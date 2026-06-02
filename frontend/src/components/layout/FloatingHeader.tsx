@@ -152,8 +152,6 @@ const REFERRAL_NOTIFICATION_LAST_SEEN_DATE_STORAGE_KEY =
 const MAX_QUICK_PROJECTS = 5;
 const USER_MANUAL_URL =
   "https://fcn0tn5wd2p8.feishu.cn/wiki/CWZpw5T9EiZvRzkaoe0c3Bmgn5c?from=from_copylink";
-const CHANGELOG_URL =
-  "https://gcnyatv1ofs3.feishu.cn/wiki/NMVhwMbglijVwFkW8HKcfpCynIp";
 
 const getTodayDateKey = () => {
   const now = new Date();
@@ -2239,16 +2237,7 @@ const FloatingHeader: React.FC = () => {
                     >
                       {t("workspace.header.pricingCatalog")}
                     </button>
-                    <button
-                      type='button'
-                      className='tanva-help-dropdown-item w-full h-9 px-3 rounded-xl text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300'
-                      onClick={() => {
-                        window.open(CHANGELOG_URL, "_blank", "noopener,noreferrer");
-                        setIsHelpMenuOpen(false);
-                      }}
-                    >
-                      {t("workspace.header.changelog")}
-                    </button>
+                    
                   </div>
                 </div>
               )}
