@@ -1156,10 +1156,12 @@ export class AiController {
     const normalizedKlingModel =
       typeof dto.klingModel === 'string' ? dto.klingModel.trim().toLowerCase() : '';
 
+    if (dto.provider === 'kling-o3') {
+      return 'kling-o3-video';
+    }
+
     if (
-      (dto.provider === 'kling' ||
-        dto.provider === 'kling-2.6' ||
-        dto.provider === 'kling-o3') &&
+      (dto.provider === 'kling' || dto.provider === 'kling-2.6') &&
       normalizedKlingModel === 'kling-v3-0'
     ) {
       return 'kling-3.0-video';

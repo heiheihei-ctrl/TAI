@@ -683,8 +683,12 @@ export class VideoProviderService {
   ): Promise<VideoGenerationResult> {
     const { provider } = options;
 
+    if (provider === "kling-o3") {
+      return this.generateManagedKlingO3(options);
+    }
+
     if (
-      (provider === "kling" || provider === "kling-2.6" || provider === "kling-o3") &&
+      (provider === "kling" || provider === "kling-2.6") &&
       options.klingModel === "kling-v3-0"
     ) {
       return this.generateManagedKling30(options);
@@ -695,10 +699,6 @@ export class VideoProviderService {
       options.klingModel === "kling-v2-6"
     ) {
       return this.generateManagedKling26(options);
-    }
-
-    if (provider === "kling-o3") {
-      return this.generateManagedKlingO3(options);
     }
 
     if (provider === "vidu" || provider === "viduq3-pro") {
@@ -807,18 +807,36 @@ export class VideoProviderService {
       "kling-o3",
       options.vendorKey,
       async (route) => {
-      if (this.shouldUseManagedV2RequestProfile(route)) {
-        return this.createManagedV2Task("kling-o3", options, route);
-      }
-      if (route.route === "tencent_vod") {
-        return this.generateKlingOmniViaTencent(options, route.vendor);
-      }
+        this.logKlingO3Debug("resolved-route", {
+          requestedVendorKey: String(options.vendorKey || "").trim() || null,
+          route: route.route,
+          vendorKey: route.vendor?.vendorKey || null,
+          platformKey: route.vendor?.platformKey || null,
+          provider: route.vendor?.provider || null,
+          modelName: route.vendor?.modelName || null,
+          modelVersion: route.vendor?.modelVersion || null,
+          duration: typeof options.duration === "number" ? Math.round(options.duration) : null,
+          sound: String(options.sound || "").trim() || null,
+          resolution: String(options.resolution || "").trim() || null,
+          aspectRatio: String(options.aspectRatio || "").trim() || null,
+          hasReferenceVideo: Boolean(String(options.referenceVideo || "").trim()),
+          referenceImageCount: Array.isArray(options.referenceImages) ? options.referenceImages.length : 0,
+          referenceVideoType: String(options.referenceVideoType || "").trim() || null,
+          keepOriginalSound: String(options.keepOriginalSound || "").trim() || null,
+          promptPreview: this.previewDebugText(options.prompt, 120),
+        });
+        if (this.shouldUseManagedV2RequestProfile(route)) {
+          return this.createManagedV2Task("kling-o3", options, route);
+        }
+        if (route.route === "tencent_vod") {
+          return this.generateKlingOmniViaTencent(options, route.vendor);
+        }
 
-      const apiKey = this.apiKeys["kling-o3"];
-      if (!apiKey || apiKey.includes("xxx")) {
-        throw new ServiceUnavailableException("kling-o3 API Key 未配置");
-      }
-      return this.generateKlingO1(options, apiKey);
+        const apiKey = this.apiKeys["kling-o3"];
+        if (!apiKey || apiKey.includes("xxx")) {
+          throw new ServiceUnavailableException("kling-o3 API Key 未配置");
+        }
+        return this.generateKlingO1(options, apiKey);
       },
     );
     if (managedResult) return managedResult;
@@ -827,6 +845,13 @@ export class VideoProviderService {
     if (!apiKey || apiKey.includes("xxx")) {
       throw new ServiceUnavailableException("kling-o3 API Key 未配置");
     }
+    this.logKlingO3Debug("fallback-legacy", {
+      reason: "managed route unavailable, fallback to direct kling-o3 provider",
+      requestedVendorKey: String(options.vendorKey || "").trim() || null,
+      duration: typeof options.duration === "number" ? Math.round(options.duration) : null,
+      sound: String(options.sound || "").trim() || null,
+      promptPreview: this.previewDebugText(options.prompt, 120),
+    });
     return this.generateKlingO1(options, apiKey);
   }
 
@@ -919,6 +944,15 @@ export class VideoProviderService {
 
   private async queryManagedKlingO3(taskId: string) {
     const route = await this.modelRoutingService.resolveVideoModel("kling-o3");
+    this.logKlingO3Debug("query-route", {
+      taskId,
+      route: route?.route || null,
+      vendorKey: route?.vendor?.vendorKey || null,
+      platformKey: route?.vendor?.platformKey || null,
+      provider: route?.vendor?.provider || null,
+      modelName: route?.vendor?.modelName || null,
+      modelVersion: route?.vendor?.modelVersion || null,
+    });
     if (route?.route === "tencent_vod") {
       return this.queryTencentManagedVideoTask(taskId, "kling-o3", "Kling 3.0-Omni");
     }
@@ -1593,6 +1627,51 @@ export class VideoProviderService {
     return null;
   }
 
+  private previewDebugText(value: unknown, limit = 80): string {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    return text.length > limit ? `${text.slice(0, limit)}...` : text;
+  }
+
+  private getDebugUrlHost(value: unknown): string | null {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+    try {
+      return new URL(raw).host || null;
+    } catch {
+      return null;
+    }
+  }
+
+  private buildTencentVodAudioMetadataSummary(raw: any): Record<string, any> {
+    const outputFileInfos = Array.isArray(raw?.AigcVideoTask?.Output?.FileInfos)
+      ? raw.AigcVideoTask.Output.FileInfos
+      : Array.isArray(raw?.Response?.AigcVideoTask?.Output?.FileInfos)
+        ? raw.Response.AigcVideoTask.Output.FileInfos
+        : [];
+    const meta = outputFileInfos[0]?.MetaData || {};
+    const audioStreamSet = Array.isArray(meta?.AudioStreamSet) ? meta.AudioStreamSet : [];
+    const audioDurationRaw = Number(meta?.AudioDuration);
+    const audioDuration = Number.isFinite(audioDurationRaw) ? audioDurationRaw : null;
+
+    return {
+      hasAudio: audioStreamSet.length > 0 || (audioDuration !== null && audioDuration > 0),
+      audioDuration,
+      audioStreamCount: audioStreamSet.length,
+      audioCodec: String(audioStreamSet[0]?.Codec || "").trim() || null,
+      container: String(meta?.Container || "").trim() || null,
+      videoDuration: Number.isFinite(Number(meta?.VideoDuration)) ? Number(meta.VideoDuration) : null,
+    };
+  }
+
+  private logKlingO3Debug(stage: string, payload: Record<string, any>): void {
+    try {
+      this.logger.debug(`[kling-o3][${stage}] ${JSON.stringify(payload)}`);
+    } catch {
+      this.logger.debug(`[kling-o3][${stage}] (failed to stringify payload)`);
+    }
+  }
+
   private async queryManagedV2Task(taskId: string) {
     const parsed = this.parseManagedV2TaskId(taskId);
     if (!parsed) {
@@ -2041,6 +2120,30 @@ export class VideoProviderService {
       duration
     );
 
+    if (options.provider === "kling-o3" || fallbackModelVersion === "3.0-Omni") {
+      this.logKlingO3Debug("tencent-request", {
+        vendorModelName: vendorConfig.modelName || "Kling",
+        vendorModelVersion: vendorConfig.modelVersion || null,
+        fallbackModelVersion,
+        effectiveModelVersion: modelVersion,
+        isKling30Family,
+        requestedDuration,
+        finalDuration: duration,
+        requestedResolution: rawResolution || null,
+        finalResolution: resolutionRaw,
+        audioGeneration,
+        sound: normalizedSound || null,
+        aspectRatio: String(options.aspectRatio || "").trim() || null,
+        hasReferenceVideo,
+        referenceImageCount: normalizedImages.length,
+        referenceVideoType: hasReferenceVideo ? normalizedReferenceVideoType : null,
+        keepOriginalSound: hasReferenceVideo ? normalizedKeepOriginalSound : null,
+        storyboardMode: String(options.klingStoryboardMode || "").trim() || "single",
+        extInfo,
+        promptPreview: this.previewDebugText(options.prompt, 120),
+      });
+    }
+
     const { taskId } = await this.tencentVodAigcService.createVideoTask({
       modelName: vendorConfig.modelName || "Kling",
       modelVersion,
@@ -2106,6 +2209,20 @@ export class VideoProviderService {
     const result = await this.tencentVodAigcService.queryVideoTask(taskId);
     const normalizedStatus = String(result.status || "").trim().toLowerCase();
     const terminalError = this.extractTencentVodTerminalError(result.raw);
+    const isKlingO3Task = uploadKeyPrefix === "kling-o3" || modelLabel === "Kling 3.0-Omni";
+
+    if (isKlingO3Task) {
+      this.logKlingO3Debug("tencent-query", {
+        taskId,
+        modelLabel,
+        status: result.status,
+        videoUrlHost: this.getDebugUrlHost(result.videoUrl),
+        fileId: result.fileId || null,
+        requestId: result.requestId || null,
+        terminalError,
+        audioMetadata: this.buildTencentVodAudioMetadataSummary(result.raw),
+      });
+    }
 
     if (
       normalizedStatus === "finish" ||
@@ -2138,6 +2255,17 @@ export class VideoProviderService {
       const ossUrl = this.isOssPublicUrl(result.videoUrl)
         ? result.videoUrl
         : await this.uploadRemoteVideoToOss(result.videoUrl, `${uploadKeyPrefix}-${taskId}`);
+      if (isKlingO3Task) {
+        this.logKlingO3Debug("tencent-final", {
+          taskId,
+          modelLabel,
+          status: "succeeded",
+          upstreamVideoUrlHost: this.getDebugUrlHost(result.videoUrl),
+          finalVideoUrlHost: this.getDebugUrlHost(ossUrl),
+          terminalError,
+          audioMetadata: this.buildTencentVodAudioMetadataSummary(result.raw),
+        });
+      }
       return { status: "succeeded", videoUrl: ossUrl };
     }
 
@@ -2153,6 +2281,16 @@ export class VideoProviderService {
         (result.raw?.ProcedureTask as any)?.Message ||
         (result.raw?.AigcVideoTask as any)?.Message ||
         "生成失败";
+      if (isKlingO3Task) {
+        this.logKlingO3Debug("tencent-final", {
+          taskId,
+          modelLabel,
+          status: "failed",
+          message,
+          terminalError,
+          audioMetadata: this.buildTencentVodAudioMetadataSummary(result.raw),
+        });
+      }
       return { status: "failed", error: message } as any;
     }
 

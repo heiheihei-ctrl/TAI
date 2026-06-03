@@ -140,8 +140,11 @@ const resolveVideoServiceType = (
   data: Props["data"]
 ): string => {
   const klingModel = String(data.klingModel || "").trim().toLowerCase();
+  if (provider === "kling-o3") {
+    return "kling-o3-video";
+  }
   if (
-    (provider === "kling" || provider === "kling-2.6" || provider === "kling-o3") &&
+    (provider === "kling" || provider === "kling-2.6") &&
     klingModel === "kling-v3-0"
   ) {
     return "kling-3.0-video";
@@ -157,6 +160,9 @@ const resolvePreviewVideoBillingModel = (
   data: Props["data"],
   viduModelVariant?: ViduModel
 ): string => {
+  if (provider === "kling-o3") {
+    return "kling-o3";
+  }
   if (provider === "vidu" || provider === "viduq3-pro") {
     return viduModelVariant || data.viduModel || provider;
   }

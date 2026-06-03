@@ -4152,7 +4152,7 @@ const MANAGED_MODEL_SERVICE_TYPE_MAP: Record<string, string> = {
   "gemini-image-analyze": "gemini-image-analyze",
   "kling-2.6": "kling-2.6-video",
   "kling-3.0": "kling-3.0-video",
-  "kling-o3": "kling-o1-video",
+  "kling-o3": "kling-o3-video",
   "vidu-q2": "vidu-video",
   "vidu-q3": "viduq3-pro-video",
   "seedance-1.5": "doubao-video",
