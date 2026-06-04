@@ -514,7 +514,7 @@ const enUS = {
     authChecking: "Verifying login status...",
     mobile: {
       title: "Please Use Desktop",
-      desc1: "Tanva is a professional design tool and works best on desktop.",
+      desc1: "TAI is a professional design tool and works best on desktop.",
       desc2: "Please open this website in a browser on PC or Mac.",
       recommendation: "Recommended browsers: Chrome, Edge, or Safari",
     },

@@ -511,7 +511,7 @@ const zhCN = {
     authChecking: "正在验证登录状态...",
     mobile: {
       title: "请使用电脑访问",
-      desc1: "Tanva 是一款专业的设计工具，需要在电脑端使用以获得最佳体验。",
+      desc1: "TAI 是一款专业的设计工具，需要在电脑端使用以获得最佳体验。",
       desc2: "请在 PC 或 Mac 上打开浏览器访问本网站。",
       recommendation: "推荐使用 Chrome、Edge 或 Safari 浏览器",
     },
