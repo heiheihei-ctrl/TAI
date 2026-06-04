@@ -40,6 +40,9 @@ const CHINESE_NUM_MAP: Record<string, number> = {
   '四十六': 46, '四十七': 47, '四十八': 48, '四十九': 49, '五十': 50,
 };
 
+const CHINESE_NUM_TOKENS = Object.keys(CHINESE_NUM_MAP).sort((a, b) => b.length - a.length);
+const CHINESE_NUM_CAPTURE = CHINESE_NUM_TOKENS.join('|');
+
 /**
  * 分镜脚本解析器 - 支持多种格式，按优先级匹配
  *
@@ -47,6 +50,7 @@ const CHINESE_NUM_MAP: Record<string, number> = {
  * 优先级2: "分镜1"、"分镜2" 等阿拉伯数字格式
  * 优先级3: 大标题 "# 分镜" 或 "## 分镜" 后跟数字
  * 优先级4: Markdown 表格格式 |**1**| 或 | **1** |
+ * 优先级5: 中文节号格式 "一、基础信息"、"二）镜头描述"、"(三) 画面"
  */
 function parseStoryboardScript(text: string): string[] {
   if (!text || !text.trim()) return [];
@@ -72,7 +76,7 @@ function parseStoryboardScript(text: string): string[] {
   }
 
   // 优先级3: Markdown 标题格式（# 分镜1、## 分镜 2、### 分镜一）
-  const headingPattern = /^#{1,6}\s*分镜\s*(\d{1,2}|一|二|三|四|五|六|七|八|九|十|十一|十二|十三|十四|十五|十六|十七|十八|十九|二十|二十一|二十二|二十三|二十四|二十五|二十六|二十七|二十八|二十九|三十|三十一|三十二|三十三|三十四|三十五|三十六|三十七|三十八|三十九|四十|四十一|四十二|四十三|四十四|四十五|四十六|四十七|四十八|四十九|五十)/gm;
+  const headingPattern = new RegExp(`^#{1,6}\\s*分镜\\s*(${CHINESE_NUM_CAPTURE}|\\d{1,2})`, 'gm');
   const headingMatches = [...text.matchAll(headingPattern)];
   if (headingMatches.length >= 2) {
     return extractSegmentsByMatches(text, headingMatches);
@@ -85,7 +89,17 @@ function parseStoryboardScript(text: string): string[] {
     return extractSegmentsByMatches(text, mdMatches);
   }
 
-  // 优先级5: 纯数字编号格式（行首 "1."、"2." 等）
+  // 优先级5: 中文节号格式（行首 "一、"、"二）"、"(三)" 等）
+  const sectionPattern = new RegExp(
+    `^(?:第\\s*)?[（(]?(${CHINESE_NUM_CAPTURE})[）)\\s]*[、.．:：]\\s*|^[（(](${CHINESE_NUM_CAPTURE})[）)]\\s*`,
+    'gm'
+  );
+  const sectionMatches = [...text.matchAll(sectionPattern)];
+  if (sectionMatches.length >= 2) {
+    return extractSegmentsByMatches(text, sectionMatches);
+  }
+
+  // 优先级6: 纯数字编号格式（行首 "1."、"2." 等）
   const numberedPattern = /^(\d{1,2})\.\s/gm;
   const numberedMatches = [...text.matchAll(numberedPattern)];
   if (numberedMatches.length >= 2) {
@@ -228,6 +242,19 @@ function StoryboardSplitNodeInner({ id, data, selected }: Props) {
 
     try {
       const parsed = parseStoryboardScript(inputText);
+      if (parsed.length === 0) {
+        const errorMessage = lt(
+          '未识别到分镜结构，请使用“分镜1”或“一、二、三”这类编号格式',
+          'No storyboard structure detected. Use numbered sections like "Storyboard 1" or "1./I./One".'
+        );
+        setSegments([]);
+        updateNodeData({
+          status: 'failed',
+          error: errorMessage,
+          segments: []
+        });
+        return;
+      }
       setSegments(parsed);
 
       // 自动扩展输出端口数量
