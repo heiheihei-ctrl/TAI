@@ -246,6 +246,23 @@ const normalizeGridDimension = (value: unknown, fallback: number): number => {
   return Math.min(MAX_OUTPUT_COUNT, parsed);
 };
 
+const normalizeOutputCount = (value: unknown, fallback = DEFAULT_OUTPUT_COUNT): number => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(MAX_OUTPUT_COUNT, Math.max(MIN_OUTPUT_COUNT, Math.floor(n)));
+};
+
+const parseImageSplitPortIndex = (sourceHandle?: string | null): number | null => {
+  if (typeof sourceHandle !== 'string') return null;
+  const match = /^(?:image|img)(\d+)$/i.exec(sourceHandle.trim());
+  if (!match?.[1]) return null;
+  const index = Number(match[1]);
+  if (!Number.isFinite(index) || index < 1) return null;
+  return index;
+};
+
+const toImageSplitSourceHandle = (index: number): string => `image${index}`;
+
 const normalizeMimeType = (type: string): string => {
   const lower = type.trim().toLowerCase();
   if (lower === 'image/jpg') return 'image/jpeg';
@@ -461,16 +478,16 @@ const readImageFromNode = (node: Node<any>, sourceHandle?: string | null): strin
   if (!node) return undefined;
   const d = (node.data ?? {}) as Record<string, unknown>;
 
-  // imageSplit：按 image1..imageN 读取
+  // imageSplit：按 image1..imageN（兼容持久化后的 img1..imgN）读取
   if (node.type === 'imageSplit' && typeof sourceHandle === 'string') {
-    const match = /^image(\d+)$/.exec(sourceHandle);
-    if (match) {
-      const key = `image${match[1]}`;
+    const portIndex = parseImageSplitPortIndex(sourceHandle);
+    if (portIndex != null) {
+      const key = `image${portIndex}`;
       const direct = normalizeString(d[key]);
       if (direct) return direct;
 
       const splitImages = d.splitImages as LegacySplitImageItem[] | undefined;
-      const idx = Math.max(0, Number(match[1]) - 1);
+      const idx = portIndex - 1;
       const fromList = splitImages?.[idx]?.imageData;
       return normalizeString(fromList);
     }
@@ -593,18 +610,16 @@ const readImagesFromNode = (node: Node<any>, sourceHandle?: string | null): Upst
 
   // imageSplit：可输出单张（imageX）或整个 splitImages（兼容少数场景）
   if (node.type === 'imageSplit') {
-    if (typeof sourceHandle === 'string') {
-      const match = /^image(\d+)$/.exec(sourceHandle);
-      if (match) {
-        const key = `image${match[1]}`;
-        const direct = normalizeString(d[key]);
-        if (direct) return [{ id: `${node.id}-${key}`, imageData: direct }];
+    const portIndex = parseImageSplitPortIndex(sourceHandle);
+    if (portIndex != null) {
+      const key = `image${portIndex}`;
+      const direct = normalizeString(d[key]);
+      if (direct) return [{ id: `${node.id}-${key}`, imageData: direct }];
 
-        const splitImages = d.splitImages as LegacySplitImageItem[] | undefined;
-        const idx = Math.max(0, Number(match[1]) - 1);
-        const fromList = normalizeString(splitImages?.[idx]?.imageData);
-        return fromList ? [{ id: `${node.id}-split-${idx + 1}`, imageData: fromList }] : [];
-      }
+      const splitImages = d.splitImages as LegacySplitImageItem[] | undefined;
+      const idx = portIndex - 1;
+      const fromList = normalizeString(splitImages?.[idx]?.imageData);
+      return fromList ? [{ id: `${node.id}-split-${idx + 1}`, imageData: fromList }] : [];
     }
 
     const splitImages = d.splitImages as LegacySplitImageItem[] | undefined;
@@ -1203,8 +1218,8 @@ function ImageSplitNodeInner({ id, data, selected }: Props) {
   const [gridRows, setGridRows] = React.useState<number>(() =>
     normalizeGridDimension(data.gridRows, DEFAULT_GRID_ROWS)
   );
-  const [outputCount, setOutputCount] = React.useState<number>(
-    Math.min(MAX_OUTPUT_COUNT, Math.max(MIN_OUTPUT_COUNT, data.outputCount || DEFAULT_OUTPUT_COUNT))
+  const [outputCount, setOutputCount] = React.useState<number>(() =>
+    normalizeOutputCount(data.outputCount)
   );
   const [hover, setHover] = React.useState<string | null>(null);
   const [isProcessing, setIsProcessing] = React.useState(false);
@@ -1390,9 +1405,9 @@ function ImageSplitNodeInner({ id, data, selected }: Props) {
           if (!baseRef) return null;
 
           const handle = typeof sourceHandle === 'string' ? sourceHandle.trim() : '';
-          const match = handle ? /^image(\d+)$/.exec(handle) : null;
-          if (!match) return null;
-          const idx = Math.max(0, Number(match[1]) - 1);
+          const portIndex = parseImageSplitPortIndex(handle);
+          if (portIndex == null) return null;
+          const idx = portIndex - 1;
 
           const splitRects = Array.isArray(d.splitRects) ? d.splitRects : [];
           const rect = splitRects?.[idx];
@@ -1869,19 +1884,14 @@ function ImageSplitNodeInner({ id, data, selected }: Props) {
 
   React.useEffect(() => {
     if (splitMode === 'customGrid') {
-      const count = Math.min(MAX_OUTPUT_COUNT, Math.max(MIN_OUTPUT_COUNT, customGridCount));
-      if (count !== outputCount) {
-        setOutputCount(count);
-      }
+      const count = normalizeOutputCount(customGridCount);
+      setOutputCount((prev) => (prev === count ? prev : count));
       return;
     }
 
-    const count = data.outputCount || DEFAULT_OUTPUT_COUNT;
-    const safeCount = Math.min(MAX_OUTPUT_COUNT, Math.max(MIN_OUTPUT_COUNT, count));
-    if (safeCount !== outputCount) {
-      setOutputCount(safeCount);
-    }
-  }, [customGridCount, data.outputCount, outputCount, splitMode]);
+    const safeCount = normalizeOutputCount(data.outputCount);
+    setOutputCount((prev) => (prev === safeCount ? prev : safeCount));
+  }, [customGridCount, data.outputCount, splitMode]);
 
   // 执行分割
   const handleSplit = React.useCallback(async () => {
@@ -2146,7 +2156,7 @@ function ImageSplitNodeInner({ id, data, selected }: Props) {
   // 更新输出端口数量
   const handleOutputCountChange = React.useCallback((value: number) => {
     if (splitMode === 'customGrid') return;
-    const count = Math.min(MAX_OUTPUT_COUNT, Math.max(MIN_OUTPUT_COUNT, value));
+    const count = normalizeOutputCount(value);
     setOutputCount(count);
     updateNodeData({ outputCount: count });
   }, [splitMode, updateNodeData]);
@@ -2154,7 +2164,7 @@ function ImageSplitNodeInner({ id, data, selected }: Props) {
   const handleSplitModeChange = React.useCallback((nextMode: SplitMode) => {
     setSplitMode(nextMode);
     if (nextMode === 'customGrid') {
-      const nextCount = Math.min(MAX_OUTPUT_COUNT, Math.max(MIN_OUTPUT_COUNT, gridCols * gridRows));
+      const nextCount = normalizeOutputCount(gridCols * gridRows);
       setOutputCount(nextCount);
       updateNodeData({
         splitMode: nextMode,
@@ -2176,7 +2186,7 @@ function ImageSplitNodeInner({ id, data, selected }: Props) {
     const nextCols = normalizeGridDimension(value, 1);
     setGridCols(nextCols);
     if (splitMode === 'customGrid') {
-      const nextCount = Math.min(MAX_OUTPUT_COUNT, Math.max(MIN_OUTPUT_COUNT, nextCols * gridRows));
+      const nextCount = normalizeOutputCount(nextCols * gridRows);
       setOutputCount(nextCount);
       updateNodeData({
         splitMode,
@@ -2193,7 +2203,7 @@ function ImageSplitNodeInner({ id, data, selected }: Props) {
     const nextRows = normalizeGridDimension(value, 1);
     setGridRows(nextRows);
     if (splitMode === 'customGrid') {
-      const nextCount = Math.min(MAX_OUTPUT_COUNT, Math.max(MIN_OUTPUT_COUNT, gridCols * nextRows));
+      const nextCount = normalizeOutputCount(gridCols * nextRows);
       setOutputCount(nextCount);
       updateNodeData({
         splitMode,
@@ -2212,10 +2222,42 @@ function ImageSplitNodeInner({ id, data, selected }: Props) {
     nativeEvent.stopImmediatePropagation?.();
   }, []);
 
-  const getHandleTopPercent = React.useCallback((index: number) => {
-    if (outputCount <= 1) return 50;
-    return 10 + (index / (outputCount - 1)) * 80;
-  }, [outputCount]);
+  const safeOutputCount = normalizeOutputCount(outputCount);
+
+  const getHandleTopPercent = React.useCallback((index: number, count = safeOutputCount) => {
+    if (count <= 1) return 50;
+    return 10 + (index / (count - 1)) * 80;
+  }, [safeOutputCount]);
+
+  // 兼容持久化边：imgN -> imageN；并在 outputCount 缩小时清理无效出边
+  React.useEffect(() => {
+    const maxPort = safeOutputCount;
+    const hasWork = edges.some((edge) => {
+      if (edge.source !== id) return false;
+      const portIndex = parseImageSplitPortIndex(edge.sourceHandle);
+      if (portIndex == null) return false;
+      return portIndex > maxPort || edge.sourceHandle !== toImageSplitSourceHandle(portIndex);
+    });
+    if (!hasWork) return;
+
+    const nextEdges = edges.flatMap((edge) => {
+      if (edge.source !== id) return [edge];
+
+      const portIndex = parseImageSplitPortIndex(edge.sourceHandle);
+      if (portIndex == null) return [edge];
+
+      if (portIndex > maxPort) return [];
+
+      const normalizedHandle = toImageSplitSourceHandle(portIndex);
+      if (edge.sourceHandle !== normalizedHandle) {
+        return [{ ...edge, sourceHandle: normalizedHandle }];
+      }
+
+      return [edge];
+    });
+
+    rf.setEdges(nextEdges);
+  }, [edges, id, rf, safeOutputCount]);
 
   const boxW = data.boxW || 320;
   const boxH = data.boxH || 400;
@@ -2225,7 +2267,7 @@ function ImageSplitNodeInner({ id, data, selected }: Props) {
   // 当输出端口数量变化时，强制 React Flow 重新计算句柄位置
   React.useEffect(() => {
     updateNodeInternals(id);
-  }, [id, outputCount, boxW, boxH, updateNodeInternals]);
+  }, [id, safeOutputCount, boxW, boxH, updateNodeInternals]);
 
   // 一键生成 Image 节点并连接
   const handleGenerateImageNodes = React.useCallback(() => {
@@ -2345,15 +2387,18 @@ function ImageSplitNodeInner({ id, data, selected }: Props) {
       newEdges.push({
         id: `edge-${id}-${imageNodeId}`,
         source: id,
-        sourceHandle: `image${i + 1}`,
+        sourceHandle: toImageSplitSourceHandle(i + 1),
         target: imageNodeId,
         targetHandle: 'img',
       });
     }
 
     rf.setNodes((nodes) => [...nodes, ...newNodes]);
-    rf.setEdges((edges) => [...edges, ...newEdges]);
-  }, [rf, id, data.inputImage, data.inputImageUrl, data.splitImages, outputCount, splitRects, boxW, boxH, canSplit, connectedImage, rawInputImage, sourceSize.height, sourceSize.width, lt]);
+    updateNodeInternals(id);
+    requestAnimationFrame(() => {
+      rf.setEdges((edges) => [...edges, ...newEdges]);
+    });
+  }, [rf, id, data.inputImage, data.inputImageUrl, data.splitImages, outputCount, splitRects, boxW, boxH, canSplit, connectedImage, rawInputImage, sourceSize.height, sourceSize.width, lt, updateNodeInternals]);
 
   return (
     <div style={{
@@ -2610,7 +2655,7 @@ function ImageSplitNodeInner({ id, data, selected }: Props) {
           flexWrap: 'wrap',
           gap: 4,
         }}>
-          {splitRects.slice(0, outputCount).map((rect, i) => (
+          {splitRects.slice(0, safeOutputCount).map((rect, i) => (
             <SplitRectPreview
               key={`${rect.index}-${i}`}
               index={i}
@@ -2634,9 +2679,9 @@ function ImageSplitNodeInner({ id, data, selected }: Props) {
       />
 
       {/* 动态输出端口 */}
-      {Array.from({ length: outputCount }).map((_, i) => {
-        const portId = `image${i + 1}`;
-        const topPercent = getHandleTopPercent(i);
+      {Array.from({ length: safeOutputCount }, (_, i) => {
+        const portId = toImageSplitSourceHandle(i + 1);
+        const topPercent = getHandleTopPercent(i, safeOutputCount);
         return (
           <Handle
             key={portId}
