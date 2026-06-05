@@ -2254,6 +2254,8 @@ const AIChatDialog: React.FC = () => {
 
   const hasPdfForAnalysis = Boolean(sourcePdfForAnalysis);
 
+
+  
   const getModeSupport = useCallback(
     (mode: ManualAIMode) => {
       const count = selectedImageCount;
