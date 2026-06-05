@@ -730,6 +730,68 @@ const createThumbnailDataUrl = async (
   }
 };
 
+const composeMidjourneyQuadDataUrl = async (
+  sources: string[]
+): Promise<string | null> => {
+  const candidates = sources
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean)
+    .slice(0, 4);
+  if (candidates.length < 4) return null;
+
+  const bitmaps: ImageBitmap[] = [];
+  try {
+    for (const source of candidates) {
+      const blob = await resolveImageToBlob(source, { preferProxy: true });
+      if (!blob) return null;
+      const bitmap = await createImageBitmapLimited(blob);
+      bitmaps.push(bitmap);
+    }
+
+    const cellSize = Math.max(
+      1,
+      ...bitmaps.map((bitmap) => Math.max(bitmap.width || 1, bitmap.height || 1))
+    );
+    const canvas =
+      typeof OffscreenCanvas !== "undefined"
+        ? new OffscreenCanvas(cellSize * 2, cellSize * 2)
+        : Object.assign(document.createElement("canvas"), {
+            width: cellSize * 2,
+            height: cellSize * 2,
+          });
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
+    ctx.clearRect(0, 0, cellSize * 2, cellSize * 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, cellSize * 2, cellSize * 2);
+
+    bitmaps.forEach((bitmap, idx) => {
+      const col = idx % 2;
+      const row = Math.floor(idx / 2);
+      const x = col * cellSize;
+      const y = row * cellSize;
+      const scale = Math.min(cellSize / bitmap.width, cellSize / bitmap.height);
+      const drawWidth = Math.max(1, Math.round(bitmap.width * scale));
+      const drawHeight = Math.max(1, Math.round(bitmap.height * scale));
+      const offsetX = x + Math.floor((cellSize - drawWidth) / 2);
+      const offsetY = y + Math.floor((cellSize - drawHeight) / 2);
+      ctx.drawImage(bitmap, offsetX, offsetY, drawWidth, drawHeight);
+    });
+
+    const blob = await canvasToBlob(canvas, { type: "image/png" });
+    return await blobToDataUrl(blob);
+  } catch {
+    return null;
+  } finally {
+    bitmaps.forEach((bitmap) => {
+      try {
+        bitmap.close();
+      } catch {}
+    });
+  }
+};
+
 const FLOW_CLIPBOARD_MIME = "application/x-tanva-flow";
 const FLOW_CLIPBOARD_FALLBACK_TEXT = "Tanva flow selection";
 const FLOW_CLIPBOARD_TYPE = "tanva-flow";
@@ -16608,14 +16670,48 @@ function FlowInner() {
           const mjImgBase64 = mjResult.data.imageData;
           const mjMetadata = mjResult.data.metadata || {};
           const midjourneyMeta = mjMetadata.midjourney || {};
+          const rawImageUrls = Array.isArray(midjourneyMeta.imageUrls)
+            ? midjourneyMeta.imageUrls
+            : Array.isArray(mjMetadata.imageUrls)
+            ? mjMetadata.imageUrls
+            : Array.isArray(mjResult.data.imageUrls)
+            ? mjResult.data.imageUrls
+            : [];
+          const stableMidjourneyImageUrls: string[] = [];
+          for (let idx = 0; idx < rawImageUrls.length; idx += 1) {
+            const item = rawImageUrls[idx];
+            if (typeof item !== "string" || !item.trim()) continue;
+            const trimmed = item.trim();
+            try {
+              stableMidjourneyImageUrls.push(
+                await uploadImageToStableUrl(
+                  trimmed,
+                  `flow_midjourney_${nodeId}_${idx}_${Date.now()}.png`,
+                  { reuploadUnstableRemote: true }
+                )
+              );
+            } catch (persistErr) {
+              console.warn(
+                "[Flow] Midjourney: failed to persist imageUrls item",
+                persistErr
+              );
+              stableMidjourneyImageUrls.push(trimmed);
+            }
+          }
+
           const midjourneyImageUrl =
             midjourneyMeta.imageUrl || mjMetadata.imageUrl;
           const rawMidjourneyImageUrl =
             typeof midjourneyImageUrl === "string"
               ? midjourneyImageUrl.trim()
               : "";
+          const composedQuadSource =
+            stableMidjourneyImageUrls.length >= 4
+              ? await composeMidjourneyQuadDataUrl(stableMidjourneyImageUrls)
+              : null;
           const rawPreviewSource =
-            rawMidjourneyImageUrl.length > 0 ? rawMidjourneyImageUrl : mjImgBase64;
+            composedQuadSource ||
+            (rawMidjourneyImageUrl.length > 0 ? rawMidjourneyImageUrl : mjImgBase64);
 
           let previewSource = rawPreviewSource;
           try {
@@ -16641,33 +16737,6 @@ function FlowInner() {
             !isBlobUrl(previewSource);
           const stableRemoteUrl = hasRemoteUrl ? previewSource : undefined;
 
-          const rawImageUrls = Array.isArray(midjourneyMeta.imageUrls)
-            ? midjourneyMeta.imageUrls
-            : Array.isArray(mjMetadata.imageUrls)
-            ? mjMetadata.imageUrls
-            : [];
-          const stableMidjourneyImageUrls: string[] = [];
-          for (let idx = 0; idx < rawImageUrls.length; idx += 1) {
-            const item = rawImageUrls[idx];
-            if (typeof item !== "string" || !item.trim()) continue;
-            const trimmed = item.trim();
-            try {
-              stableMidjourneyImageUrls.push(
-                await uploadImageToStableUrl(
-                  trimmed,
-                  `flow_midjourney_${nodeId}_${idx}_${Date.now()}.png`,
-                  { reuploadUnstableRemote: true }
-                )
-              );
-            } catch (persistErr) {
-              console.warn(
-                "[Flow] Midjourney: failed to persist imageUrls item",
-                persistErr
-              );
-              stableMidjourneyImageUrls.push(trimmed);
-            }
-          }
-
           const historyId = previewSource
             ? `${nodeId}-${Date.now()}`
             : undefined;
@@ -16691,9 +16760,7 @@ function FlowInner() {
                       imageUrl: hasRemoteUrl
                         ? stableRemoteUrl
                         : undefined,
-                      imageUrls: stableMidjourneyImageUrls.length > 0
-                        ? stableMidjourneyImageUrls
-                        : undefined,
+                      imageUrls: undefined,
                       promptEn: midjourneyMeta.promptEn,
                       lastHistoryId:
                         historyId ?? (n.data as any)?.lastHistoryId,

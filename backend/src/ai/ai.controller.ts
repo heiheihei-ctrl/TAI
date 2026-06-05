@@ -105,7 +105,7 @@ export class AiController {
     'banana-2.5': 'gemini-2.5-flash-image-preview',
     'banana-3.1': 'gemini-3.1-flash-image-preview',
     runninghub: 'runninghub-su-effect',
-    midjourney: 'midjourney-fast',
+    midjourney: 'midjourney-v7',
     nano2: 'gemini-3.1-flash-image-preview',
     seedream5: 'doubao-seedream-5-0-260128',
   };
