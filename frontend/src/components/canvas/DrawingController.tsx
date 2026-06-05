@@ -1372,6 +1372,20 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
               );
               return;
             }
+            if (parsed?.type === "video" && parsed?.url) {
+              event.preventDefault();
+              event.stopPropagation();
+              window.dispatchEvent(
+                new CustomEvent("flow:insert-video-from-library", {
+                  detail: {
+                    videoUrl: parsed.url,
+                    videoName: parsed.fileName || parsed.name,
+                    thumbnail: parsed.thumbnail,
+                  },
+                })
+              );
+              return;
+            }
           } catch (error) {
             console.warn("解析拖拽资源数据失败:", error);
           }

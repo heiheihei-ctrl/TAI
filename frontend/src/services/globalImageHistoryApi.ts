@@ -9,6 +9,9 @@ const base =
 export interface GlobalImageHistoryItem {
   id: string;
   imageUrl: string;
+  mediaType?: "image" | "video";
+  mediaUrl?: string;
+  thumbnailUrl?: string;
   prompt?: string;
   sourceType: string;
   sourceProjectId?: string;
@@ -18,7 +21,10 @@ export interface GlobalImageHistoryItem {
 }
 
 export interface CreateGlobalImageHistoryDto {
-  imageUrl: string;
+  imageUrl?: string;
+  mediaType?: "image" | "video";
+  mediaUrl?: string;
+  thumbnailUrl?: string;
   prompt?: string;
   sourceType: string;
   sourceProjectId?: string;

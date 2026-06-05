@@ -13,7 +13,7 @@ import {
   isIndexedDBAvailable,
 } from '@/services/indexedDBService';
 
-export type PersonalAssetType = '2d' | '3d' | 'svg';
+export type PersonalAssetType = '2d' | '3d' | 'svg' | 'video';
 
 export interface PersonalLibraryBase {
   id: string;
@@ -24,6 +24,8 @@ export interface PersonalLibraryBase {
   fileName?: string;
   fileSize?: number;
   contentType?: string;
+  sourceType?: string;
+  sourceProjectId?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -52,7 +54,18 @@ export interface PersonalSvgAsset extends PersonalLibraryBase {
   svgContent?: string;
 }
 
-export type PersonalLibraryAsset = PersonalImageAsset | PersonalModelAsset | PersonalSvgAsset;
+export interface PersonalVideoAsset extends PersonalLibraryBase {
+  type: 'video';
+  width?: number;
+  height?: number;
+  duration?: number;
+}
+
+export type PersonalLibraryAsset =
+  | PersonalImageAsset
+  | PersonalModelAsset
+  | PersonalSvgAsset
+  | PersonalVideoAsset;
 
 type PersonalLibraryUpdate = Partial<Omit<PersonalLibraryAsset, 'type'>>;
 

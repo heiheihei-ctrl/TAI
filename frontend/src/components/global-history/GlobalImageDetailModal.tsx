@@ -9,15 +9,62 @@ import {
   getHistoryRequestThumbnail,
 } from './historyRequestInfo';
 
-const SOURCE_TYPE_LABELS: Record<string, { zh: string; en: string }> = {
-  generate: { zh: '图片生成', en: 'Image Generate' },
-  generatePro: { zh: '图片生成Pro', en: 'Image Generate Pro' },
-  generatePro4: { zh: '图片生成Pro4', en: 'Image Generate Pro4' },
-  midjourney: { zh: 'Midjourney', en: 'Midjourney' },
-  '3d': { zh: '3D生成', en: '3D Generate' },
-  camera: { zh: '相机', en: 'Camera' },
+const HISTORY_CATEGORY_LABELS: Record<string, { zh: string; en: string }> = {
   image: { zh: '图片', en: 'Image' },
-  imagePro: { zh: '图片Pro', en: 'Image Pro' },
+  video: { zh: '视频', en: 'Video' },
+  camera: { zh: '相机', en: 'Camera' },
+  '3d': { zh: '3D', en: '3D' },
+  speech: { zh: '语音', en: 'Speech' },
+};
+
+const HISTORY_CATEGORY_SOURCE_TYPES: Record<string, string[]> = {
+  image: ['generate', 'generatePro', 'generatePro4', 'midjourney', 'image', 'imagePro'],
+  video: [
+    'video',
+    'klingVideo',
+    'kling26Video',
+    'kling30Video',
+    'klingO1Video',
+    'viduVideo',
+    'viduQ3',
+    'doubaoVideo',
+    'seedance20Video',
+    'wan26',
+    'wan27Video',
+    'wan2R2V',
+    'happyhorseR2V',
+    'sora2Video',
+  ],
+  camera: ['camera'],
+  '3d': ['3d'],
+  speech: ['tencentSpeech'],
+};
+
+const getMediaType = (item: GlobalImageHistoryItem): 'image' | 'video' =>
+  item.mediaType === 'video' ? 'video' : 'image';
+
+const getMediaUrl = (item: GlobalImageHistoryItem): string =>
+  (typeof item.mediaUrl === 'string' && item.mediaUrl.trim()) || item.imageUrl;
+
+const getImagePreviewUrl = (item: GlobalImageHistoryItem): string | undefined => {
+  const thumbnailUrl =
+    typeof item.thumbnailUrl === 'string' ? item.thumbnailUrl.trim() : '';
+  if (thumbnailUrl) return thumbnailUrl;
+
+  const imageUrl = typeof item.imageUrl === 'string' ? item.imageUrl.trim() : '';
+  const mediaUrl = getMediaUrl(item).trim();
+  if (imageUrl && imageUrl !== mediaUrl) {
+    return imageUrl;
+  }
+  return undefined;
+};
+
+const getHistoryCategory = (item: GlobalImageHistoryItem): string => {
+  const sourceType = typeof item.sourceType === 'string' ? item.sourceType.trim() : '';
+  for (const [category, sourceTypes] of Object.entries(HISTORY_CATEGORY_SOURCE_TYPES)) {
+    if (sourceTypes.includes(sourceType)) return category;
+  }
+  return getMediaType(item) === 'video' ? 'video' : 'image';
 };
 
 const BANANA_31_MODEL = 'gemini-3.1-flash-image-preview';
@@ -85,7 +132,7 @@ const GlobalImageDetailModal: React.FC<GlobalImageDetailModalProps> = ({
     .startsWith('zh');
   const lt = (zh: string, en: string) => (isZh ? zh : en);
   const formattedDate = new Date(item.createdAt).toLocaleString(isZh ? 'zh-CN' : 'en-US');
-  const sourceTypeLabel = SOURCE_TYPE_LABELS[item.sourceType];
+  const sourceTypeLabel = HISTORY_CATEGORY_LABELS[getHistoryCategory(item)];
   const typeLabel =
     typeof sourceTypeLabel === 'string'
       ? sourceTypeLabel
@@ -108,7 +155,7 @@ const GlobalImageDetailModal: React.FC<GlobalImageDetailModalProps> = ({
       >
         {/* 头部 */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-          <h3 className="text-white font-medium">{lt('图片详情', 'Image Details')}</h3>
+          <h3 className="text-white font-medium">{lt('媒体详情', 'Media Details')}</h3>
           <div className="flex items-center gap-2">
             <Button
               onClick={onDownload}
@@ -141,13 +188,23 @@ const GlobalImageDetailModal: React.FC<GlobalImageDetailModalProps> = ({
 
         {/* 内容区 */}
         <div className="flex-1 overflow-auto p-4 flex gap-4">
-          {/* 图片预览 */}
+          {/* 媒体预览 */}
           <div className="flex-1 flex items-center justify-center bg-black/50 rounded-lg">
-            <SmartImage
-              src={item.imageUrl}
-              alt={item.prompt || lt('图片', 'Image')}
-              className="max-w-full max-h-[60vh] object-contain"
-            />
+            {getMediaType(item) === 'video' ? (
+              <video
+                src={getMediaUrl(item)}
+                poster={getImagePreviewUrl(item)}
+                className="max-w-full max-h-[60vh] object-contain"
+                controls
+                preload="metadata"
+              />
+            ) : (
+              <SmartImage
+                src={item.imageUrl}
+                alt={item.prompt || lt('图片', 'Image')}
+                className="max-w-full max-h-[60vh] object-contain"
+              />
+            )}
           </div>
 
           {/* 信息面板 */}

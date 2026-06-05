@@ -97,7 +97,10 @@ import Seedream5Node from "./nodes/Seedream5Node";
 import NodeGroupNode from "./nodes/NodeGroupNode";
 import { resolveFlowNodeSendAnchorClient } from "./utils/flowNodeSendAnchor";
 import { FLOW_IMAGE_ASSET_PREFIX } from "@/services/flowImageAssetStore";
-import { recordImageHistoryEntry } from "@/services/imageHistoryService";
+import {
+  recordGlobalMediaHistoryEntry,
+  recordImageHistoryEntry,
+} from "@/services/imageHistoryService";
 import {
   useFlowStore,
   FlowBackgroundVariant,
@@ -185,6 +188,7 @@ import {
   createPersonalAssetId,
   usePersonalLibraryStore,
   type PersonalImageAsset,
+  type PersonalVideoAsset,
 } from "@/stores/personalLibraryStore";
 import { normalizeWheelDelta, computeSmoothZoom } from "@/lib/zoomUtils";
 import type { AIImageGenerateRequest, AIImageResult } from "@/types/ai";
@@ -231,6 +235,42 @@ const normalizeFlowSourceHandle = (
   }
   return trimmed;
 };
+
+const VIDEO_LIBRARY_SOURCE_LABELS: Record<string, string> = {
+  video: "视频",
+  klingVideo: "Kling 视频",
+  kling26Video: "Kling 2.6 视频",
+  kling30Video: "Kling 3.0 视频",
+  klingO1Video: "Kling O3 视频",
+  viduVideo: "Vidu 视频",
+  viduQ3: "Vidu Q3 视频",
+  doubaoVideo: "豆包视频",
+  seedance20Video: "Seedance 2.0 视频",
+  sora2Video: "Sora 2 视频",
+  wan26: "Wan 2.6 视频",
+  wan27Video: "Wan 2.7 视频",
+  wan2R2V: "Wan 参考视频",
+  happyhorseR2V: "快乐马视频",
+  tencentSpeech: "腾讯语音",
+};
+
+const VIDEO_LIBRARY_NODE_TYPES = new Set([
+  "video",
+  "klingVideo",
+  "kling26Video",
+  "kling30Video",
+  "klingO1Video",
+  "viduVideo",
+  "viduQ3",
+  "doubaoVideo",
+  "seedance20Video",
+  "sora2Video",
+  "wan26",
+  "wan27Video",
+  "wan2R2V",
+  "happyhorseR2V",
+  "tencentSpeech",
+]);
 
 const FLOW_EDGE_STANDARD_COLOR = "#9ca3af";
 const FLOW_EDGE_COLOR_BY_KIND = {
@@ -3508,6 +3548,108 @@ function FlowInner() {
   const isMarqueeMode = drawMode === "marquee";
 
   const addPersonalAsset = usePersonalLibraryStore((state) => state.addAsset);
+  const syncedGlobalVideoHistoryRef = React.useRef<Set<string>>(new Set());
+
+  React.useEffect(() => {
+    const existingVideoUrls = new Set(
+      usePersonalLibraryStore
+        .getState()
+        .assets.filter((asset) => asset.type === "video" && typeof asset.url === "string")
+        .map((asset) => asset.url.trim())
+        .filter(Boolean)
+    );
+
+    const nextVideoAssets: PersonalVideoAsset[] = [];
+    for (const node of nodes) {
+      if (!VIDEO_LIBRARY_NODE_TYPES.has(String(node.type || ""))) continue;
+      const data = ((node as any)?.data ?? {}) as Record<string, any>;
+      const rawVideoUrl =
+        typeof data.videoUrl === "string"
+          ? data.videoUrl
+          : typeof data.video_url === "string"
+          ? data.video_url
+          : "";
+      const videoUrl = rawVideoUrl.trim();
+      if (!/^https?:\/\//i.test(videoUrl) || existingVideoUrls.has(videoUrl)) {
+        continue;
+      }
+
+      const now = Date.now();
+      const sourceType = String(node.type || "video");
+      const fallbackName =
+        VIDEO_LIBRARY_SOURCE_LABELS[sourceType] ||
+        data.label ||
+        lt("视频", "Video");
+      const asset: PersonalVideoAsset = {
+        id: createPersonalAssetId("plvideo"),
+        type: "video",
+        name:
+          (typeof data.videoName === "string" && data.videoName.trim()) ||
+          (typeof data.prompt === "string" && data.prompt.trim().slice(0, 48)) ||
+          fallbackName,
+        url: videoUrl,
+        thumbnail:
+          (typeof data.thumbnail === "string" && data.thumbnail.trim()) ||
+          (Array.isArray(data.history) &&
+          typeof data.history[0]?.thumbnail === "string"
+            ? data.history[0].thumbnail
+            : undefined),
+        fileName:
+          (typeof data.videoName === "string" && data.videoName.trim()) ||
+          `${sourceType}-${now}.mp4`,
+        contentType:
+          (typeof data.mimeType === "string" && data.mimeType.trim()) ||
+          "video/mp4",
+        sourceType,
+        sourceProjectId: useProjectContentStore.getState().projectId || undefined,
+        duration:
+          typeof data.duration === "number" && Number.isFinite(data.duration)
+            ? data.duration
+            : undefined,
+        width:
+          typeof data.boxW === "number" && Number.isFinite(data.boxW)
+            ? data.boxW
+            : undefined,
+        height:
+          typeof data.boxH === "number" && Number.isFinite(data.boxH)
+            ? data.boxH
+            : undefined,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      existingVideoUrls.add(videoUrl);
+      nextVideoAssets.push(asset);
+
+      if (!syncedGlobalVideoHistoryRef.current.has(videoUrl)) {
+        syncedGlobalVideoHistoryRef.current.add(videoUrl);
+        recordGlobalMediaHistoryEntry({
+          mediaType: "video",
+          mediaUrl: videoUrl,
+          thumbnailUrl: asset.thumbnail,
+          prompt:
+            (typeof data.prompt === "string" && data.prompt.trim()) ||
+            (typeof data.videoName === "string" && data.videoName.trim()) ||
+            fallbackName,
+          sourceType,
+          sourceProjectId: useProjectContentStore.getState().projectId || undefined,
+          metadata: {
+            thumbnailUrl: asset.thumbnail,
+            duration: asset.duration,
+            from: "flow-video-node",
+          },
+        });
+      }
+    }
+
+    if (nextVideoAssets.length === 0) return;
+    nextVideoAssets.forEach((asset) => {
+      addPersonalAsset(asset);
+      void personalLibraryApi.upsert(asset).catch((error) => {
+        console.warn("[Flow] 同步视频资源到个人库失败:", error);
+      });
+    });
+  }, [nodes, addPersonalAsset, lt]);
 
   // 动态节点配置
   const [nodeConfigs, setNodeConfigs] = React.useState<NodeConfig[]>([]);
@@ -11169,6 +11311,56 @@ function FlowInner() {
     return () =>
       window.removeEventListener("flow:addToLibrary", handler as EventListener);
   }, [rf, addPersonalAsset]);
+
+  React.useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail as
+        | {
+            videoUrl?: string;
+            videoName?: string;
+            thumbnail?: string;
+          }
+        | undefined;
+      const videoUrl =
+        typeof detail?.videoUrl === "string" ? detail.videoUrl.trim() : "";
+      if (!videoUrl) return;
+
+      const center = rf.screenToFlowPosition({
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+      });
+      const id = `video_${Date.now()}`;
+
+      setNodes((ns) =>
+        ns.concat([
+          {
+            id,
+            type: "video",
+            position: center,
+            data: {
+              label: lt("视频", "Video"),
+              videoUrl,
+              videoName: detail?.videoName || lt("库中视频", "Library Video"),
+              thumbnail: detail?.thumbnail,
+              status: "ready",
+              boxW: 320,
+              boxH: 280,
+            },
+          } as any,
+        ])
+      );
+    };
+
+    window.addEventListener(
+      "flow:insert-video-from-library",
+      handler as EventListener
+    );
+    return () =>
+      window.removeEventListener(
+        "flow:insert-video-from-library",
+        handler as EventListener
+      );
+  }, [rf, setNodes, lt]);
 
   // 监听双击输出节点创建新节点并连线
   React.useEffect(() => {

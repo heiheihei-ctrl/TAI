@@ -13,6 +13,7 @@ import {
   Plus,
   Search,
   Loader2,
+  Film,
 } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
@@ -34,6 +35,7 @@ import {
   type PersonalImageAsset,
   type PersonalModelAsset,
   type PersonalSvgAsset,
+  type PersonalVideoAsset,
 } from "@/stores/personalLibraryStore";
 import {
   globalImageHistoryApi,
@@ -60,15 +62,72 @@ const formatHistoryDate = (value: string, locale: string): string => {
   });
 };
 
-const SOURCE_TYPE_LABELS: Record<string, { zh: string; en: string }> = {
-  generate: { zh: "图片生成", en: "Image Generate" },
-  generatePro: { zh: "图片生成Pro", en: "Image Generate Pro" },
-  generatePro4: { zh: "图片生成Pro4", en: "Image Generate Pro4" },
-  midjourney: { zh: "Midjourney", en: "Midjourney" },
-  "3d": { zh: "3D生成", en: "3D Generate" },
-  camera: { zh: "相机", en: "Camera" },
+const HISTORY_CATEGORY_LABELS: Record<string, { zh: string; en: string }> = {
   image: { zh: "图片", en: "Image" },
-  imagePro: { zh: "图片Pro", en: "Image Pro" },
+  video: { zh: "视频", en: "Video" },
+  camera: { zh: "相机", en: "Camera" },
+  "3d": { zh: "3D", en: "3D" },
+  speech: { zh: "语音", en: "Speech" },
+};
+
+const HISTORY_CATEGORY_SOURCE_TYPES: Record<string, string[]> = {
+  image: ["generate", "generatePro", "generatePro4", "midjourney", "image", "imagePro"],
+  video: [
+    "video",
+    "klingVideo",
+    "kling26Video",
+    "kling30Video",
+    "klingO1Video",
+    "viduVideo",
+    "viduQ3",
+    "doubaoVideo",
+    "seedance20Video",
+    "wan26",
+    "wan27Video",
+    "wan2R2V",
+    "happyhorseR2V",
+    "sora2Video",
+  ],
+  camera: ["camera"],
+  "3d": ["3d"],
+  speech: ["tencentSpeech"],
+};
+
+const getHistoryMediaType = (
+  item: GlobalImageHistoryItem
+): "image" | "video" => (item.mediaType === "video" ? "video" : "image");
+
+const getHistoryMediaUrl = (item: GlobalImageHistoryItem): string =>
+  (typeof item.mediaUrl === "string" && item.mediaUrl.trim()) ||
+  item.imageUrl ||
+  "";
+
+const getHistoryImagePreviewSrc = (
+  item: GlobalImageHistoryItem
+): string | undefined => {
+  const thumbnailUrl =
+    typeof item.thumbnailUrl === "string" ? item.thumbnailUrl.trim() : "";
+  if (thumbnailUrl) return thumbnailUrl;
+
+  const imageUrl = typeof item.imageUrl === "string" ? item.imageUrl.trim() : "";
+  const mediaUrl = getHistoryMediaUrl(item).trim();
+  if (imageUrl && imageUrl !== mediaUrl) {
+    return imageUrl;
+  }
+  return undefined;
+};
+
+const getHistoryPreviewSrc = (item: GlobalImageHistoryItem): string =>
+  getHistoryMediaType(item) === "video"
+    ? (getHistoryImagePreviewSrc(item) || getHistoryMediaUrl(item))
+    : (item.imageUrl || getHistoryMediaUrl(item));
+
+const getHistoryCategory = (item: GlobalImageHistoryItem): string => {
+  const sourceType = typeof item.sourceType === "string" ? item.sourceType.trim() : "";
+  for (const [category, sourceTypes] of Object.entries(HISTORY_CATEGORY_SOURCE_TYPES)) {
+    if (sourceTypes.includes(sourceType)) return category;
+  }
+  return getHistoryMediaType(item) === "video" ? "video" : "image";
 };
 
 type LibraryTab = "global-history" | "project-history" | "manual";
@@ -124,6 +183,12 @@ const getTypeLabel = (
         icon: <Box className='w-3 h-3' />,
         bgColor: "bg-purple-100 text-purple-700",
       };
+    case "video":
+      return {
+        label: "VIDEO",
+        icon: <Film className='w-3 h-3' />,
+        bgColor: "bg-amber-100 text-amber-700",
+      };
     default:
       return {
         label: "SVG",
@@ -177,6 +242,7 @@ const LibraryPanel: React.FC = () => {
     React.useState("");
   const [projectHistorySearchQuery, setProjectHistorySearchQuery] =
     React.useState("");
+  const [manualSearchQuery, setManualSearchQuery] = React.useState("");
   const [projectHistoryPage, setProjectHistoryPage] = React.useState(1);
   const [projectHistoryTotalPages, setProjectHistoryTotalPages] =
     React.useState(1);
@@ -206,11 +272,29 @@ const LibraryPanel: React.FC = () => {
     () => buildHistoryPageSlots(projectHistoryPage, projectHistoryTotalPages),
     [projectHistoryPage, projectHistoryTotalPages]
   );
+  const filteredManualAssets = React.useMemo(() => {
+    const keyword = manualSearchQuery.trim().toLowerCase();
+    if (!keyword) return allAssets;
+    return allAssets.filter((asset) => {
+      const typeInfo = getTypeLabel(asset.type);
+      const haystack = [
+        asset.name,
+        asset.fileName,
+        asset.contentType,
+        (asset as PersonalVideoAsset).sourceType,
+        typeInfo.label,
+      ]
+        .filter((value): value is string => typeof value === "string")
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(keyword);
+    });
+  }, [allAssets, manualSearchQuery]);
 
-  const getSourceTypeLabel = React.useCallback(
-    (type: string) => {
-      const item = SOURCE_TYPE_LABELS[type];
-      if (!item) return type;
+  const getHistoryCategoryLabel = React.useCallback(
+    (category: string) => {
+      const item = HISTORY_CATEGORY_LABELS[category];
+      if (!item) return category;
       return lt(item.zh, item.en);
     },
     [lt]
@@ -573,21 +657,44 @@ const LibraryPanel: React.FC = () => {
           detail: { message: lt("SVG 已发送到画板", "SVG sent to canvas"), type: "success" },
         })
       );
+      return;
+    }
+
+    if (asset.type === "video") {
+      const videoAsset = asset as PersonalVideoAsset;
+      window.dispatchEvent(
+        new CustomEvent("flow:insert-video-from-library", {
+          detail: {
+            videoUrl: videoAsset.url,
+            videoName: videoAsset.fileName || videoAsset.name,
+            thumbnail: videoAsset.thumbnail,
+          },
+        })
+      );
+      window.dispatchEvent(
+        new CustomEvent("toast", {
+          detail: { message: lt("视频已发送到画板", "Video sent to canvas"), type: "success" },
+        })
+      );
     }
   };
 
   const handleHistoryDownload = (item: GlobalImageHistoryItem) => {
+    const targetUrl = getHistoryMediaUrl(item);
     try {
       const link = document.createElement("a");
-      link.href = item.imageUrl;
-      link.download = `history_${item.id}.png`;
+      link.href = targetUrl;
+      link.download =
+        getHistoryMediaType(item) === "video"
+          ? `history_${item.id}.mp4`
+          : `history_${item.id}.png`;
       link.target = "_blank";
       link.rel = "noopener noreferrer";
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     } catch {
-      window.open(item.imageUrl, "_blank", "noopener,noreferrer");
+      window.open(targetUrl, "_blank", "noopener,noreferrer");
     }
   };
 
@@ -664,8 +771,30 @@ const LibraryPanel: React.FC = () => {
   };
 
   const handleHistorySendToCanvas = async (item: GlobalImageHistoryItem) => {
-    if (!item.imageUrl) {
-      alert(lt("历史图片缺少可用链接，无法发送到画板", "History image has no usable URL and cannot be sent to canvas."));
+    const mediaUrl = getHistoryMediaUrl(item);
+    if (!mediaUrl) {
+      alert(
+        getHistoryMediaType(item) === "video"
+          ? lt("历史视频缺少可用链接，无法发送到画板", "History video has no usable URL and cannot be sent to canvas.")
+          : lt("历史图片缺少可用链接，无法发送到画板", "History image has no usable URL and cannot be sent to canvas.")
+      );
+      return;
+    }
+    if (getHistoryMediaType(item) === "video") {
+      window.dispatchEvent(
+        new CustomEvent("flow:insert-video-from-library", {
+          detail: {
+            videoUrl: mediaUrl,
+            videoName: item.prompt || `history_${item.id}.mp4`,
+            thumbnail: getHistoryImagePreviewSrc(item),
+          },
+        })
+      );
+      window.dispatchEvent(
+        new CustomEvent("toast", {
+          detail: { message: lt("历史视频已发送到画板", "History video sent to canvas"), type: "success" },
+        })
+      );
       return;
     }
     const dataUrl = await readDataUrl(item.imageUrl);
@@ -730,6 +859,10 @@ const LibraryPanel: React.FC = () => {
 
   const handleAssetDoubleClick = React.useCallback(
     (asset: PersonalLibraryAsset) => {
+      if (asset.type === "video") {
+        window.open(asset.url, "_blank", "noopener,noreferrer");
+        return;
+      }
       openImagePreview(
         getAssetPreviewSrc(asset),
         asset.name || lt("素材预览", "Asset Preview")
@@ -740,8 +873,12 @@ const LibraryPanel: React.FC = () => {
 
   const handleHistoryItemDoubleClick = React.useCallback(
     (item: GlobalImageHistoryItem) => {
+      if (getHistoryMediaType(item) === "video") {
+        window.open(getHistoryMediaUrl(item), "_blank", "noopener,noreferrer");
+        return;
+      }
       openImagePreview(
-        item.imageUrl,
+        getHistoryPreviewSrc(item),
         item.prompt ||
           (activeTab === "project-history"
             ? lt("项目图片预览", "Project Image Preview")
@@ -830,6 +967,21 @@ const LibraryPanel: React.FC = () => {
           svgContent: svgAsset.svgContent,
         })
       );
+    } else if (asset.type === "video") {
+      const videoAsset = asset as PersonalVideoAsset;
+      event.dataTransfer.setData("text/uri-list", videoAsset.url);
+      event.dataTransfer.setData("text/plain", videoAsset.url);
+      event.dataTransfer.setData(
+        "application/x-tanva-asset",
+        JSON.stringify({
+          type: "video",
+          id: videoAsset.id,
+          url: videoAsset.url,
+          name: videoAsset.name,
+          fileName: videoAsset.fileName,
+          thumbnail: videoAsset.thumbnail,
+        })
+      );
     }
     event.dataTransfer.effectAllowed = "copy";
   };
@@ -838,16 +990,23 @@ const LibraryPanel: React.FC = () => {
     item: GlobalImageHistoryItem,
     event: React.DragEvent
   ) => {
-    event.dataTransfer.setData("text/uri-list", item.imageUrl);
-    event.dataTransfer.setData("text/plain", item.imageUrl);
+    const mediaType = getHistoryMediaType(item);
+    const mediaUrl = getHistoryMediaUrl(item);
+    event.dataTransfer.setData("text/uri-list", mediaUrl);
+    event.dataTransfer.setData("text/plain", mediaUrl);
     event.dataTransfer.setData(
       "application/x-tanva-asset",
       JSON.stringify({
-        type: "2d",
+        type: mediaType === "video" ? "video" : "2d",
         id: item.id,
-        url: item.imageUrl,
-        name: item.prompt || lt("历史图片", "History Image"),
-        fileName: `history_${item.id}.png`,
+        url: mediaUrl,
+        name:
+          item.prompt ||
+          (mediaType === "video"
+            ? lt("历史视频", "History Video")
+            : lt("历史图片", "History Image")),
+        fileName: `history_${item.id}.${mediaType === "video" ? "mp4" : "png"}`,
+        thumbnail: getHistoryImagePreviewSrc(item),
       })
     );
     event.dataTransfer.effectAllowed = "copy";
@@ -1175,6 +1334,14 @@ const LibraryPanel: React.FC = () => {
                 alt={selectedAsset.name}
                 className='w-full h-full object-contain'
               />
+            ) : selectedAsset.type === "video" ? (
+              <video
+                src={selectedAsset.url}
+                poster={selectedAsset.thumbnail}
+                className='w-full h-full object-contain bg-black'
+                controls
+                preload='metadata'
+              />
             ) : (
               <ModelPreview
                 asset={selectedAsset as PersonalModelAsset}
@@ -1212,14 +1379,20 @@ const LibraryPanel: React.FC = () => {
             </div>
 
             {/* 尺寸/格式 */}
-            {selectedAsset.type === "2d" || selectedAsset.type === "svg" ? (
+            {selectedAsset.type === "2d" ||
+            selectedAsset.type === "svg" ||
+            selectedAsset.type === "video" ? (
               <div>
-                <div className='text-xs text-gray-500'>{lt("尺寸", "Dimensions")}</div>
+                <div className='text-xs text-gray-500'>
+                  {selectedAsset.type === "video"
+                    ? lt("分辨率", "Resolution")
+                    : lt("尺寸", "Dimensions")}
+                </div>
                 <div className='text-sm text-gray-700'>
-                  {(selectedAsset as PersonalImageAsset | PersonalSvgAsset)
+                  {(selectedAsset as PersonalImageAsset | PersonalSvgAsset | PersonalVideoAsset)
                     .width ?? "-"}{" "}
                   ×{" "}
-                  {(selectedAsset as PersonalImageAsset | PersonalSvgAsset)
+                  {(selectedAsset as PersonalImageAsset | PersonalSvgAsset | PersonalVideoAsset)
                     .height ?? "-"}
                 </div>
               </div>
@@ -1294,23 +1467,43 @@ const LibraryPanel: React.FC = () => {
           }}
         >
           <div className='w-full aspect-square bg-gray-100 flex items-center justify-center overflow-hidden'>
-            <SmartImage
-              src={selectedHistoryItem.imageUrl}
-              alt={
-                selectedHistoryItem.prompt ||
-                (activeTab === "project-history"
-                  ? lt("项目图片", "Project Image")
-                  : lt("历史图片", "History Image"))
-              }
-              className='w-full h-full object-contain'
-            />
+            {getHistoryMediaType(selectedHistoryItem) === "video" ? (
+              <video
+                src={getHistoryMediaUrl(selectedHistoryItem)}
+                poster={getHistoryImagePreviewSrc(selectedHistoryItem)}
+                className='w-full h-full object-contain bg-black'
+                controls
+                preload='metadata'
+              />
+            ) : (
+              <SmartImage
+                src={selectedHistoryItem.imageUrl}
+                alt={
+                  selectedHistoryItem.prompt ||
+                  (activeTab === "project-history"
+                    ? lt("项目图片", "Project Image")
+                    : lt("历史图片", "History Image"))
+                }
+                className='w-full h-full object-contain'
+              />
+            )}
           </div>
 
           <div className='p-3 space-y-2'>
             <div className='flex items-center gap-2'>
-              <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700'>
-                <ImageIcon className='w-3 h-3' />
-                IMG
+              <span
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
+                  getHistoryMediaType(selectedHistoryItem) === "video"
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-blue-100 text-blue-700"
+                }`}
+              >
+                {getHistoryMediaType(selectedHistoryItem) === "video" ? (
+                  <Film className='w-3 h-3' />
+                ) : (
+                  <ImageIcon className='w-3 h-3' />
+                )}
+                {getHistoryMediaType(selectedHistoryItem) === "video" ? "VIDEO" : "IMG"}
               </span>
             </div>
 
@@ -1334,7 +1527,7 @@ const LibraryPanel: React.FC = () => {
             <div>
               <div className='text-xs text-gray-500'>{lt("类型", "Type")}</div>
               <div className='text-sm text-gray-700'>
-                {getSourceTypeLabel(selectedHistoryItem.sourceType)}
+                {getHistoryCategoryLabel(getHistoryCategory(selectedHistoryItem))}
               </div>
             </div>
 
@@ -1474,9 +1667,19 @@ const LibraryPanel: React.FC = () => {
         <div className='flex-1 min-h-0 overflow-y-auto'>
           {activeTab === "manual" ? (
             <div className='p-3'>
+              <div className='mb-3 relative'>
+                <Search className='pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400' />
+                <input
+                  type='text'
+                  value={manualSearchQuery}
+                  onChange={(event) => setManualSearchQuery(event.target.value)}
+                  placeholder={lt("搜索资源 / 类型...", "Search assets / type...")}
+                  className='tanva-library-search-input w-full h-8 rounded-lg border border-gray-200 bg-white pl-7 pr-2 text-xs text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400'
+                />
+              </div>
               <div className='grid grid-cols-3 gap-2'>
                 {/* 资源列表 */}
-                {allAssets.map((asset) => {
+                {filteredManualAssets.map((asset) => {
                   const is2dOrSvg = asset.type === "2d" || asset.type === "svg";
                   const isSelected = selectedAsset?.id === asset.id;
                   const typeLabel =
@@ -1484,6 +1687,8 @@ const LibraryPanel: React.FC = () => {
                       ? "IMG"
                       : asset.type === "3d"
                       ? "3D"
+                      : asset.type === "video"
+                      ? "VIDEO"
                       : "SVG";
 
                   return (
@@ -1505,6 +1710,22 @@ const LibraryPanel: React.FC = () => {
                           className='w-full h-full object-cover'
                           draggable={false}
                         />
+                      ) : asset.type === "video" ? (
+                        asset.thumbnail ? (
+                          <SmartImage
+                            src={asset.thumbnail}
+                            alt={asset.name}
+                            className='w-full h-full object-cover'
+                            draggable={false}
+                          />
+                        ) : (
+                          <video
+                            src={asset.url}
+                            className='w-full h-full object-cover bg-black'
+                            muted
+                            preload='metadata'
+                          />
+                        )
                       ) : (
                         <ModelPreview
                           asset={asset as PersonalModelAsset}
@@ -1547,7 +1768,10 @@ const LibraryPanel: React.FC = () => {
                       }
                       setHistorySearchQuery(event.target.value);
                     }}
-                    placeholder={lt("搜索 prompt...", "Search prompt...")}
+                    placeholder={lt(
+                      "搜索 prompt / 类型...",
+                      "Search prompt / type..."
+                    )}
                     className='tanva-library-search-input w-full h-8 rounded-lg border border-gray-200 bg-white pl-7 pr-2 text-xs text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400'
                   />
                 </div>
@@ -1563,9 +1787,9 @@ const LibraryPanel: React.FC = () => {
                   className='tanva-library-filter-select h-8 max-w-[108px] rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400'
                 >
                   <option value=''>{lt("全部类型", "All types")}</option>
-                  {Object.keys(SOURCE_TYPE_LABELS).map((key) => (
+                  {Object.keys(HISTORY_CATEGORY_LABELS).map((key) => (
                     <option key={key} value={key}>
-                      {getSourceTypeLabel(key)}
+                      {getHistoryCategoryLabel(key)}
                     </option>
                   ))}
                 </select>
@@ -1595,28 +1819,61 @@ const LibraryPanel: React.FC = () => {
                       title={
                         item.prompt ||
                         (isProjectHistoryTab
-                          ? lt("项目图片", "Project Image")
+                          ? getHistoryMediaType(item) === "video"
+                            ? lt("项目视频", "Project Video")
+                            : lt("项目图片", "Project Image")
+                          : getHistoryMediaType(item) === "video"
+                          ? lt("历史视频", "History Video")
                           : lt("历史图片", "History Image"))
                       }
                     >
-                      <SmartImage
-                        src={item.imageUrl}
-                        alt={
-                          item.prompt ||
-                          (isProjectHistoryTab
-                            ? lt("项目图片", "Project Image")
-                            : lt("历史图片", "History Image"))
-                        }
-                        className='w-full h-full object-cover'
-                        draggable={false}
-                        loading='lazy'
-                      />
+                      {getHistoryMediaType(item) === "video" ? (
+                        getHistoryImagePreviewSrc(item) ? (
+                          <SmartImage
+                            src={getHistoryPreviewSrc(item)}
+                            alt={
+                              item.prompt ||
+                              (isProjectHistoryTab
+                                ? lt("项目视频", "Project Video")
+                                : lt("历史视频", "History Video"))
+                            }
+                            className='w-full h-full object-cover'
+                            draggable={false}
+                            loading='lazy'
+                          />
+                        ) : (
+                          <video
+                            src={getHistoryMediaUrl(item)}
+                            className='w-full h-full object-cover bg-black'
+                            preload='metadata'
+                            muted
+                          />
+                        )
+                      ) : (
+                        <SmartImage
+                          src={item.imageUrl}
+                          alt={
+                            item.prompt ||
+                            (isProjectHistoryTab
+                              ? lt("项目图片", "Project Image")
+                              : lt("历史图片", "History Image"))
+                          }
+                          className='w-full h-full object-cover'
+                          draggable={false}
+                          loading='lazy'
+                        />
+                      )}
                       <div className='absolute bottom-0 left-0 right-0 px-1.5 py-1 bg-gradient-to-t from-black/70 to-transparent flex items-center justify-between text-[10px] text-white'>
                         <span>{formatHistoryDate(item.createdAt, locale)}</span>
-                        <span className='px-1 py-0.5 rounded bg-white/25 truncate max-w-[70px] text-right'>
-                          {getSourceTypeLabel(item.sourceType)}
+                        <span className='px-1 py-0.5 rounded bg-white/25 truncate max-w-[78px] text-right'>
+                          {getHistoryCategoryLabel(getHistoryCategory(item))}
                         </span>
                       </div>
+                      {getHistoryMediaType(item) === "video" ? (
+                        <div className='absolute top-1 left-1 px-1 py-0.5 rounded bg-black/60 text-white text-[8px] font-medium'>
+                          VIDEO
+                        </div>
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -1713,7 +1970,10 @@ const LibraryPanel: React.FC = () => {
         <div className='tanva-library-footer p-3 bg-white/80 backdrop-blur-sm border-t border-white/40'>
           <div className='text-xs text-gray-500 text-center'>
             {activeTab === "manual"
-              ? lt(`共 ${allAssets.length} 个资源`, `${allAssets.length} assets`)
+              ? lt(
+                  `显示 ${filteredManualAssets.length}/${allAssets.length} 个资源`,
+                  `${filteredManualAssets.length}/${allAssets.length} assets`
+                )
               : lt(
                   `第 ${activeHistoryPage}/${activeHistoryTotalPages} 页 · 共 ${activeHistoryTotalCount} 条`,
                   `Page ${activeHistoryPage}/${activeHistoryTotalPages} · ${activeHistoryTotalCount} items`

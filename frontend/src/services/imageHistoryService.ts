@@ -40,11 +40,19 @@ const parsePendingQueue = (raw: string | null): PendingGlobalHistoryWrite[] => {
         const dto = item.dto;
         if (!isObjectRecord(dto)) return null;
         const imageUrl = typeof dto.imageUrl === 'string' ? dto.imageUrl.trim() : '';
+        const mediaUrl = typeof dto.mediaUrl === 'string' ? dto.mediaUrl.trim() : '';
         const sourceType = typeof dto.sourceType === 'string' ? dto.sourceType.trim() : '';
-        if (!imageUrl || !sourceType) return null;
+        if ((!imageUrl && !mediaUrl) || !sourceType) return null;
         return {
           dto: {
-            imageUrl,
+            imageUrl: imageUrl || undefined,
+            mediaType:
+              dto.mediaType === 'video' || dto.mediaType === 'image'
+                ? dto.mediaType
+                : undefined,
+            mediaUrl: mediaUrl || undefined,
+            thumbnailUrl:
+              typeof dto.thumbnailUrl === 'string' ? dto.thumbnailUrl : undefined,
             sourceType,
             prompt: typeof dto.prompt === 'string' ? dto.prompt : undefined,
             sourceProjectId:
@@ -89,7 +97,9 @@ const isSamePendingWrite = (
   b: CreateGlobalImageHistoryDto
 ): boolean => {
   return (
-    a.imageUrl === b.imageUrl &&
+    (a.imageUrl || '') === (b.imageUrl || '') &&
+    (a.mediaUrl || '') === (b.mediaUrl || '') &&
+    (a.mediaType || 'image') === (b.mediaType || 'image') &&
     a.sourceType === b.sourceType &&
     (a.prompt || '') === (b.prompt || '') &&
     (a.sourceProjectId || '') === (b.sourceProjectId || '')
@@ -404,6 +414,39 @@ export async function recordImageHistoryEntry(options: RecordImageHistoryOptions
   }
 
   return { id, remoteUrl: undefined, thumbnail: resolvedThumbnail };
+}
+
+interface RecordGlobalMediaHistoryOptions {
+  mediaType: 'image' | 'video';
+  mediaUrl: string;
+  thumbnailUrl?: string;
+  prompt?: string;
+  sourceType: string;
+  sourceProjectId?: string | null;
+  sourceProjectName?: string;
+  metadata?: Record<string, any>;
+}
+
+export function recordGlobalMediaHistoryEntry(
+  options: RecordGlobalMediaHistoryOptions
+): void {
+  const mediaUrl = typeof options.mediaUrl === 'string' ? options.mediaUrl.trim() : '';
+  if (!mediaUrl) return;
+
+  const thumbnailUrl =
+    typeof options.thumbnailUrl === 'string' ? options.thumbnailUrl.trim() : undefined;
+
+  enqueuePendingGlobalHistoryWrite({
+    imageUrl: options.mediaType === 'video' ? thumbnailUrl || mediaUrl : mediaUrl,
+    mediaType: options.mediaType,
+    mediaUrl,
+    thumbnailUrl,
+    prompt: options.prompt,
+    sourceType: options.sourceType,
+    sourceProjectId: options.sourceProjectId ?? undefined,
+    sourceProjectName: options.sourceProjectName,
+    metadata: options.metadata,
+  });
 }
 
 /**

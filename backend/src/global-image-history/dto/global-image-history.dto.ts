@@ -3,8 +3,21 @@ import { IsString, IsOptional, IsInt, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateGlobalImageHistoryDto {
+  @IsOptional()
   @IsString()
-  imageUrl!: string;
+  imageUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  mediaType?: string;
+
+  @IsOptional()
+  @IsString()
+  mediaUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  thumbnailUrl?: string;
 
   @IsOptional()
   @IsString()

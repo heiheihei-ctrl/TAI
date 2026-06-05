@@ -1,6 +1,6 @@
 import React, { useEffect, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Download, Trash2, Search, Loader2 } from 'lucide-react';
+import { X, Download, Trash2, Search, Loader2, Film } from 'lucide-react';
 import { Button } from '../ui/button';
 import SmartImage from '../ui/SmartImage';
 import { useGlobalImageHistoryStore } from '@/stores/globalImageHistoryStore';
@@ -17,15 +17,67 @@ interface GlobalImageHistoryPageProps {
   onClose: () => void;
 }
 
-const SOURCE_TYPE_LABELS: Record<string, { zh: string; en: string }> = {
-  generate: { zh: '图片生成', en: 'Image Generate' },
-  generatePro: { zh: '图片生成Pro', en: 'Image Generate Pro' },
-  generatePro4: { zh: '图片生成Pro4', en: 'Image Generate Pro4' },
-  midjourney: { zh: 'Midjourney', en: 'Midjourney' },
-  '3d': { zh: '3D生成', en: '3D Generate' },
-  camera: { zh: '相机', en: 'Camera' },
+const HISTORY_CATEGORY_LABELS: Record<string, { zh: string; en: string }> = {
   image: { zh: '图片', en: 'Image' },
-  imagePro: { zh: '图片Pro', en: 'Image Pro' },
+  video: { zh: '视频', en: 'Video' },
+  camera: { zh: '相机', en: 'Camera' },
+  '3d': { zh: '3D', en: '3D' },
+  speech: { zh: '语音', en: 'Speech' },
+};
+
+const HISTORY_CATEGORY_SOURCE_TYPES: Record<string, string[]> = {
+  image: ['generate', 'generatePro', 'generatePro4', 'midjourney', 'image', 'imagePro'],
+  video: [
+    'video',
+    'klingVideo',
+    'kling26Video',
+    'kling30Video',
+    'klingO1Video',
+    'viduVideo',
+    'viduQ3',
+    'doubaoVideo',
+    'seedance20Video',
+    'wan26',
+    'wan27Video',
+    'wan2R2V',
+    'happyhorseR2V',
+    'sora2Video',
+  ],
+  camera: ['camera'],
+  '3d': ['3d'],
+  speech: ['tencentSpeech'],
+};
+
+const getMediaType = (item: GlobalImageHistoryItem): 'image' | 'video' =>
+  item.mediaType === 'video' ? 'video' : 'image';
+
+const getMediaUrl = (item: GlobalImageHistoryItem): string =>
+  (typeof item.mediaUrl === 'string' && item.mediaUrl.trim()) || item.imageUrl;
+
+const getImagePreviewUrl = (item: GlobalImageHistoryItem): string | undefined => {
+  const thumbnailUrl =
+    typeof item.thumbnailUrl === 'string' ? item.thumbnailUrl.trim() : '';
+  if (thumbnailUrl) return thumbnailUrl;
+
+  const imageUrl = typeof item.imageUrl === 'string' ? item.imageUrl.trim() : '';
+  const mediaUrl = getMediaUrl(item).trim();
+  if (imageUrl && imageUrl !== mediaUrl) {
+    return imageUrl;
+  }
+  return undefined;
+};
+
+const getPreviewUrl = (item: GlobalImageHistoryItem): string =>
+  getMediaType(item) === 'video'
+    ? getImagePreviewUrl(item) || getMediaUrl(item)
+    : item.imageUrl;
+
+const getHistoryCategory = (item: GlobalImageHistoryItem): string => {
+  const sourceType = typeof item.sourceType === 'string' ? item.sourceType.trim() : '';
+  for (const [category, sourceTypes] of Object.entries(HISTORY_CATEGORY_SOURCE_TYPES)) {
+    if (sourceTypes.includes(sourceType)) return category;
+  }
+  return getMediaType(item) === 'video' ? 'video' : 'image';
 };
 
 // Header 子组件
@@ -47,14 +99,14 @@ const Header: React.FC<HeaderProps> = ({
   lt,
 }) => (
   <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-    <h2 className="text-xl font-semibold text-white">{lt('全局图片历史', 'Global Image History')}</h2>
+    <h2 className="text-xl font-semibold text-white">{lt('全局媒体历史', 'Global Media History')}</h2>
     <div className="flex items-center gap-4">
       {/* 搜索框 */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
         <input
           type="text"
-          placeholder={lt('搜索 prompt 或项目名...', 'Search prompt or project...')}
+          placeholder={lt('搜索 prompt / 项目 / 类型...', 'Search prompt / project / type...')}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="pl-9 pr-4 py-2 w-64 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -67,7 +119,7 @@ const Header: React.FC<HeaderProps> = ({
         className="px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
         <option value="">{lt('全部类型', 'All Types')}</option>
-        {Object.entries(SOURCE_TYPE_LABELS).map(([key, label]) => (
+        {Object.entries(HISTORY_CATEGORY_LABELS).map(([key, label]) => (
           <option key={key} value={key}>
             {lt(label.zh, label.en)}
           </option>
@@ -94,7 +146,7 @@ interface ImageCardProps {
   onDownload: (item: GlobalImageHistoryItem) => void;
   lt: (zh: string, en: string) => string;
   isZh: boolean;
-  resolveSourceTypeLabel: (sourceType: string) => string;
+  resolveSourceTypeLabel: (item: GlobalImageHistoryItem) => string;
 }
 
 const ImageCard: React.FC<ImageCardProps> = ({
@@ -110,7 +162,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
     month: '2-digit',
     day: '2-digit',
   });
-  const typeLabel = resolveSourceTypeLabel(item.sourceType);
+  const typeLabel = resolveSourceTypeLabel(item);
   const requestPrompt = getHistoryRequestPrompt(item);
   const requestThumbnail = getHistoryRequestThumbnail(item);
 
@@ -120,13 +172,37 @@ const ImageCard: React.FC<ImageCardProps> = ({
       onClick={() => onSelect(item)}
     >
       <div className="aspect-square">
-        <SmartImage
-          src={item.imageUrl}
-          alt={requestPrompt || lt('图片', 'Image')}
-          className="w-full h-full object-cover"
-          loading="lazy"
-        />
+        {getMediaType(item) === 'video' ? (
+          getImagePreviewUrl(item) ? (
+          <SmartImage
+            src={getPreviewUrl(item)}
+            alt={requestPrompt || lt('视频', 'Video')}
+            className="w-full h-full object-cover"
+            loading="lazy"
+          />
+          ) : (
+            <video
+              src={getMediaUrl(item)}
+              className="w-full h-full object-cover bg-black"
+              preload="metadata"
+              muted
+            />
+          )
+        ) : (
+          <SmartImage
+            src={item.imageUrl}
+            alt={requestPrompt || lt('图片', 'Image')}
+            className="w-full h-full object-cover"
+            loading="lazy"
+          />
+        )}
       </div>
+      {getMediaType(item) === 'video' ? (
+        <div className="absolute left-2 bottom-14 rounded bg-black/55 px-1.5 py-0.5 text-[10px] text-white">
+          <Film className="inline mr-1 h-3 w-3" />
+          VIDEO
+        </div>
+      ) : null}
       {requestThumbnail ? (
         <div className="absolute left-2 top-2 rounded-lg border border-white/15 bg-black/55 p-1 backdrop-blur-sm">
           <div className="text-[10px] leading-none text-white/70">
@@ -203,7 +279,7 @@ interface ImageGridProps {
   onDownload: (item: GlobalImageHistoryItem) => void;
   lt: (zh: string, en: string) => string;
   isZh: boolean;
-  resolveSourceTypeLabel: (sourceType: string) => string;
+  resolveSourceTypeLabel: (item: GlobalImageHistoryItem) => string;
 }
 
 const ImageGrid: React.FC<ImageGridProps> = ({
@@ -221,8 +297,8 @@ const ImageGrid: React.FC<ImageGridProps> = ({
   <div className="flex-1 overflow-y-auto p-6">
     {items.length === 0 && !isLoading ? (
       <div className="flex flex-col items-center justify-center h-full text-gray-400">
-        <p className="text-lg">{lt('暂无图片历史', 'No image history yet')}</p>
-        <p className="text-sm mt-2">{lt('生成的图片会自动保存到这里', 'Generated images will appear here automatically')}</p>
+        <p className="text-lg">{lt('暂无媒体历史', 'No media history yet')}</p>
+        <p className="text-sm mt-2">{lt('生成的图片和视频会自动保存到这里', 'Generated images and videos will appear here automatically')}</p>
       </div>
     ) : (
       <>
@@ -292,9 +368,10 @@ export const GlobalImageHistoryPage: React.FC<GlobalImageHistoryPageProps> = ({
     search: searchQuery.trim() || undefined,
   };
   const resolveSourceTypeLabel = useCallback(
-    (sourceType: string) => {
-      const label = SOURCE_TYPE_LABELS[sourceType];
-      return label ? lt(label.zh, label.en) : sourceType;
+    (item: GlobalImageHistoryItem) => {
+      const category = getHistoryCategory(item);
+      const label = HISTORY_CATEGORY_LABELS[category];
+      return label ? lt(label.zh, label.en) : category;
     },
     [lt]
   );
@@ -404,11 +481,12 @@ export const GlobalImageHistoryPage: React.FC<GlobalImageHistoryPageProps> = ({
     setPendingDelete({ id, timer });
   }, [deleteItem, hideItem, lt, pendingDelete, restoreHiddenItem]);
 
-  // 下载图片
+  // 下载媒体
   const handleDownload = useCallback((item: GlobalImageHistoryItem) => {
     const link = document.createElement('a');
-    link.href = item.imageUrl;
-    link.download = `image_${item.id}.png`;
+    link.href = getMediaUrl(item);
+    link.download =
+      getMediaType(item) === 'video' ? `video_${item.id}.mp4` : `image_${item.id}.png`;
     link.target = '_blank';
     document.body.appendChild(link);
     link.click();
