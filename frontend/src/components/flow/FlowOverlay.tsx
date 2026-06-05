@@ -215,7 +215,7 @@ const normalizeFlowTargetHandle = (
   return handle;
 };
 
-// 兼容历史输出句柄：将 sourceHandle image/image1/image-1 归一化到 img/img1
+// 兼容历史输出句柄：bare "image" -> "img"；image-1/image_1 -> img1；image1 保留（imageSplit 句柄）
 const normalizeFlowSourceHandle = (
   handle?: string | null
 ): string | undefined => {
@@ -225,9 +225,10 @@ const normalizeFlowSourceHandle = (
   const lower = trimmed.toLowerCase();
   if (lower === "omniimage") return "omniImage";
   if (lower === "image") return "img";
-  const imageIndexMatch = lower.match(/^image[-_]?(\d+)$/);
-  if (imageIndexMatch?.[1]) {
-    return `img${imageIndexMatch[1]}`;
+  // imageSplit 节点句柄为 image1..imageN，保留编号形式；仅兼容 image-1 / image_1 旧写法
+  const legacyImageIndexMatch = lower.match(/^image[-_](\d+)$/);
+  if (legacyImageIndexMatch?.[1]) {
+    return `img${legacyImageIndexMatch[1]}`;
   }
   return trimmed;
 };
