@@ -78,6 +78,7 @@ const HISTORY_CATEGORY_SOURCE_TYPES: Record<string, string[]> = {
     "kling26Video",
     "kling30Video",
     "klingO1Video",
+    "klingO3Video",
     "viduVideo",
     "viduQ3",
     "doubaoVideo",
@@ -93,12 +94,39 @@ const HISTORY_CATEGORY_SOURCE_TYPES: Record<string, string[]> = {
   speech: ["tencentSpeech"],
 };
 
+const looksLikeVideoUrl = (value?: string): boolean => {
+  if (!value) return false;
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return false;
+  if (trimmed.startsWith("data:video/")) return true;
+  return /(\.mp4|\.mov|\.avi|\.webm|\.m4v|\.m3u8)(\?|#|$)/i.test(trimmed);
+};
+
 const getHistoryMediaType = (
   item: GlobalImageHistoryItem
-): "image" | "video" => (item.mediaType === "video" ? "video" : "image");
+): "image" | "video" => {
+  if (item.mediaType === "video") return "video";
+
+  const sourceType = typeof item.sourceType === "string" ? item.sourceType.trim() : "";
+  if (HISTORY_CATEGORY_SOURCE_TYPES.video.includes(sourceType)) {
+    return "video";
+  }
+
+  const metadata = item.metadata ?? {};
+  const candidateVideoUrl =
+    (typeof item.mediaUrl === "string" && item.mediaUrl.trim()) ||
+    (typeof metadata.mediaUrl === "string" && metadata.mediaUrl.trim()) ||
+    (typeof metadata.videoUrl === "string" && metadata.videoUrl.trim()) ||
+    (typeof item.imageUrl === "string" && item.imageUrl.trim()) ||
+    "";
+
+  return looksLikeVideoUrl(candidateVideoUrl) ? "video" : "image";
+};
 
 const getHistoryMediaUrl = (item: GlobalImageHistoryItem): string =>
   (typeof item.mediaUrl === "string" && item.mediaUrl.trim()) ||
+  (typeof item.metadata?.mediaUrl === "string" && item.metadata.mediaUrl.trim()) ||
+  (typeof item.metadata?.videoUrl === "string" && item.metadata.videoUrl.trim()) ||
   item.imageUrl ||
   "";
 
@@ -107,11 +135,21 @@ const getHistoryImagePreviewSrc = (
 ): string | undefined => {
   const thumbnailUrl =
     typeof item.thumbnailUrl === "string" ? item.thumbnailUrl.trim() : "";
-  if (thumbnailUrl) return thumbnailUrl;
+  if (thumbnailUrl && looksLikeImageUrl(thumbnailUrl)) return thumbnailUrl;
+
+  const metadataThumbnail =
+    typeof item.metadata?.thumbnailUrl === "string"
+      ? item.metadata.thumbnailUrl.trim()
+      : typeof item.metadata?.thumbnail === "string"
+      ? item.metadata.thumbnail.trim()
+      : typeof item.metadata?.poster === "string"
+      ? item.metadata.poster.trim()
+      : "";
+  if (metadataThumbnail && looksLikeImageUrl(metadataThumbnail)) return metadataThumbnail;
 
   const imageUrl = typeof item.imageUrl === "string" ? item.imageUrl.trim() : "";
   const mediaUrl = getHistoryMediaUrl(item).trim();
-  if (imageUrl && imageUrl !== mediaUrl) {
+  if (imageUrl && imageUrl !== mediaUrl && looksLikeImageUrl(imageUrl)) {
     return imageUrl;
   }
   return undefined;
@@ -121,6 +159,23 @@ const getHistoryPreviewSrc = (item: GlobalImageHistoryItem): string =>
   getHistoryMediaType(item) === "video"
     ? (getHistoryImagePreviewSrc(item) || getHistoryMediaUrl(item))
     : (item.imageUrl || getHistoryMediaUrl(item));
+
+const looksLikeImageUrl = (value?: string): boolean => {
+  if (!value) return false;
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return false;
+  if (trimmed.startsWith("data:image/")) return true;
+  return /(\.png|\.jpg|\.jpeg|\.webp|\.gif|\.bmp|\.avif)(\?|#|$)/i.test(trimmed);
+};
+
+const getVideoAssetPreviewSrc = (
+  asset: PersonalVideoAsset
+): string | undefined => {
+  const thumbnail = typeof asset.thumbnail === "string" ? asset.thumbnail.trim() : "";
+  const videoUrl = typeof asset.url === "string" ? asset.url.trim() : "";
+  if (!thumbnail || thumbnail === videoUrl) return undefined;
+  return looksLikeImageUrl(thumbnail) ? thumbnail : undefined;
+};
 
 const getHistoryCategory = (item: GlobalImageHistoryItem): string => {
   const sourceType = typeof item.sourceType === "string" ? item.sourceType.trim() : "";
@@ -1337,7 +1392,7 @@ const LibraryPanel: React.FC = () => {
             ) : selectedAsset.type === "video" ? (
               <video
                 src={selectedAsset.url}
-                poster={selectedAsset.thumbnail}
+                poster={getVideoAssetPreviewSrc(selectedAsset as PersonalVideoAsset)}
                 className='w-full h-full object-contain bg-black'
                 controls
                 preload='metadata'
@@ -1711,9 +1766,9 @@ const LibraryPanel: React.FC = () => {
                           draggable={false}
                         />
                       ) : asset.type === "video" ? (
-                        asset.thumbnail ? (
+                        getVideoAssetPreviewSrc(asset as PersonalVideoAsset) ? (
                           <SmartImage
-                            src={asset.thumbnail}
+                            src={getVideoAssetPreviewSrc(asset as PersonalVideoAsset)}
                             alt={asset.name}
                             className='w-full h-full object-cover'
                             draggable={false}

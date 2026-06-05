@@ -102,11 +102,31 @@ const isHeavyInlineString = (value: unknown): boolean => {
   return false;
 };
 
-const normalizeTimestamps = (asset: PersonalLibraryAsset): PersonalLibraryAsset => ({
-  ...asset,
-  createdAt: asset.createdAt ?? Date.now(),
-  updatedAt: asset.updatedAt ?? Date.now(),
-});
+const looksLikeImagePreview = (value?: string): boolean => {
+  if (!value) return false;
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return false;
+  if (trimmed.startsWith('data:image/')) return true;
+  return /(\.png|\.jpg|\.jpeg|\.webp|\.gif|\.bmp|\.avif)(\?|#|$)/i.test(trimmed);
+};
+
+const normalizeTimestamps = (asset: PersonalLibraryAsset): PersonalLibraryAsset => {
+  const normalized: PersonalLibraryAsset = {
+    ...asset,
+    createdAt: asset.createdAt ?? Date.now(),
+    updatedAt: asset.updatedAt ?? Date.now(),
+  };
+
+  if (normalized.type === 'video') {
+    const thumbnail = typeof normalized.thumbnail === 'string' ? normalized.thumbnail.trim() : '';
+    const videoUrl = typeof normalized.url === 'string' ? normalized.url.trim() : '';
+    if (!thumbnail || thumbnail === videoUrl || !looksLikeImagePreview(thumbnail)) {
+      normalized.thumbnail = undefined;
+    }
+  }
+
+  return normalized;
+};
 
 const mergeById = (
   existing: PersonalLibraryAsset[],

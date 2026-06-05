@@ -272,6 +272,54 @@ const VIDEO_LIBRARY_NODE_TYPES = new Set([
   "tencentSpeech",
 ]);
 
+const pickFirstNonEmptyString = (...values: unknown[]): string => {
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    const trimmed = value.trim();
+    if (trimmed) return trimmed;
+  }
+  return "";
+};
+
+const looksLikeImagePreviewUrl = (value?: string): boolean => {
+  if (!value) return false;
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return false;
+  if (trimmed.startsWith("data:image/")) return true;
+  return /(\.png|\.jpg|\.jpeg|\.webp|\.gif|\.bmp|\.avif)(\?|#|$)/i.test(trimmed);
+};
+
+const extractVideoLibraryNodeMedia = (data: Record<string, any>) => {
+  const firstHistory = Array.isArray(data.history) ? data.history[0] : undefined;
+  const rawVideoUrl = pickFirstNonEmptyString(
+    data.videoUrl,
+    data.video_url,
+    data.outputVideoUrl,
+    data.result?.videoUrl,
+    data.output?.videoUrl,
+    firstHistory?.videoUrl,
+    firstHistory?.video_url
+  );
+  const rawThumbnail = pickFirstNonEmptyString(
+    data.thumbnail,
+    data.poster,
+    data.coverUrl,
+    data.result?.thumbnailUrl,
+    data.output?.thumbnailUrl,
+    firstHistory?.thumbnailUrl,
+    firstHistory?.thumbnail,
+    firstHistory?.poster
+  );
+
+  return {
+    videoUrl: rawVideoUrl,
+    thumbnailUrl:
+      rawThumbnail && rawThumbnail !== rawVideoUrl && looksLikeImagePreviewUrl(rawThumbnail)
+        ? rawThumbnail
+        : undefined,
+  };
+};
+
 const FLOW_EDGE_STANDARD_COLOR = "#9ca3af";
 const FLOW_EDGE_COLOR_BY_KIND = {
   text: "#22c55e",
@@ -3563,13 +3611,7 @@ function FlowInner() {
     for (const node of nodes) {
       if (!VIDEO_LIBRARY_NODE_TYPES.has(String(node.type || ""))) continue;
       const data = ((node as any)?.data ?? {}) as Record<string, any>;
-      const rawVideoUrl =
-        typeof data.videoUrl === "string"
-          ? data.videoUrl
-          : typeof data.video_url === "string"
-          ? data.video_url
-          : "";
-      const videoUrl = rawVideoUrl.trim();
+      const { videoUrl, thumbnailUrl } = extractVideoLibraryNodeMedia(data);
       if (!/^https?:\/\//i.test(videoUrl) || existingVideoUrls.has(videoUrl)) {
         continue;
       }
@@ -3588,12 +3630,7 @@ function FlowInner() {
           (typeof data.prompt === "string" && data.prompt.trim().slice(0, 48)) ||
           fallbackName,
         url: videoUrl,
-        thumbnail:
-          (typeof data.thumbnail === "string" && data.thumbnail.trim()) ||
-          (Array.isArray(data.history) &&
-          typeof data.history[0]?.thumbnail === "string"
-            ? data.history[0].thumbnail
-            : undefined),
+        thumbnail: thumbnailUrl,
         fileName:
           (typeof data.videoName === "string" && data.videoName.trim()) ||
           `${sourceType}-${now}.mp4`,
