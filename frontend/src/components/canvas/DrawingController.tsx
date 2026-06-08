@@ -81,6 +81,12 @@ import { personalLibraryApi } from "@/services/personalLibraryApi";
 import { imageUploadService } from "@/services/imageUploadService";
 import { generateOssKey } from "@/services/ossUploadService";
 import { putFlowImageBlobs, toFlowImageAssetRef } from "@/services/flowImageAssetStore";
+import {
+  TANVA_ASSET_MIME,
+  TANVA_ASSETS_BATCH_MIME,
+  getLibraryDropOffset,
+  type TanvaDragAssetPayload,
+} from "@/utils/libraryDragPayload";
 
 const isInlineImageSource = (value: unknown): value is string => {
   if (typeof value !== "string") return false;
@@ -1296,6 +1302,75 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
     [ensureDrawingLayer, resolveSvgContent]
   );
 
+  const insertLibraryAssetAtPosition = useCallback(
+    async (parsed: TanvaDragAssetPayload, position: { x: number; y: number }) => {
+      if (parsed?.type === "svg" && parsed?.url) {
+        await insertSvgAssetToCanvas(parsed, position);
+        return;
+      }
+      if (parsed?.type === "2d" && parsed?.url) {
+        logger.upload("🖼️ 从资源库拖拽 2D 图片:", parsed);
+        await uploadImageToCanvas?.(
+          parsed.url,
+          (parsed.fileName as string | undefined) || (parsed.name as string | undefined),
+          undefined,
+          position,
+          "manual"
+        );
+        return;
+      }
+      if (parsed?.type === "video" && parsed?.url) {
+        window.dispatchEvent(
+          new CustomEvent("flow:insert-video-from-library", {
+            detail: {
+              videoUrl: parsed.url,
+              videoName:
+                (parsed.fileName as string | undefined) ||
+                (parsed.name as string | undefined),
+              thumbnail: parsed.thumbnail,
+            },
+          })
+        );
+        return;
+      }
+      if (parsed?.type === "3d") {
+        const width = 320;
+        const height = 240;
+        const modelData: Partial<Model3DData> = {
+          url: (parsed.url as string | undefined) || (parsed.path as string | undefined) || "",
+          path: (parsed.path as string | undefined) || (parsed.url as string | undefined) || "",
+          key: parsed.key as string | undefined,
+          format: (parsed.format as string | undefined) || "glb",
+          fileName: (parsed.fileName as string | undefined) || "model.glb",
+          fileSize: (parsed.fileSize as number | undefined) ?? 0,
+          defaultScale:
+            (parsed.defaultScale as Model3DData["defaultScale"]) || { x: 1, y: 1, z: 1 },
+          defaultRotation:
+            (parsed.defaultRotation as Model3DData["defaultRotation"]) || {
+              x: 0,
+              y: 0,
+              z: 0,
+            },
+          timestamp: (parsed.updatedAt as number | undefined) || Date.now(),
+          camera: parsed.camera as Model3DData["camera"],
+        };
+        window.dispatchEvent(
+          new CustomEvent("canvas:insert-model3d", {
+            detail: {
+              modelData,
+              size: { width, height },
+              position: {
+                start: { x: position.x - width / 2, y: position.y - height / 2 },
+                end: { x: position.x + width / 2, y: position.y + height / 2 },
+              },
+            },
+          })
+        );
+      }
+    },
+    [insertSvgAssetToCanvas, uploadImageToCanvas]
+  );
+
   // ========== 拖拽图片到画布 ==========
   useEffect(() => {
     const isEventInsideCanvas = (event: DragEvent) => {
@@ -1345,45 +1420,41 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
           event.clientX,
           event.clientY
         );
-        const tanvaAssetData = dt.getData("application/x-tanva-asset");
+
+        const tanvaAssetsBatch = dt.getData(TANVA_ASSETS_BATCH_MIME);
+        if (tanvaAssetsBatch) {
+          try {
+            const parsedBatch = JSON.parse(tanvaAssetsBatch);
+            if (Array.isArray(parsedBatch) && parsedBatch.length > 1) {
+              event.preventDefault();
+              event.stopPropagation();
+              for (let i = 0; i < parsedBatch.length; i += 1) {
+                const asset = parsedBatch[i] as TanvaDragAssetPayload;
+                await insertLibraryAssetAtPosition(
+                  asset,
+                  getLibraryDropOffset(i, parsedBatch.length, projectPoint)
+                );
+              }
+              return;
+            }
+          } catch (error) {
+            console.warn("解析批量拖拽资源数据失败:", error);
+          }
+        }
+
+        const tanvaAssetData = dt.getData(TANVA_ASSET_MIME);
         if (tanvaAssetData) {
           try {
-            const parsed = JSON.parse(tanvaAssetData);
-            if (parsed?.type === "svg" && parsed?.url) {
+            const parsed = JSON.parse(tanvaAssetData) as TanvaDragAssetPayload;
+            if (
+              (parsed?.type === "svg" && parsed?.url) ||
+              (parsed?.type === "2d" && parsed?.url) ||
+              (parsed?.type === "video" && parsed?.url) ||
+              parsed?.type === "3d"
+            ) {
               event.preventDefault();
               event.stopPropagation();
-              await insertSvgAssetToCanvas(parsed, {
-                x: projectPoint.x,
-                y: projectPoint.y,
-              });
-              return;
-            }
-            // 🔥 修复：处理从资源库拖拽的 2D 图片
-            if (parsed?.type === "2d" && parsed?.url) {
-              event.preventDefault();
-              event.stopPropagation();
-              logger.upload("🖼️ 从资源库拖拽 2D 图片:", parsed);
-              await uploadImageToCanvas?.(
-                parsed.url,
-                parsed.fileName || parsed.name,
-                undefined,
-                { x: projectPoint.x, y: projectPoint.y },
-                "manual"
-              );
-              return;
-            }
-            if (parsed?.type === "video" && parsed?.url) {
-              event.preventDefault();
-              event.stopPropagation();
-              window.dispatchEvent(
-                new CustomEvent("flow:insert-video-from-library", {
-                  detail: {
-                    videoUrl: parsed.url,
-                    videoName: parsed.fileName || parsed.name,
-                    thumbnail: parsed.thumbnail,
-                  },
-                })
-              );
+              await insertLibraryAssetAtPosition(parsed, projectPoint);
               return;
             }
           } catch (error) {
@@ -1506,7 +1577,7 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
       window.removeEventListener("dragover", handleDragOver);
       window.removeEventListener("drop", handleDrop);
     };
-  }, [canvasRef, insertSvgAssetToCanvas, projectId, uploadImageToCanvas]);
+  }, [canvasRef, insertLibraryAssetAtPosition, projectId, uploadImageToCanvas]);
 
   useEffect(() => {
     const handleInsertSvg = (event: CustomEvent) => {
