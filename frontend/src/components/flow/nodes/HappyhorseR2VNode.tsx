@@ -8,6 +8,7 @@ import { useLocaleText } from "@/utils/localeText";
 import RunCreditBadge from "./RunCreditBadge";
 import { useNodeRunCredits } from "../hooks/useNodeRunCredits";
 import { useBackendCreditsPreview } from "../hooks/useBackendCreditsPreview";
+import FlowResizableNodeShell from "./FlowResizableNodeShell";
 
 type VideoHistoryItem = {
   id: string;
@@ -50,6 +51,8 @@ type Props = {
     pendingPrompt?: string;
     pendingQuality?: string;
     pendingReferenceCount?: number;
+    boxW?: number;
+    boxH?: number;
   };
   selected?: boolean;
 };
@@ -460,9 +463,15 @@ function HappyhorseR2VNodeInner({ id, data, selected }: Props) {
   const refHandleStep = imageHandleCount > 0 ? 50 / imageHandleCount : 50;
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={300}
+      defaultHeight={460}
+      minWidth={180}
+      minHeight={120}
       style={{
-        width: 280,
         padding: 10,
         background: "#fff",
         border: `1px solid ${selected ? "#2563eb" : "#e5e7eb"}`,
@@ -470,7 +479,6 @@ function HappyhorseR2VNodeInner({ id, data, selected }: Props) {
         boxShadow: selected
           ? "0 0 0 2px rgba(37,99,235,0.12)"
           : "0 1px 2px rgba(0,0,0,0.04)",
-        position: "relative",
       }}
     >
       <Handle
@@ -1247,7 +1255,7 @@ function HappyhorseR2VNodeInner({ id, data, selected }: Props) {
           {data.error}
         </div>
       )}
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

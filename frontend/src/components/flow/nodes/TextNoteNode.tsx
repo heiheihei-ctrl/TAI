@@ -1,7 +1,8 @@
 import React from 'react';
-import { Handle, Position, NodeResizer, useReactFlow } from 'reactflow';
+import { Handle, Position } from 'reactflow';
 import { useLocaleText } from '@/utils/localeText';
 import { useAIChatStore } from '@/stores/aiChatStore';
+import FlowResizableNodeShell from './FlowResizableNodeShell';
 
 type Props = {
   id: string;
@@ -11,7 +12,6 @@ type Props = {
 
 function TextNoteNodeInner({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
-  const rf = useReactFlow();
   const isDarkTheme = useAIChatStore((state) => state.chatTheme === 'black');
   const [value, setValue] = React.useState<string>(data.text || '');
   const [hover, setHover] = React.useState<string | null>(null);
@@ -20,8 +20,7 @@ function TextNoteNodeInner({ id, data, selected }: Props) {
   const boxShadow = selected
     ? '0 0 0 2px rgba(37,99,235,0.12)'
     : '0 1px 2px rgba(0,0,0,0.04)';
-  const width = data.boxW || 220;
-  const height = data.boxH || 120;
+  const height = data.boxH || 140;
   const editorRef = React.useRef<HTMLDivElement | null>(null);
   const [isEditing, setIsEditing] = React.useState(false);
   const isComposing = React.useRef(false);
@@ -112,37 +111,27 @@ function TextNoteNodeInner({ id, data, selected }: Props) {
   }, [isEditing]);
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={220}
+      defaultHeight={140}
+      minWidth={160}
+      minHeight={96}
       className="tanva-textnote"
       style={{
-        width,
-        minHeight: height,
         padding: '12px 14px',
         background: noteBackground,
         border: `1px solid ${borderColor}`,
         borderRadius: 14,
         boxShadow,
-        display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        position: 'relative',
         boxSizing: 'border-box',
         transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
       }}
     >
-      <NodeResizer
-        isVisible
-        minWidth={160}
-        minHeight={96}
-        lineStyle={{ display: 'none' }}
-        handleStyle={{ background: 'transparent', border: 'none', width: 16, height: 16, opacity: 0 }}
-        onResize={(_, params) => {
-          rf.setNodes(ns => ns.map(node => node.id === id ? { ...node, data: { ...(node.data || {}), boxW: params.width, boxH: params.height } } : node));
-        }}
-        onResizeEnd={(_, params) => {
-          rf.setNodes(ns => ns.map(node => node.id === id ? { ...node, data: { ...(node.data || {}), boxW: params.width, boxH: params.height } } : node));
-        }}
-      />
       <div
         ref={editorRef}
         className={`tanva-textnote-editor nowheel${isEditing ? ' nodrag' : ''}`}
@@ -202,7 +191,7 @@ function TextNoteNodeInner({ id, data, selected }: Props) {
       {hover === 'prompt-out' && (
         <div className="flow-tooltip" style={{ right: -8, top: '50%', transform: 'translate(100%, -50%)' }}>prompt</div>
       )}
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

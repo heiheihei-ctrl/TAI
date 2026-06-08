@@ -16,6 +16,7 @@ import { explainGenerateReferenceImageError } from "@/utils/flowGenerateRefError
 import RunCreditBadge from "./RunCreditBadge";
 import { useAIChatStore } from "@/stores/aiChatStore";
 import { useImageNodeCreditsPreview } from "../hooks/useImageNodeCreditsPreview";
+import FlowResizableNodeShell from "./FlowResizableNodeShell";
 
 type Props = {
   id: string;
@@ -32,6 +33,8 @@ type Props = {
     platformKey?: string;
     onRun?: (id: string) => void;
     onSend?: (id: string) => void;
+    boxW?: number;
+    boxH?: number;
   };
   selected?: boolean;
 };
@@ -175,18 +178,21 @@ function GenerateReferenceNodeInner({ id, data, selected }: Props) {
   );
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={260}
+      defaultHeight={240}
+      minWidth={220}
+      minHeight={180}
       style={{
-        width: 260,
         padding: 8,
         background: "#fff",
         border: `1px solid ${borderColor}`,
         borderRadius: 8,
         boxShadow,
         transition: "border-color 0.15s ease, box-shadow 0.15s ease",
-        position: "relative",
-        display: "flex",
-        flexDirection: "column",
         gap: 6,
       }}
     >
@@ -274,7 +280,7 @@ function GenerateReferenceNodeInner({ id, data, selected }: Props) {
         )}
       </div>
 
-      <div>
+      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
         <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>
           {lt("参考提示词", "Reference prompt")}
         </div>
@@ -300,7 +306,8 @@ function GenerateReferenceNodeInner({ id, data, selected }: Props) {
           placeholder={lt('请输入参考提示词', 'Enter reference prompt')}
           style={{
             width: "100%",
-            minHeight: 70,
+            flex: 1,
+            minHeight: 60,
             resize: "none",
             fontSize: 12,
             lineHeight: 1.4,
@@ -423,7 +430,7 @@ function GenerateReferenceNodeInner({ id, data, selected }: Props) {
         currentImageId={currentImageId}
         onImageChange={handleImageChange}
       />
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

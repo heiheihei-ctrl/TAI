@@ -15,6 +15,7 @@ import {
   useFlowNodeDarkTheme,
 } from "./flowNodeDarkTheme";
 import RunCreditBadge from "./RunCreditBadge";
+import FlowResizableNodeShell from "./FlowResizableNodeShell";
 
 const PROMPT_MAX_LENGTH = 2000;
 const LYRICS_MAX_LENGTH = 3500;
@@ -44,6 +45,8 @@ type Props = {
     selectedHistoryId?: string;
     creditsPerCall?: number;
     onRun?: (id: string) => void;
+    boxW?: number;
+    boxH?: number;
   };
   selected?: boolean;
 };
@@ -271,9 +274,15 @@ function MinimaxMusicNode({ id, data, selected }: Props) {
   };
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={300}
+      defaultHeight={460}
+      minWidth={260}
+      minHeight={320}
       style={{
-        width: 300,
         padding: 8,
         background: shell.background,
         color: shell.color,
@@ -281,8 +290,6 @@ function MinimaxMusicNode({ id, data, selected }: Props) {
         borderRadius: 8,
         boxShadow,
         transition: "border-color 0.15s ease, box-shadow 0.15s ease",
-        display: "flex",
-        flexDirection: "column",
         gap: 6,
       }}
     >
@@ -313,6 +320,7 @@ function MinimaxMusicNode({ id, data, selected }: Props) {
         </button>
       </div>
 
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'grid', gap: 6, alignContent: 'start' }}>
       <div style={{ display: "grid", gap: 6 }}>
         <label style={{ fontSize: 11, color: isFlowDark ? "#9ca3af" : "#6b7280" }}>
           {lt("曲风提示词", "Prompt")} ({prompt.length}/{PROMPT_MAX_LENGTH})
@@ -517,6 +525,7 @@ function MinimaxMusicNode({ id, data, selected }: Props) {
           </div>
         </div>
       ) : null}
+      </div>
 
       <Handle
         id="text"
@@ -540,7 +549,7 @@ function MinimaxMusicNode({ id, data, selected }: Props) {
       {handleHover === "audio-out" ? (
         <div className="flow-tooltip" style={{ right: -8, top: "50%", transform: "translate(100%, -50%)" }}>audio</div>
       ) : null}
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

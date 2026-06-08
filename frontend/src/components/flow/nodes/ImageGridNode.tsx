@@ -18,6 +18,7 @@ import {
   useFlowNodeDarkTheme,
 } from './flowNodeDarkTheme';
 import { useFlowRenderMode } from '../FlowRenderModeContext';
+import FlowResizableNodeShell from './FlowResizableNodeShell';
 
 type ImageItem = {
   id: string;
@@ -46,6 +47,8 @@ type Props = {
     padding?: number;
     gap?: number; // 图片之间的间隙宽度
     gridSize?: number; // 自动计算或手动指定
+    boxW?: number;
+    boxH?: number;
   };
   selected?: boolean;
 };
@@ -711,9 +714,15 @@ function ImageGridNodeInner({ id, data, selected = false }: Props) {
   const previewImages = allImages.slice(0, MAX_PREVIEW_IMAGES);
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={300}
+      defaultHeight={380}
+      minWidth={180}
+      minHeight={120}
       style={{
-        width: 300,
         padding: 10,
         background: shell.background,
         color: shell.color,
@@ -721,9 +730,6 @@ function ImageGridNodeInner({ id, data, selected = false }: Props) {
         borderRadius: 8,
         boxShadow,
         transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
-        position: 'relative',
-        display: 'flex',
-        flexDirection: 'column',
         gap: 8,
       }}
     >
@@ -888,7 +894,7 @@ function ImageGridNodeInner({ id, data, selected = false }: Props) {
 
       {/* 隐藏的 canvas */}
       <canvas ref={canvasRef} style={{ display: 'none' }} />
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

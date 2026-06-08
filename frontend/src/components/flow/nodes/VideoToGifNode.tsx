@@ -4,6 +4,7 @@ import SmartImage from '../../ui/SmartImage';
 import { fetchWithAuth } from '@/services/authFetch';
 import { useProjectContentStore } from '@/stores/projectContentStore';
 import { useLocaleText } from '@/utils/localeText';
+import FlowResizableNodeShell from './FlowResizableNodeShell';
 
 type Props = {
   id: string;
@@ -19,6 +20,8 @@ type Props = {
     width?: number;
     startSeconds?: number;
     durationSeconds?: number;
+    boxW?: number;
+    boxH?: number;
   };
   selected?: boolean;
 };
@@ -270,18 +273,21 @@ function VideoToGifNodeInner({ id, data, selected = false }: Props) {
   const canConvert = Boolean(effectiveVideoUrl) && status !== 'converting';
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={320}
+      defaultHeight={420}
+      minWidth={180}
+      minHeight={120}
       style={{
-        width: 320,
         padding: 10,
         background: '#fff',
         border: `1px solid ${borderColor}`,
         borderRadius: 8,
         boxShadow,
         transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
-        position: 'relative',
-        display: 'flex',
-        flexDirection: 'column',
         gap: 8,
       }}
     >
@@ -509,7 +515,7 @@ function VideoToGifNodeInner({ id, data, selected = false }: Props) {
           video
         </div>
       )}
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

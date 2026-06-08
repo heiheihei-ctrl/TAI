@@ -1,9 +1,9 @@
 import React from 'react';
-import { Handle, Position, NodeResizer, useReactFlow, useStore, type ReactFlowState, type Edge } from 'reactflow';
+import { Handle, Position, useReactFlow, useStore, useUpdateNodeInternals, type ReactFlowState, type Edge } from 'reactflow';
 import { resolveTextFromSourceNode } from '../utils/textSource';
-import useNodeInternalsSync from '../hooks/useNodeInternalsSync';
 import { useLocaleText } from '@/utils/localeText';
 import { useCanvasStore } from '@/stores';
+import FlowResizableNodeShell from './FlowResizableNodeShell';
 
 type Props = {
   id: string;
@@ -30,7 +30,7 @@ function TextPromptNodeInner({ id, data, selected }: Props) {
   const [titleDraft, setTitleDraft] = React.useState<string>(normalizedTitle);
   const [isEditingTitle, setIsEditingTitle] = React.useState(false);
   const titleInputRef = React.useRef<HTMLInputElement>(null);
-  const nodeRootRef = React.useRef<HTMLDivElement | null>(null);
+  const updateNodeInternals = useUpdateNodeInternals();
   const incomingCount = incomingTexts.length;
   const hasIncoming = incomingCount > 0;
   const shouldPassWheelToCanvas = React.useCallback((event: React.WheelEvent<HTMLTextAreaElement>) => {
@@ -181,36 +181,28 @@ function TextPromptNodeInner({ id, data, selected }: Props) {
     setTitleDraft(title);
   }, [title]);
 
-  useNodeInternalsSync(id, nodeRootRef, [data.boxW, data.boxH, isEditingTitle]);
+  React.useLayoutEffect(() => {
+    updateNodeInternals(id);
+  }, [id, isEditingTitle, updateNodeInternals]);
 
   return (
-    <div ref={nodeRootRef} style={{
-      width: data.boxW || 240,
-      height: data.boxH || 180,
-      padding: 8,
-      background: '#fff',
-      border: `1px solid ${borderColor}`,
-      borderRadius: 8,
-      boxShadow,
-      transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
-      display: 'flex',
-      flexDirection: 'column',
-      position: 'relative'
-    }}>
-      <NodeResizer
-        isVisible
-        minWidth={180}
-        minHeight={120}
-        color="transparent"
-        lineStyle={{ display: 'none' }}
-        handleStyle={{ background: 'transparent', border: 'none', width: 16, height: 16, opacity: 0 }}
-        onResize={(evt, params) => {
-          rf.setNodes(ns => ns.map(n => n.id === id ? { ...n, data: { ...n.data, boxW: params.width, boxH: params.height } } : n));
-        }}
-        onResizeEnd={(evt, params) => {
-          rf.setNodes(ns => ns.map(n => n.id === id ? { ...n, data: { ...n.data, boxW: params.width, boxH: params.height } } : n));
-        }}
-      />
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={240}
+      defaultHeight={180}
+      minWidth={180}
+      minHeight={120}
+      style={{
+        padding: 8,
+        background: '#fff',
+        border: `1px solid ${borderColor}`,
+        borderRadius: 8,
+        boxShadow,
+        transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+      }}
+    >
       <div style={{ fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         {isEditingTitle ? (
           <input
@@ -298,7 +290,7 @@ function TextPromptNodeInner({ id, data, selected }: Props) {
         style={{
           width: '100%',
           flex: 1,
-          resize: 'vertical',
+          resize: 'none',
           maxHeight: '100%',
           minHeight: 60,
           overflowY: 'auto',
@@ -334,7 +326,7 @@ function TextPromptNodeInner({ id, data, selected }: Props) {
       {hover === 'prompt-out' && (
         <div className="flow-tooltip" style={{ right: -8, top: '50%', transform: 'translate(100%, -50%)' }}>prompt</div>
       )}
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

@@ -59,7 +59,8 @@
   position: relative;
 }
 
-.flow-image-node--resizing {
+.flow-image-node--resizing,
+.flow-resizable-node--resizing {
   contain: layout paint;
 }
 
@@ -68,7 +69,9 @@
 }
 
 .flow-image-node .image-node-resize-line,
-.flow-image-node .image-node-resize-handle {
+.flow-image-node .image-node-resize-handle,
+.flow-resizable-node .flow-node-resize-line,
+.flow-resizable-node .flow-node-resize-handle {
   pointer-events: auto;
   z-index: 5;
   background: transparent;

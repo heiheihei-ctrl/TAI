@@ -23,6 +23,7 @@ import {
 } from './flowNodeDarkTheme';
 import { useFlowRenderMode } from '../FlowRenderModeContext';
 import { useBackendCreditsPreview } from '../hooks/useBackendCreditsPreview';
+import FlowResizableNodeShell from './FlowResizableNodeShell';
 
 type Props = {
   id: string;
@@ -38,6 +39,8 @@ type Props = {
     vendorKey?: string;
     platformKey?: string;
     analysisProvider?: ProviderToggleValue;
+    boxW?: number;
+    boxH?: number;
   };
   selected?: boolean;
 };
@@ -1024,9 +1027,15 @@ function AnalysisNodeInner({ id, data, selected = false }: Props) {
   }, [id]);
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={260}
+      defaultHeight={280}
+      minWidth={220}
+      minHeight={200}
       style={{
-        width: 260,
         padding: 8,
         background: shell.background,
         color: shell.color,
@@ -1034,9 +1043,6 @@ function AnalysisNodeInner({ id, data, selected = false }: Props) {
         borderRadius: 8,
         boxShadow,
         transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
-        position: 'relative',
-        display: 'flex',
-        flexDirection: 'column',
         gap: 6,
       }}
     >
@@ -1215,7 +1221,7 @@ function AnalysisNodeInner({ id, data, selected = false }: Props) {
         </div>
       )}
 
-      <div>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 4, color: shell.color }}>Analysis Prompt</div>
         <textarea
           className="nodrag nopan nowheel"
@@ -1240,7 +1246,8 @@ function AnalysisNodeInner({ id, data, selected = false }: Props) {
           placeholder="Enter prompt for analysis"
           style={{
             width: '100%',
-            minHeight: 70,
+            flex: 1,
+            minHeight: 60,
             resize: 'none',
             fontSize: 12,
             lineHeight: 1.4,
@@ -1323,7 +1330,7 @@ function AnalysisNodeInner({ id, data, selected = false }: Props) {
         currentImageId=""
         onImageChange={() => {}}
       />
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 
