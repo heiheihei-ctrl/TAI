@@ -28,6 +28,7 @@ interface MembershipPanelProps {
 }
 
 type BillingPeriod = "monthly" | "yearly";
+type TimerHandle = ReturnType<typeof setInterval>;
 
 function normPlanCode(code: string | undefined): string {
   return (code || "").trim().toLowerCase();
@@ -142,6 +143,77 @@ function isDailyCreationPlan(plan: PaymentMembershipPlan): boolean {
   return name.includes("日常");
 }
 
+type MembershipPromoCardConfig = {
+  displayPrice: number;
+  billingLabel?: string;
+  promoText: string;
+  displayEquivMonthly?: string;
+  showRecommended?: boolean;
+};
+
+function getMembershipPromoCardConfig(plan: PaymentMembershipPlan): MembershipPromoCardConfig | null {
+  const name = (plan.name || "").trim();
+
+  if (plan.billingCycle === "monthly") {
+    if (name.includes("日常创作")) {
+      return {
+        displayPrice: 39,
+        billingLabel: "首月特惠",
+        promoText: "限时5.5折专享",
+      };
+    }
+
+    if (name.includes("专业进阶")) {
+      return {
+        displayPrice: 149,
+        billingLabel: "首月特惠",
+        promoText: "限时7.5折专享",
+        showRecommended: true,
+      };
+    }
+
+    if (name.includes("旗舰尊享") || name.includes("旗舰专享") || name.includes("旗舰")) {
+      return {
+        displayPrice: 429,
+        billingLabel: "首月特惠",
+        promoText: "限时7折专享",
+      };
+    }
+  }
+
+  if (plan.billingCycle === "yearly") {
+    if (name.includes("日常创作")) {
+      return {
+        displayPrice: 658,
+        billingLabel: "首年特惠",
+        promoText: "限时8折专享",
+        displayEquivMonthly: "54.83",
+      };
+    }
+
+    if (name.includes("专业进阶")) {
+      return {
+        displayPrice: 1888,
+        billingLabel: "首年特惠",
+        promoText: "限时8折专享",
+        displayEquivMonthly: "157.33",
+        showRecommended: true,
+      };
+    }
+
+    if (name.includes("旗舰尊享") || name.includes("旗舰专享") || name.includes("旗舰")) {
+      return {
+        displayPrice: 5688,
+        billingLabel: "首年特惠",
+        promoText: "限时8折专享",
+        displayEquivMonthly: "474",
+      };
+    }
+  }
+
+  return null;
+}
+
 /** 套餐卡默认统一最小高度（免费 + 各档付费、选中/未选中一致，与视觉稿对齐） */
 const PLAN_CARD_MIN_H = "min-h-[520px] sm:min-h-[550px] lg:min-h-[580px] xl:min-h-[600px]";
 
@@ -162,8 +234,8 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({ onBack, onPaymentSucc
   const [orders, setOrders] = useState<MembershipOrderRecord[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [hasWhitelistTopUpAccess, setHasWhitelistTopUpAccess] = useState(false);
-  const countdownRef = useRef<NodeJS.Timeout | null>(null);
-  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const countdownRef = useRef<TimerHandle | null>(null);
+  const pollingRef = useRef<TimerHandle | null>(null);
   const hasYearlyPlans = useMemo(() => (plans || []).some((plan) => plan.billingCycle === "yearly"), [plans]);
 
   const filteredPlans = useMemo(() => {
@@ -682,20 +754,26 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({ onBack, onPaymentSucc
                     const confirmedActive = active && userConfirmedPlan;
                     const tierTitle = plan.name;
                     const { main, accent } = vipFeatureLines(plan);
-                    const isRecommended = isRecommendedPlan(plan);
+                    const promoConfig = getMembershipPromoCardConfig(plan);
+                    const isRecommended = promoConfig?.showRecommended ?? isRecommendedPlan(plan);
                     const isDailyCreation = !isRecommended && isDailyCreationPlan(plan);
-                    const billingLabel = plan.billingCycle === "yearly" ? "年费套餐 · 在月付价基础上 8 折" : "月费套餐";
+                    const billingLabel = promoConfig?.billingLabel
+                      ?? (plan.billingCycle === "yearly" ? "年费套餐 · 在月付价基础上 8 折" : "月费套餐");
+                    const displayPrice = promoConfig?.displayPrice ?? plan.price;
                     const equivMonthly =
-                      plan.billingCycle === "yearly" && plan.price > 0
-                        ? Math.round((plan.price / 12) * 100) / 100
-                        : null;
+                      promoConfig?.displayEquivMonthly
+                        ?? (
+                          plan.billingCycle === "yearly" && plan.price > 0
+                            ? String(Math.round((plan.price / 12) * 100) / 100)
+                            : null
+                        );
                     const planTotalCredits = plan.monthlyQuotaCredits + plan.signupBonusCredits;
 
                     return (
                       <div
                         key={plan.code}
                         className={cn(
-                          "relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border p-4 transition-all sm:p-5 xl:p-4",
+                          "relative flex min-h-0 min-w-0 flex-col overflow-visible rounded-2xl border p-4 transition-all sm:p-5 xl:p-4",
                           PLAN_CARD_MIN_H,
                           isWhite
                             ? "bg-white shadow-[0_12px_24px_rgba(15,23,42,0.08)]"
@@ -726,25 +804,44 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({ onBack, onPaymentSucc
                             : null,
                         )}
                       >
+                        {promoConfig ? (
+                          <div
+                            className={cn(
+                              "absolute -right-1 -top-3 flex min-w-[132px] items-center justify-center rounded-full border px-4 py-2 text-center text-[13px] font-semibold leading-none whitespace-nowrap shadow-[0_10px_24px_rgba(0,0,0,0.18)]",
+                              isWhite
+                                ? "border-amber-300 bg-amber-50 text-red-600"
+                                : "border-amber-300/70 bg-[#20170a] text-red-400",
+                            )}
+                          >
+                            <span className="whitespace-nowrap">{promoConfig.promoText}</span>
+                          </div>
+                        ) : null}
                         {isRecommended ? (
-                          <div className="absolute right-3 top-3 rounded-full bg-gradient-to-r from-[#8E86F5] to-[#9aa8ef] px-2.5 py-0.5 text-[10px] font-semibold text-white shadow-lg shadow-violet-950/60">
+                          <div
+                            className={cn(
+                              "absolute rounded-full bg-gradient-to-r from-[#8E86F5] to-[#9aa8ef] px-2.5 py-0.5 text-[10px] font-semibold text-white shadow-lg shadow-violet-950/60",
+                              promoConfig ? "right-[120px] top-[18px]" : "right-3 top-3",
+                            )}
+                          >
                             最受欢迎
                           </div>
                         ) : null}
                         <div
                           className={cn(
-                            "pr-14 text-xl font-semibold tracking-tight xl:text-lg 2xl:text-xl",
+                            promoConfig ? "pr-24 text-xl font-semibold tracking-tight xl:text-lg 2xl:text-xl" : "pr-14 text-xl font-semibold tracking-tight xl:text-lg 2xl:text-xl",
                             isWhite ? "text-slate-900" : "text-zinc-100",
                           )}
                         >
                           {tierTitle}
                         </div>
                         {/* <div className="mt-1 text-xs text-zinc-500">{tierSub}</div> */}
-                        <div
-                          className={cn("mt-1 text-[11px]", isWhite ? "text-slate-500" : "text-zinc-500")}
-                        >
-                          {billingLabel}
-                        </div>
+                        {billingLabel ? (
+                          <div
+                            className={cn("mt-1 text-[11px]", isWhite ? "text-slate-500" : "text-zinc-500")}
+                          >
+                            {billingLabel}
+                          </div>
+                        ) : null}
 
                         <div className="mt-3 flex flex-wrap items-end gap-2">
                           <span
@@ -753,7 +850,7 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({ onBack, onPaymentSucc
                               isWhite ? "text-slate-900" : "text-zinc-100",
                             )}
                           >
-                            ¥{plan.price}
+                            ¥{displayPrice}
                           </span>
                           <span
                             className={cn("pb-1 text-sm", isWhite ? "text-slate-500" : "text-zinc-500")}

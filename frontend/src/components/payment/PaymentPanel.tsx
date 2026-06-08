@@ -30,6 +30,9 @@ const showToast = (message: string, type: "success" | "error" | "info" = "info")
   );
 };
 
+const MIN_CUSTOM_RECHARGE_AMOUNT = 200;
+type TimerHandle = ReturnType<typeof setInterval>;
+
 export type PaymentPanelHandle = {
   openOrders: () => void;
   closeOrders: () => void;
@@ -63,38 +66,23 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [countdown, setCountdown] = useState(300);
   const [isExpired, setIsExpired] = useState(false);
-  const countdownRef = useRef<NodeJS.Timeout | null>(null);
-  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const countdownRef = useRef<TimerHandle | null>(null);
+  const pollingRef = useRef<TimerHandle | null>(null);
   /** 递增后可使尚未完成的 createPaymentOrder 回调不再写入 state，避免套餐单与自定义单互相覆盖 */
   const orderRequestIdRef = useRef(0);
 
   const isWhite = useAIChatStore((s) => s.chatTheme === "white");
-  const isDark = !isWhite;
-
-  // 自定义积分解锁：历史累计已支付 ≥ ¥200 才显示该区域
-  const [customAmountEligible, setCustomAmountEligible] = useState(false);
   const [customAmountMode, setCustomAmountMode] = useState(false);
   const [customCreditsInput, setCustomCreditsInput] = useState("");
 
   const parseCustomCredits = (raw: string) =>
     Math.max(0, Math.floor(Number.parseFloat(raw.replace(/,/g, "").trim()) || 0));
+
   const localizePackageBadge = useCallback(
     (rawValue?: string | null): string => {
-      const value = typeof rawValue === "string" ? rawValue.trim() : "";
-      if (!value) return "";
-      if (
-        /(?:\u9996\u5145\u7ffb\u500d|\u7ffb\u500d|\u53cc\u500d|first\s*top-?up\s*x2|x\s*2|2\s*x|double)/i.test(
-          value
-        )
-      ) {
-        return "";
-      }
-      if (/^(?:\u9001|\u8d60\u9001|\+)?\s*\d+\s*%$/i.test(value)) {
-        return "";
-      }
-      return value;
+      return typeof rawValue === "string" ? rawValue.trim() : "";
     },
-    [lt]
+    []
   );
 
   // 当前选中的支付金额和积分（自定义：先填积分，再换算金额）
@@ -110,6 +98,9 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
     }
     return { amount: 0, credits: 0 };
   }, [selectedPackage, packages, customAmountMode, customCreditsInput, creditsPerYuan]);
+  const minCustomRechargeCredits = Math.round(MIN_CUSTOM_RECHARGE_AMOUNT * creditsPerYuan);
+  const isCustomCreditsBelowMinimum =
+    customAmountMode && currentPayInfo.credits > 0 && currentPayInfo.credits < minCustomRechargeCredits;
 
   // 筛选后的订单列表
   const filteredOrders = useMemo(() => {
@@ -157,7 +148,7 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
         setIsLoading(false);
       }
     }
-  }, [currentPayInfo, paymentMethod, isLoading, customAmountMode]);
+  }, [currentPayInfo, paymentMethod, isLoading, customAmountMode, lt]);
 
   const handlePaymentCompleted = useCallback(
     (credits: number) => {
@@ -240,32 +231,18 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
     };
   }, []);
 
-  // 打开面板时根据历史已付金额判断是否显示自定义积分入口：累计已支付 ≥ ¥200 才解锁
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const result = await getPaymentOrders({ page: 1, pageSize: 200 });
-        if (cancelled) return;
-        const totalPaid = result.orders
-          .filter((o) => o.status === "paid")
-          .reduce((sum, o) => sum + o.amount, 0);
-        setCustomAmountEligible(totalPaid >= 200);
-      } catch (e) {
-        console.error("检查自定义充值资格失败:", e);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   // 自定义模式：积分输入变化后自动生成订单（500ms 防抖）
   useEffect(() => {
     if (!customAmountMode || !customCreditsInput) return;
     const credits = parseCustomCredits(customCreditsInput);
     const amount = Math.round((credits / creditsPerYuan) * 100) / 100;
-    if (credits < 1 || amount <= 0) return;
+    if (credits < minCustomRechargeCredits || amount < MIN_CUSTOM_RECHARGE_AMOUNT) {
+      setQrCodeUrl(null);
+      setCurrentOrderNo(null);
+      setIsExpired(false);
+      setCountdown(300);
+      return;
+    }
     if (paymentMethod !== "alipay" && paymentMethod !== "wechat") return;
 
     const timer = setTimeout(async () => {
@@ -292,7 +269,8 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [customAmountMode, customCreditsInput, creditsPerYuan, paymentMethod]);
+  }, [customAmountMode, customCreditsInput, creditsPerYuan, minCustomRechargeCredits, paymentMethod, lt]);
+
   // 仅在套餐列表首次加载完成时自动下单，避免与 handlePackageSelect 在切换套餐时重复请求
   useEffect(() => {
     if (!packagesLoading && packages.length > 0 && selectedPackage !== null && (paymentMethod === "alipay" || paymentMethod === "wechat") && !showOrders && !customAmountMode) {
@@ -325,7 +303,7 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
       })();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 只响应 packagesLoading，首次进入面板拉默认套餐码
-  }, [packagesLoading]);
+  }, [packagesLoading, customAmountMode, packages, paymentMethod, selectedPackage, showOrders]);
 
   // 当有订单号时，启动支付状态轮询（每3秒查询一次）
   useEffect(() => {
@@ -356,7 +334,6 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
     setCountdown(300);
 
     if (customAmountMode) {
-      // 切换支付方式后由 useEffect 自动重新生成订单
       return;
     }
 
@@ -592,23 +569,25 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
                         : "border-zinc-700/80 bg-[#0f0f18] hover:border-zinc-600",
                   )}
                 >
+                  {localizedTag && (
+                    <span
+                      className={cn(
+                        "absolute -right-3 -top-3 rounded-full border px-3.5 py-1.5 text-xs font-semibold leading-none shadow-[0_8px_18px_rgba(239,68,68,0.22)]",
+                        isWhite
+                          ? "border-amber-300 bg-amber-50 text-red-600"
+                          : "border-amber-300/70 bg-[#20170a] text-red-300",
+                      )}
+                    >
+                      {localizedTag}
+                    </span>
+                  )}
                   <div className={cn("text-2xl font-semibold", isWhite ? "text-slate-800" : "text-zinc-100")}>¥{pkg.price}</div>
                   <div className={cn("mt-1 text-sm", isWhite ? "text-slate-500" : "text-zinc-500")}>
                     {pkg.credits.toLocaleString()}
                     <span className="text-xs">{lt("积分", "credits")}</span>
                   </div>
-                  {(localizedTag || localizedBonus) && (
+                  {localizedBonus && (
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      {localizedTag && (
-                        <span
-                          className={cn(
-                            "rounded-full px-2 py-0.5 text-xs",
-                            isWhite ? "bg-orange-100 text-orange-600" : "bg-orange-500/20 text-orange-200",
-                          )}
-                        >
-                          {localizedTag}
-                        </span>
-                      )}
                       {localizedBonus && (
                         <span
                           className={cn(
@@ -624,13 +603,9 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
                 </button>
               );
             })}
-          </div>
-
-          {/* 自定义积分（历史累计已支付 ≥ ¥200 才显示该区域；金额由积分按汇率换算） */}
-          {customAmountEligible && (
             <div
               className={cn(
-                "rounded-xl border-2 transition-all",
+                "col-span-2 rounded-xl border-2 transition-all",
                 customAmountMode
                   ? isWhite
                     ? "border-blue-400 bg-blue-50/50"
@@ -641,7 +616,7 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
               )}
             >
               {customAmountMode ? (
-                <div className="p-4">
+                <div className="h-full p-4">
                   <div className="mb-3 flex items-center gap-2">
                     <Pencil className={cn("h-4 w-4", isWhite ? "text-blue-500" : "text-violet-400")} />
                     <span className={cn("text-sm font-medium", isWhite ? "text-blue-600" : "text-violet-200")}>
@@ -667,11 +642,11 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
                     <input
                       type="number"
                       inputMode="numeric"
-                      min={1}
+                      min={minCustomRechargeCredits}
                       step={1}
                       value={customCreditsInput}
                       onChange={(e) => setCustomCreditsInput(e.target.value)}
-                      placeholder={lt("输入积分数量", "Enter credits")}
+                      placeholder={lt(`最低 ${minCustomRechargeCredits} 积分`, `Minimum ${minCustomRechargeCredits} credits`)}
                       className={cn(
                         "min-w-[120px] flex-1 rounded-lg border-2 px-3 py-2 text-lg font-semibold outline-none transition-colors",
                         isWhite
@@ -685,6 +660,12 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
                     <span className={cn("shrink-0 text-sm", isWhite ? "text-slate-500" : "text-zinc-500")}>
                       ≈ ¥{currentPayInfo.amount.toFixed(2)}
                     </span>
+                  </div>
+                  <div className={cn("mt-2 text-xs", isWhite ? "text-slate-500" : "text-zinc-400")}>
+                    {lt(
+                      `自定义充值最低为 ${minCustomRechargeCredits} 积分（¥${MIN_CUSTOM_RECHARGE_AMOUNT}）`,
+                      `Custom top-up minimum is ${minCustomRechargeCredits} credits (¥${MIN_CUSTOM_RECHARGE_AMOUNT})`
+                    )}
                   </div>
                 </div>
               ) : (
@@ -701,7 +682,7 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
                     setCountdown(300);
                   }}
                   className={cn(
-                    "flex w-full items-center justify-center gap-2 p-4 transition-colors",
+                    "flex h-full min-h-[96px] w-full items-center justify-center gap-2 p-4 transition-colors",
                     isWhite ? "text-slate-500 hover:text-blue-500" : "text-zinc-400 hover:text-violet-300",
                   )}
                 >
@@ -710,7 +691,7 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
                 </button>
               )}
             </div>
-          )}
+          </div>
 
         </div>
 
@@ -766,6 +747,11 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
                 {customAmountMode
                   ? parseCustomCredits(customCreditsInput) < 1
                     ? lt("请输入积分数量", "Please enter credits")
+                    : isCustomCreditsBelowMinimum
+                    ? lt(
+                        `自定义充值最低 ${minCustomRechargeCredits} 积分（¥${MIN_CUSTOM_RECHARGE_AMOUNT}）`,
+                        `Custom top-up minimum is ${minCustomRechargeCredits} credits (¥${MIN_CUSTOM_RECHARGE_AMOUNT})`
+                      )
                     : lt("正在生成二维码…", "Generating QR code...")
                   : lt("选择套餐生成二维码", "Select a package to generate QR code")}
               </span>

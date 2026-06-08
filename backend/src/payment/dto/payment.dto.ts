@@ -54,13 +54,12 @@ export interface PaymentStatusResponse {
 
 // 充值套餐配置
 export const RECHARGE_PACKAGES = [
-  { price: 25, credits: 2500, bonus: null, tag: null },
-  { price: 50, credits: 5000, bonus: null, tag: null },
-  { price: 100, credits: 10000, bonus: null, tag: null },
-  { price: 200, credits: 20000, bonus: null, tag: null },
-  { price: 500, credits: 50000, bonus: null, tag: null },
-  { price: 1000, credits: 100000, bonus: null, tag: null },
+  { price: 19, credits: 2000, bonus: null, tag: null },
+  { price: 49, credits: 5000, bonus: null, tag: null },
+  { price: 99, credits: 20000, bonus: null, tag: '限时首充双倍' },
+  { price: 199, credits: 26000, bonus: null, tag: '限时首充7.5折' },
 ];
 
 // 积分兑换比例：1元 = 100积分
 export const CREDITS_PER_YUAN = 100;
+export const MIN_CUSTOM_RECHARGE_AMOUNT = 200;

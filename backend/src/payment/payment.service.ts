@@ -11,6 +11,7 @@ import {
   PaymentStatusResponse,
   RECHARGE_PACKAGES,
   CREDITS_PER_YUAN,
+  MIN_CUSTOM_RECHARGE_AMOUNT,
   type PaymentOrderType,
 } from './dto/payment.dto';
 import { TransactionType } from '../credits/dto/credits.dto';
@@ -281,8 +282,8 @@ export class PaymentService implements OnModuleInit {
       return {
         price: item.price,
         credits: item.credits,
-        bonus: null,
-        tag: null,
+        bonus: item.bonus,
+        tag: item.tag,
         isFirstRecharge: false,
       };
     });
@@ -397,6 +398,10 @@ export class PaymentService implements OnModuleInit {
         throw new BadRequestException('Invalid amount precision');
       }
       orderAmount = normalizedAmount;
+      const packageConfig = this.getRechargePackageByAmount(orderAmount);
+      if (!packageConfig && orderAmount < MIN_CUSTOM_RECHARGE_AMOUNT) {
+        throw new BadRequestException(`自定义充值最低金额为 ¥${MIN_CUSTOM_RECHARGE_AMOUNT}`);
+      }
       orderCredits = this.resolveRechargeOrderCredits(orderAmount);
     }
 
