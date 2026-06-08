@@ -1,9 +1,21 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/authStore";
 import { authApi } from "@/services/authApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { EventDateTimeFields } from "@/components/admin/EventDateTimeFields";
 import { fetchWithAuth } from "@/services/authFetch";
 import {
   getDashboardStats,
@@ -66,6 +78,9 @@ import {
   type NodeConfig,
   listVolcReviewGroups,
   cleanupVolcReviewGroup,
+  getEventSettingsConfig,
+  saveEventSettingsConfig,
+  type EventSettingsConfig,
 } from "@/services/adminApi";
 import { notifyNodeConfigsUpdated } from "@/services/nodeConfigService";
 import {
@@ -7096,6 +7111,207 @@ function VolcReviewTab() {
   );
 }
 
+function EventSettingsTab() {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [config, setConfig] = useState<EventSettingsConfig>({
+    images: [],
+    copy: "",
+    link: "",
+    eventAt: "",
+  });
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const loadConfig = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getEventSettingsConfig();
+      setConfig(data);
+    } catch (error) {
+      console.error("加载赛事设置失败:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadConfig();
+  }, [loadConfig]);
+
+  const handleImageUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const { uploadToOSS } = await import("@/services/ossUploadService");
+      const result = await uploadToOSS(file, {
+        dir: "settings/events/",
+        fileName: file.name,
+      });
+      if (!result.success || !result.url) {
+        throw new Error(result.error || "上传失败");
+      }
+      setConfig((prev) => ({
+        ...prev,
+        images: [...prev.images, result.url!],
+      }));
+    } catch (error: any) {
+      alert(error.message || "上传失败");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleFilesSelected = async (files: FileList | null) => {
+    const list = Array.from(files || []);
+    for (const file of list) {
+      await handleImageUpload(file);
+    }
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setConfig((prev) => ({
+      ...prev,
+      images: prev.images.filter((_, i) => i !== index),
+    }));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await saveEventSettingsConfig(config);
+      alert("保存成功");
+      void loadConfig();
+    } catch (error: any) {
+      alert(error.message || "保存失败");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+        <LoadingSpinner size="sm" />
+        <span className="text-sm">加载中...</span>
+      </div>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">赛事设置</CardTitle>
+        <CardDescription>
+          配置赛事展示内容：支持上传多张图片、编辑展示文案、设置日期与时间，并配置点击后的跳转链接。
+        </CardDescription>
+      </CardHeader>
+
+      <CardContent className="space-y-6">
+        <div className="space-y-3">
+          <Label>赛事图片（可多张）</Label>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            {config.images.map((url, index) => (
+              <div
+                key={`${url}-${index}`}
+                className="relative overflow-hidden rounded-lg border bg-muted/30"
+              >
+                <img
+                  src={url}
+                  alt={`赛事图片 ${index + 1}`}
+                  className="h-32 w-full object-cover"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="absolute right-2 top-2 bg-background/90"
+                  onClick={() => handleRemoveImage(index)}
+                >
+                  删除
+                </Button>
+              </div>
+            ))}
+
+            <div className="flex h-32 items-center justify-center rounded-lg border border-dashed bg-muted/20">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                disabled={uploading}
+                onChange={(e) => {
+                  void handleFilesSelected(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                disabled={uploading}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {uploading ? (
+                  <>
+                    <LoadingSpinner size="sm" className="mr-2" />
+                    上传中...
+                  </>
+                ) : (
+                  "上传图片"
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="event-copy">赛事文案</Label>
+          <Textarea
+            id="event-copy"
+            value={config.copy}
+            onChange={(e) => setConfig((prev) => ({ ...prev, copy: e.target.value }))}
+            rows={4}
+            placeholder="请输入赛事展示文案"
+          />
+        </div>
+
+        <EventDateTimeFields
+          eventAt={config.eventAt}
+          disabled={saving || uploading}
+          onChange={(eventAt) => setConfig((prev) => ({ ...prev, eventAt }))}
+        />
+
+        <div className="space-y-2">
+          <Label htmlFor="event-link">跳转链接</Label>
+          <Input
+            id="event-link"
+            value={config.link}
+            onChange={(e) => setConfig((prev) => ({ ...prev, link: e.target.value }))}
+            placeholder="https://example.com/event"
+          />
+          <CardDescription className="pt-0">用户点击赛事入口时将跳转到此链接。</CardDescription>
+        </div>
+      </CardContent>
+
+      <CardFooter className="gap-3">
+        <Button onClick={handleSave} disabled={saving}>
+          {saving ? (
+            <>
+              <LoadingSpinner size="sm" className="mr-2" />
+              保存中...
+            </>
+          ) : (
+            "保存设置"
+          )}
+        </Button>
+        <Button variant="outline" onClick={() => void loadConfig()} disabled={loading || saving}>
+          重新加载
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+}
+
 // 水印白名单管理 Tab
 function WatermarkWhitelistTab() {
   const [whitelistUsers, setWhitelistUsers] = useState<WatermarkWhitelistUser[]>([]);
@@ -13047,7 +13263,12 @@ export default function Admin() {
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<AdminTabKey>("dashboard");
   const [settingsSubTab, setSettingsSubTab] = useState<
-    "system" | "vip-management" | "model-management" | "unified-model-management" | "volc-review"
+    | "system"
+    | "vip-management"
+    | "model-management"
+    | "unified-model-management"
+    | "volc-review"
+    | "event-settings"
   >("system");
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -13241,6 +13462,7 @@ export default function Admin() {
                   { key: "unified-model-management", label: "统一模型管理" },
                   { key: "model-management", label: "视频模型管理" },
                   { key: "volc-review", label: "审核素材组" },
+                  { key: "event-settings", label: "赛事设置" },
                 ].map((tab) => (
                   <button
                     key={tab.key}
@@ -13252,6 +13474,7 @@ export default function Admin() {
                           | "model-management"
                           | "unified-model-management"
                           | "volc-review"
+                          | "event-settings"
                       )
                     }
                     className={`rounded-md px-4 py-2 text-sm font-medium transition ${
@@ -13271,6 +13494,7 @@ export default function Admin() {
             {settingsSubTab === "unified-model-management" && <UnifiedModelManagementTab />}
             {settingsSubTab === "model-management" && <ModelManagementTab />}
             {settingsSubTab === "volc-review" && <VolcReviewTab />}
+            {settingsSubTab === "event-settings" && <EventSettingsTab />}
           </div>
         )}
       </main>

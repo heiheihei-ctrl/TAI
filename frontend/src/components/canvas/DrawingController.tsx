@@ -56,7 +56,7 @@ import { SnapGuideRenderer } from "./SnapGuideRenderer";
 import type { DrawingContext, ImageInstance } from "@/types/canvas";
 import { paperSaveService } from "@/services/paperSaveService";
 import { historyService } from "@/services/historyService";
-import type { Model3DData } from "@/services/model3DUploadService";
+import type { Model3DData, Model3DFormat } from "@/services/model3DUploadService";
 import { clientToProject } from "@/utils/paperCoords";
 import { downloadImage, getSuggestedFileName } from "@/utils/downloadHelper";
 import { applyCursorForDrawMode } from "@/utils/cursorStyles";
@@ -87,6 +87,9 @@ import {
   getLibraryDropOffset,
   type TanvaDragAssetPayload,
 } from "@/utils/libraryDragPayload";
+
+const normalizeModel3DFormat = (value: unknown): Model3DFormat =>
+  value === "gltf" ? "gltf" : "glb";
 
 const isInlineImageSource = (value: unknown): value is string => {
   if (typeof value !== "string") return false;
@@ -1340,7 +1343,7 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
           url: (parsed.url as string | undefined) || (parsed.path as string | undefined) || "",
           path: (parsed.path as string | undefined) || (parsed.url as string | undefined) || "",
           key: parsed.key as string | undefined,
-          format: (parsed.format as string | undefined) || "glb",
+          format: normalizeModel3DFormat(parsed.format),
           fileName: (parsed.fileName as string | undefined) || "model.glb",
           fileSize: (parsed.fileSize as number | undefined) ?? 0,
           defaultScale:

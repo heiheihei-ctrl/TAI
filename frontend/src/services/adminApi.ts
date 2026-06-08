@@ -746,6 +746,119 @@ export async function upsertSetting(data: {
   return response.json();
 }
 
+export const EVENT_SETTINGS_KEY = "event_settings";
+
+export type EventSettingsConfig = {
+  images: string[];
+  copy: string;
+  link: string;
+  /** ISO 8601，精确到秒，如 2026-06-05T14:30:00.000Z */
+  eventAt: string;
+};
+
+const EMPTY_EVENT_SETTINGS: EventSettingsConfig = {
+  images: [],
+  copy: "",
+  link: "",
+  eventAt: "",
+};
+
+const pad2 = (value: number) => String(value).padStart(2, "0");
+
+const parseEventDate = (iso?: string | null): Date | null => {
+  if (!iso || typeof iso !== "string") return null;
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+/** 将 ISO 时间转为 date 输入值 YYYY-MM-DD */
+export function toEventDateValue(iso?: string | null): string {
+  const date = parseEventDate(iso);
+  if (!date) return "";
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+/** 将 ISO 时间转为 time 输入值 HH:mm:ss */
+export function toEventTimeValue(iso?: string | null): string {
+  const date = parseEventDate(iso);
+  if (!date) return "";
+  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
+}
+
+const normalizeTimeValue = (value?: string | null): string => {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return "00:00:00";
+  if (/^\d{2}:\d{2}$/.test(trimmed)) return `${trimmed}:00`;
+  if (/^\d{2}:\d{2}:\d{2}$/.test(trimmed)) return trimmed;
+  return "00:00:00";
+};
+
+const todayDateValue = (): string => {
+  const now = new Date();
+  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+};
+
+export { todayDateValue };
+
+/** 合并 date + time 输入值为 ISO 字符串（精确到秒） */
+export function mergeEventDateAndTime(dateValue?: string | null, timeValue?: string | null): string {
+  const date = (dateValue || "").trim();
+  if (!date) return "";
+  const merged = new Date(`${date}T${normalizeTimeValue(timeValue)}`);
+  if (Number.isNaN(merged.getTime())) return "";
+  return merged.toISOString();
+}
+
+/** 从 Date 对象生成本地 date 输入值，避免 toISOString 时区偏移 */
+export function toLocalDateValueFromDate(date: Date): string {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+export function parseEventSettingsValue(value?: string | null): EventSettingsConfig {
+  if (!value || typeof value !== "string") return { ...EMPTY_EVENT_SETTINGS };
+  try {
+    const parsed = JSON.parse(value) as Partial<EventSettingsConfig>;
+    const eventAt =
+      typeof parsed.eventAt === "string" && !Number.isNaN(new Date(parsed.eventAt).getTime())
+        ? new Date(parsed.eventAt).toISOString()
+        : "";
+    return {
+      images: Array.isArray(parsed.images)
+        ? parsed.images.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+        : [],
+      copy: typeof parsed.copy === "string" ? parsed.copy : "",
+      link: typeof parsed.link === "string" ? parsed.link : "",
+      eventAt,
+    };
+  } catch {
+    return { ...EMPTY_EVENT_SETTINGS };
+  }
+}
+
+export async function getEventSettingsConfig(): Promise<EventSettingsConfig> {
+  try {
+    const setting = await getSetting(EVENT_SETTINGS_KEY);
+    return parseEventSettingsValue(setting.value);
+  } catch {
+    return { ...EMPTY_EVENT_SETTINGS };
+  }
+}
+
+export async function saveEventSettingsConfig(
+  config: EventSettingsConfig
+): Promise<SystemSetting> {
+  return upsertSetting({
+    key: EVENT_SETTINGS_KEY,
+    value: JSON.stringify({
+      images: config.images,
+      copy: config.copy.trim(),
+      link: config.link.trim(),
+      eventAt: config.eventAt.trim(),
+    }),
+    description: "赛事设置（多图、文案、跳转链接、日期时间）",
+  });
+}
+
 export async function previewManagedPricing(
   data: ManagedPricingPreviewRequest
 ): Promise<ManagedPricingPreviewResponse> {

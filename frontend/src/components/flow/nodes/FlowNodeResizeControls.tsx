@@ -1,5 +1,5 @@
 import React from 'react';
-import { NodeResizeControl } from '@reactflow/node-resizer';
+import { NodeResizeControl, ResizeControlVariant } from '@reactflow/node-resizer';
 
 export const FLOW_NODE_RESIZE_EDGE = 8;
 
@@ -99,7 +99,7 @@ export function FlowNodeResizeControls({
         <NodeResizeControl
           key={`line-${config.position}`}
           position={config.position}
-          variant="line"
+          variant={ResizeControlVariant.Line}
           className="flow-node-resize-line"
           style={config.style}
           minWidth={minWidth}
