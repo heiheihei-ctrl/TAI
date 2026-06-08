@@ -43,6 +43,17 @@ import {
 } from "@/services/globalImageHistoryApi";
 import type { StoredImageAsset } from "@/types/canvas";
 import { useLocaleText } from "@/utils/localeText";
+import {
+  applyTanvaDragPayloads,
+  type TanvaDragAssetPayload,
+} from "@/utils/libraryDragPayload";
+
+const toggleSelectionId = (prev: Set<string>, id: string): Set<string> => {
+  const next = new Set(prev);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  return next;
+};
 
 const formatSize = (bytes?: number): string => {
   if (!bytes && bytes !== 0) return "-";
@@ -298,6 +309,12 @@ const LibraryPanel: React.FC = () => {
   const [projectHistorySearchQuery, setProjectHistorySearchQuery] =
     React.useState("");
   const [manualSearchQuery, setManualSearchQuery] = React.useState("");
+  const [selectedAssetIds, setSelectedAssetIds] = React.useState<Set<string>>(
+    () => new Set()
+  );
+  const [selectedHistoryIds, setSelectedHistoryIds] = React.useState<Set<string>>(
+    () => new Set()
+  );
   const [projectHistoryPage, setProjectHistoryPage] = React.useState(1);
   const [projectHistoryTotalPages, setProjectHistoryTotalPages] =
     React.useState(1);
@@ -953,43 +970,20 @@ const LibraryPanel: React.FC = () => {
     setSelectedAsset(null);
   };
 
-  const handleAssetClick = (
-    asset: PersonalLibraryAsset,
-    event: React.MouseEvent
-  ) => {
-    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    // 计算详情面板的位置，使其与点击的缩略图对齐
-    setDetailPosition({ top: rect.top });
-    setSelectedAsset(asset);
-    setSelectedHistoryItem(null);
-  };
-
-  // 拖拽开始处理
-  const handleDragStart = (
-    asset: PersonalLibraryAsset,
-    event: React.DragEvent
-  ) => {
-    // 设置拖拽数据
-    if (asset.type === "2d") {
-      // 2D 图片：设置 URL，DrawingController 会自动处理
-      event.dataTransfer.setData("text/uri-list", asset.url);
-      event.dataTransfer.setData("text/plain", asset.url);
-      event.dataTransfer.setData(
-        "application/x-tanva-asset",
-        JSON.stringify({
+  const buildManualAssetPayload = React.useCallback(
+    (asset: PersonalLibraryAsset): TanvaDragAssetPayload | null => {
+      if (asset.type === "2d") {
+        return {
           type: "2d",
           id: asset.id,
           url: asset.url,
           name: asset.name,
           fileName: asset.fileName,
-        })
-      );
-    } else if (asset.type === "3d") {
-      // 3D 模型：设置自定义数据
-      const modelAsset = asset as PersonalModelAsset;
-      event.dataTransfer.setData(
-        "application/x-tanva-asset",
-        JSON.stringify({
+        };
+      }
+      if (asset.type === "3d") {
+        const modelAsset = asset as PersonalModelAsset;
+        return {
           type: "3d",
           id: modelAsset.id,
           url: modelAsset.url,
@@ -1003,15 +997,11 @@ const LibraryPanel: React.FC = () => {
           camera: modelAsset.camera,
           fileSize: modelAsset.fileSize,
           updatedAt: modelAsset.updatedAt,
-        })
-      );
-    } else if (asset.type === "svg") {
-      const svgAsset = asset as PersonalSvgAsset;
-      event.dataTransfer.setData("text/uri-list", svgAsset.url);
-      event.dataTransfer.setData("text/plain", svgAsset.url);
-      event.dataTransfer.setData(
-        "application/x-tanva-asset",
-        JSON.stringify({
+        };
+      }
+      if (asset.type === "svg") {
+        const svgAsset = asset as PersonalSvgAsset;
+        return {
           type: "svg",
           id: svgAsset.id,
           url: svgAsset.url,
@@ -1020,38 +1010,30 @@ const LibraryPanel: React.FC = () => {
           width: svgAsset.width,
           height: svgAsset.height,
           svgContent: svgAsset.svgContent,
-        })
-      );
-    } else if (asset.type === "video") {
-      const videoAsset = asset as PersonalVideoAsset;
-      event.dataTransfer.setData("text/uri-list", videoAsset.url);
-      event.dataTransfer.setData("text/plain", videoAsset.url);
-      event.dataTransfer.setData(
-        "application/x-tanva-asset",
-        JSON.stringify({
+        };
+      }
+      if (asset.type === "video") {
+        const videoAsset = asset as PersonalVideoAsset;
+        return {
           type: "video",
           id: videoAsset.id,
           url: videoAsset.url,
           name: videoAsset.name,
           fileName: videoAsset.fileName,
           thumbnail: videoAsset.thumbnail,
-        })
-      );
-    }
-    event.dataTransfer.effectAllowed = "copy";
-  };
+        };
+      }
+      return null;
+    },
+    []
+  );
 
-  const handleHistoryDragStart = (
-    item: GlobalImageHistoryItem,
-    event: React.DragEvent
-  ) => {
-    const mediaType = getHistoryMediaType(item);
-    const mediaUrl = getHistoryMediaUrl(item);
-    event.dataTransfer.setData("text/uri-list", mediaUrl);
-    event.dataTransfer.setData("text/plain", mediaUrl);
-    event.dataTransfer.setData(
-      "application/x-tanva-asset",
-      JSON.stringify({
+  const buildHistoryAssetPayload = React.useCallback(
+    (item: GlobalImageHistoryItem): TanvaDragAssetPayload | null => {
+      const mediaType = getHistoryMediaType(item);
+      const mediaUrl = getHistoryMediaUrl(item);
+      if (!mediaUrl) return null;
+      return {
         type: mediaType === "video" ? "video" : "2d",
         id: item.id,
         url: mediaUrl,
@@ -1062,9 +1044,51 @@ const LibraryPanel: React.FC = () => {
             : lt("历史图片", "History Image")),
         fileName: `history_${item.id}.${mediaType === "video" ? "mp4" : "png"}`,
         thumbnail: getHistoryImagePreviewSrc(item),
-      })
-    );
-    event.dataTransfer.effectAllowed = "copy";
+      };
+    },
+    [lt]
+  );
+
+  const handleAssetClick = (
+    asset: PersonalLibraryAsset,
+    event: React.MouseEvent
+  ) => {
+    if (event.ctrlKey || event.metaKey) {
+      setSelectedAssetIds((prev) => toggleSelectionId(prev, asset.id));
+      return;
+    }
+    setSelectedAssetIds(new Set([asset.id]));
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    setDetailPosition({ top: rect.top });
+    setSelectedAsset(asset);
+    setSelectedHistoryItem(null);
+  };
+
+  const handleHistoryItemSelect = (
+    item: GlobalImageHistoryItem,
+    event: React.MouseEvent
+  ) => {
+    if (event.ctrlKey || event.metaKey) {
+      setSelectedHistoryIds((prev) => toggleSelectionId(prev, item.id));
+      return;
+    }
+    setSelectedHistoryIds(new Set([item.id]));
+    handleHistoryItemClick(item, event);
+  };
+
+  // 拖拽开始处理（支持多选批量拖到画板）
+  const handleDragStart = (
+    asset: PersonalLibraryAsset,
+    event: React.DragEvent
+  ) => {
+    const dragAssets =
+      selectedAssetIds.has(asset.id) && selectedAssetIds.size > 1
+        ? filteredManualAssets.filter((item) => selectedAssetIds.has(item.id))
+        : [asset];
+    const payloads = dragAssets
+      .map((item) => buildManualAssetPayload(item))
+      .filter(Boolean) as TanvaDragAssetPayload[];
+    applyTanvaDragPayloads(event, payloads);
   };
 
   // 拖拽结束处理（用于 3D 模型）
@@ -1365,6 +1389,30 @@ const LibraryPanel: React.FC = () => {
   const activeHistoryPageSlots = isProjectHistoryTab
     ? projectHistoryPageSlots
     : historyPageSlots;
+
+  const handleHistoryDragStart = React.useCallback(
+    (item: GlobalImageHistoryItem, event: React.DragEvent) => {
+      const dragItems =
+        selectedHistoryIds.has(item.id) && selectedHistoryIds.size > 1
+          ? activeHistoryItems.filter((historyItem) =>
+              selectedHistoryIds.has(historyItem.id)
+            )
+          : [item];
+      const payloads = dragItems
+        .map((historyItem) => buildHistoryAssetPayload(historyItem))
+        .filter(Boolean) as TanvaDragAssetPayload[];
+      applyTanvaDragPayloads(event, payloads);
+    },
+    [activeHistoryItems, buildHistoryAssetPayload, selectedHistoryIds]
+  );
+
+  const activeSelectionCount =
+    activeTab === "manual" ? selectedAssetIds.size : selectedHistoryIds.size;
+
+  React.useEffect(() => {
+    setSelectedAssetIds(new Set());
+    setSelectedHistoryIds(new Set());
+  }, [activeTab]);
 
   // 面板关闭时隐藏
   if (!showLibraryPanel) return null;
@@ -1737,6 +1785,7 @@ const LibraryPanel: React.FC = () => {
                 {filteredManualAssets.map((asset) => {
                   const is2dOrSvg = asset.type === "2d" || asset.type === "svg";
                   const isSelected = selectedAsset?.id === asset.id;
+                  const isMultiSelected = selectedAssetIds.has(asset.id);
                   const typeLabel =
                     asset.type === "2d"
                       ? "IMG"
@@ -1752,7 +1801,11 @@ const LibraryPanel: React.FC = () => {
                       data-library-thumbnail
                       draggable
                       className={`aspect-square rounded-lg overflow-hidden bg-gray-100 cursor-grab transition-all hover:ring-2 hover:ring-blue-400 active:cursor-grabbing relative ${
-                        isSelected ? "ring-2 ring-blue-500" : ""
+                        isMultiSelected
+                          ? "ring-2 ring-blue-500"
+                          : isSelected
+                          ? "ring-2 ring-blue-500"
+                          : ""
                       }`}
                       onClick={(e) => handleAssetClick(asset, e)}
                       onDoubleClick={() => handleAssetDoubleClick(asset)}
@@ -1862,13 +1915,17 @@ const LibraryPanel: React.FC = () => {
                 </div>
               ) : (
                 <div className='grid grid-cols-2 gap-2'>
-                  {activeHistoryItems.map((item) => (
+                  {activeHistoryItems.map((item) => {
+                    const isHistoryMultiSelected = selectedHistoryIds.has(item.id);
+                    return (
                     <div
                       key={item.id}
                       data-library-thumbnail
                       draggable
-                      className='aspect-square rounded-lg overflow-hidden bg-gray-100 cursor-grab transition-all hover:ring-2 hover:ring-blue-400 active:cursor-grabbing relative'
-                      onClick={(event) => handleHistoryItemClick(item, event)}
+                      className={`aspect-square rounded-lg overflow-hidden bg-gray-100 cursor-grab transition-all hover:ring-2 hover:ring-blue-400 active:cursor-grabbing relative ${
+                        isHistoryMultiSelected ? "ring-2 ring-blue-500" : ""
+                      }`}
+                      onClick={(event) => handleHistoryItemSelect(item, event)}
                       onDoubleClick={() => handleHistoryItemDoubleClick(item)}
                       onDragStart={(event) => handleHistoryDragStart(item, event)}
                       title={
@@ -1930,7 +1987,8 @@ const LibraryPanel: React.FC = () => {
                         </div>
                       ) : null}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
@@ -2023,16 +2081,33 @@ const LibraryPanel: React.FC = () => {
 
         {/* 面板底部 */}
         <div className='tanva-library-footer p-3 bg-white/80 backdrop-blur-sm border-t border-white/40'>
-          <div className='text-xs text-gray-500 text-center'>
-            {activeTab === "manual"
-              ? lt(
-                  `显示 ${filteredManualAssets.length}/${allAssets.length} 个资源`,
-                  `${filteredManualAssets.length}/${allAssets.length} assets`
-                )
-              : lt(
-                  `第 ${activeHistoryPage}/${activeHistoryTotalPages} 页 · 共 ${activeHistoryTotalCount} 条`,
-                  `Page ${activeHistoryPage}/${activeHistoryTotalPages} · ${activeHistoryTotalCount} items`
+          <div className='text-xs text-gray-500 text-center space-y-1'>
+            <div>
+              {activeTab === "manual"
+                ? lt(
+                    `显示 ${filteredManualAssets.length}/${allAssets.length} 个资源`,
+                    `${filteredManualAssets.length}/${allAssets.length} assets`
+                  )
+                : lt(
+                    `第 ${activeHistoryPage}/${activeHistoryTotalPages} 页 · 共 ${activeHistoryTotalCount} 条`,
+                    `Page ${activeHistoryPage}/${activeHistoryTotalPages} · ${activeHistoryTotalCount} items`
+                  )}
+            </div>
+            {activeSelectionCount > 1 ? (
+              <div className='text-blue-600 font-medium'>
+                {lt(
+                  `已选 ${activeSelectionCount} 项，拖拽任一选中项可批量添加到画板`,
+                  `${activeSelectionCount} selected — drag any selected item to add all to canvas`
                 )}
+              </div>
+            ) : (
+              <div className='text-gray-400'>
+                {lt(
+                  "Ctrl+点击多选，可批量拖到画板",
+                  "Ctrl+click to multi-select, then drag to canvas"
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
