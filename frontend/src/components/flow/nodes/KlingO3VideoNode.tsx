@@ -11,6 +11,7 @@ import { useLocaleText } from "@/utils/localeText";
 import RunCreditBadge from "./RunCreditBadge";
 import { imageUploadService } from "@/services/imageUploadService";
 import { useBackendCreditsPreview } from "../hooks/useBackendCreditsPreview";
+import FlowResizableNodeShell from "./FlowResizableNodeShell";
 
 type Props = {
   id: string;
@@ -56,6 +57,8 @@ type Props = {
           duration?: number;
         };
     imageType?: "frame" | "reference"; // 图片类型：首尾帧 or 图片/主体参考
+    boxW?: number;
+    boxH?: number;
   };
   selected?: boolean;
 };
@@ -1221,15 +1224,20 @@ function KlingO1VideoNode({ id, data, selected }: Props) {
   };
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={280}
+      defaultHeight={380}
+      minWidth={180}
+      minHeight={120}
       style={{
-        width: 280,
         padding: 10,
         background: "#fff",
         border: `1px solid ${borderColor}`,
         borderRadius: 10,
         boxShadow,
-        position: "relative",
       }}
     >
       <Handle
@@ -2505,7 +2513,7 @@ function KlingO1VideoNode({ id, data, selected }: Props) {
           <span>{data.fallbackMessage}</span>
         </div>
       )}
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

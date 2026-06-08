@@ -13,6 +13,7 @@ import {
   flowNodeShellChrome,
   useFlowNodeDarkTheme,
 } from './flowNodeDarkTheme';
+import FlowResizableNodeShell from './FlowResizableNodeShell';
 
 type CompressionLevel = 'light' | 'balanced' | 'strong';
 
@@ -552,9 +553,15 @@ function ImageCompressNodeInner({ id, data, selected = false }: Props) {
       : '--';
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={300}
+      defaultHeight={360}
+      minWidth={180}
+      minHeight={120}
       style={{
-        width: 300,
         padding: 10,
         background: shell.background,
         color: shell.color,
@@ -562,9 +569,6 @@ function ImageCompressNodeInner({ id, data, selected = false }: Props) {
         borderRadius: 8,
         boxShadow,
         transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
-        position: 'relative',
-        display: 'flex',
-        flexDirection: 'column',
         gap: 8,
       }}
     >
@@ -693,7 +697,7 @@ function ImageCompressNodeInner({ id, data, selected = false }: Props) {
         }}
       />
       <Handle type='source' position={Position.Right} id='image' />
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

@@ -10,6 +10,7 @@ import { proxifyRemoteAssetUrl } from "@/utils/assetProxy";
 import { useLocaleText } from "@/utils/localeText";
 import RunCreditBadge from "./RunCreditBadge";
 import NodeSelect from "./NodeSelect";
+import FlowResizableNodeShell from "./FlowResizableNodeShell";
 import { useBackendCreditsPreview } from "../hooks/useBackendCreditsPreview";
 import {
   buildViduRequestSemantics,
@@ -82,6 +83,8 @@ type Props = {
     nodeConfigMetadata?: Record<string, any>;
     seedance2AccessEnabled?: boolean;
     seedance2AccessResolved?: boolean;
+    boxW?: number;
+    boxH?: number;
   };
   selected?: boolean;
 };
@@ -2091,15 +2094,20 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
   };
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={280}
+      defaultHeight={260}
+      minWidth={220}
+      minHeight={180}
       style={{
-        width: 280,
         padding: 10,
         background: "#fff",
         border: `1px solid ${borderColor}`,
         borderRadius: 10,
         boxShadow,
-        position: "relative",
       }}
     >
       <Handle
@@ -3478,7 +3486,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
           <span>{data.fallbackMessage}</span>
         </div>
       )}
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

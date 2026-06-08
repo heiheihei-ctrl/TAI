@@ -16,6 +16,7 @@ import { parseFlowImageAssetRef } from "@/services/flowImageAssetStore";
 import { useFlowImageAssetUrl } from "@/hooks/useFlowImageAssetUrl";
 import RunCreditBadge from "./RunCreditBadge";
 import { useFlowRenderMode } from "../FlowRenderModeContext";
+import FlowResizableNodeShell from "./FlowResizableNodeShell";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "../../ui/dropdown-menu";
 import {
   getFlowModelProviderMode,
@@ -675,8 +676,6 @@ function Generate4NodeInner({ id, data, selected }: Props) {
     [id, images, imageUrls, lt]
   );
 
-  const boxW = data.boxW || 300;
-  const boxH = data.boxH || 240;
   const aspectRatioValue = data.aspectRatio ?? "";
   const imageSizeValue = data.imageSize ?? "";
   const aspectOptions = React.useMemo(
@@ -859,16 +858,21 @@ function Generate4NodeInner({ id, data, selected }: Props) {
   });
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={300}
+      defaultHeight={240}
+      minWidth={240}
+      minHeight={180}
       style={{
-        width: boxW,
         padding: 8,
         background: "#fff",
         border: `1px solid ${borderColor}`,
         borderRadius: 8,
         boxShadow,
         transition: "border-color 0.15s ease, box-shadow 0.15s ease",
-        position: "relative",
       }}
     >
       {/* 标题行：标题 + 模式标签 + 控制按钮 */}
@@ -1281,7 +1285,7 @@ function Generate4NodeInner({ id, data, selected }: Props) {
           if (i >= 0) setPreviewIndex(i);
         }}
       />
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

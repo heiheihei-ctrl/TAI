@@ -9,10 +9,10 @@ import {
   flowAudioPlayerShell,
   flowNodeShellChrome,
 } from "./flowNodeDarkTheme";
+import FlowResizableNodeShell from "./FlowResizableNodeShell";
 
 const MAX_AUDIO_NAME_LENGTH = 28;
 const MAX_AUDIO_SIZE = 100 * 1024 * 1024; // 100MB
-const COMPACT_NODE_HEIGHT = 128;
 const COMPACT_CONTENT_HEIGHT = 72;
 
 const SUPPORTED_AUDIO_MIME_TYPES = [
@@ -363,17 +363,18 @@ function AudioNodeInner({ id, data, selected }: Props) {
   const displayAudioUrl = incomingAudioUrl || data.audioUrl;
   const displayMimeType =
     incomingAudioUrl && !data.audioUrl ? undefined : data.mimeType;
-  const nodeHeight =
-    typeof data.boxH === "number" && data.boxH > 0
-      ? Math.min(data.boxH, COMPACT_NODE_HEIGHT)
-      : COMPACT_NODE_HEIGHT;
 
   return (
-    <div
-        className="flow-audio-node"
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={320}
+      defaultHeight={128}
+      minWidth={180}
+      minHeight={100}
+      className="flow-audio-node"
       style={{
-        width: data.boxW || 320,
-        height: nodeHeight,
         padding: 8,
         background: shell.background,
         color: shell.color,
@@ -381,9 +382,6 @@ function AudioNodeInner({ id, data, selected }: Props) {
         borderRadius: 8,
         boxShadow,
         transition: "border-color 0.15s ease, box-shadow 0.15s ease",
-        display: "flex",
-        flexDirection: "column",
-        position: "relative",
       }}
     >
       <div
@@ -498,7 +496,7 @@ function AudioNodeInner({ id, data, selected }: Props) {
           audio
         </div>
       )}
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

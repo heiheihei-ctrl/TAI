@@ -11,6 +11,7 @@ import RunCreditBadge from "./RunCreditBadge";
 import NodeSelect from "./NodeSelect";
 import { useNodeRunCredits } from "../hooks/useNodeRunCredits";
 import { useBackendCreditsPreview } from "../hooks/useBackendCreditsPreview";
+import FlowResizableNodeShell from "./FlowResizableNodeShell";
 
 type VideoHistoryItem = {
   id: string;
@@ -39,6 +40,8 @@ type Props = {
     history?: VideoHistoryItem[];
     audioUrl?: string;
     inputImageUrl?: string; // 用于判断是 T2V 还是 I2V
+    boxW?: number;
+    boxH?: number;
   };
   selected?: boolean;
 };
@@ -517,15 +520,20 @@ function Wan26Node({ id, data, selected }: Props) {
   }, [lt]);
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={300}
+      defaultHeight={320}
+      minWidth={180}
+      minHeight={120}
       style={{
-        width: 280,
         padding: 10,
         background: "#fff",
         border: `1px solid ${borderColor}`,
         borderRadius: 10,
         boxShadow,
-        position: "relative",
       }}
     >
       <Handle
@@ -1287,7 +1295,7 @@ function Wan26Node({ id, data, selected }: Props) {
           <span>{data.error}</span>
         </div>
       )}
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

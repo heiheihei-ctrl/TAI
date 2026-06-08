@@ -10,6 +10,7 @@ import RunCreditBadge from "./RunCreditBadge";
 import NodeSelect from "./NodeSelect";
 import { useNodeRunCredits } from "../hooks/useNodeRunCredits";
 import { useBackendCreditsPreview } from "../hooks/useBackendCreditsPreview";
+import FlowResizableNodeShell from "./FlowResizableNodeShell";
 
 type VideoHistoryItem = {
   id: string;
@@ -34,6 +35,8 @@ type Props = {
     seed?: number | string;
     audioUrl?: string;
     history?: VideoHistoryItem[];
+    boxW?: number;
+    boxH?: number;
   };
   selected?: boolean;
 };
@@ -95,13 +98,11 @@ const zh = {
 
 const getStyles = (selected?: boolean) => ({
   card: {
-    width: 300,
     padding: 10,
     background: "#fff",
     border: `1px solid ${selected ? "#2563eb" : "#e5e7eb"}`,
     borderRadius: 10,
     boxShadow: selected ? "0 0 0 2px rgba(37,99,235,0.12)" : "0 1px 2px rgba(0,0,0,0.04)",
-    position: "relative" as const,
   },
   input: {
     width: "100%",
@@ -346,7 +347,16 @@ function Wan27VideoNode({ id, data, selected }: Props) {
   const tooltip = (key: string, top: string, text: string) => hover === key ? <div className="flow-tooltip" style={{ left: -8, top, transform: "translate(-100%, -50%)" }}>{text}</div> : null;
 
   return (
-    <div style={styles.card}>
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={300}
+      defaultHeight={420}
+      minWidth={180}
+      minHeight={120}
+      style={styles.card}
+    >
       <Handle type="target" position={Position.Left} id="text" style={{ top: "14%" }} onMouseEnter={() => setHover("text")} onMouseLeave={() => setHover(null)} />
       <Handle type="target" position={Position.Left} id="image" style={{ top: "30%" }} onMouseEnter={() => setHover("image")} onMouseLeave={() => setHover(null)} />
       <Handle type="target" position={Position.Left} id="image-2" style={{ top: "46%" }} onMouseEnter={() => setHover("image-2")} onMouseLeave={() => setHover(null)} />
@@ -507,7 +517,7 @@ function Wan27VideoNode({ id, data, selected }: Props) {
           <span>{data.error}</span>
         </div>
       )}
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

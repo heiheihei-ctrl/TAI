@@ -1,5 +1,5 @@
 import React from "react";
-import { Handle, Position, NodeResizer, useReactFlow } from "reactflow";
+import { Handle, Position, useReactFlow } from "reactflow";
 import { Send as SendIcon, Camera } from "lucide-react";
 import { AutoScreenshotService } from "@/services/AutoScreenshotService";
 import ImagePreviewModal, { type ImageItem } from "../../ui/ImagePreviewModal";
@@ -12,6 +12,7 @@ import { toRenderableImageSrc } from "@/utils/imageSource";
 import { useLocaleText } from "@/utils/localeText";
 import { flowImagePreviewWell, flowLetterboxBackground, useFlowNodeDarkTheme } from "./flowNodeDarkTheme";
 import { resolveFlowNodeSendAnchorClient } from "../utils/flowNodeSendAnchor";
+import FlowResizableNodeShell from "./FlowResizableNodeShell";
 
 type Props = {
   id: string;
@@ -201,53 +202,24 @@ function CameraNodeInner({ id, data, selected }: Props) {
   }, [preview]);
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={260}
+      defaultHeight={220}
+      minWidth={220}
+      minHeight={180}
+      resizerVisible="selected"
       style={{
-        width: data.boxW || 260,
-        height: data.boxH || 220,
         padding: 8,
         background: "#fff",
         border: `1px solid ${borderColor}`,
         borderRadius: 8,
         boxShadow,
         transition: "border-color 0.15s ease, box-shadow 0.15s ease",
-        display: "flex",
-        flexDirection: "column",
-        position: "relative",
       }}
     >
-      <NodeResizer
-        isVisible={!!selected}
-        minWidth={220}
-        minHeight={180}
-        color='transparent'
-        lineStyle={{ display: "none" }}
-        handleStyle={{
-          background: "transparent",
-          border: "none",
-          width: 12,
-          height: 12,
-          opacity: 0,
-        }}
-        onResize={(e, p) =>
-          rf.setNodes((ns) =>
-            ns.map((n) =>
-              n.id === id
-                ? { ...n, data: { ...n.data, boxW: p.width, boxH: p.height } }
-                : n
-            )
-          )
-        }
-        onResizeEnd={(e, p) =>
-          rf.setNodes((ns) =>
-            ns.map((n) =>
-              n.id === id
-                ? { ...n, data: { ...n.data, boxW: p.width, boxH: p.height } }
-                : n
-            )
-          )
-        }
-      />
       <div
         style={{
           display: "flex",
@@ -356,7 +328,7 @@ function CameraNodeInner({ id, data, selected }: Props) {
           }
         }}
       />
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

@@ -20,6 +20,7 @@ import { useLocaleText } from '@/utils/localeText';
 import { useAIChatStore } from '@/stores/aiChatStore';
 import { flowImagePreviewWell, flowLetterboxBackground } from './flowNodeDarkTheme';
 import RunCreditBadge from './RunCreditBadge';
+import FlowResizableNodeShell from './FlowResizableNodeShell';
 import { useImageNodeCreditsPreview } from '../hooks/useImageNodeCreditsPreview';
 
 type MidjourneyMode = 'FAST' | 'RELAX';
@@ -137,6 +138,8 @@ type Props = {
     managedModelKey?: string;
     vendorKey?: string;
     platformKey?: string;
+    boxW?: number;
+    boxH?: number;
   };
   selected?: boolean;
 };
@@ -1034,16 +1037,21 @@ function MidjourneyNodeInner({ id, type, data, selected }: Props) {
   };
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={isAdvanced ? 300 : 280}
+      defaultHeight={isAdvanced ? 760 : 320}
+      minWidth={180}
+      minHeight={120}
       style={{
-        width: isAdvanced ? 300 : 280,
         padding: 10,
         background: '#fff',
         border: `1px solid ${borderColor}`,
         borderRadius: 10,
         boxShadow,
         transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
-        position: 'relative',
       }}
     >
       {isAdvanced ? renderAdvancedContent() : (
@@ -1383,7 +1391,7 @@ function MidjourneyNodeInner({ id, type, data, selected }: Props) {
         currentImageId={currentImageId}
         onImageChange={handleImageChange}
       />
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

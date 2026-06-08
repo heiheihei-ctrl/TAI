@@ -17,6 +17,7 @@ import RunCreditBadge from "./RunCreditBadge";
 import NodeSelect from "./NodeSelect";
 import { useImageNodeCreditsPreview } from "../hooks/useImageNodeCreditsPreview";
 import { useFlowRenderMode } from "../FlowRenderModeContext";
+import FlowResizableNodeShell from "./FlowResizableNodeShell";
 import {
   getFlowModelProviderMode,
   resolveFlowModelProvider,
@@ -55,6 +56,8 @@ type Props = {
     modelProvider?: FlowModelProvider;
     onRun?: (id: string) => void;
     onSend?: (id: string) => void;
+    boxW?: number;
+    boxH?: number;
   };
   selected?: boolean;
 };
@@ -831,16 +834,21 @@ function GenerateNodeInner({ id, data, selected }: Props) {
   }, [showTextOutputHandle]);
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={260}
+      defaultHeight={200}
+      minWidth={220}
+      minHeight={160}
       style={{
-        width: 260,
         padding: 8,
         background: "#fff",
         border: `1px solid ${borderColor}`,
         borderRadius: 8,
         boxShadow,
         transition: "border-color 0.15s ease, box-shadow 0.15s ease",
-        position: "relative",
       }}
     >
       <div
@@ -1285,7 +1293,7 @@ function GenerateNodeInner({ id, data, selected }: Props) {
         currentImageId={currentImageId}
         onImageChange={handleImageChange}
       />
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

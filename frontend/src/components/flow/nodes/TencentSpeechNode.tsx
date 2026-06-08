@@ -14,6 +14,7 @@ import {
 } from './flowNodeDarkTheme';
 import { TENCENT_SYSTEM_VOICES } from './tencentSystemVoices';
 import RunCreditBadge from './RunCreditBadge';
+import FlowResizableNodeShell from './FlowResizableNodeShell';
 
 const LANGUAGE_OPTIONS = [
   { value: 'zh', zh: '中文 (zh)', en: 'Chinese (zh)' },
@@ -93,6 +94,8 @@ type Props = {
     selectedHistoryId?: string;
     creditsPerCall?: number;
     onRun?: (id: string) => void;
+    boxW?: number;
+    boxH?: number;
   };
   selected?: boolean;
 };
@@ -300,18 +303,21 @@ function TencentSpeechNode({ id, data, selected }: Props) {
   const hasRunCredits = typeof data.creditsPerCall === 'number' && data.creditsPerCall > 0;
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={300}
+      defaultHeight={400}
+      minWidth={180}
+      minHeight={120}
       style={{
-        width: 280,
         padding: 8,
         background: '#fff',
         border: `1px solid ${borderColor}`,
         borderRadius: 8,
         boxShadow,
         transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
-        position: 'relative',
-        display: 'flex',
-        flexDirection: 'column',
         gap: 6,
       }}
     >
@@ -813,7 +819,7 @@ function TencentSpeechNode({ id, data, selected }: Props) {
       {handleHover === 'video-out' ? (
         <div className="flow-tooltip" style={{ right: -8, top: '62%', transform: 'translate(100%, -50%)' }}>video</div>
       ) : null}
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

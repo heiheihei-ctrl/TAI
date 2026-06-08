@@ -3,6 +3,7 @@ import React from "react";
 import { Handle, Position, useReactFlow } from "reactflow";
 import { useProjectContentStore } from "@/stores/projectContentStore";
 import { useLocaleText } from "@/utils/localeText";
+import FlowResizableNodeShell from "./FlowResizableNodeShell";
 
 const MIN_WIDTH = 320;
 const MIN_HEIGHT = 240;
@@ -221,20 +222,22 @@ function VideoNodeInner({ id, data, selected }: Props) {
   }, [updateNodeData]);
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={320}
+      defaultHeight={280}
+      minWidth={180}
+      minHeight={120}
       className="flow-video-node"
       style={{
-        width: data.boxW || 320,
-        height: data.boxH || 280,
         padding: 8,
         background: "#fff",
         border: `1px solid ${borderColor}`,
         borderRadius: 8,
         boxShadow,
         transition: "border-color 0.15s ease, box-shadow 0.15s ease",
-        display: "flex",
-        flexDirection: "column",
-        position: "relative",
         outline: "none",
       }}
     >
@@ -322,7 +325,7 @@ function VideoNodeInner({ id, data, selected }: Props) {
           video
         </div>
       )}
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

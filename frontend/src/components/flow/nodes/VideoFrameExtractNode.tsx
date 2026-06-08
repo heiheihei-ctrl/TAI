@@ -12,6 +12,7 @@ import {
   flowNodeWellOutlineBorder,
   useFlowNodeDarkTheme,
 } from './flowNodeDarkTheme';
+import FlowResizableNodeShell from './FlowResizableNodeShell';
 
 type FrameData = {
   index: number;
@@ -35,6 +36,8 @@ type Props = {
     rangeStart?: number;
     rangeEnd?: number;
     extractProgress?: number;
+    boxW?: number;
+    boxH?: number;
   };
   selected?: boolean;
 };
@@ -394,9 +397,15 @@ function VideoFrameExtractNodeInner({ id, data, selected = false }: Props) {
   const previewFrames = frames.slice(0, MAX_PREVIEW_FRAMES);
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={300}
+      defaultHeight={420}
+      minWidth={180}
+      minHeight={120}
       style={{
-        width: 300,
         padding: 10,
         background: shell.background,
         color: shell.color,
@@ -404,9 +413,6 @@ function VideoFrameExtractNodeInner({ id, data, selected = false }: Props) {
         borderRadius: 8,
         boxShadow,
         transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
-        position: 'relative',
-        display: 'flex',
-        flexDirection: 'column',
         gap: 8,
       }}
     >
@@ -815,7 +821,7 @@ function VideoFrameExtractNodeInner({ id, data, selected = false }: Props) {
 
       {/* 隐藏的 canvas */}
       <canvas ref={canvasRef} style={{ display: 'none' }} />
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

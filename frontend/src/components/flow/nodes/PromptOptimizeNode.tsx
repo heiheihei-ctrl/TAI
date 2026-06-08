@@ -1,5 +1,5 @@
 import React from 'react';
-import { Handle, Position, NodeResizer, useReactFlow } from 'reactflow';
+import { Handle, Position, useReactFlow } from 'reactflow';
 import { Check } from 'lucide-react';
 // no Button/Textarea components needed here
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
@@ -12,6 +12,7 @@ import { useLocaleText } from '@/utils/localeText';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '../../ui/dropdown-menu';
 import RunCreditBadge from './RunCreditBadge';
 import { useBackendCreditsPreview } from '../hooks/useBackendCreditsPreview';
+import FlowResizableNodeShell from './FlowResizableNodeShell';
 
 // 已去除可视化设置面板，采用内部默认参数
 type Props = {
@@ -222,33 +223,23 @@ function PromptOptimizeNodeInner({ id, data, selected }: Props) {
   // 不需要中间激活按钮；Run 后即写入 expandedText 与 text
 
   return (
-    <div style={{
-      width: data.boxW || 360,
-      height: data.boxH || 300,
-      padding: 12,
-      background: '#fff',
-      border: `1px solid ${borderColor}`,
-      borderRadius: 8,
-      boxShadow,
-      transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
-      display: 'flex',
-      flexDirection: 'column',
-      position: 'relative'
-    }}>
-      <NodeResizer
-        isVisible
-        minWidth={300}
-        minHeight={220}
-        color="transparent"
-        lineStyle={{ display: 'none' }}
-        handleStyle={{ background: 'transparent', border: 'none', width: 16, height: 16, opacity: 0 }}
-        onResize={(evt, params) => {
-          rf.setNodes(ns => ns.map(n => n.id === id ? { ...n, data: { ...n.data, boxW: params.width, boxH: params.height } } : n));
-        }}
-        onResizeEnd={(evt, params) => {
-          rf.setNodes(ns => ns.map(n => n.id === id ? { ...n, data: { ...n.data, boxW: params.width, boxH: params.height } } : n));
-        }}
-      />
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={360}
+      defaultHeight={300}
+      minWidth={300}
+      minHeight={220}
+      style={{
+        padding: 12,
+        background: '#fff',
+        border: `1px solid ${borderColor}`,
+        borderRadius: 8,
+        boxShadow,
+        transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+      }}
+    >
 
       {/* 标题栏（英文标题，其它中文） */}
       <div style={{ 
@@ -473,7 +464,7 @@ function PromptOptimizeNodeInner({ id, data, selected }: Props) {
           {lt('优化文本', 'Optimized text')}
         </div>
       )}
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

@@ -18,6 +18,7 @@ import {
 import RunCreditBadge from "./RunCreditBadge";
 import { useAIChatStore } from "@/stores/aiChatStore";
 import { useImageNodeCreditsPreview } from "../hooks/useImageNodeCreditsPreview";
+import FlowResizableNodeShell from "./FlowResizableNodeShell";
 
 type NodeConfigMetadata = {
   type?: string;
@@ -58,6 +59,8 @@ type NodeData = {
   platformKey?: string;
   onRun?: (id: string) => void;
   onSend?: (id: string) => void;
+  boxW?: number;
+  boxH?: number;
 };
 
 type CreditNodeType =
@@ -621,16 +624,21 @@ function Nano2NodeInner({ id, data, selected }: Props) {
   );
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={260}
+      defaultHeight={200}
+      minWidth={180}
+      minHeight={120}
       style={{
-        width: 260,
         padding: 8,
         background: "#fff",
         border: `1px solid ${borderColor}`,
         borderRadius: 8,
         boxShadow,
         transition: "border-color 0.15s ease, box-shadow 0.15s ease",
-        position: "relative",
       }}
     >
       <div
@@ -1119,7 +1127,7 @@ function Nano2NodeInner({ id, data, selected }: Props) {
           {lt("参考图上限", "Reference max")}: {maxReferenceImages}
         </div>
       ) : null}
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

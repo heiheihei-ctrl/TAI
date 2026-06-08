@@ -15,6 +15,7 @@ import {
   useFlowNodeDarkTheme,
 } from './flowNodeDarkTheme';
 import RunCreditBadge from './RunCreditBadge';
+import FlowResizableNodeShell from './FlowResizableNodeShell';
 
 const VOICE_OPTIONS = [
   { value: 'echo', zh: 'echo（男声青年-清色）', en: 'echo (male youth clear)' },
@@ -79,6 +80,8 @@ type Props = {
     soundEffects?: Array<'spacious_echo' | 'auditorium_echo' | 'lofi_telephone' | 'robotic'>;
     creditsPerCall?: number;
     onRun?: (id: string) => void;
+    boxW?: number;
+    boxH?: number;
   };
   selected?: boolean;
 };
@@ -252,9 +255,15 @@ function MinimaxSpeechNode({ id, data, selected }: Props) {
   }, []);
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={280}
+      defaultHeight={240}
+      minWidth={180}
+      minHeight={120}
       style={{
-        width: 260,
         padding: 8,
         background: shell.background,
         color: shell.color,
@@ -262,9 +271,6 @@ function MinimaxSpeechNode({ id, data, selected }: Props) {
         borderRadius: 8,
         boxShadow,
         transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
-        position: 'relative',
-        display: 'flex',
-        flexDirection: 'column',
         gap: 6,
       }}
     >
@@ -533,7 +539,7 @@ function MinimaxSpeechNode({ id, data, selected }: Props) {
       {handleHover === 'audio-out' ? (
         <div className="flow-tooltip" style={{ right: -8, top: '50%', transform: 'translate(100%, -50%)' }}>audio</div>
       ) : null}
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

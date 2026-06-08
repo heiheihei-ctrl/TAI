@@ -9,6 +9,7 @@ import { fetchWithAuth } from '@/services/authFetch';
 import { useLocaleText } from '@/utils/localeText';
 import RunCreditBadge from './RunCreditBadge';
 import { useNodeRunCredits } from '../hooks/useNodeRunCredits';
+import FlowResizableNodeShell from './FlowResizableNodeShell';
 
 type Props = {
   id: string;
@@ -41,6 +42,8 @@ type Props = {
     hasCharacterConnection?: boolean;
     history?: Sora2VideoHistoryItem[];
     fallbackMessage?: string;
+    boxW?: number;
+    boxH?: number;
   };
   selected?: boolean;
 };
@@ -517,15 +520,22 @@ function Sora2VideoNodeInner({ id, data, selected }: Props) {
   };
 
   return (
-    <div style={{
-      width: isCreateCharacterMode ? 300 : 280,
-      padding: 10,
-      background: '#fff',
-      border: `1px solid ${borderColor}`,
-      borderRadius: 10,
-      boxShadow,
-      position: 'relative'
-    }}>
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={isCreateCharacterMode ? 300 : 280}
+      defaultHeight={260}
+      minWidth={180}
+      minHeight={120}
+      style={{
+        padding: 10,
+        background: '#fff',
+        border: `1px solid ${borderColor}`,
+        borderRadius: 10,
+        boxShadow,
+      }}
+    >
       {/* Input handles */}
       {shouldShowTextHandle && (
         <Handle type="target" position={Position.Left} id="text" style={{ top: '32%' }}
@@ -1087,7 +1097,7 @@ function Sora2VideoNodeInner({ id, data, selected }: Props) {
           <span>{data.fallbackMessage}</span>
         </div>
       )}
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

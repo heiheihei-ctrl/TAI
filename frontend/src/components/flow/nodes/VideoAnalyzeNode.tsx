@@ -12,6 +12,7 @@ import {
   useFlowNodeDarkTheme,
 } from './flowNodeDarkTheme';
 import { useImeSafeTextValue } from '../hooks/useImeSafeTextInput';
+import FlowResizableNodeShell from './FlowResizableNodeShell';
 
 type Props = {
   id: string;
@@ -24,6 +25,8 @@ type Props = {
     text?: string;
     taskId?: string;
     creditsPerCall?: number;
+    boxW?: number;
+    boxH?: number;
   };
   selected?: boolean;
 };
@@ -298,9 +301,15 @@ function VideoAnalyzeNodeInner({ id, data, selected = false }: Props) {
   const canRun = !!effectiveVideoUrl && status !== 'running' && !isAnalyzing;
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={280}
+      defaultHeight={360}
+      minWidth={240}
+      minHeight={260}
       style={{
-        width: 280,
         padding: 8,
         background: shell.background,
         color: shell.color,
@@ -308,9 +317,6 @@ function VideoAnalyzeNodeInner({ id, data, selected = false }: Props) {
         borderRadius: 8,
         boxShadow,
         transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
-        position: 'relative',
-        display: 'flex',
-        flexDirection: 'column',
         gap: 6,
       }}
     >
@@ -364,7 +370,7 @@ function VideoAnalyzeNodeInner({ id, data, selected = false }: Props) {
         )}
       </div>
 
-      <div>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 4, color: shell.color }}>
           {lt('分析提示词', 'Analysis prompt')}
         </div>
@@ -382,6 +388,7 @@ function VideoAnalyzeNodeInner({ id, data, selected = false }: Props) {
           placeholder={lt('输入分析提示词', 'Enter analysis prompt')}
           style={{
             width: '100%',
+            flex: 1,
             minHeight: 60,
             resize: 'none',
             fontSize: 12,
@@ -450,7 +457,7 @@ function VideoAnalyzeNodeInner({ id, data, selected = false }: Props) {
           text
         </div>
       )}
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

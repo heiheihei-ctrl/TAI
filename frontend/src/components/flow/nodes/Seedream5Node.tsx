@@ -11,6 +11,7 @@ import { useLocaleText } from "@/utils/localeText";
 import { flowImagePreviewWell, flowLetterboxBackground, useFlowNodeDarkTheme } from "./flowNodeDarkTheme";
 import RunCreditBadge from "./RunCreditBadge";
 import { useImageNodeCreditsPreview } from "../hooks/useImageNodeCreditsPreview";
+import FlowResizableNodeShell from "./FlowResizableNodeShell";
 
 type Props = {
   id: string;
@@ -29,6 +30,8 @@ type Props = {
     platformKey?: string;
     onRun?: (id: string) => void;
     onSend?: (id: string) => void;
+    boxW?: number;
+    boxH?: number;
   };
   selected?: boolean;
 };
@@ -185,16 +188,21 @@ function Seedream5Node({ id, data, selected }: Props) {
   );
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={260}
+      defaultHeight={240}
+      minWidth={180}
+      minHeight={120}
       style={{
-        width: 260,
         padding: 8,
         background: "#fff",
         border: `1px solid ${borderColor}`,
         borderRadius: 8,
         boxShadow,
         transition: "border-color 0.15s ease, box-shadow 0.15s ease",
-        position: "relative",
       }}
     >
       <div
@@ -531,7 +539,7 @@ function Seedream5Node({ id, data, selected }: Props) {
           if (i >= 0) setPreviewIndex(i);
         }}
       />
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

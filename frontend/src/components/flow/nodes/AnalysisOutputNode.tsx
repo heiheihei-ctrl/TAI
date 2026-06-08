@@ -1,6 +1,7 @@
 import React from 'react';
-import { Handle, Position, NodeResizer, useReactFlow } from 'reactflow';
+import { Handle, Position } from 'reactflow';
 import { useLocaleText } from '@/utils/localeText';
+import FlowResizableNodeShell from './FlowResizableNodeShell';
 
 type Props = {
   id: string;
@@ -10,46 +11,29 @@ type Props = {
 
 function AnalysisOutputNodeInner({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
-  const rf = useReactFlow();
   const [hover, setHover] = React.useState<string | null>(null);
   const borderColor = selected ? '#2563eb' : '#e5e7eb';
   const boxShadow = selected ? '0 0 0 2px rgba(37,99,235,0.12)' : '0 1px 2px rgba(0,0,0,0.04)';
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={240}
+      defaultHeight={160}
+      minWidth={180}
+      minHeight={120}
       style={{
-        width: data.boxW || 240,
-        height: data.boxH || 160,
         padding: 8,
         background: '#fff',
         border: `1px solid ${borderColor}`,
         borderRadius: 8,
         boxShadow,
         transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
-        display: 'flex',
-        flexDirection: 'column',
-        position: 'relative',
         gap: 6,
       }}
     >
-      <NodeResizer
-        isVisible
-        minWidth={180}
-        minHeight={120}
-        color="transparent"
-        lineStyle={{ display: 'none' }}
-        handleStyle={{ background: 'transparent', border: 'none', width: 16, height: 16, opacity: 0 }}
-        onResize={(evt, params) => {
-          rf.setNodes(ns => ns.map(n => n.id === id
-            ? { ...n, data: { ...n.data, boxW: params.width, boxH: params.height } }
-            : n));
-        }}
-        onResizeEnd={(evt, params) => {
-          rf.setNodes(ns => ns.map(n => n.id === id
-            ? { ...n, data: { ...n.data, boxW: params.width, boxH: params.height } }
-            : n));
-        }}
-      />
 
       <div style={{ fontWeight: 600 }}>{lt('提示词输出', 'Prompt output')}</div>
       <div
@@ -89,7 +73,7 @@ function AnalysisOutputNodeInner({ id, data, selected }: Props) {
       {hover === 'prompt-out' && (
         <div className="flow-tooltip" style={{ right: -8, top: '50%', transform: 'translate(100%, -50%)' }}>prompt</div>
       )}
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

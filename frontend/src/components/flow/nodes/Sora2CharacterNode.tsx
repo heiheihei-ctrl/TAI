@@ -4,6 +4,7 @@ import { AlertTriangle, UserRound } from "lucide-react";
 import { useLocaleText } from "@/utils/localeText";
 import RunCreditBadge from "./RunCreditBadge";
 import { useNodeRunCredits } from "../hooks/useNodeRunCredits";
+import FlowResizableNodeShell from "./FlowResizableNodeShell";
 
 type CharacterItem = {
   id?: string;
@@ -24,6 +25,8 @@ type Props = {
     taskId?: string;
     progress?: number;
     characters?: CharacterItem[];
+    boxW?: number;
+    boxH?: number;
   };
   selected?: boolean;
 };
@@ -63,15 +66,20 @@ function Sora2CharacterNodeInner({ id, data, selected }: Props) {
   };
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      defaultWidth={300}
+      defaultHeight={320}
+      minWidth={180}
+      minHeight={120}
       style={{
-        width: 300,
         padding: 10,
         background: "#fff",
         border: `1px solid ${borderColor}`,
         borderRadius: 10,
         boxShadow,
-        position: "relative",
       }}
     >
       <Handle
@@ -232,7 +240,7 @@ function Sora2CharacterNodeInner({ id, data, selected }: Props) {
             <span>{data.error}</span>
           </div>
         )}
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 
