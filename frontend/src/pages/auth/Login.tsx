@@ -143,9 +143,8 @@ export default function LoginPage() {
       <div className='relative z-10 my-auto w-full max-w-xl flex flex-col items-center'>
         <Card className='w-full border border-blue-400/20 bg-blue-500/10 p-6 shadow-2xl backdrop-blur-md sm:p-8 rounded-3xl'>
           {/* Logo 区域 */}
-          <div className='flex items-center justify-center sm:mb-5 gap-1 pr-6'>
-            <img src='/login-logo.png' alt='logo' className='h-10 w-auto sm:h-14' />
-            <span className='text-white text-3xl sm:text-4xl font-bold select-none'>TAI</span>
+          <div className='flex items-center justify-center sm:mb-5'>
+            <img src='/TAI logo源文件/TAI_White.png' alt='TAI' className='h-8 w-auto sm:h-8 pr-3 pb-1' />
           </div>
 
           {/* 欢迎登录 + 光标 */}
