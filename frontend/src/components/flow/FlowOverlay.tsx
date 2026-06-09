@@ -11351,41 +11351,92 @@ function FlowInner() {
   }, [rf, addPersonalAsset]);
 
   React.useEffect(() => {
-    const handler = (event: Event) => {
-      const detail = (event as CustomEvent).detail as
+    const VIDEO_NODE_W = 320;
+    const VIDEO_NODE_H = 280;
+
+    type VideoInsertItem = {
+      videoUrl?: string;
+      videoName?: string;
+      thumbnail?: string;
+      screenPosition?: { x: number; y: number };
+    };
+
+    const createVideoNodeId = () =>
+      `video_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const resolveVideoNodePosition = (screenPosition?: { x: number; y: number }) => {
+      const flowPos = screenPosition
+        ? rf.screenToFlowPosition(screenPosition)
+        : rf.screenToFlowPosition({
+            x: window.innerWidth / 2,
+            y: window.innerHeight / 2,
+          });
+      return {
+        x: flowPos.x - VIDEO_NODE_W / 2,
+        y: flowPos.y - VIDEO_NODE_H / 2,
+      };
+    };
+
+    const normalizeVideoInsertItems = (
+      detail:
         | {
+            items?: VideoInsertItem[];
             videoUrl?: string;
             videoName?: string;
             thumbnail?: string;
+            screenPosition?: { x: number; y: number };
           }
-        | undefined;
+        | undefined
+    ): VideoInsertItem[] => {
+      if (Array.isArray(detail?.items) && detail.items.length > 0) {
+        return detail.items;
+      }
       const videoUrl =
         typeof detail?.videoUrl === "string" ? detail.videoUrl.trim() : "";
-      if (!videoUrl) return;
+      if (!videoUrl) return [];
+      return [
+        {
+          videoUrl,
+          videoName: detail?.videoName,
+          thumbnail: detail?.thumbnail,
+          screenPosition: detail?.screenPosition,
+        },
+      ];
+    };
 
-      const center = rf.screenToFlowPosition({
-        x: window.innerWidth / 2,
-        y: window.innerHeight / 2,
-      });
-      const id = `video_${Date.now()}`;
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail as
+        | {
+            items?: VideoInsertItem[];
+            videoUrl?: string;
+            videoName?: string;
+            thumbnail?: string;
+            screenPosition?: { x: number; y: number };
+          }
+        | undefined;
+
+      const items = normalizeVideoInsertItems(detail).filter(
+        (item) => typeof item.videoUrl === "string" && item.videoUrl.trim().length > 0
+      );
+      if (items.length === 0) return;
 
       setNodes((ns) =>
-        ns.concat([
-          {
-            id,
+        ns.concat(
+          items.map((item) => ({
+            id: createVideoNodeId(),
             type: "video",
-            position: center,
+            position: resolveVideoNodePosition(item.screenPosition),
             data: {
               label: lt("视频", "Video"),
-              videoUrl,
-              videoName: detail?.videoName || lt("库中视频", "Library Video"),
-              thumbnail: detail?.thumbnail,
+              videoUrl: item.videoUrl!.trim(),
+              videoName: item.videoName || lt("库中视频", "Library Video"),
+              thumbnail: item.thumbnail,
               status: "ready",
-              boxW: 320,
-              boxH: 280,
+              boxW: VIDEO_NODE_W,
+              boxH: VIDEO_NODE_H,
             },
-          } as any,
-        ])
+          })) as any
+        )
       );
     };
 

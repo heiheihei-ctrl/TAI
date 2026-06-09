@@ -1306,7 +1306,11 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
   );
 
   const insertLibraryAssetAtPosition = useCallback(
-    async (parsed: TanvaDragAssetPayload, position: { x: number; y: number }) => {
+    async (
+      parsed: TanvaDragAssetPayload,
+      position: { x: number; y: number },
+      screenPosition?: { x: number; y: number }
+    ) => {
       if (parsed?.type === "svg" && parsed?.url) {
         await insertSvgAssetToCanvas(parsed, position);
         return;
@@ -1326,11 +1330,16 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
         window.dispatchEvent(
           new CustomEvent("flow:insert-video-from-library", {
             detail: {
-              videoUrl: parsed.url,
-              videoName:
-                (parsed.fileName as string | undefined) ||
-                (parsed.name as string | undefined),
-              thumbnail: parsed.thumbnail,
+              items: [
+                {
+                  videoUrl: parsed.url,
+                  videoName:
+                    (parsed.fileName as string | undefined) ||
+                    (parsed.name as string | undefined),
+                  thumbnail: parsed.thumbnail,
+                  screenPosition,
+                },
+              ],
             },
           })
         );
@@ -1423,6 +1432,7 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
           event.clientX,
           event.clientY
         );
+        const screenPoint = { x: event.clientX, y: event.clientY };
 
         const tanvaAssetsBatch = dt.getData(TANVA_ASSETS_BATCH_MIME);
         if (tanvaAssetsBatch) {
@@ -1431,11 +1441,46 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
             if (Array.isArray(parsedBatch) && parsedBatch.length > 1) {
               event.preventDefault();
               event.stopPropagation();
+              const videoItems: Array<{
+                videoUrl: string;
+                videoName?: string;
+                thumbnail?: string;
+                screenPosition: { x: number; y: number };
+              }> = [];
               for (let i = 0; i < parsedBatch.length; i += 1) {
                 const asset = parsedBatch[i] as TanvaDragAssetPayload;
+                const dropProjectPoint = getLibraryDropOffset(
+                  i,
+                  parsedBatch.length,
+                  projectPoint
+                );
+                const dropScreenPoint = getLibraryDropOffset(
+                  i,
+                  parsedBatch.length,
+                  screenPoint
+                );
+                if (asset?.type === "video" && asset?.url) {
+                  videoItems.push({
+                    videoUrl: asset.url,
+                    videoName:
+                      (asset.fileName as string | undefined) ||
+                      (asset.name as string | undefined),
+                    thumbnail: asset.thumbnail as string | undefined,
+                    screenPosition: dropScreenPoint,
+                  });
+                  continue;
+                }
                 await insertLibraryAssetAtPosition(
                   asset,
-                  getLibraryDropOffset(i, parsedBatch.length, projectPoint)
+                  dropProjectPoint,
+                  dropScreenPoint
+                );
+              }
+              if (videoItems.length > 0) {
+                window.dispatchEvent(
+                  new CustomEvent("flow:insert-video-from-library", {
+                    detail: { items: videoItems },
+                  })
                 );
               }
               return;
@@ -1457,7 +1502,7 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
             ) {
               event.preventDefault();
               event.stopPropagation();
-              await insertLibraryAssetAtPosition(parsed, projectPoint);
+              await insertLibraryAssetAtPosition(parsed, projectPoint, screenPoint);
               return;
             }
           } catch (error) {
