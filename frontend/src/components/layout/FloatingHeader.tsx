@@ -1913,14 +1913,14 @@ const FloatingHeader: React.FC = () => {
         <div className='tanva-header-card tanva-header-card-left flex items-center gap-2 md:gap-3 px-4 md:px-6 py-2 h-[46px] rounded-2xl bg-liquid-glass backdrop-blur-minimal backdrop-saturate-125 shadow-liquid-glass-lg border border-liquid-glass transition-all duration-300 pointer-events-auto'>
           {/* Logo */}
           <div
-            className='tanva-brand-logo-wrap flex w-[88px] h-[24px] items-center justify-center cursor-pointer hover:opacity-80 transition-opacity select-none'
+            className='tanva-brand-logo-wrap flex h-[24px] items-center justify-center cursor-pointer hover:opacity-80 transition-opacity select-none'
             onClick={handleLogoClick}
             title={t("workspace.header.backHome")}
           >
             <img
-              src={chatTheme === "black" ? "/tanvas_ai.png" : "/TAI-logo-2.png"}
-              className='tanva-brand-logo-img h-6 w-auto object-contain'
-              alt='Logo'
+              src="/TAI logo源文件/TAI_black.png"
+              className='tanva-brand-logo-img h-4 w-auto object-contain'
+              alt='TAI'
               draggable='false'
               style={{
                 imageRendering: "auto",

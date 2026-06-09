@@ -142,9 +142,8 @@ export default function RegisterPage() {
       <div className='absolute inset-0 bg-black/35 z-[2]'></div>
 
       {/* 左上角 Logo */}
-      <div className='absolute top-10 left-10 z-20 flex items-center gap-2'>
-        <img src='/register-logo.png' alt='logo' className='h-10 w-auto sm:h-12' />
-        <span className='text-white text-2xl sm:text-3xl font-bold select-none'>TAI</span>
+      <div className='absolute top-10 left-10 z-20 flex items-center'>
+        <img src='/TAI logo源文件/TAI_White.png' alt='TAI' className='h-8 w-auto sm:h-7' />
       </div>
 
       <div className='relative z-10 my-auto w-full max-w-xl flex flex-col items-center'>

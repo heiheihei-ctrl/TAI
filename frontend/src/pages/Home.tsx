@@ -197,25 +197,19 @@ export default function Home() {
           {/* 左侧：Logo */}
           <div className='flex items-center'>
             <div
-              className='flex w-[92px] h-[32px] items-center justify-center cursor-pointer hover:opacity-80 transition-opacity select-none gap-1'
+              className='flex h-[32px] items-center justify-center cursor-pointer hover:opacity-80 transition-opacity select-none'
               onClick={() => navigate("/")}
             >
               <img
-                src='/logo.png'
-                alt='logo'
+                src='/TAI logo源文件/TAI_White.png'
+                alt='TAI'
                 draggable='false'
-                className='h-8 w-auto object-contain'
+                className='h-5 w-auto object-contain'
                 style={{
                   imageRendering: "auto",
                   WebkitFontSmoothing: "antialiased",
                 }}
               />
-              <span
-                className='text-white text-2xl font-bold select-none'
-                style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
-              >
-                TAI
-              </span>
             </div>
           </div>
 
@@ -328,7 +322,7 @@ export default function Home() {
           <div className='flex-1 flex flex-col items-center justify-center text-center relative z-10 w-full pt-8'>
             {/* 顶部占位，将整个标题+文字+光标区域整体下移 */}
             <div className='mt-10' />
-            {/* 主标题 - 中文显示图片，英文显示 TAI 文字 */}
+            {/* 主标题 - 中英文都显示图片 */}
             {isZh ? (
               <img
                 src="/home.png"
@@ -336,12 +330,11 @@ export default function Home() {
                 className='mb-5 h-auto max-w-[clamp(18rem,55vw,40rem)] select-none hero-title-glow'
               />
             ) : (
-              <h1
-                className='mb-5 select-none text-[clamp(5rem,15vw,10rem)] font-black leading-none tracking-[0.08em] text-white drop-shadow-[0_12px_32px_rgba(0,0,0,0.55)]'
-                aria-label={t("home.hero.logoAlt")}
-              >
-                TAI
-              </h1>
+              <img
+                src="/TAI logo源文件/TAI_White_home_en.png"
+                alt={t("home.hero.logoAlt")}
+                className='mb-9 h-32 max-w-[clamp(20rem,60vw,44rem)] -translate-x-8 select-none hero-title-glow'
+              />
             )}
             {/* 副标题 + 打字机光标 */}
             <div className='flex items-center justify-center gap-4 md:gap-6 mb-16'>
