@@ -8,6 +8,7 @@ import SaveDebugPanel from '@/components/autosave/SaveDebugPanel';
 import { useProjectStore } from '@/stores/projectStore';
 import KeyboardShortcuts from '@/components/KeyboardShortcuts';
 import LoginModal from '@/components/auth/LoginModal';
+import EventSettingsModalHost from '@/components/home/EventSettingsModalHost';
 import { tokenRefreshManager } from '@/services/tokenRefreshManager';
 import { useAuthStore } from '@/stores/authStore';
 import { AppLoadingIndicator } from '@/components/AppLoadingIndicator';
@@ -184,6 +185,7 @@ const App: React.FC = () => {
       <ProjectAutosaveManager projectId={projectId} />
       <Canvas />
       <LoginModal />
+      <EventSettingsModalHost />
 
       {/* 认证初始化加载指示器 */}
       {authLoading && !user && (

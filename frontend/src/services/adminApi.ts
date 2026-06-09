@@ -752,8 +752,10 @@ export type EventSettingsConfig = {
   images: string[];
   copy: string;
   link: string;
-  /** ISO 8601，精确到秒，如 2026-06-05T14:30:00.000Z */
+  /** ISO 8601，赛事开始时间，精确到秒 */
   eventAt: string;
+  /** ISO 8601，赛事结束时间，精确到秒 */
+  eventEndAt: string;
 };
 
 const EMPTY_EVENT_SETTINGS: EventSettingsConfig = {
@@ -761,6 +763,7 @@ const EMPTY_EVENT_SETTINGS: EventSettingsConfig = {
   copy: "",
   link: "",
   eventAt: "",
+  eventEndAt: "",
 };
 
 const pad2 = (value: number) => String(value).padStart(2, "0");
@@ -814,21 +817,24 @@ export function toLocalDateValueFromDate(date: Date): string {
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 }
 
+const parseIsoDateTime = (value?: string | null): string => {
+  if (typeof value !== "string" || !value.trim()) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+};
+
 export function parseEventSettingsValue(value?: string | null): EventSettingsConfig {
   if (!value || typeof value !== "string") return { ...EMPTY_EVENT_SETTINGS };
   try {
     const parsed = JSON.parse(value) as Partial<EventSettingsConfig>;
-    const eventAt =
-      typeof parsed.eventAt === "string" && !Number.isNaN(new Date(parsed.eventAt).getTime())
-        ? new Date(parsed.eventAt).toISOString()
-        : "";
     return {
       images: Array.isArray(parsed.images)
         ? parsed.images.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
         : [],
       copy: typeof parsed.copy === "string" ? parsed.copy : "",
       link: typeof parsed.link === "string" ? parsed.link : "",
-      eventAt,
+      eventAt: parseIsoDateTime(parsed.eventAt),
+      eventEndAt: parseIsoDateTime(parsed.eventEndAt),
     };
   } catch {
     return { ...EMPTY_EVENT_SETTINGS };
@@ -854,8 +860,9 @@ export async function saveEventSettingsConfig(
       copy: config.copy.trim(),
       link: config.link.trim(),
       eventAt: config.eventAt.trim(),
+      eventEndAt: config.eventEndAt.trim(),
     }),
-    description: "赛事设置（多图、文案、跳转链接、日期时间）",
+    description: "赛事设置（多图、文案、跳转链接、开始/结束时间）",
   });
 }
 

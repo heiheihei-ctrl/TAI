@@ -7118,6 +7118,7 @@ function EventSettingsTab() {
     copy: "",
     link: "",
     eventAt: "",
+    eventEndAt: "",
   });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -7202,7 +7203,7 @@ function EventSettingsTab() {
       <CardHeader>
         <CardTitle className="text-lg">赛事设置</CardTitle>
         <CardDescription>
-          配置赛事展示内容：支持上传多张图片、编辑展示文案、设置日期与时间，并配置点击后的跳转链接。
+          配置赛事展示内容：支持上传多张图片、编辑展示文案、设置开始与结束时间，并配置点击后的跳转链接。
         </CardDescription>
       </CardHeader>
 
@@ -7275,11 +7276,22 @@ function EventSettingsTab() {
           />
         </div>
 
-        <EventDateTimeFields
-          eventAt={config.eventAt}
-          disabled={saving || uploading}
-          onChange={(eventAt) => setConfig((prev) => ({ ...prev, eventAt }))}
-        />
+        <div className="space-y-6">
+          <EventDateTimeFields
+            title="开始时间"
+            value={config.eventAt}
+            disabled={saving || uploading}
+            description="赛事开始日期与时间，精确到秒；需先选择日期再设置时间，留空表示不限制开始时间。"
+            onChange={(eventAt) => setConfig((prev) => ({ ...prev, eventAt }))}
+          />
+          <EventDateTimeFields
+            title="结束时间"
+            value={config.eventEndAt}
+            disabled={saving || uploading}
+            description="赛事结束日期与时间，精确到秒；需先选择日期再设置时间，留空表示不限制结束时间。"
+            onChange={(eventEndAt) => setConfig((prev) => ({ ...prev, eventEndAt }))}
+          />
+        </div>
 
         <div className="space-y-2">
           <Label htmlFor="event-link">跳转链接</Label>
