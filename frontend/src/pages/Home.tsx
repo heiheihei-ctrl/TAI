@@ -200,10 +200,10 @@ export default function Home() {
               onClick={() => navigate("/")}
             >
               <img
-                src='/TAI logo源文件/TAI_White.png'
+                src='/TAI-logo.png'
                 alt='TAI'
                 draggable='false'
-                className='h-5 w-auto object-contain'
+                className='h-9 w-auto object-contain'
                 style={{
                   imageRendering: "auto",
                   WebkitFontSmoothing: "antialiased",
@@ -330,9 +330,9 @@ export default function Home() {
               />
             ) : (
               <img
-                src="/TAI logo源文件/TAI_White_home_en.png"
+                src="/TAI-logo-home-en.png"
                 alt={t("home.hero.logoAlt")}
-                className='mb-9 h-32 max-w-[clamp(20rem,60vw,44rem)] -translate-x-8 select-none hero-title-glow'
+                className='mb-5 h-48 max-w-[clamp(26rem,72vw,56rem)] -translate-x-4 select-none hero-title-glow'
               />
             )}
             {/* 副标题 + 打字机光标 */}

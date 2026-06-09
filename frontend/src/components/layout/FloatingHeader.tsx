@@ -1918,8 +1918,8 @@ const FloatingHeader: React.FC = () => {
             title={t("workspace.header.backHome")}
           >
             <img
-              src="/TAI logo源文件/TAI_black.png"
-              className='tanva-brand-logo-img h-4 w-auto object-contain'
+              src="/TAI-logo-2.png"
+              className='tanva-brand-logo-img h-6 w-auto object-contain'
               alt='TAI'
               draggable='false'
               style={{

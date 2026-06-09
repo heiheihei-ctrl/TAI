@@ -144,7 +144,7 @@ export default function LoginPage() {
         <Card className='w-full border border-blue-400/20 bg-blue-500/10 p-6 shadow-2xl backdrop-blur-md sm:p-8 rounded-3xl'>
           {/* Logo 区域 */}
           <div className='flex items-center justify-center sm:mb-5'>
-            <img src='/TAI logo源文件/TAI_White.png' alt='TAI' className='h-8 w-auto sm:h-8 pr-3 pb-1' />
+            <img src='/TAI-logo.png' alt='TAI' className='h-12 w-auto sm:h-14 pr-3.5 pb-1' />
           </div>
 
           {/* 欢迎登录 + 光标 */}
