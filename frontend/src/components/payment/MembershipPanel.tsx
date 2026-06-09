@@ -144,7 +144,6 @@ function isDailyCreationPlan(plan: PaymentMembershipPlan): boolean {
 }
 
 type MembershipPromoCardConfig = {
-  displayPrice: number;
   billingLabel?: string;
   promoText: string;
   displayEquivMonthly?: string;
@@ -157,7 +156,6 @@ function getMembershipPromoCardConfig(plan: PaymentMembershipPlan): MembershipPr
   if (plan.billingCycle === "monthly") {
     if (name.includes("日常创作")) {
       return {
-        displayPrice: 39,
         billingLabel: "首月特惠",
         promoText: "限时5.5折专享",
       };
@@ -165,7 +163,6 @@ function getMembershipPromoCardConfig(plan: PaymentMembershipPlan): MembershipPr
 
     if (name.includes("专业进阶")) {
       return {
-        displayPrice: 149,
         billingLabel: "首月特惠",
         promoText: "限时7.5折专享",
         showRecommended: true,
@@ -174,7 +171,6 @@ function getMembershipPromoCardConfig(plan: PaymentMembershipPlan): MembershipPr
 
     if (name.includes("旗舰尊享") || name.includes("旗舰专享") || name.includes("旗舰")) {
       return {
-        displayPrice: 429,
         billingLabel: "首月特惠",
         promoText: "限时7折专享",
       };
@@ -184,7 +180,6 @@ function getMembershipPromoCardConfig(plan: PaymentMembershipPlan): MembershipPr
   if (plan.billingCycle === "yearly") {
     if (name.includes("日常创作")) {
       return {
-        displayPrice: 658,
         billingLabel: "首年特惠",
         promoText: "限时8折专享",
         displayEquivMonthly: "54.83",
@@ -193,7 +188,6 @@ function getMembershipPromoCardConfig(plan: PaymentMembershipPlan): MembershipPr
 
     if (name.includes("专业进阶")) {
       return {
-        displayPrice: 1888,
         billingLabel: "首年特惠",
         promoText: "限时8折专享",
         displayEquivMonthly: "157.33",
@@ -203,7 +197,6 @@ function getMembershipPromoCardConfig(plan: PaymentMembershipPlan): MembershipPr
 
     if (name.includes("旗舰尊享") || name.includes("旗舰专享") || name.includes("旗舰")) {
       return {
-        displayPrice: 5688,
         billingLabel: "首年特惠",
         promoText: "限时8折专享",
         displayEquivMonthly: "474",
@@ -759,7 +752,6 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({ onBack, onPaymentSucc
                     const isDailyCreation = !isRecommended && isDailyCreationPlan(plan);
                     const billingLabel = promoConfig?.billingLabel
                       ?? (plan.billingCycle === "yearly" ? "年费套餐 · 在月付价基础上 8 折" : "月费套餐");
-                    const displayPrice = promoConfig?.displayPrice ?? plan.price;
                     const equivMonthly =
                       promoConfig?.displayEquivMonthly
                         ?? (
@@ -850,7 +842,7 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({ onBack, onPaymentSucc
                               isWhite ? "text-slate-900" : "text-zinc-100",
                             )}
                           >
-                            ¥{displayPrice}
+                            ¥{plan.price}
                           </span>
                           <span
                             className={cn("pb-1 text-sm", isWhite ? "text-slate-500" : "text-zinc-500")}

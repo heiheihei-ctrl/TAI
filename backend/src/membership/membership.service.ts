@@ -11,6 +11,7 @@ import type {
   MembershipNextChangeView,
   MembershipPlanSnapshot,
 } from './membership.types';
+import { getEffectiveMembershipPlanPrice } from './membership-pricing';
 
 @Injectable()
 export class MembershipService {
@@ -508,10 +509,11 @@ export class MembershipService {
     );
 
     if (!current) {
+      const targetEffectivePrice = getEffectiveMembershipPlanPrice(targetPlan);
       return {
         actionType: 'subscribe',
         effectiveMode: 'immediate',
-        payableAmount: Number(targetPlan.price),
+        payableAmount: targetEffectivePrice,
         immediateCreditDelta: targetPlan.monthlyQuotaCredits + targetPlan.signupBonusCredits,
         remainingRatio: 1,
         targetPlan: {
@@ -519,7 +521,7 @@ export class MembershipService {
           code: targetPlan.code,
           name: targetPlan.name,
           billingCycle: this.normalizeBillingCycle(targetPlan.billingCycle),
-          price: Number(targetPlan.price),
+          price: targetEffectivePrice,
         },
         currentPlan: null,
       };
@@ -537,10 +539,11 @@ export class MembershipService {
     }
 
     if (currentPlan.id === targetPlan.id) {
+      const targetEffectivePrice = getEffectiveMembershipPlanPrice(targetPlan);
       return {
         actionType: 'renew',
         effectiveMode: 'immediate',
-        payableAmount: Number(targetPlan.price),
+        payableAmount: targetEffectivePrice,
         immediateCreditDelta: targetPlan.monthlyQuotaCredits + targetPlan.signupBonusCredits,
         remainingRatio: 1,
         targetPlan: {
@@ -548,14 +551,14 @@ export class MembershipService {
           code: targetPlan.code,
           name: targetPlan.name,
           billingCycle: this.normalizeBillingCycle(targetPlan.billingCycle),
-          price: Number(targetPlan.price),
+          price: targetEffectivePrice,
         },
         currentPlan: {
           id: currentPlan.id,
           code: currentPlan.code,
           name: currentPlan.name,
           billingCycle: this.normalizeBillingCycle(currentPlan.billingCycle),
-          price: Number(currentPlan.price),
+          price: getEffectiveMembershipPlanPrice(currentPlan),
         },
       };
     }
@@ -565,9 +568,11 @@ export class MembershipService {
       current.currentPeriodStartAt,
       current.currentPeriodEndAt,
     );
+    const targetEffectivePrice = getEffectiveMembershipPlanPrice(targetPlan);
+    const currentEffectivePrice = getEffectiveMembershipPlanPrice(currentPlan);
 
     if (comparison < 0) {
-      const amountDiff = Math.max(0, Number(targetPlan.price) - Number(currentPlan.price));
+      const amountDiff = Math.max(0, targetEffectivePrice - currentEffectivePrice);
       const payableAmount = this.roundMoney(Math.max(0.01, amountDiff * remainingRatio));
       const immediateCreditDelta = Math.max(
         0,
@@ -584,14 +589,14 @@ export class MembershipService {
           code: targetPlan.code,
           name: targetPlan.name,
           billingCycle: this.normalizeBillingCycle(targetPlan.billingCycle),
-          price: Number(targetPlan.price),
+          price: targetEffectivePrice,
         },
         currentPlan: {
           id: currentPlan.id,
           code: currentPlan.code,
           name: currentPlan.name,
           billingCycle: this.normalizeBillingCycle(currentPlan.billingCycle),
-          price: Number(currentPlan.price),
+          price: currentEffectivePrice,
         },
       };
     }
@@ -607,14 +612,14 @@ export class MembershipService {
         code: targetPlan.code,
         name: targetPlan.name,
         billingCycle: this.normalizeBillingCycle(targetPlan.billingCycle),
-        price: Number(targetPlan.price),
+        price: targetEffectivePrice,
       },
       currentPlan: {
         id: currentPlan.id,
         code: currentPlan.code,
         name: currentPlan.name,
         billingCycle: this.normalizeBillingCycle(currentPlan.billingCycle),
-        price: Number(currentPlan.price),
+        price: currentEffectivePrice,
       },
       nextEffectiveAt: current.currentPeriodEndAt,
     };
