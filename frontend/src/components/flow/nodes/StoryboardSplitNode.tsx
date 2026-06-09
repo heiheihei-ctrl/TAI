@@ -1,6 +1,7 @@
 import React from 'react';
-import { Handle, Position, NodeResizer, useReactFlow, useStore, useUpdateNodeInternals, type ReactFlowState, type Edge } from 'reactflow';
+import { Handle, Position, useReactFlow, useStore, useUpdateNodeInternals, type ReactFlowState, type Edge } from 'reactflow';
 import { useLocaleText } from '@/utils/localeText';
+import FlowResizableNodeShell from './FlowResizableNodeShell';
 import {
   flowNodeControlField,
   flowNodeMutedWellBackground,
@@ -381,35 +382,23 @@ function StoryboardSplitNodeInner({ id, data, selected }: Props) {
   }, [rf, id, segments, outputCount, boxW, boxH]);
 
   return (
-    <div style={{
-      width: boxW,
-      minHeight: boxH,
-      padding: 12,
-      background: shell.background,
-      border: `1px solid ${shell.borderColor}`,
-      color: shell.color,
-      borderRadius: 8,
-      boxShadow,
-      transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
-      position: 'relative',
-      display: 'flex',
-      flexDirection: 'column',
-    }}>
-      <NodeResizer
-        isVisible
-        minWidth={280}
-        minHeight={300}
-        color="transparent"
-        lineStyle={{ display: 'none' }}
-        handleStyle={{ background: 'transparent', border: 'none', width: 16, height: 16, opacity: 0 }}
-        onResize={(_, params) => {
-          rf.setNodes(ns => ns.map(n => n.id === id
-            ? { ...n, data: { ...n.data, boxW: params.width, boxH: params.height } }
-            : n
-          ));
-        }}
-      />
-
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      nodeType="storyboardSplit"
+      minWidth={280}
+      minHeight={300}
+      style={{
+        padding: 12,
+        background: shell.background,
+        border: `1px solid ${shell.borderColor}`,
+        color: shell.color,
+        borderRadius: 8,
+        boxShadow,
+        transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+      }}
+    >
       {/* 标题栏 */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <div style={{ fontWeight: 600, color: shell.color }}>Split</div>
@@ -518,7 +507,6 @@ function StoryboardSplitNodeInner({ id, data, selected }: Props) {
         <div style={{
           flex: 1,
           minHeight: 80,
-          maxHeight: 150,
           overflow: 'auto',
           fontSize: 11,
           color: isFlowDark ? '#d1d5db' : '#374151',
@@ -587,7 +575,7 @@ function StoryboardSplitNodeInner({ id, data, selected }: Props) {
           分镜 #{hover.replace('prompt', '').replace('-out', '')}
         </div>
       )}
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

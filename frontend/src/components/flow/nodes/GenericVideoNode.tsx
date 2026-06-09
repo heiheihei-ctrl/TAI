@@ -3283,20 +3283,30 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       )}
 
       <div
+        className="flow-node-fill-region"
         style={{
-          width: "100%",
-          aspectRatio: previewAspect,
+          flex: 1,
           minHeight: 140,
-          background: "#f8fafc",
-          borderRadius: 6,
-          border: "1px solid #eef0f2",
           display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          overflow: "hidden",
+          flexDirection: "column",
         }}
       >
-        {renderPreview()}
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            width: "100%",
+            background: "#f8fafc",
+            borderRadius: 6,
+            border: "1px solid #eef0f2",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            overflow: "hidden",
+          }}
+        >
+          {renderPreview()}
+        </div>
       </div>
 
       <GenerationProgressBar

@@ -604,7 +604,8 @@ function Generate4NodeInner({ id, data, selected }: Props) {
         }}
         style={{
           width: "100%",
-          aspectRatio: "1 / 1",
+          height: "100%",
+          minHeight: 72,
           borderRadius: 6,
           display: "flex",
           alignItems: "center",
@@ -862,10 +863,9 @@ function Generate4NodeInner({ id, data, selected }: Props) {
       id={id}
       data={data}
       selected={selected}
-      defaultWidth={300}
-      defaultHeight={240}
-      minWidth={240}
-      minHeight={180}
+      nodeType="generate4"
+      minWidth={260}
+      minHeight={240}
       style={{
         padding: 8,
         background: "#fff",
@@ -1139,9 +1139,14 @@ function Generate4NodeInner({ id, data, selected }: Props) {
 
       {/* 2x2 预览网格 */}
       <div
+        className="flow-node-fill-region"
         style={{
+          flex: 1,
+          minHeight: 200,
+          width: "100%",
           display: "grid",
           gridTemplateColumns: "1fr 1fr",
+          gridTemplateRows: "1fr 1fr",
           gap: 6,
           ...(isFlowDark
             ? {

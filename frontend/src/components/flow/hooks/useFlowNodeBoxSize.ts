@@ -17,6 +17,8 @@ type UseFlowNodeBoxSizeOptions = {
   minHeight?: number;
   widthKey?: 'boxW' | 'boxWidth';
   heightKey?: 'boxH' | 'boxHeight';
+  onResize?: (width: number, height: number) => void;
+  onResizeEnd?: (width: number, height: number) => void;
 };
 
 export function useFlowNodeBoxSize({
@@ -28,6 +30,8 @@ export function useFlowNodeBoxSize({
   minHeight = 120,
   widthKey = 'boxW',
   heightKey = 'boxH',
+  onResize,
+  onResizeEnd,
 }: UseFlowNodeBoxSizeOptions) {
   const rf = useReactFlow();
 
@@ -107,18 +111,20 @@ export function useFlowNodeBoxSize({
   const handleResize = React.useCallback(
     (_event: unknown, params: { width: number; height: number }) => {
       if (!params) return;
+      onResize?.(params.width, params.height);
       scheduleResize(params.width, params.height);
     },
-    [scheduleResize]
+    [onResize, scheduleResize]
   );
 
   const handleResizeEnd = React.useCallback(
     (_event: unknown, params: { width: number; height: number }) => {
       setIsResizing(false);
       if (!params) return;
+      onResizeEnd?.(params.width, params.height);
       updateNodeSize(params.width, params.height);
     },
-    [updateNodeSize]
+    [onResizeEnd, updateNodeSize]
   );
 
   return {

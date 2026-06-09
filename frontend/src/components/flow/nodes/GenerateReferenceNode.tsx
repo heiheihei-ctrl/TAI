@@ -182,10 +182,9 @@ function GenerateReferenceNodeInner({ id, data, selected }: Props) {
       id={id}
       data={data}
       selected={selected}
-      defaultWidth={260}
-      defaultHeight={240}
-      minWidth={220}
-      minHeight={180}
+      nodeType="generateRef"
+      minWidth={240}
+      minHeight={220}
       style={{
         padding: 8,
         background: "#fff",
@@ -248,10 +247,12 @@ function GenerateReferenceNodeInner({ id, data, selected }: Props) {
       </div>
 
       <div
+        className="flow-node-fill-region"
         onDoubleClick={() => fullSrc && setPreview(true)}
         style={{
           width: "100%",
-          height: 140,
+          flex: 1,
+          minHeight: 160,
           borderRadius: 6,
           display: "flex",
           alignItems: "center",

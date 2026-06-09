@@ -190,8 +190,7 @@ function TextPromptNodeInner({ id, data, selected }: Props) {
       id={id}
       data={data}
       selected={selected}
-      defaultWidth={240}
-      defaultHeight={180}
+      nodeType="textPrompt"
       minWidth={180}
       minHeight={120}
       style={{

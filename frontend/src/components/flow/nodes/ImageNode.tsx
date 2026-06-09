@@ -2,7 +2,7 @@
 // Flow Image 节点交互与预览逻辑。
 import React from "react";
 import { Handle, Position, useReactFlow, useStore, type ReactFlowState } from "reactflow";
-import { NodeResizeControl } from "@reactflow/node-resizer";
+import FlowResizableNodeShell from "./FlowResizableNodeShell";
 import {
   Send as SendIcon,
   Shield,
@@ -49,84 +49,7 @@ import backgroundRemovalService from "@/services/backgroundRemovalService";
 import { logger } from "@/utils/logger";
 import { splitImageIntoLayers } from "@/utils/imageLayerSplit";
 
-const RESIZE_EDGE_THICKNESS = 8;
 const BIO_AUTH_VALID_DAYS = 30;
-
-const lineControlConfigs = [
-  {
-    position: "top",
-    icon: "↕",
-    style: {
-      top: 0,
-      bottom: "auto",
-      left: 0,
-      right: "auto",
-      width: "100%",
-      height: RESIZE_EDGE_THICKNESS,
-      transform: "none",
-      cursor: "ns-resize",
-      pointerEvents: "auto",
-    },
-  },
-  {
-    position: "bottom",
-    icon: "↕",
-    style: {
-      top: "auto",
-      bottom: 0,
-      left: 0,
-      right: "auto",
-      width: "100%",
-      height: RESIZE_EDGE_THICKNESS,
-      transform: "none",
-      cursor: "ns-resize",
-      pointerEvents: "auto",
-    },
-  },
-];
-
-const handleControlConfigs = [
-  {
-    position: "top-left",
-    icon: "⤡",
-    style: {
-      width: 20,
-      height: 20,
-      pointerEvents: "auto",
-      cursor: "nwse-resize",
-    },
-  },
-  {
-    position: "top-right",
-    icon: "⤢",
-    style: {
-      width: 20,
-      height: 20,
-      pointerEvents: "auto",
-      cursor: "nesw-resize",
-    },
-  },
-  {
-    position: "bottom-left",
-    icon: "⤢",
-    style: {
-      width: 20,
-      height: 20,
-      pointerEvents: "auto",
-      cursor: "nesw-resize",
-    },
-  },
-  {
-    position: "bottom-right",
-    icon: "⤡",
-    style: {
-      width: 20,
-      height: 20,
-      pointerEvents: "auto",
-      cursor: "nwse-resize",
-    },
-  },
-];
 
 type Props = {
   id: string;
@@ -907,83 +830,6 @@ function ImageNodeInner({ id, data, selected }: Props) {
   const [currentImageId, setCurrentImageId] = React.useState<string>("");
   const [isResizing, setIsResizing] = React.useState(false);
   const [isSeparatingLayers, setIsSeparatingLayers] = React.useState(false);
-  const updateNodeSize = React.useCallback(
-    (width: number, height: number) => {
-      const nextWidth = Math.max(1, Math.round(Math.max(width, MIN_WIDTH)));
-      const nextHeight = Math.max(1, Math.round(Math.max(height, MIN_HEIGHT)));
-      rf.setNodes((ns) => {
-        const idx = ns.findIndex((n) => n.id === id);
-        if (idx < 0) return ns;
-        const node = ns[idx];
-        const prevW = (node?.data as any)?.boxW;
-        const prevH = (node?.data as any)?.boxH;
-        if (prevW === nextWidth && prevH === nextHeight) return ns;
-        const next = ns.slice();
-        next[idx] = {
-          ...node,
-          data: { ...(node.data || {}), boxW: nextWidth, boxH: nextHeight },
-        };
-        return next;
-      });
-    },
-    [rf, id]
-  );
-
-  const resizeRafRef = React.useRef<number | null>(null);
-  const resizePendingRef = React.useRef<{ w: number; h: number } | null>(null);
-  const flushResizeRef = React.useRef<(() => void) | null>(null);
-
-  flushResizeRef.current = () => {
-    resizeRafRef.current = null;
-    const pending = resizePendingRef.current;
-    resizePendingRef.current = null;
-    if (!pending) return;
-    updateNodeSize(pending.w, pending.h);
-  };
-
-  const scheduleResize = React.useCallback(
-    (w: number, h: number) => {
-      resizePendingRef.current = { w, h };
-      if (resizeRafRef.current != null) return;
-      resizeRafRef.current = window.requestAnimationFrame(() => {
-        flushResizeRef.current?.();
-      });
-    },
-    []
-  );
-
-  React.useEffect(() => {
-    return () => {
-      if (resizeRafRef.current != null) {
-        window.cancelAnimationFrame(resizeRafRef.current);
-        resizeRafRef.current = null;
-      }
-      resizePendingRef.current = null;
-    };
-  }, []);
-  const handleResizeStart = React.useCallback(() => {
-    setIsResizing(true);
-  }, []);
-  const handleResize = React.useCallback(
-    (_: unknown, params: { width: number; height: number }) => {
-      if (!params) return;
-      scheduleResize(params.width, params.height);
-    },
-    [scheduleResize]
-  );
-  const handleResizeEnd = React.useCallback(
-    (_: unknown, params: { width: number; height: number }) => {
-      setIsResizing(false);
-      if (!params) return;
-      if (resizeRafRef.current != null) {
-        window.cancelAnimationFrame(resizeRafRef.current);
-        resizeRafRef.current = null;
-      }
-      resizePendingRef.current = null;
-      updateNodeSize(params.width, params.height);
-    },
-    [updateNodeSize]
-  );
   const borderColor = selected ? "#2563eb" : "#e5e7eb";
   const boxShadow = selected
     ? "0 0 0 2px rgba(37,99,235,0.12)"
@@ -1775,54 +1621,38 @@ function ImageNodeInner({ id, data, selected }: Props) {
   );
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      nodeType="image"
+      minWidth={MIN_WIDTH}
+      minHeight={MIN_HEIGHT}
       className={`flow-image-node${
         isResizing ? " flow-image-node--resizing" : ""
       }`}
-      onPaste={onPaste}
-      tabIndex={0}
+      onResizingChange={setIsResizing}
       style={{
-        width: data.boxW || 260,
-        height: data.boxH || 240,
         padding: 8,
         background: "#fff",
         border: `1px solid ${borderColor}`,
         borderRadius: 8,
         boxShadow,
         transition: "border-color 0.15s ease, box-shadow 0.15s ease",
-        display: "flex",
-        flexDirection: "column",
-        position: "relative",
         outline: "none",
       }}
     >
-      {lineControlConfigs.map((config) => (
-        <NodeResizeControl
-          key={`line-${config.position}`}
-          position={config.position}
-          variant='line'
-          className='image-node-resize-line'
-          style={config.style}
-          minWidth={MIN_WIDTH}
-          minHeight={MIN_HEIGHT}
-          onResizeStart={handleResizeStart}
-          onResize={handleResize}
-          onResizeEnd={handleResizeEnd}
-        />
-      ))}
-      {handleControlConfigs.map((config) => (
-        <NodeResizeControl
-          key={`handle-${config.position}`}
-          position={config.position}
-          className='image-node-resize-handle'
-          style={config.style}
-          minWidth={MIN_WIDTH}
-          minHeight={MIN_HEIGHT}
-          onResizeStart={handleResizeStart}
-          onResize={handleResize}
-          onResizeEnd={handleResizeEnd}
-        />
-      ))}
+      <div
+        onPaste={onPaste}
+        tabIndex={0}
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          flex: 1,
+          minHeight: 0,
+          outline: "none",
+        }}
+      >
       <div
         style={{
           display: "flex",
@@ -2140,6 +1970,8 @@ function ImageNodeInner({ id, data, selected }: Props) {
         </div>
       )}
 
+      </div>
+
       <ImagePreviewModal
         isOpen={preview}
         imageSrc={
@@ -2193,7 +2025,7 @@ function ImageNodeInner({ id, data, selected }: Props) {
           setBioAuthModalOpen(false);
         }}
       />
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

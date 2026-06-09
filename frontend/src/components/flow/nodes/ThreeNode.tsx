@@ -1,5 +1,5 @@
 import React from 'react';
-import { Handle, Position, NodeResizer, useReactFlow } from 'reactflow';
+import { Handle, Position, useReactFlow } from 'reactflow';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -13,6 +13,7 @@ import { proxifyRemoteAssetUrl } from '@/utils/assetProxy';
 import { toRenderableImageSrc } from '@/utils/imageSource';
 import { canvasToDataUrl } from '@/utils/imageConcurrency';
 import { useLocaleText } from '@/utils/localeText';
+import FlowResizableNodeShell from './FlowResizableNodeShell';
 import { resolveFlowNodeSendAnchorClient } from '../utils/flowNodeSendAnchor';
 
 type Props = {
@@ -1078,24 +1079,25 @@ function ThreeNodeInner({ id, data, selected }: Props) {
   const runtimeErr = err || pathTracerError;
 
   return (
-    <div style={{ width: Math.max(data.boxW || defaultNodeWidth, minNodeWidth), height: Math.max(data.boxH || defaultNodeHeight, minNodeHeight), padding: 8, background: '#fff', border: `1px solid ${borderColor}`, borderRadius: 8, boxShadow, transition: 'border-color 0.15s ease, box-shadow 0.15s ease', display: 'flex', flexDirection: 'column', position: 'relative', contain: 'layout' }}>
-      <NodeResizer
-        isVisible={!!selected}
-        minWidth={minNodeWidth}
-        minHeight={minNodeHeight}
-        color="transparent"
-        lineStyle={{ display: 'none' }}
-        handleStyle={{
-          background: 'transparent',
-          border: 'none',
-          width: 22,
-          height: 22,
-          opacity: 0,
-          zIndex: 40,
-        }}
-        onResize={(e, p) => { onResize(p.width, p.height); rf.setNodes(ns => ns.map(n => n.id === id ? { ...n, data: { ...n.data, boxW: p.width, boxH: p.height } } : n)); }}
-        onResizeEnd={(e, p) => { onResizeEnd(p.width, p.height); rf.setNodes(ns => ns.map(n => n.id === id ? { ...n, data: { ...n.data, boxW: p.width, boxH: p.height } } : n)); }}
-      />
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      nodeType="three"
+      minWidth={minNodeWidth}
+      minHeight={minNodeHeight}
+      onResize={onResize}
+      onResizeEnd={onResizeEnd}
+      style={{
+        padding: 8,
+        background: '#fff',
+        border: `1px solid ${borderColor}`,
+        borderRadius: 8,
+        boxShadow,
+        transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+        contain: 'layout',
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
         <div style={{ fontWeight: 600 }}>{headerTitle}</div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -1223,7 +1225,7 @@ function ThreeNodeInner({ id, data, selected }: Props) {
           }
         }}
       />
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

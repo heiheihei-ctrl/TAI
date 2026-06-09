@@ -3,7 +3,6 @@ import React from "react";
 import {
   Handle,
   Position,
-  NodeResizer,
   useStore,
   type ReactFlowState,
   type Node,
@@ -12,6 +11,7 @@ import * as THREE from "three";
 import { Send as SendIcon, Copy, Check, RotateCcw } from "lucide-react";
 import SmartImage from "../../ui/SmartImage";
 import GenerationProgressBar from "./GenerationProgressBar";
+import FlowResizableNodeShell from "./FlowResizableNodeShell";
 import { parseFlowImageAssetRef } from "@/services/flowImageAssetStore";
 import { useFlowImageAssetUrl } from "@/hooks/useFlowImageAssetUrl";
 import { toRenderableImageSrc } from "@/utils/imageSource";
@@ -1150,10 +1150,14 @@ function ViewAngleNodeInner({ id, data, selected }: Props) {
       };
 
   return (
-    <div
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      nodeType="viewAngle"
+      minWidth={360}
+      minHeight={460}
       style={{
-        width: boxW,
-        height: boxH,
         padding: 10,
         background: shell.background,
         border: `1px solid ${shell.borderColor}`,
@@ -1161,30 +1165,9 @@ function ViewAngleNodeInner({ id, data, selected }: Props) {
         boxShadow,
         transition: "border-color 0.15s ease, box-shadow 0.15s ease",
         color: shell.color,
-        display: "flex",
-        flexDirection: "column",
         gap: 8,
-        position: "relative",
       }}
     >
-      <NodeResizer
-        isVisible={!!selected}
-        minWidth={360}
-        minHeight={460}
-        color='transparent'
-        lineStyle={{ display: "none" }}
-        handleStyle={{
-          background: "transparent",
-          border: "none",
-          width: 12,
-          height: 12,
-          opacity: 0,
-        }}
-        onResize={(_, params) =>
-          patchNodeData({ boxW: params.width, boxH: params.height })
-        }
-      />
-
       <div
         style={{
           display: "flex",
@@ -1372,10 +1355,11 @@ function ViewAngleNodeInner({ id, data, selected }: Props) {
       </div>
 
       <div
-        className='nodrag nopan nowheel'
+        className='nodrag nopan nowheel flow-node-fill-region'
         style={{
           position: "relative",
-          height: 198,
+          flex: 1,
+          minHeight: 198,
           border: `1px solid ${panelBorder}`,
           borderRadius: 8,
           overflow: "hidden",
@@ -1647,7 +1631,7 @@ function ViewAngleNodeInner({ id, data, selected }: Props) {
         id='img'
         style={{ top: "44%" }}
       />
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 

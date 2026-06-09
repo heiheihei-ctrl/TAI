@@ -838,10 +838,9 @@ function GenerateNodeInner({ id, data, selected }: Props) {
       id={id}
       data={data}
       selected={selected}
-      defaultWidth={260}
-      defaultHeight={200}
-      minWidth={220}
-      minHeight={160}
+      nodeType="generate"
+      minWidth={260}
+      minHeight={240}
       style={{
         padding: 8,
         background: "#fff",
@@ -1148,10 +1147,12 @@ function GenerateNodeInner({ id, data, selected }: Props) {
         </div>
       )}
       <div
+        className="flow-node-fill-region"
         onDoubleClick={() => fullSrc && setPreview(true)}
         style={{
           width: "100%",
-          height: 160,
+          flex: 1,
+          minHeight: 180,
           borderRadius: 6,
           display: "flex",
           alignItems: "center",

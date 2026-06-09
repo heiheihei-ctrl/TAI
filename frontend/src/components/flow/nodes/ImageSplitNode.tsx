@@ -2,7 +2,6 @@ import React from 'react';
 import {
   Handle,
   Position,
-  NodeResizer,
   useReactFlow,
   useStore,
   useUpdateNodeInternals,
@@ -27,6 +26,7 @@ import {
   flowNodeShellChrome,
   useFlowNodeDarkTheme,
 } from './flowNodeDarkTheme';
+import FlowResizableNodeShell from './FlowResizableNodeShell';
 import { useFlowRenderMode } from '../FlowRenderModeContext';
 
 // 类型定义
@@ -2401,35 +2401,23 @@ function ImageSplitNodeInner({ id, data, selected }: Props) {
   }, [rf, id, data.inputImage, data.inputImageUrl, data.splitImages, outputCount, splitRects, boxW, boxH, canSplit, connectedImage, rawInputImage, sourceSize.height, sourceSize.width, lt, updateNodeInternals]);
 
   return (
-    <div style={{
-      width: boxW,
-      minHeight: boxH,
-      padding: 12,
-      background: shell.background,
-      color: shell.color,
-      border: `1px solid ${shell.borderColor}`,
-      borderRadius: 8,
-      boxShadow,
-      transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
-      position: 'relative',
-      display: 'flex',
-      flexDirection: 'column',
-    }}>
-      <NodeResizer
-        isVisible
-        minWidth={280}
-        minHeight={300}
-        color="transparent"
-        lineStyle={{ display: 'none' }}
-        handleStyle={{ background: 'transparent', border: 'none', width: 16, height: 16, opacity: 0 }}
-        onResize={(_, params) => {
-          rf.setNodes(ns => ns.map(n => n.id === id
-            ? { ...n, data: { ...n.data, boxW: params.width, boxH: params.height } }
-            : n
-          ));
-        }}
-      />
-
+    <FlowResizableNodeShell
+      id={id}
+      data={data}
+      selected={selected}
+      nodeType="imageSplit"
+      minWidth={280}
+      minHeight={300}
+      style={{
+        padding: 12,
+        background: shell.background,
+        color: shell.color,
+        border: `1px solid ${shell.borderColor}`,
+        borderRadius: 8,
+        boxShadow,
+        transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+      }}
+    >
       {/* 标题栏 */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <div style={{ fontWeight: 600, color: shell.color }}>Image Split</div>
@@ -2591,11 +2579,12 @@ function ImageSplitNodeInner({ id, data, selected }: Props) {
 
       {/* 输入图片预览 */}
       <div style={{
+        flex: 1,
+        minHeight: 80,
         background: flowNodeMutedWellBackground(isFlowDark),
         borderRadius: 6,
         padding: 8,
         marginBottom: 8,
-        minHeight: 80,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -2710,7 +2699,7 @@ function ImageSplitNodeInner({ id, data, selected }: Props) {
           {lt('图片', 'Image')} #{hover.replace('image', '').replace('-out', '')}
         </div>
       )}
-    </div>
+    </FlowResizableNodeShell>
   );
 }
 
