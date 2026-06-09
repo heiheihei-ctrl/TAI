@@ -6,6 +6,7 @@ import { MessageCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import WelcomeShaderBackground from "@/components/background/WelcomeShaderBackground";
+import EventSettingsModalHost from "@/components/home/EventSettingsModalHost";
 
 // 微信咨询悬浮按钮组件
 const WeChatFloatingButton = () => {
@@ -565,6 +566,8 @@ export default function Home() {
           </footer>
         </section>
       </div>
+
+      <EventSettingsModalHost />
 
       {/* 微信咨询悬浮按钮 - 放在最外层确保始终可见 */}
       <WeChatFloatingButton />

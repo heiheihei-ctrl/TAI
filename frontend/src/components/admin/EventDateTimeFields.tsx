@@ -12,9 +12,11 @@ import {
 } from "@/services/adminApi";
 
 type EventDateTimeFieldsProps = {
-  eventAt: string;
-  onChange: (eventAt: string) => void;
+  title: string;
+  value: string;
+  onChange: (value: string) => void;
   disabled?: boolean;
+  description?: string;
 };
 
 const parseEventDate = (iso?: string): Date | undefined => {
@@ -38,14 +40,16 @@ const formatTimeValue = (value: TimePickerValue): string =>
   `${String(value.hour).padStart(2, "0")}:${String(value.minute).padStart(2, "0")}:${String(value.second).padStart(2, "0")}`;
 
 export function EventDateTimeFields({
-  eventAt,
+  title,
+  value,
   onChange,
   disabled,
+  description,
 }: EventDateTimeFieldsProps) {
   const timeFieldRef = useRef<HTMLDivElement>(null);
   const [controlWidth, setControlWidth] = useState<number>();
-  const selectedDate = parseEventDate(eventAt);
-  const selectedTime = parseEventTime(eventAt);
+  const selectedDate = parseEventDate(value);
+  const selectedTime = parseEventTime(value);
 
   useLayoutEffect(() => {
     const node = timeFieldRef.current;
@@ -63,7 +67,7 @@ export function EventDateTimeFields({
 
   return (
     <div className="space-y-3">
-      <Label>赛事日期与时间</Label>
+      <Label>{title}</Label>
       <div className="flex flex-wrap items-end gap-4">
         <div
           className="space-y-2"
@@ -73,14 +77,14 @@ export function EventDateTimeFields({
           <DatePicker
             value={selectedDate}
             disabled={disabled}
-            placeholder="选择赛事日期"
+            placeholder="选择日期"
             className="w-full"
             onChange={(date) => {
               if (!date) {
                 onChange("");
                 return;
               }
-              const timeValue = toEventTimeValue(eventAt) || "00:00:00";
+              const timeValue = toEventTimeValue(value) || "00:00:00";
               onChange(mergeEventDateAndTime(toLocalDateValueFromDate(date), timeValue));
             }}
           />
@@ -91,15 +95,15 @@ export function EventDateTimeFields({
             value={selectedTime}
             disabled={disabled || !selectedDate}
             onChange={(time) => {
-              const dateValue = toEventDateValue(eventAt) || todayDateValue();
+              const dateValue = toEventDateValue(value) || todayDateValue();
               onChange(mergeEventDateAndTime(dateValue, formatTimeValue(time)));
             }}
           />
         </div>
       </div>
-      <CardDescription className="pt-0">
-        日期使用日历选择，时间精确到秒；需先选择日期再设置时间，留空表示不展示具体时间。
-      </CardDescription>
+      {description ? (
+        <CardDescription className="pt-0">{description}</CardDescription>
+      ) : null}
     </div>
   );
 }

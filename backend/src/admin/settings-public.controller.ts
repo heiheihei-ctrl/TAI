@@ -9,28 +9,32 @@ type EventSettingsPayload = {
   copy: string;
   link: string;
   eventAt: string;
+  eventEndAt: string;
+};
+
+const parseIsoDateTime = (value?: string | null): string => {
+  if (typeof value !== 'string' || !value.trim()) return '';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString();
 };
 
 const parseEventSettings = (value?: string | null): EventSettingsPayload => {
   if (!value) {
-    return { images: [], copy: '', link: '', eventAt: '' };
+    return { images: [], copy: '', link: '', eventAt: '', eventEndAt: '' };
   }
   try {
     const parsed = JSON.parse(value) as Partial<EventSettingsPayload>;
-    const eventAt =
-      typeof parsed.eventAt === 'string' && !Number.isNaN(new Date(parsed.eventAt).getTime())
-        ? new Date(parsed.eventAt).toISOString()
-        : '';
     return {
       images: Array.isArray(parsed.images)
         ? parsed.images.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
         : [],
       copy: typeof parsed.copy === 'string' ? parsed.copy : '',
       link: typeof parsed.link === 'string' ? parsed.link : '',
-      eventAt,
+      eventAt: parseIsoDateTime(parsed.eventAt),
+      eventEndAt: parseIsoDateTime(parsed.eventEndAt),
     };
   } catch {
-    return { images: [], copy: '', link: '', eventAt: '' };
+    return { images: [], copy: '', link: '', eventAt: '', eventEndAt: '' };
   }
 };
 
