@@ -19,6 +19,7 @@ import { ReferralService } from '../referral/referral.service';
 import { buildRechargeCreditLotData } from '../credits/credit-lot-grants';
 import { MembershipService } from '../membership/membership.service';
 import { BusinessPolicyService } from '../business-policy/business-policy.service';
+import { getEffectiveMembershipPlanPrice } from '../membership/membership-pricing';
 
 // --- 🛡️ 兼容引用 ---
 const alipayLib = require('alipay-sdk');
@@ -302,7 +303,7 @@ export class PaymentService implements OnModuleInit {
         code: plan.code,
         name: plan.name,
         billingCycle: plan.billingCycle,
-        price: Number(plan.price),
+        price: getEffectiveMembershipPlanPrice(plan),
         monthlyQuotaCredits: plan.monthlyQuotaCredits,
         signupBonusCredits: plan.signupBonusCredits,
         dailyGiftCredits: plan.dailyGiftCredits,
@@ -364,12 +365,13 @@ export class PaymentService implements OnModuleInit {
       if (!plan) {
         throw new NotFoundException('会员套餐不存在');
       }
+      const effectivePrice = getEffectiveMembershipPlanPrice(plan);
       const allowCustomMembershipAmount =
         dto.metadata &&
         typeof dto.metadata === 'object' &&
         !Array.isArray(dto.metadata) &&
         Boolean((dto.metadata as Record<string, unknown>).membershipTransitionType);
-      if (!allowCustomMembershipAmount && Math.abs(Number(plan.price) - orderAmount) >= 0.01) {
+      if (!allowCustomMembershipAmount && Math.abs(effectivePrice - orderAmount) >= 0.01) {
         throw new BadRequestException('会员订单金额与套餐价格不匹配');
       }
       if (dto.credits !== 0) {
@@ -383,7 +385,7 @@ export class PaymentService implements OnModuleInit {
         code: plan.code,
         name: plan.name,
         billingCycle: plan.billingCycle,
-        price: plan.price.toString(),
+        price: effectivePrice.toFixed(2),
         monthlyQuotaCredits: plan.monthlyQuotaCredits,
         signupBonusCredits: plan.signupBonusCredits,
         dailyGiftCredits: plan.dailyGiftCredits,
