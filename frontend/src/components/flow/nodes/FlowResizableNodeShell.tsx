@@ -38,7 +38,7 @@ type FlowResizableNodeShellProps = {
 
 /**
  * 统一节点外框缩放：四角 + 上下边拖拽，持久化 boxW/boxH。
- * 内部主内容区请放在可 flex:1 的子元素中，由 __body 容器撑满剩余高度。
+ * boxH 作为用户设定的最小高度；内容超出时由 DOM 自然撑高，避免字段和错误信息被裁切。
  */
 export function FlowResizableNodeShell({
   id,
@@ -105,12 +105,12 @@ export function FlowResizableNodeShell({
       className={shellClassName}
       style={{
         width: boxW,
-        height: boxH,
+        minHeight: boxH,
         position: 'relative',
         display: 'flex',
         flexDirection: 'column',
         boxSizing: 'border-box',
-        overflow: 'hidden',
+        overflow: 'visible',
         ...style,
       }}
     >

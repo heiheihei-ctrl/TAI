@@ -12,6 +12,7 @@ flowchart LR
 ## 前端
 - 使用 React Router 进行路由，受保护路由通过 `ProtectedRoute` 控制。
 - 画布/流程相关能力主要位于 `frontend/src/components/`，并通过 `services/` 与后端交互。
+- 可缩放流程节点将持久化的 `boxH` 作为最小高度，实际高度由内容自然撑开；不要通过观察器持续累加并写回高度。
 
 ## 后端
 - NestJS + Fastify adapter，启用压缩、Helmet、Cookie、Multipart、CORS。

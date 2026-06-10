@@ -5,6 +5,10 @@ All notable changes to this knowledge base will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning (knowledge-base versioning).
 
 ## [Unreleased]
+### Fixed
+- Resizable flow nodes now treat stored height as a minimum and naturally expand for fields or runtime errors, avoiding both clipped content and observer-driven infinite height growth.
+- New Midjourney V7 and Niji 7 nodes now start at a compact 430px height instead of leaving a large blank area below their collapsed controls.
+
 ### Changed
 - Canvas image expansion now follows the generic `edit-image` workflow end-to-end: the frontend composes a full PNG with red `#ff0000` masked expansion area, `ExpandImageSelector` previews the same red mask and blocks non-expanding selections, and `ImageContainer` submits the composed image to `editImageViaAPI` before inserting the result back as a new canvas image.
 
