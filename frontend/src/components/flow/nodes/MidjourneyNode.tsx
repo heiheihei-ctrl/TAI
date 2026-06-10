@@ -1042,7 +1042,7 @@ function MidjourneyNodeInner({ id, type, data, selected }: Props) {
       data={data}
       selected={selected}
       defaultWidth={isAdvanced ? 300 : 280}
-      defaultHeight={isAdvanced ? 760 : 320}
+      defaultHeight={isAdvanced ? 430 : 320}
       minWidth={180}
       minHeight={120}
       style={{

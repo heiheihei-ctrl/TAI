@@ -66,10 +66,10 @@
 
 .flow-resizable-node__body {
   flex: 1;
-  min-height: 0;
+  min-height: min-content;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .flow-node-fill-region {
