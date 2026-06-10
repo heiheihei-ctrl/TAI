@@ -185,7 +185,7 @@ const App: React.FC = () => {
       <ProjectAutosaveManager projectId={projectId} />
       <Canvas />
       <LoginModal />
-      <EventSettingsModalHost />
+      {/* <EventSettingsModalHost /> */}
 
       {/* 认证初始化加载指示器 */}
       {authLoading && !user && (

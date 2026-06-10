@@ -560,7 +560,7 @@ export default function Home() {
         </section>
       </div>
 
-      <EventSettingsModalHost />
+      {/* <EventSettingsModalHost /> */}
 
       {/* 微信咨询悬浮按钮 - 放在最外层确保始终可见 */}
       <WeChatFloatingButton />

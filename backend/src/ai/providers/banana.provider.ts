@@ -1653,7 +1653,7 @@ export class BananaProvider implements IAIProvider {
         error: {
           code: "GENERATION_FAILED",
           message:
-            "Tencent reference images require Tencent FileId or public URL.",
+            "这张参考图暂不适合当前模型编辑，建议裁剪局部后分次修改，或更换图片重试。",
         },
       };
     }
@@ -1723,7 +1723,7 @@ export class BananaProvider implements IAIProvider {
           error: {
             code: "EDIT_FAILED",
             message:
-              "Tencent image edit requires source image as Tencent FileId or public URL.",
+              "这张参考图暂不适合当前模型编辑，建议裁剪局部后分次修改，或更换图片重试。",
           },
         };
       }
@@ -1790,7 +1790,7 @@ export class BananaProvider implements IAIProvider {
           error: {
             code: "BLEND_FAILED",
             message:
-              "Tencent image blend requires source images as Tencent FileId or public URL.",
+              "这张参考图暂不适合当前模型编辑，建议裁剪局部后分次修改，或更换图片重试。",
           },
         };
       }
@@ -3750,3 +3750,4 @@ ${imageAnalysis}
     };
   }
 }
+
