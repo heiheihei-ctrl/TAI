@@ -13,7 +13,7 @@ import { CreditsService } from '../credits/credits.service';
 // 邀请奖励配置
 const REFERRAL_INVITER_REWARD = 500; // 邀请人奖励积分
 const REFERRAL_INVITER_FIRST_RECHARGE_REWARD = 500; // 邀请好友首充额外奖励积分
-const FREE_USER_REFERRAL_REWARD_LIMIT = 5; // 免费用户邀请奖励次数上限
+const UNLIMITED_REFERRAL_REWARD_LIMIT = -1; // 邀请奖励次数不设上限
 const DAILY_REWARD_RESET_HOUR = 3;
 
 @Injectable()
@@ -40,55 +40,15 @@ export class ReferralService {
     return Math.floor(diffMs / (1000 * 60 * 60 * 24));
   }
 
-  private parseInviteLimitFromPlanMetadata(metadata: Prisma.JsonValue | null | undefined): number | null {
-    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
-      return null;
-    }
-
-    const rawValue = (metadata as Record<string, unknown>).inviteLimit;
-    const parsed =
-      typeof rawValue === 'number'
-        ? Math.trunc(rawValue)
-        : typeof rawValue === 'string' && rawValue.trim()
-          ? Math.trunc(Number(rawValue))
-          : NaN;
-
-    if (!Number.isFinite(parsed) || parsed < 0) {
-      return null;
-    }
-
-    return parsed;
+  private isUnlimitedReferralRewardLimit(limit: number): boolean {
+    return limit < 0;
   }
 
   private async resolveInviterRewardLimit(
-    inviterUserId: string,
-    tx: Prisma.TransactionClient | PrismaService = this.prisma,
+    _inviterUserId: string,
+    _tx: Prisma.TransactionClient | PrismaService = this.prisma,
   ): Promise<number> {
-    const subscription = await tx.userMembershipSubscription.findFirst({
-      where: {
-        userId: inviterUserId,
-        status: 'active',
-        currentPeriodStartAt: { lte: new Date() },
-        currentPeriodEndAt: { gt: new Date() },
-      },
-      select: {
-        membershipPlanId: true,
-      },
-      orderBy: [{ currentPeriodEndAt: 'desc' }, { createdAt: 'desc' }],
-    });
-
-    if (!subscription?.membershipPlanId) {
-      return FREE_USER_REFERRAL_REWARD_LIMIT;
-    }
-
-    const plan = await tx.membershipPlan.findUnique({
-      where: { id: subscription.membershipPlanId },
-      select: { metadata: true },
-    });
-
-    return (
-      this.parseInviteLimitFromPlanMetadata(plan?.metadata) ?? FREE_USER_REFERRAL_REWARD_LIMIT
-    );
+    return UNLIMITED_REFERRAL_REWARD_LIMIT;
   }
 
   private async syncInviteCodeMaxUses(
@@ -193,17 +153,25 @@ export class ReferralService {
     );
     const effectiveMaxUses = syncedInviteCode.maxUses;
 
-    // 原子化占用可发奖次数；超过上限后仍允许使用邀请码，但不再发放邀请积分
-    const rewardReservation = await tx.invitationCode.updateMany({
-      where: {
-        id: inviteCode.id,
-        usedCount: { lt: effectiveMaxUses },
-      },
-      data: {
-        usedCount: { increment: 1 },
-      },
-    });
-    const rewardEligible = rewardReservation.count > 0;
+    let rewardEligible = true;
+    if (this.isUnlimitedReferralRewardLimit(effectiveMaxUses)) {
+      await tx.invitationCode.update({
+        where: { id: inviteCode.id },
+        data: { usedCount: { increment: 1 } },
+      });
+    } else {
+      // 原子化占用可发奖次数；超过上限后仍允许使用邀请码，但不再发放邀请积分
+      const rewardReservation = await tx.invitationCode.updateMany({
+        where: {
+          id: inviteCode.id,
+          usedCount: { lt: effectiveMaxUses },
+        },
+        data: {
+          usedCount: { increment: 1 },
+        },
+      });
+      rewardEligible = rewardReservation.count > 0;
+    }
 
     // 创建邀请兑换记录
     const redemption = await tx.invitationRedemption.create({
@@ -668,7 +636,9 @@ export class ReferralService {
     return {
       valid: true,
       inviterName: inviteCode.inviter?.name || '用户',
-      remainingUses: Math.max(0, effectiveMaxUses - inviteCode.usedCount),
+      remainingUses: this.isUnlimitedReferralRewardLimit(effectiveMaxUses)
+        ? null
+        : Math.max(0, effectiveMaxUses - inviteCode.usedCount),
     };
   }
 }
