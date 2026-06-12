@@ -623,7 +623,7 @@ export default function Home() {
             className="h-auto max-w-[600px] select-none [filter:drop-shadow(0_1px_2px_rgba(0,0,0,0.4))_drop-shadow(0_0_6px_rgba(100,190,255,0.25))_drop-shadow(0_0_14px_rgba(60,150,255,0.15))]"
           />
 
-          <p className="mb-12 text-[12px] text-white/45">
+          <p className="mb-12 text-[14px] text-white/45">
             {t("home.hero.subtitle")}
           </p>
 
