@@ -43,6 +43,8 @@ const zhCN = {
         logout: "退出登录",
         membership: "会员权益",
         myCredits: "我的积分",
+        membership: "会员权益",
+        referral: "邀请有礼",
       },
     },
     hero: {
@@ -355,7 +357,7 @@ const zhCN = {
           title: "邀请状态",
           subtitle: "INVITE STATUS",
           ruleLabel: "奖励规则：",
-          ruleDesc: "每成功邀请1位好友并完成首次创作，可获得邀请奖励积分（最多10次）。",
+          ruleDesc: "每成功邀请1位好友并完成首次创作，可获得邀请奖励积分，邀请次数不设上限。",
           invited: "已邀请",
           rewarded: "奖励已发放",
           pendingFirstGeneration: "待首次创作",
