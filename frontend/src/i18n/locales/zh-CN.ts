@@ -43,7 +43,6 @@ const zhCN = {
         logout: "退出登录",
         membership: "会员权益",
         myCredits: "我的积分",
-        membership: "会员权益",
         referral: "邀请有礼",
       },
     },

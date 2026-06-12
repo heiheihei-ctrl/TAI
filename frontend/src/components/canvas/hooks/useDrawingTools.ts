@@ -209,7 +209,7 @@ export const useDrawingTools = ({
   );
 
   const applyFreeDrawStrokeWidth = useCallback(
-    (path: paper.Path, pressure = 0.5) => {
+    (path: ExtendedPath, pressure = 0.5) => {
       const multiplier = pressureToStrokeMultiplier(pressure);
       if (isEraser) {
         path.strokeWidth = strokeWidth * 1.5 * multiplier;

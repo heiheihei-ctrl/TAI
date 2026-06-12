@@ -21,6 +21,8 @@ import {
 } from '@/utils/paperImageGroupBlock';
 import type { ImageAssetSnapshot } from '@/types/project';
 import type { SnapAlignmentAPI } from './useSnapAlignment';
+import type { FreeDrawPointOptions } from './useDrawingTools';
+import { getCoalescedPointerSamples, isPenPointer } from '@/utils/tabletPointer';
 
 
 // 导入其他hook的类型
