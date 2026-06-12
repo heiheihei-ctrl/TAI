@@ -82,7 +82,6 @@ export class PaymentController {
   }
 
   @Get('membership-plans')
-  @UseGuards(JwtAuthGuard)
   async getMembershipPlans() {
     return this.paymentService.getMembershipPlans();
   }

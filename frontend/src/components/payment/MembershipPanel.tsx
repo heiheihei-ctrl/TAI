@@ -3,6 +3,8 @@ import { ArrowLeft, Check, CheckCircle, Clock, Crown, FileText, Loader2, Refresh
 import { cn } from "@/lib/utils";
 import PaymentPanel from "@/components/payment/PaymentPanel";
 import { useAIChatStore } from "@/stores/aiChatStore";
+import { useAuthStore } from "@/stores/authStore";
+import { fetchPublicMembershipPlans } from "@/services/settingsApi";
 import {
   createMembershipOrder,
   getMembershipCurrent,
@@ -25,6 +27,9 @@ interface MembershipPanelProps {
   onPaymentSuccess?: () => void;
   /** 独立页面时隐藏左上角返回按钮 */
   hideBackButton?: boolean;
+  /** 首页等场景：公开套餐与价格展示，不含订阅支付与积分充值 */
+  publicBrowse?: boolean;
+  onRequireLogin?: () => void;
 }
 
 type BillingPeriod = "monthly" | "yearly";
@@ -210,7 +215,15 @@ function getMembershipPromoCardConfig(plan: PaymentMembershipPlan): MembershipPr
 /** 套餐卡默认统一最小高度（免费 + 各档付费、选中/未选中一致，与视觉稿对齐） */
 const PLAN_CARD_MIN_H = "min-h-[520px] sm:min-h-[550px] lg:min-h-[580px] xl:min-h-[600px]";
 
-const MembershipPanel: React.FC<MembershipPanelProps> = ({ onBack, onPaymentSuccess, hideBackButton = false }) => {
+const MembershipPanel: React.FC<MembershipPanelProps> = ({
+  onBack,
+  onPaymentSuccess,
+  hideBackButton = false,
+  publicBrowse = false,
+  onRequireLogin,
+}) => {
+  const user = useAuthStore((state) => state.user);
+  const canPurchase = !publicBrowse && Boolean(user);
   const [plans, setPlans] = useState<PaymentMembershipPlan[]>([]);
   const [current, setCurrent] = useState<MembershipCurrentResponse | null>(null);
   const [selectedPlanCode, setSelectedPlanCode] = useState<string | null>(null);
@@ -242,11 +255,17 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({ onBack, onPaymentSucc
   );
 
   const loadData = useCallback(async () => {
-    const [plansResult, currentResult, seedance2AccessResult] = await Promise.allSettled([
-      getPaymentMembershipPlans(),
-      getMembershipCurrent(),
-      getSeedance2Access(),
+    const plansPromise = publicBrowse
+      ? fetchPublicMembershipPlans().then((plans) => ({ plans }))
+      : getPaymentMembershipPlans();
+
+    const settled = await Promise.allSettled([
+      plansPromise,
+      canPurchase ? getMembershipCurrent() : Promise.resolve(null),
+      canPurchase ? getSeedance2Access() : Promise.resolve(null),
     ]);
+
+    const [plansResult, currentResult, seedance2AccessResult] = settled;
 
     if (plansResult.status === "fulfilled") {
       setPlans(plansResult.value.plans || []);
@@ -256,21 +275,26 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({ onBack, onPaymentSucc
       showToast("加载会员套餐失败", "error");
     }
 
+    if (!canPurchase) {
+      setCurrent(null);
+      setHasWhitelistTopUpAccess(false);
+      return;
+    }
+
     if (currentResult.status === "fulfilled") {
       setCurrent(currentResult.value);
     } else {
-      // current 失败时仍允许展示套餐和支付区，避免整块不可用
       console.warn("加载当前会员状态失败，已降级为仅展示套餐列表:", currentResult.reason);
       setCurrent(null);
     }
 
     if (seedance2AccessResult.status === "fulfilled") {
-      setHasWhitelistTopUpAccess(Boolean(seedance2AccessResult.value.byWhitelist));
+      setHasWhitelistTopUpAccess(Boolean(seedance2AccessResult.value?.byWhitelist));
     } else {
       console.warn("加载白名单状态失败，默认按非白名单处理:", seedance2AccessResult.reason);
       setHasWhitelistTopUpAccess(false);
     }
-  }, []);
+  }, [canPurchase, publicBrowse]);
 
   useEffect(() => {
     if (!filteredPlans.length) {
@@ -358,6 +382,10 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({ onBack, onPaymentSucc
   }, [currentOrderNo, pollPaymentStatus]);
 
   const createOrderForPlan = useCallback(async (planCode: string, method: PaymentMethod) => {
+    if (!canPurchase) {
+      onRequireLogin?.();
+      return;
+    }
     setSubmitting(true);
     setQrCodeUrl(null);
     setCurrentOrderNo(null);
@@ -376,12 +404,12 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({ onBack, onPaymentSucc
     } finally {
       setSubmitting(false);
     }
-  }, []);
+  }, [canPurchase, onRequireLogin]);
 
   useEffect(() => {
-    if (!selectedPlanCode || !userConfirmedPlan) return;
+    if (!selectedPlanCode || !userConfirmedPlan || !canPurchase) return;
     void createOrderForPlan(selectedPlanCode, paymentMethod);
-  }, [selectedPlanCode, paymentMethod, userConfirmedPlan, createOrderForPlan]);
+  }, [selectedPlanCode, paymentMethod, userConfirmedPlan, canPurchase, createOrderForPlan]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -412,7 +440,7 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({ onBack, onPaymentSucc
   };
 
   const isFreeUser = current?.entitlement?.membershipStatus !== "active";
-  const canTopUpCredits = true;
+  const canTopUpCredits = !publicBrowse;
 
   const isWhite = useAIChatStore((state) => state.chatTheme === "white");
 
@@ -451,7 +479,7 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({ onBack, onPaymentSucc
             </button>
           )}
           <h3 className={cn("text-lg font-medium tracking-tight", isWhite ? "text-slate-800" : "text-zinc-100")}>
-            {showOrders ? "会员订单" : "VIP 订阅"}
+            {showOrders ? "会员订单" : publicBrowse ? "会员权益" : "VIP 订阅"}
           </h3>
         </div>
         {!showOrders && (
@@ -468,22 +496,24 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({ onBack, onPaymentSucc
             >
               <RefreshCw className="h-4 w-4" />
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowOrders(true);
-                void loadOrders();
-              }}
-              className={cn(
-                "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm transition-colors",
-                isWhite
-                  ? "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                  : "text-zinc-400 hover:bg-zinc-800/80 hover:text-zinc-100",
-              )}
-            >
-              <FileText className="h-4 w-4" />
-              订单记录
-            </button>
+            {canPurchase ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowOrders(true);
+                  void loadOrders();
+                }}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm transition-colors",
+                  isWhite
+                    ? "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                    : "text-zinc-400 hover:bg-zinc-800/80 hover:text-zinc-100",
+                )}
+              >
+                <FileText className="h-4 w-4" />
+                订单记录
+              </button>
+            ) : null}
           </div>
         )}
       </div>
@@ -877,25 +907,33 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({ onBack, onPaymentSucc
                           </div>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setUserConfirmedPlan(true);
-                            setSelectedPlanCode(plan.code);
-                          }}
-                          className={cn(
-                            "mt-4 w-full rounded-xl py-3 text-xs font-semibold text-white shadow-lg transition-transform sm:py-3.5 sm:text-sm",
-                            confirmedActive
-                              ? "bg-gradient-to-r from-[#6f66e8] to-[#9aa8ef] shadow-violet-950/50 ring-2 ring-white/20"
-                              : "bg-gradient-to-r from-[#8E86F5] to-[#9aa8ef] shadow-violet-950/40 hover:scale-[1.01] active:scale-[0.99]",
-                          )}
-                        >
-                          {confirmedActive
-                            ? "已选择 · 右侧扫码支付"
-                            : plan.billingCycle === "yearly"
-                              ? "订阅年计划"
-                              : "订阅月计划"}
-                        </button>
+                        {!publicBrowse ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!canPurchase) {
+                                onRequireLogin?.();
+                                return;
+                              }
+                              setUserConfirmedPlan(true);
+                              setSelectedPlanCode(plan.code);
+                            }}
+                            className={cn(
+                              "mt-4 w-full rounded-xl py-3 text-xs font-semibold text-white shadow-lg transition-transform sm:py-3.5 sm:text-sm",
+                              confirmedActive
+                                ? "bg-gradient-to-r from-[#6f66e8] to-[#9aa8ef] shadow-violet-950/50 ring-2 ring-white/20"
+                                : "bg-gradient-to-r from-[#8E86F5] to-[#9aa8ef] shadow-violet-950/40 hover:scale-[1.01] active:scale-[0.99]",
+                            )}
+                          >
+                            {confirmedActive
+                              ? "已选择 · 右侧扫码支付"
+                              : !canPurchase
+                                ? "登录后订阅"
+                                : plan.billingCycle === "yearly"
+                                  ? "订阅年计划"
+                                  : "订阅月计划"}
+                          </button>
+                        ) : null}
 
                         <ul className="mt-4 flex flex-1 flex-col gap-1.5 text-[11px] leading-relaxed sm:gap-2 sm:text-xs">
                           {main.map((line) => (
@@ -940,7 +978,7 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({ onBack, onPaymentSucc
                   })}
                   </div>
 
-                  {userConfirmedPlan ? (
+                  {userConfirmedPlan && canPurchase ? (
                     <aside className="w-full shrink-0 xl:sticky xl:top-4 xl:self-start xl:w-[min(100%,420px)] 2xl:w-[440px]">
                       <div
                         className={cn(

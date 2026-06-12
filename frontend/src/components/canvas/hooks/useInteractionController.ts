@@ -81,7 +81,10 @@ interface PathEditor {
 
 interface DrawingTools {
   startFreeDraw: (point: paper.Point) => void;
-  continueFreeDraw: (point: paper.Point) => void;
+  continueFreeDraw: (point: paper.Point, options?: FreeDrawPointOptions) => void;
+  continueFreeDrawSamples?: (
+    samples: Array<{ point: paper.Point } & FreeDrawPointOptions>,
+  ) => void;
   startLineDraw: (point: paper.Point) => void;
   updateLineDraw: (point: paper.Point) => void;
   finishLineDraw: (point: paper.Point) => void;
@@ -244,6 +247,8 @@ export const useInteractionController = ({
   const model3DToolRef = useRef(model3DTool);
   const pathEditorRef = useRef(pathEditor);
   const drawingToolsRef = useRef(drawingTools);
+  const activeTabletPointerIdRef = useRef<number | null>(null);
+  const suppressMouseEventsRef = useRef(false);
   const simpleTextToolRef = useRef(simpleTextTool);
   const drawModeRef = useRef(drawMode);
   const isEraserRef = useRef(isEraser);
@@ -649,6 +654,7 @@ export const useInteractionController = ({
   const handleMouseDown = useCallback((event: MouseEvent) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    if (suppressMouseEventsRef.current) return;
     isAltPressedRef.current = event.altKey;
 
     if (event.button === 1) {
@@ -1279,6 +1285,7 @@ export const useInteractionController = ({
 
   // ========== 鼠标移动事件处理 ==========
   const handleMouseMove = useCallback((event: MouseEvent) => {
+    if (suppressMouseEventsRef.current) return;
     // Flow 拖拽/连线时，跳过 Canvas 侧的重计算（Paper hitTest / update 等），避免双系统同时处理 mousemove 导致掉帧。
     if (
       typeof document !== 'undefined' &&
@@ -1721,7 +1728,7 @@ export const useInteractionController = ({
 
     // 其他绘图模式
     if (currentDrawMode === 'free') {
-      latestDrawingTools.continueFreeDraw(point);
+      latestDrawingTools.continueFreeDraw(point, { pointerType: 'mouse' });
     } else if (currentDrawMode === 'rect') {
       latestDrawingTools.updateRectDraw(point);
     } else if (currentDrawMode === 'circle') {
@@ -1742,9 +1749,74 @@ export const useInteractionController = ({
   ]);
 
   // ========== 鼠标抬起事件处理 ==========
+  const releaseTabletPointer = useCallback((event: PointerEvent) => {
+    const canvas = canvasRef.current;
+    if (
+      activeTabletPointerIdRef.current !== null &&
+      event.pointerId === activeTabletPointerIdRef.current
+    ) {
+      activeTabletPointerIdRef.current = null;
+      suppressMouseEventsRef.current = false;
+      try {
+        canvas?.releasePointerCapture(event.pointerId);
+      } catch {}
+    }
+  }, [canvasRef]);
+
+  const handlePointerDown = useCallback((event: PointerEvent) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const isPen = isPenPointer(event);
+    if (isPen) {
+      activeTabletPointerIdRef.current = event.pointerId;
+      try {
+        canvas.setPointerCapture(event.pointerId);
+      } catch {}
+    }
+
+    handleMouseDown(event as unknown as MouseEvent);
+
+    if (isPen) {
+      suppressMouseEventsRef.current = true;
+    }
+  }, [handleMouseDown, canvasRef]);
+
+  const handlePointerMove = useCallback((event: PointerEvent) => {
+    if (
+      activeTabletPointerIdRef.current !== null &&
+      event.pointerId !== activeTabletPointerIdRef.current
+    ) {
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const currentDrawMode = drawModeRef.current;
+    const latestDrawingTools = drawingToolsRef.current;
+
+    if (
+      currentDrawMode === 'free' &&
+      latestDrawingTools?.continueFreeDrawSamples &&
+      (isPenPointer(event) || event.pointerType === 'touch')
+    ) {
+      const samples = getCoalescedPointerSamples(event).map((sample) => ({
+        point: clientToProject(canvas, sample.clientX, sample.clientY),
+        pressure: sample.pressure,
+        pointerType: sample.pointerType,
+      }));
+      latestDrawingTools.continueFreeDrawSamples(samples);
+      return;
+    }
+
+    handleMouseMove(event as unknown as MouseEvent);
+  }, [handleMouseMove, canvasRef]);
+
   const handleMouseUp = useCallback((event: MouseEvent) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    if (suppressMouseEventsRef.current) return;
     isAltPressedRef.current = event.altKey;
     const currentDrawMode = drawModeRef.current;
     const latestSelectionTool = selectionToolRef.current;
@@ -2185,10 +2257,23 @@ export const useInteractionController = ({
     latestDrawingTools.isDrawingRef.current = false;
   }, [canvasRef, isLockedImage, resetGroupPathDrag, stopSpacePan]);
 
+  const handlePointerUp = useCallback((event: PointerEvent) => {
+    releaseTabletPointer(event);
+    handleMouseUp(event as unknown as MouseEvent);
+  }, [handleMouseUp, releaseTabletPointer]);
+
+  const handlePointerCancel = useCallback((event: PointerEvent) => {
+    releaseTabletPointer(event);
+    handleMouseUp(event as unknown as MouseEvent);
+  }, [handleMouseUp, releaseTabletPointer]);
+
   // ========== 事件监听器绑定 ==========
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    const previousTouchAction = canvas.style.touchAction;
+    canvas.style.touchAction = 'none';
 
     // 键盘事件处理
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -2711,12 +2796,16 @@ export const useInteractionController = ({
 
     // 绑定事件监听器
     canvas.addEventListener('mousedown', handleMouseDown);
+    canvas.addEventListener('pointerdown', handlePointerDown);
     canvas.addEventListener('dblclick', handleDoubleClick); // 双击事件
 
     // 在窗口级别监听移动/抬起，避免经过 Flow 节点时中断拖拽
     window.addEventListener('mousemove', handleMouseMove, { capture: true });
     window.addEventListener('mouseup', handleMouseUp, { capture: true });
     window.addEventListener('mouseleave', handleMouseUp, { capture: true });
+    window.addEventListener('pointermove', handlePointerMove, { capture: true });
+    window.addEventListener('pointerup', handlePointerUp, { capture: true });
+    window.addEventListener('pointercancel', handlePointerCancel, { capture: true });
     
     // 键盘事件需要绑定到document，因为canvas无法获取焦点
     document.addEventListener('keydown', handleKeyDown, true);
@@ -2734,18 +2823,35 @@ export const useInteractionController = ({
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
+      canvas.style.touchAction = previousTouchAction;
+      activeTabletPointerIdRef.current = null;
+      suppressMouseEventsRef.current = false;
       // 清理事件监听器
       canvas.removeEventListener('mousedown', handleMouseDown);
+      canvas.removeEventListener('pointerdown', handlePointerDown);
       canvas.removeEventListener('dblclick', handleDoubleClick);
       window.removeEventListener('mousemove', handleMouseMove, { capture: true });
       window.removeEventListener('mouseup', handleMouseUp, { capture: true });
       window.removeEventListener('mouseleave', handleMouseUp, { capture: true });
+      window.removeEventListener('pointermove', handlePointerMove, { capture: true });
+      window.removeEventListener('pointerup', handlePointerUp, { capture: true });
+      window.removeEventListener('pointercancel', handlePointerCancel, { capture: true });
       document.removeEventListener('keydown', handleKeyDown, true);
       document.removeEventListener('keyup', handleKeyUp, true);
       window.removeEventListener('blur', handleWindowBlur);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [handleMouseDown, handleMouseMove, handleMouseUp, stopSpacePan, isSelectionLikeMode]);
+  }, [
+    handleMouseDown,
+    handleMouseMove,
+    handleMouseUp,
+    handlePointerDown,
+    handlePointerMove,
+    handlePointerUp,
+    handlePointerCancel,
+    stopSpacePan,
+    isSelectionLikeMode,
+  ]);
 
   return {
     // 主要事件处理器

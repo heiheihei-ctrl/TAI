@@ -1,5 +1,6 @@
 import { PerspectiveCamera } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
+import { cn } from '@/lib/utils';
 import ShaderPlaneBackground from './ShaderPlaneBackground';
 
 type WelcomeShaderBackgroundProps = {
@@ -12,7 +13,7 @@ export default function WelcomeShaderBackground({
   return (
     <div
       aria-hidden='true'
-      className={`pointer-events-none absolute inset-0 overflow-hidden ${className}`}
+      className={cn('pointer-events-none fixed inset-0 overflow-hidden', className)}
     >
       <div className='absolute left-1/2 top-0 h-full w-screen -translate-x-1/2'>
         <Canvas

@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from '@/utils/assetProxy';
+import type { PaymentMembershipPlan } from '@/services/adminApi';
 
 export type EventSettingsConfig = {
   images: string[];
@@ -52,12 +53,50 @@ export function hasEventSettingsContent(config: EventSettingsConfig): boolean {
   );
 }
 
+/** 当前时间是否在赛事展示窗口内（未开始或已结束则不展示） */
+export function isEventSettingsActive(
+  config: EventSettingsConfig,
+  now: Date = new Date(),
+): boolean {
+  if (!hasEventSettingsContent(config)) return false;
+
+  const nowMs = now.getTime();
+
+  if (config.eventAt) {
+    const startMs = new Date(config.eventAt).getTime();
+    if (!Number.isNaN(startMs) && nowMs < startMs) return false;
+  }
+
+  if (config.eventEndAt) {
+    const endMs = new Date(config.eventEndAt).getTime();
+    if (!Number.isNaN(endMs) && nowMs > endMs) return false;
+  }
+
+  return true;
+}
+
 export function getEventSettingsContentKey(config: EventSettingsConfig): string {
   return JSON.stringify({
     images: config.images,
     copy: config.copy.trim(),
     link: config.link.trim(),
+    eventAt: config.eventAt,
+    eventEndAt: config.eventEndAt,
   });
+}
+
+export async function fetchPublicMembershipPlans(): Promise<PaymentMembershipPlan[]> {
+  try {
+    const apiBase = getApiBaseUrl();
+    const response = await fetch(`${apiBase}/api/payment/membership-plans`);
+    if (!response.ok) {
+      return [];
+    }
+    const data = (await response.json()) as { plans?: PaymentMembershipPlan[] };
+    return Array.isArray(data.plans) ? data.plans : [];
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchPublicEventSettings(): Promise<EventSettingsConfig> {

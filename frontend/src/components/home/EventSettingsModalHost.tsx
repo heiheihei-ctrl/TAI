@@ -4,7 +4,7 @@ import {
   EVENT_SETTINGS_DISMISS_KEY,
   fetchPublicEventSettings,
   getEventSettingsContentKey,
-  hasEventSettingsContent,
+  isEventSettingsActive,
   type EventSettingsConfig,
 } from '@/services/settingsApi';
 
@@ -14,9 +14,11 @@ export default function EventSettingsModalHost() {
 
   useEffect(() => {
     void fetchPublicEventSettings().then((data) => {
-      if (!hasEventSettingsContent(data)) return;
+      if (!isEventSettingsActive(data)) return;
+
       const dismissed = sessionStorage.getItem(EVENT_SETTINGS_DISMISS_KEY);
       if (dismissed === getEventSettingsContentKey(data)) return;
+
       setConfig(data);
       setOpen(true);
     });

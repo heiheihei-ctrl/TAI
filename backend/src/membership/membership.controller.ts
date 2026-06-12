@@ -21,9 +21,7 @@ export class MembershipController {
   ) {}
 
   @Get('plans')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: '获取会员套餐展示页数据' })
+  @ApiOperation({ summary: '获取会员套餐展示页数据（公开）' })
   async getMembershipPlans() {
     return this.membershipService.getMembershipPlansPage();
   }

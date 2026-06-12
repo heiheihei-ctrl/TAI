@@ -22704,7 +22704,7 @@ function FlowInner() {
                   height: "min(70vh, 640px)",
                   overflowY: "auto",
                   overflowX: "hidden",
-                  padding: "12px 18px 18px",
+                  padding: "0 18px 18px",
                   background: isFlowBlackTheme ? "#161616" : "transparent",
                   borderRadius: isFlowBlackTheme ? 12 : 0,
                   border: isFlowBlackTheme ? "1px solid #2b2b2b" : "none",
@@ -22714,11 +22714,21 @@ function FlowInner() {
                   <div style={{ marginBottom: 18 }}>
                     <div
                       style={{
+                        position: "sticky",
+                        top: 0,
+                        zIndex: 10,
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "space-between",
                         gap: 8,
                         marginBottom: 14,
+                        marginLeft: -18,
+                        marginRight: -18,
+                        padding: "12px 18px 10px",
+                        background: isFlowBlackTheme ? "#161616" : "#fff",
+                        borderBottom: isFlowBlackTheme
+                          ? "1px solid #2b2b2b"
+                          : "1px solid #e5e7eb",
                       }}
                     >
                       <div

@@ -32,16 +32,22 @@ const zhCN = {
     },
     header: {
       greeting: "你好，{{name}}",
+      nav: {
+        toolbox: "工具舱",
+        scenes: "场景库",
+        cocreate: "共创台",
+      },
       actions: {
         login: "登录",
         register: "注册",
         logout: "退出登录",
+        membership: "会员权益",
         myCredits: "我的积分",
       },
     },
     hero: {
       logoAlt: "探索创作之境",
-      subtitle: "让每一次设计比上一次更聪明",
+      subtitle: "TAI新一代智能聚合创意平台，深耕建筑与教育领域，用AI理解行业、释放创造力。",
       startNow: "立即体验",
     },
     features: {
@@ -57,6 +63,23 @@ const zhCN = {
         { label: "高效协同", desc: "团队实时协作" },
         { label: "精准专业", desc: "细节成就品质" },
         { label: "持续进化", desc: "每一次都更进一步" },
+      ],
+      cards: [
+        {
+          category: "CONSTRUCTION INDUSTRY",
+          title: "建筑行业",
+          desc: "方案快出，全专业 AI 一键助攻",
+        },
+        {
+          category: "EDUCATIONAL TRAINING",
+          title: "教育培训",
+          desc: "课堂升级，沉浸式教学超带感",
+        },
+        {
+          category: "CREATIVE DESIGN",
+          title: "创意设计",
+          desc: "灵感起飞，打造独一份创意作品",
+        },
       ],
     },
     cta: {
@@ -80,6 +103,83 @@ const zhCN = {
       text: "来体验这个智能画板应用！",
     },
     icp: "粤ICP备2023120022号",
+    toolbox: {
+      title: "工具舱",
+      subtitle: "强大的AI驱动功能，让创造更智能、更高效",
+      prev: "上一项",
+      next: "下一项",
+      items: [
+        {
+          title: "无限画布",
+          titleEn: "Infinite Canvas",
+          desc: "自由缩放与平移，无边界创作空间，支持多层级内容组织与管理。",
+          duration: "02:36",
+          icon: "wxhb",
+        },
+        {
+          title: "AI聊天助手",
+          titleEn: "Chatbot Assistant",
+          desc: "多模式对话创意助手，一键落地设计想法",
+          duration: "02:36",
+          icon: "chat",
+        },
+        {
+          title: "智能节点",
+          titleEn: "Smart Nodes",
+          desc: "AI节点式生成平台，自定义节点连接，灵活编排设计与工作流",
+          duration: "02:36",
+          icon: "znjd",
+        },
+        {
+          title: "协同合作",
+          titleEn: "AI Assistant",
+          desc: "内置协作模块，支持多人实施协作，优化团队创作与设计流程。",
+          duration: "02:36",
+          icon: "xthz",
+        },
+      ],
+    },
+    ctaBanner: {
+      tagline: "TAI不止于AI，是效率，更是智能生产力",
+    },
+    footer: {
+      brandSuffix: "天宫 · 神匠",
+      slogan: "用AI理解行业，释放创造力，赋能每一位内容创作者",
+      products: "产品",
+      dfc: "DFC",
+      support: "支持",
+      helpCenter: "帮助中心",
+      docs: "使用文档",
+      contact: "联系我们",
+      follow: "关注我们",
+      copyright: "© 2024 TAI All rights reserved.",
+    },
+    scenes: {
+      title: "场景库",
+      subtitle: "覆盖建筑、教育、创意设计三大领域，赋能多元化创作需求",
+      more: "更多场景",
+      filters: {
+        all: "全部",
+        architecture: "城市规划",
+        education: "建筑设计",
+        career: "室内空间",
+        skills: "园林景观",
+        online: "教育培训",
+        corporate: "创意设计",
+      },
+      items: [
+        { title: "城市更新", category: "architecture" },
+        { title: "城市设计", category: "architecture" },
+        { title: "概念方案", category: "education" },
+        { title: "建筑改造", category: "education" },
+        { title: "效果图渲染", category: "education" },
+        { title: "空间设计", category: "education" },
+        { title: "时节变换", category: "education" },
+        { title: "中式家装", category: "career" },
+        { title: "酒店空间", category: "career" },
+        { title: "家具设计", category: "career" },
+      ],
+    },
   },
   auth: {
     modal: {

@@ -1,32 +1,212 @@
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { useRef, useState, useEffect, useCallback } from "react";
+import {
+  useRef,
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  type TransitionEvent,
+} from "react";
 import { useAuthStore } from "@/stores/authStore";
-import { MessageCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, MessageCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { cn } from "@/lib/utils";
 import WelcomeShaderBackground from "@/components/background/WelcomeShaderBackground";
 import EventSettingsModalHost from "@/components/home/EventSettingsModalHost";
+import MembershipModal from "@/components/home/MembershipModal";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
+import titleImage from "@/assets/title.png";
+import logoImage from "@/assets/logo.png";
+import leftIconImage from "@/assets/left-icon.png";
+import rightIconImage from "@/assets/right-icon.png";
+import wechatIconImage from "@/assets/wechat.png";
+import xhsIconImage from "@/assets/xhs.png";
+import dyIconImage from "@/assets/dy.png";
+import wxErweimaImage from "@/assets/wx-erweima.jpg";
+import xhsErweimaImage from "@/assets/xhs-erweima.jpg";
+import dyErweimaImage from "@/assets/dy-erweima.jpg";
+import toolboxWxhbIcon from "@/assets/wxhb.png";
+import toolboxChatIcon from "@/assets/chat.png";
+import toolboxZnjdIcon from "@/assets/znjd.png";
+import toolboxXthzIcon from "@/assets/xthz.png";
+import SmartNode from "@/assets/smart-node.png";
+import InfiniteCanvas from "@/assets/infinite-canvas.png";
+import AIAssistant from "@/assets/assistant.png";
+import Chatbot from "@/assets/chatbot.png";
+import BoxIcon1 from "@/assets/box1.jpg";
+import BoxIcon2 from "@/assets/box2.jpg";
+import BoxIcon3 from "@/assets/box3.png";
+import Qrcode from "@/assets/group-erweima.jpg";
 
-// 微信咨询悬浮按钮组件
+
+const FEATURE_CARD_IMAGES = [
+  BoxIcon1,
+  BoxIcon2,
+  BoxIcon3,
+];
+
+const TOOLBOX_IMAGES = [InfiniteCanvas, Chatbot, SmartNode, AIAssistant];
+
+type SceneFilterKey =
+  | "all"
+  | "architecture"
+  | "education"
+  | "career"
+  | "skills"
+  | "online"
+  | "corporate";
+
+const SCENE_FILTER_KEYS: SceneFilterKey[] = [
+  "all",
+  "architecture",
+  "education",
+  "career",
+  "skills",
+  "online",
+  "corporate",
+];
+
+const SCENE_CATEGORY_DIRS: Record<Exclude<SceneFilterKey, "all">, string> = {
+  architecture: "城市规划",
+  education: "建筑设计",
+  career: "室内设计",
+  skills: "园林景观",
+  online: "教育培训",
+  corporate: "创意设计",
+};
+
+const sceneImageModules = import.meta.glob<string>(
+  "../assets/*/*.{png,jpg,jpeg,webp}",
+  { eager: true, import: "default" },
+);
+
+const SCENE_IMAGE_LOOKUP = (() => {
+  const lookup = new Map<string, string>();
+  for (const [path, url] of Object.entries(sceneImageModules)) {
+    const match = path.match(/\/assets\/([^/]+)\/([^/]+)\.(png|jpe?g|webp)$/i);
+    if (!match) continue;
+    lookup.set(`${match[1]}/${match[2]}`, url);
+  }
+  return lookup;
+})();
+
+const SCENE_MAX_ITEMS_PER_CATEGORY = 10;
+const SCENE_MAX_ITEMS_ALL = 10;
+
+const resolveSceneImage = (
+  category: Exclude<SceneFilterKey, "all">,
+  imageKey: string,
+) => {
+  const dir = SCENE_CATEGORY_DIRS[category];
+  return SCENE_IMAGE_LOOKUP.get(`${dir}/${imageKey}`) ?? "";
+};
+
+type ToolboxIconKey = "wxhb" | "chat" | "znjd" | "xthz";
+
+const TOOLBOX_ICON_MAP: Record<ToolboxIconKey, string> = {
+  wxhb: toolboxWxhbIcon,
+  chat: toolboxChatIcon,
+  znjd: toolboxZnjdIcon,
+  xthz: toolboxXthzIcon,
+};
+
+const TOOLBOX_CENTER_W = 810;
+const TOOLBOX_CENTER_H = 494;
+const TOOLBOX_SIDE_W = 623;
+const TOOLBOX_CENTER_IMG_CLASS = "h-[min(334px,calc((100vw-48px)*334/810))]";
+const TOOLBOX_CENTER_CLASS =
+  "h-[min(494px,calc((100vw-48px)*494/810))] w-[min(810px,calc(100vw-48px))]";
+const TOOLBOX_SIDE_SCALE = TOOLBOX_SIDE_W / TOOLBOX_CENTER_W;
+const TOOLBOX_SLIDE_TRANSITION_MS = 600;
+
+const getToolboxSlideProgress = (
+  index: number,
+  position: number,
+  total: number,
+) => {
+  if (total <= 1) return index === Math.round(position) ? 0 : 99;
+  let diff = index - position;
+  const half = total / 2;
+  if (diff > half) diff -= total;
+  if (diff < -half) diff += total;
+  return diff;
+};
+
+const getToolboxSlideScale = (progress: number) => {
+  const abs = Math.min(Math.abs(progress), 1);
+  return 1 - abs * (1 - TOOLBOX_SIDE_SCALE);
+};
+
+const getToolboxSlideOpacity = (progress: number) => {
+  const abs = Math.abs(progress);
+  if (abs > 1.4) return 0;
+  if (abs <= 1) return 1 - abs * 0.16;
+  return Math.max(0, 1 - (abs - 1) * 2.5);
+};
+
+const getToolboxShortestStep = (
+  from: number,
+  to: number,
+  total: number,
+) => {
+  if (total <= 1) return 0;
+  let diff = to - from;
+  while (diff > total / 2) diff -= total;
+  while (diff < -total / 2) diff += total;
+  return diff;
+};
+
+const normalizeToolboxPosition = (position: number, total: number) => {
+  if (total <= 0) return 0;
+  let normalized = Math.round(position) % total;
+  if (normalized < 0) normalized += total;
+  return normalized;
+};
+
+const NAV_LINK_CLASS =
+  "text-sm text-white/[0.82] transition-colors duration-200 hover:text-white";
+
+const SCENE_FILTER_BTN_CLASS =
+  "rounded-full px-4 py-1.5 text-sm transition-all duration-200";
+const SCENE_FILTER_BTN_HOVER_CLASS =
+  "hover:bg-[#0d1b3d] hover:text-white hover:shadow-[0_0_15px_2px_rgba(37,99,235,0.7)]";
+
+const BTN_OUTLINE_GOLD_CLASS =
+  "inline-flex items-center rounded-full border border-amber-500/65 bg-amber-500/[0.08] px-4 py-[4px] text-[12px] text-[#B26B35] transition-colors duration-200 hover:border-amber-300/85 hover:bg-amber-500/[0.16] leading-[120%]";
+
+const BTN_LOGIN_CLASS =
+  "rounded-full bg-gradient-to-br from-blue-700 via-blue-600 to-blue-800 px-[16px] py-[4px] text-[13px] text-white shadow-[0_0_16px_rgba(37,99,235,0.35)] transition-all duration-200";
+
+const CTA_BTN_CLASS =
+  "group inline-flex items-center justify-center rounded-full border border-sky-300/35 bg-gradient-to-r from-[rgba(33,75,157,0.1)] to-[rgba(33,75,157,1)] text-white w-[120px] h-[40px] text-[16px]";
+
 const WeChatFloatingButton = () => {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
-  const [qrCodes, setQrCodes] = useState<{ officialAccount: string; wechatGroup: string }>({
-    officialAccount: '/qrcode-official.png',
-    wechatGroup: '/qrcode-group.png',
+  const [qrCodes, setQrCodes] = useState<{
+    officialAccount: string;
+    wechatGroup: string;
+  }>({
+    officialAccount: "/qrcode-official.png",
+    wechatGroup: "/group-erweima.jpg",
   });
 
-  // 从后端获取二维码配置
   useEffect(() => {
     const fetchQrCodes = async () => {
       try {
-        const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'http://localhost:4000';
+        const API_BASE =
+          (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
+          "http://localhost:4000";
         const response = await fetch(`${API_BASE}/api/settings/wechat-qrcodes`);
         if (response.ok) {
           const data = await response.json();
-          if (data.officialAccount) setQrCodes(prev => ({ ...prev, officialAccount: data.officialAccount }));
-          if (data.wechatGroup) setQrCodes(prev => ({ ...prev, wechatGroup: data.wechatGroup }));
+          if (data.officialAccount)
+            setQrCodes((prev) => ({
+              ...prev,
+              officialAccount: data.officialAccount,
+            }));
+          if (data.wechatGroup)
+            setQrCodes((prev) => ({ ...prev, wechatGroup: data.wechatGroup }));
         }
       } catch (_e) {
         // 使用默认图片
@@ -41,531 +221,880 @@ const WeChatFloatingButton = () => {
       onMouseEnter={() => setIsOpen(true)}
       onMouseLeave={() => setIsOpen(false)}
     >
-      {/* 二维码弹出面�?*/}
       {isOpen && (
-        <div className="absolute bottom-16 right-0 p-4 rounded-2xl bg-black/80 backdrop-blur-md border border-white/10 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-300">
+        <div className="absolute bottom-16 right-0 rounded-2xl border border-white/10 bg-black/80 p-4 shadow-2xl backdrop-blur-md duration-300 animate-in fade-in slide-in-from-bottom-4">
           <div className="flex gap-4">
             <div className="flex flex-col items-center">
-              <div className="w-32 h-32 bg-white rounded-lg p-2 mb-2">
+              <div className="mb-2 h-32 w-32 rounded-lg bg-white p-2">
                 <img
                   src={qrCodes.officialAccount}
                   alt={t("home.wechat.followOfficial")}
-                  className="w-full h-full object-contain"
+                  className="h-full w-full"
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%23f0f0f0" width="100" height="100"/><text x="50" y="55" text-anchor="middle" fill="%23999" font-size="12">${encodeURIComponent(t("home.wechat.noImage"))}</text></svg>`;
+                    (e.target as HTMLImageElement).src =
+                      `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%23f0f0f0" width="100" height="100"/><text x="50" y="55" text-anchor="middle" fill="%23999" font-size="12">${encodeURIComponent(t("home.wechat.noImage"))}</text></svg>`;
                   }}
                 />
               </div>
-              <span className="text-xs text-white/80">{t("home.wechat.followOfficial")}</span>
+              <span className="text-xs text-white/80">
+                {t("home.wechat.followOfficial")}
+              </span>
             </div>
             <div className="flex flex-col items-center">
-              <div className="w-32 h-32 bg-white rounded-lg p-2 mb-2">
+              <div className="mb-2 h-32 w-32 rounded-lg bg-white p-2">
                 <img
-                  src={qrCodes.wechatGroup}
+                  src={Qrcode}
                   alt={t("home.wechat.joinGroup")}
-                  className="w-full h-full object-contain"
+                  className="h-full w-full"
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%23f0f0f0" width="100" height="100"/><text x="50" y="55" text-anchor="middle" fill="%23999" font-size="12">${encodeURIComponent(t("home.wechat.noImage"))}</text></svg>`;
+                    (e.target as HTMLImageElement).src =
+                      `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%23f0f0f0" width="100" height="100"/><text x="50" y="55" text-anchor="middle" fill="%23999" font-size="12">${encodeURIComponent(t("home.wechat.noImage"))}</text></svg>`;
                   }}
                 />
               </div>
-              <span className="text-xs text-white/80">{t("home.wechat.joinGroup")}</span>
+              <span className="text-xs text-white/80">
+                {t("home.wechat.joinGroup")}
+              </span>
             </div>
           </div>
         </div>
       )}
 
-      {/* 悬浮按钮 */}
       <button
-        className="w-12 h-12 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/10 shadow-lg flex items-center justify-center transition-all duration-300 hover:scale-110"
+        type="button"
+        className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-black/60 shadow-lg backdrop-blur-md transition-all duration-300 hover:scale-110 hover:bg-black/80"
       >
-        <MessageCircle className="w-6 h-6 text-white" />
+        <MessageCircle className="h-6 w-6 text-white" />
       </button>
     </div>
   );
 };
 
+const FOOTER_QR_POPUP_WIDTH = 180;
+
+const FooterSocialIcon = ({
+  icon,
+  label,
+  qrCode,
+}: {
+  icon: string;
+  label: string;
+  qrCode: string;
+}) => {
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <button
+        type="button"
+        aria-label={label}
+        className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-white/80 transition-colors duration-200 hover:bg-white/10 hover:text-white"
+      >
+        <img src={icon} alt="" className="h-full w-full object-contain" />
+      </button>
+
+      <div
+        className={cn(
+          "absolute bottom-[calc(100%+10px)] left-1/2 z-20 -translate-x-1/2 transition-all duration-300 ease-out",
+          isHovered
+            ? "pointer-events-auto visible translate-y-0 scale-100 opacity-100"
+            : "pointer-events-none invisible translate-y-2 scale-95 opacity-0",
+        )}
+        style={{ width: FOOTER_QR_POPUP_WIDTH }}
+      >
+        <div className="rounded-xl border border-white/10 bg-black/80 p-2 shadow-2xl backdrop-blur-md">
+          <div className="overflow-hidden rounded-lg bg-white p-2">
+            <img src={qrCode} alt="" className="block h-auto w-full" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+function getConnectionDotClass(connection: string | null): string {
+  switch (connection) {
+    case "server":
+    case "local":
+      return "bg-green-600";
+    case "refresh":
+      return "bg-amber-500";
+    case "mock":
+      return "bg-violet-500";
+    default:
+      return "bg-white/50";
+  }
+}
+
 export default function Home() {
-  const { t, i18n } = useTranslation();
-  const isZh = (i18n.resolvedLanguage || i18n.language || '').toLowerCase().startsWith('zh');
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const connection = useAuthStore((s) => s.connection);
   const initAuth = useAuthStore((s) => s.init);
   const authInitializing = useAuthStore((s) => s.initializing);
-  const containerRef = useRef<HTMLDivElement>(null);
   const authInitRef = useRef(false);
-  const [currentPage, setCurrentPage] = useState(0);
-  const [isAnimating, setIsAnimating] = useState(false);
-  const touchStartY = useRef(0);
-  const lastScrollTime = useRef(0);
+  const [activeCard, setActiveCard] = useState(0);
+  const [toolboxSlidePos, setToolboxSlidePos] = useState(0);
+  const [membershipModalOpen, setMembershipModalOpen] = useState(false);
+  const [activeSceneFilter, setActiveSceneFilter] =
+    useState<SceneFilterKey>("all");
 
-  // 暂时只允许第一页，禁用后两�?
-  const maxPage = 0;
+  const featureCards = useMemo(
+    () =>
+      (
+        t("home.features.cards", { returnObjects: true }) as Array<{
+          category: string;
+          title: string;
+          desc: string;
+        }>
+      ).map((card, index) => ({
+        ...card,
+        image: FEATURE_CARD_IMAGES[index] ?? FEATURE_CARD_IMAGES[0],
+      })),
+    [t],
+  );
 
-  // 首页为公开路由，手动触发一次认证初始化，确保已登录用户回到首页时能实时显示在线状�?
+  const toolboxItems = useMemo(
+    () =>
+      (
+        t("home.toolbox.items", { returnObjects: true }) as Array<{
+          title: string;
+          titleEn: string;
+          desc: string;
+          duration: string;
+          icon: ToolboxIconKey;
+        }>
+      ).map((item, index) => ({
+        ...item,
+        image: TOOLBOX_IMAGES[index] ?? TOOLBOX_IMAGES[0],
+      })),
+    [t],
+  );
+
+  const sceneItems = useMemo(() => {
+    const categoryCount = new Map<Exclude<SceneFilterKey, "all">, number>();
+
+    return (
+      t("home.scenes.items", { returnObjects: true }) as Array<{
+        title: string;
+        imageKey?: string;
+        category: Exclude<SceneFilterKey, "all">;
+      }>
+    )
+      .map((item) => ({
+        ...item,
+        image: resolveSceneImage(item.category, item.imageKey ?? item.title),
+      }))
+      .filter((item) => {
+        if (!item.image) return false;
+        const count = categoryCount.get(item.category) ?? 0;
+        if (count >= SCENE_MAX_ITEMS_PER_CATEGORY) return false;
+        categoryCount.set(item.category, count + 1);
+        return true;
+      });
+  }, [t]);
+
+  const filteredSceneItems = useMemo(() => {
+    const items =
+      activeSceneFilter === "all"
+        ? sceneItems
+        : sceneItems.filter((item) => item.category === activeSceneFilter);
+
+    const limit =
+      activeSceneFilter === "all"
+        ? SCENE_MAX_ITEMS_ALL
+        : SCENE_MAX_ITEMS_PER_CATEGORY;
+
+    return items.slice(0, limit);
+  }, [activeSceneFilter, sceneItems]);
+
   useEffect(() => {
     if (authInitRef.current || user || authInitializing) return;
     authInitRef.current = true;
     initAuth().catch(() => {});
   }, [user, authInitializing, initAuth]);
 
-  // 切换到指定页�?
-  const goToPage = useCallback(
-    (page: number) => {
-      if (isAnimating || page < 0 || page > maxPage) return;
-      setIsAnimating(true);
-      setCurrentPage(page);
-      setTimeout(() => setIsAnimating(false), 600);
-    },
-    [isAnimating]
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setActiveCard((prev) => (prev + 1) % featureCards.length);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [featureCards.length]);
+
+  const activeToolbox = useMemo(
+    () => normalizeToolboxPosition(toolboxSlidePos, toolboxItems.length),
+    [toolboxSlidePos, toolboxItems.length],
   );
 
-  // 处理滚轮事件
+  const goToToolbox = useCallback(
+    (index: number) => {
+      setToolboxSlidePos((pos) => {
+        const total = toolboxItems.length;
+        if (total <= 1) return 0;
+        return pos + getToolboxShortestStep(pos, index, total);
+      });
+    },
+    [toolboxItems.length],
+  );
+
+  const goToolboxPrev = useCallback(() => {
+    setToolboxSlidePos((prev) => prev - 1);
+  }, []);
+
+  const goToolboxNext = useCallback(() => {
+    setToolboxSlidePos((prev) => prev + 1);
+  }, []);
+
+  const handleToolboxSlideTransitionEnd = useCallback(
+    (event: TransitionEvent<HTMLDivElement>) => {
+      if (event.propertyName !== "transform") return;
+      setToolboxSlidePos((pos) =>
+        normalizeToolboxPosition(pos, toolboxItems.length),
+      );
+    },
+    [toolboxItems.length],
+  );
+
   useEffect(() => {
-    const handleWheel = (e: WheelEvent) => {
-      // 第三页不限制滚动
-      if (currentPage === 2) return;
+    const timer = window.setInterval(goToolboxNext, 6000);
+    return () => window.clearInterval(timer);
+  }, [goToolboxNext]);
 
-      const now = Date.now();
-      if (now - lastScrollTime.current < 800) return;
-
-      if (Math.abs(e.deltaY) > 30) {
-        e.preventDefault();
-        lastScrollTime.current = now;
-
-        if (e.deltaY > 0 && currentPage < maxPage) {
-          goToPage(currentPage + 1);
-        } else if (e.deltaY < 0 && currentPage > 0) {
-          goToPage(currentPage - 1);
-        }
+  const requireAuthNavigate = useCallback(
+    (path: string) => {
+      if (user) {
+        navigate(path);
+        return;
       }
-    };
+      navigate("/auth/login", { state: { from: path } });
+    },
+    [navigate, user],
+  );
 
-    const container = containerRef.current;
-    if (container) {
-      container.addEventListener("wheel", handleWheel, { passive: false });
+  const scrollToToolbox = useCallback(() => {
+    document.getElementById("toolbox")?.scrollIntoView({ behavior: "smooth" });
+  }, []);
+
+  const scrollToScenes = useCallback(() => {
+    document.getElementById("scenes")?.scrollIntoView({ behavior: "smooth" });
+  }, []);
+
+  const openMembershipModal = useCallback(() => {
+    setMembershipModalOpen(true);
+  }, []);
+
+  const connectionStatus = (() => {
+    switch (connection) {
+      case "server":
+        return {
+          label: t("common.status.online"),
+          dotClass: getConnectionDotClass("server"),
+        };
+      case "refresh":
+        return {
+          label: t("common.status.refreshed"),
+          dotClass: getConnectionDotClass("refresh"),
+        };
+      case "local":
+        return {
+          label: t("common.status.online"),
+          dotClass: getConnectionDotClass("local"),
+        };
+      case "mock":
+        return {
+          label: t("common.status.mock"),
+          dotClass: getConnectionDotClass("mock"),
+        };
+      default:
+        return null;
     }
-    return () => {
-      if (container) {
-        container.removeEventListener("wheel", handleWheel);
-      }
-    };
-  }, [currentPage, goToPage]);
-
-  // 处理触摸事件（移动端�?
-  useEffect(() => {
-    const handleTouchStart = (e: TouchEvent) => {
-      touchStartY.current = e.touches[0].clientY;
-    };
-
-    const handleTouchEnd = (e: TouchEvent) => {
-      if (currentPage === 2) return;
-
-      const deltaY = touchStartY.current - e.changedTouches[0].clientY;
-      if (Math.abs(deltaY) > 50) {
-        if (deltaY > 0 && currentPage < maxPage) {
-          goToPage(currentPage + 1);
-        } else if (deltaY < 0 && currentPage > 0) {
-          goToPage(currentPage - 1);
-        }
-      }
-    };
-
-    const container = containerRef.current;
-    if (container) {
-      container.addEventListener("touchstart", handleTouchStart);
-      container.addEventListener("touchend", handleTouchEnd);
-    }
-    return () => {
-      if (container) {
-        container.removeEventListener("touchstart", handleTouchStart);
-        container.removeEventListener("touchend", handleTouchEnd);
-      }
-    };
-  }, [currentPage, goToPage]);
+  })();
 
   return (
-    <div
-      ref={containerRef}
-      className='h-screen w-full overflow-hidden bg-gradient-to-b from-white to-sky-50 text-slate-800'
-    >
-      {/* 固定�?Header - 完整横条，向中间收缩 */}
-      <header className='fixed top-4 left-0 right-0 z-50 pointer-events-none flex justify-center'>
-        <div className='flex items-center justify-between gap-4 px-6 md:px-8 py-3 h-[60px] rounded-[999px] bg-liquid-glass backdrop-blur-minimal backdrop-saturate-125 shadow-liquid-glass-lg border border-liquid-glass transition-all duration-300 pointer-events-auto max-w-4xl w-full mx-4'>
-          {/* 左侧：Logo */}
-          <div className='flex items-center'>
-            <div
-              className='flex h-[32px] items-center justify-center cursor-pointer hover:opacity-80 transition-opacity select-none'
-              onClick={() => navigate("/")}
-            >
-              <img
-                src='/TAI-logo.png'
-                alt='TAI'
-                draggable='false'
-                className='h-9 w-auto object-contain'
-                style={{
-                  imageRendering: "auto",
-                  WebkitFontSmoothing: "antialiased",
-                }}
-              />
-            </div>
-          </div>
+    <div className="relative h-screen w-screen overflow-x-hidden overflow-y-auto scrollbar-hidden text-white">
+      <WelcomeShaderBackground className="z-0" />
+      <div className="pointer-events-none fixed inset-0 z-[1] bg-[#020818]/30" />
 
-          {/* 右侧：用户信息或登录/注册按钮（与设置弹窗使用相同�?connection 状态） */}
-          <div className='flex items-center gap-3'>
-            <LanguageSwitcher tone='dark' style='simple' />
+      <header className="fixed left-0 right-0 top-0 z-50">
+        <div className="mx-auto flex h-14 w-[1440px] items-center justify-between border border-white/[0.06] bg-[#020818]/55 backdrop-blur-md rounded-[10px] px-[48px] mt-[20px]">
+          <button
+            type="button"
+            className="flex gap-[10px] h-8 select-none items-center transition-opacity hover:opacity-85"
+            onClick={() => navigate("/")}
+          >
+            <img
+              src="/TAI-logo.png"
+              alt="TAI"
+              draggable={false}
+              className="h-8 w-auto"
+            />
+            <span className="text-sm text-white/70">
+              {t("home.footer.brandSuffix")}
+            </span>
+          </button>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            <LanguageSwitcher tone="dark" style="simple" compact />
             {user ? (
-              (() => {
-                const status = (() => {
-                  switch (connection) {
-                    case "server":
-                      return { label: t("common.status.online"), color: "#16a34a" };
-                    case "refresh":
-                      return { label: t("common.status.refreshed"), color: "#f59e0b" };
-                    case "local":
-                      return { label: t("common.status.online"), color: "#16a34a" };
-                    case "mock":
-                      return { label: t("common.status.mock"), color: "#8b5cf6" };
-                    default:
-                      return null;
-                  }
-                })();
-
-                return (
-                  <div className='flex items-center gap-3 text-sm text-white'>
-                    <span>
-                      {t("home.header.greeting", {
-                        name:
-                          user.name ||
-                          user.phone?.slice(-4) ||
-                          user.email ||
-                          user.id?.slice(-4) ||
-                          t("common.user"),
-                      })}
-                    </span>
+              <div className="flex items-center gap-2 text-sm sm:gap-3">
+                <span className="hidden text-white/80 sm:inline">
+                  {t("home.header.greeting", {
+                    name:
+                      user.name ||
+                      user.phone?.slice(-4) ||
+                      user.email ||
+                      user.id?.slice(-4) ||
+                      t("common.user"),
+                  })}
+                </span>
+                {connectionStatus && (
+                  <span
+                    className="hidden items-center gap-1.5 rounded-full border border-white/20 px-2 py-1 text-xs text-white/90 md:inline-flex"
+                    title={connectionStatus.label}
+                  >
                     <span
-                      className='inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-white/30 text-white bg-green-500/20 backdrop-blur-sm'
-                      title={`${status?.label || t("common.status.unknown")}`}
-                    >
-                      <span
-                        className='w-2 h-2 rounded-full'
-                        style={{ background: status?.color }}
-                      />
-                      {status?.label}
-                    </span>
-                    <Button
-                      variant='ghost'
-                      className='text-white hover:text-white/80 hover:bg-white/10 rounded-full h-8 px-3 text-sm border border-white/20'
-                      onClick={async () => {
-                        try {
-                          await logout();
-                          navigate("/auth/login", { replace: true });
-                        } catch (error) {
-                          console.error("退出登录失�?", error);
-                        }
-                      }}
-                    >
-                      {t("home.header.actions.logout")}
-                    </Button>
-                  </div>
-                );
-              })()
+                      className={cn(
+                        "h-1.5 w-1.5 rounded-full",
+                        connectionStatus.dotClass,
+                      )}
+                    />
+                    {connectionStatus.label}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  className={cn(
+                    BTN_OUTLINE_GOLD_CLASS,
+                    "hidden sm:inline-flex",
+                  )}
+                  onClick={openMembershipModal}
+                >
+                  {t("home.header.actions.membership")}
+                </button>
+                <button
+                  type="button"
+                  className="px-2 text-sm text-white/70 transition-colors hover:text-white"
+                  onClick={async () => {
+                    try {
+                      await logout();
+                      navigate("/auth/login", { replace: true });
+                    } catch (error) {
+                      console.error("退出登录失败", error);
+                    }
+                  }}
+                >
+                  {t("home.header.actions.logout")}
+                </button>
+              </div>
             ) : (
-              <>
-                <Button
-                  variant='ghost'
-                  className='text-white hover:text-white/80 hover:bg-white/10 rounded-full h-9 px-4 text-sm font-medium'
-                  onClick={() => navigate("/auth/login")}
-                >
-                  {t("home.header.actions.login")}
-                </Button>
-                <Button
-                  className='bg-white/20 hover:bg-white/30 text-white border border-white/20 rounded-full h-9 px-4 text-sm font-medium'
-                  onClick={() => navigate("/auth/register")}
-                >
-                  {t("home.header.actions.register")}
-                </Button>
-              </>
+              <div className="flex items-center bg-[#14181F] rounded-[20px]">
+                  <button
+                    type="button"
+                    className="px-2 text-[12px] text-white/80 transition-colors px-[16px]"
+                    onClick={() => navigate("/auth/register")}
+                  >
+                    {t("home.header.actions.register")}
+                  </button>
+                  <button
+                    type="button"
+                    className={BTN_LOGIN_CLASS}
+                    onClick={() => navigate("/auth/login")}
+                  >
+                    {t("home.header.actions.login")}
+                  </button>
+                </div>
             )}
           </div>
         </div>
       </header>
 
-      {/* 页面指示�?- 暂时隐藏 */}
-      <div className='hidden fixed right-6 top-1/2 -translate-y-1/2 z-50 flex flex-col gap-3'>
-        {[0].map((i) => (
-          <button
-            key={i}
-            onClick={() => goToPage(i)}
-            className={`w-3 h-3 rounded-full transition-all duration-300 ${
-              currentPage === i
-                ? "bg-gray-700 scale-125"
-                : "bg-gray-300 hover:bg-gray-400"
-            }`}
+      <section className="relative z-10 flex min-h-screen w-full flex-col">
+        <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 text-center mt-[100px]">
+          <img
+            src={titleImage}
+            alt={t("home.hero.logoAlt")}
+            draggable={false}
+            className="h-auto max-w-[600px] select-none [filter:drop-shadow(0_1px_2px_rgba(0,0,0,0.4))_drop-shadow(0_0_6px_rgba(100,190,255,0.25))_drop-shadow(0_0_14px_rgba(60,150,255,0.15))]"
           />
-        ))}
-      </div>
 
-      {/* 三页内容容器 */}
-      <div
-        className='transition-transform duration-500 ease-out'
-        style={{ transform: `translateY(-${currentPage * 100}vh)` }}
+          <p className="mb-12 text-[12px] text-white/45">
+            {t("home.hero.subtitle")}
+          </p>
+
+          <button
+            type="button"
+            onClick={() => navigate("/app")}
+            className={CTA_BTN_CLASS}
+          >
+            <span>{t("home.hero.startNow")}</span>
+          </button>
+        </div>
+
+        <div className="relative z-10 mx-auto w-full max-w-[1200px] px-4 pb-10 md:pb-12">
+          <div className="flex h-[278px] gap-3 md:gap-4">
+            {featureCards.map((card, index) => {
+              const isActive = activeCard === index;
+              return (
+                <button
+                  key={card.title}
+                  type="button"
+                  onClick={() => setActiveCard(index)}
+                  className={cn(
+                    "group relative overflow-hidden rounded-2xl border border-white/[0.08] text-left transition-[flex,opacity] duration-500 ease-out",
+                    isActive
+                      ? "flex-[2.2_1_0%] opacity-100"
+                      : "flex-[1_1_0%] opacity-[0.72]",
+                  )}
+                >
+                  <img
+                    src={card.image}
+                    alt=""
+                    aria-hidden
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-b from-[#020818]/15 via-[#020818]/55 to-[#020818]/88" />
+                  <div className="relative z-10 flex h-full flex-col justify-end p-4 md:p-5">
+                    <span className="mb-1 text-[10px] font-medium tracking-[0.2em] text-sky-400 md:text-xs">
+                      {card.category}
+                    </span>
+                    <h3 className="text-lg font-semibold text-white md:text-2xl">
+                      {card.title}
+                    </h3>
+                    {isActive && card.desc && (
+                      <p className="mt-1.5 line-clamp-2 text-xs text-white/65 md:text-sm">
+                        {card.desc}
+                      </p>
+                    )}
+                    <div className="mt-3">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/25 bg-white/[0.08] backdrop-blur-sm transition-colors duration-200 group-hover:border-sky-300/50 group-hover:bg-sky-400/20">
+                        <ChevronRight className="h-4 w-4 text-white/80" />
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-5 flex items-center justify-center gap-2">
+            {featureCards.map((card, index) => (
+              <button
+                key={`dot-${card.title}`}
+                type="button"
+                aria-label={card.title}
+                onClick={() => setActiveCard(index)}
+                className={cn(
+                  "h-1.5 rounded-full transition-all duration-300",
+                  activeCard === index
+                    ? "w-7 bg-gradient-to-r from-sky-400 to-blue-600 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
+                    : "w-2 bg-white/25",
+                )}
+              />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="toolbox"
+        className="relative z-10 w-full bg-transparent mt-[100px]"
       >
-        {/* 第一页 - 主标题 */}
-        <section className='h-screen w-full flex flex-col items-center px-4 relative overflow-hidden'>
-          {/* 视频背景 */}
-          <WelcomeShaderBackground className='z-[1]' />
-          <div className='absolute inset-0 z-[2] bg-black/35' />
-
-          <div className='flex-1 flex flex-col items-center justify-center text-center relative z-10 w-full pt-8'>
-            {/* 顶部占位，将整个标题+文字+光标区域整体下移 */}
-            <div className='mt-10' />
-            {/* 主标题 - 中英文都显示图片 */}
-            {isZh ? (
+        <div className="relative z-10 mx-auto w-full max-w-[1200px] px-4">
+          <div className="mb-12 flex flex-col items-center text-center md:mb-16">
+            <div className="flex items-center justify-center gap-3 sm:gap-4">
               <img
-                src="/home.png"
-                alt='天宫 · 神匠'
-                className='mb-5 h-auto max-w-[clamp(18rem,55vw,40rem)] select-none hero-title-glow'
+                src={leftIconImage}
+                alt=""
+                aria-hidden
+                className="h-auto w-[20px] shrink-0"
               />
-            ) : (
+              <h2 className="text-[32px] text-white">
+                {t("home.toolbox.title")}
+              </h2>
               <img
-                src="/TAI-logo-home-en.png"
-                alt={t("home.hero.logoAlt")}
-                className='mb-5 h-48 max-w-[clamp(26rem,72vw,56rem)] -translate-x-4 select-none hero-title-glow'
+                src={rightIconImage}
+                alt=""
+                aria-hidden
+                className="h-auto w-[20px] shrink-0"
               />
-            )}
-            {/* 副标题 + 打字机光标 */}
-            <div className='flex items-center justify-center gap-4 md:gap-6 mb-16'>
-              <span className='typing-cursor-line' />
-              <p className='text-lg md:text-xl text-slate-200 drop-shadow-md whitespace-nowrap'>
-                {t("home.hero.subtitle")}
-              </p>
-              <span className='typing-cursor-line' />
             </div>
-            {/* 立即体验按钮 - 科技感图片按钮 */}
-            <button
-              onClick={() => navigate("/app")}
-              className='mt-6 relative group cursor-pointer select-none bg-transparent border-0 p-0 outline-none focus:outline-none transition-transform duration-500 hover:scale-105'
-              style={{ background: 'none' }}
-            >
-              {/* 背景图片 */}
-              <img
-                src="/rectangle.png"
-                alt=''
-                className='h-auto max-w-[10rem] md:max-w-[14rem] block'
-                draggable='false'
+
+            <p className="mt-4 max-w-xl text-[14px] text-white/80">
+              {t("home.toolbox.subtitle")}
+            </p>
+          </div>
+
+          <div className="relative left-1/2 w-screen -translate-x-1/2 overflow-hidden">
+            {(() => {
+              const total = toolboxItems.length;
+              const arrowBtnClass =
+                "pointer-events-auto z-40 flex h-10 w-10 shrink-0 items-center justify-center text-white/75 transition-colors hover:text-white";
+
+              const renderCardInner = (
+                item: (typeof toolboxItems)[number],
+                isActive: boolean,
+              ) => {
+                const iconSrc = TOOLBOX_ICON_MAP[item.icon];
+                return (
+                  <div
+                    className={cn(
+                      TOOLBOX_CENTER_CLASS,
+                      "flex flex-col overflow-hidden rounded-2xl border bg-[#0a1020]/90 shadow-[0_0_30px_rgba(33,75,157,0.12)] backdrop-blur-sm",
+                      isActive
+                        ? "border-sky-500/40 shadow-[0_0_40px_rgba(33,75,157,0.25)]"
+                        : "border-blue-900/35",
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "relative shrink-0 overflow-hidden",
+                        TOOLBOX_CENTER_IMG_CLASS,
+                      )}
+                    >
+                      <img
+                        src={item.image}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#0a1020]/80 via-transparent to-transparent" />
+                    </div>
+                    <div className="flex min-h-0 flex-1 items-center gap-4 px-5 text-left">
+                      <img
+                        src={iconSrc}
+                        alt=""
+                        className="h-[86px] w-[86px] object-contain"
+                      />
+                      <div className="flex min-w-0 flex-col justify-center">
+                        <h3 className="text-lg font-semibold text-white">
+                          {item.title}
+                        </h3>
+                        <p className="mt-1 text-sm text-[rgba(255,255,255,0.6)]">
+                          {item.titleEn}
+                        </p>
+                        <p className="mt-2 text-sm leading-relaxed text-white/45">
+                          {item.desc}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              };
+
+              const focusIndex = toolboxItems.reduce(
+                (closest, _, index) => {
+                  const progress = Math.abs(
+                    getToolboxSlideProgress(index, toolboxSlidePos, total),
+                  );
+                  return progress < closest.progress
+                    ? { index, progress }
+                    : closest;
+                },
+                { index: 0, progress: Number.POSITIVE_INFINITY },
+              ).index;
+
+              return (
+                <div
+                  className="relative flex items-center justify-center"
+                  style={{ minHeight: TOOLBOX_CENTER_H }}
+                >
+                  <div
+                    className="pointer-events-none absolute inset-0"
+                    style={{ minHeight: TOOLBOX_CENTER_H }}
+                  >
+                    {toolboxItems.map((item, index) => {
+                      const progress = getToolboxSlideProgress(
+                        index,
+                        toolboxSlidePos,
+                        total,
+                      );
+                      const scale = getToolboxSlideScale(progress);
+                      const opacity = getToolboxSlideOpacity(progress);
+                      const isFocus = index === focusIndex;
+                      const isSide =
+                        !isFocus &&
+                        Math.abs(progress) <= 1.05 &&
+                        opacity > 0.05;
+
+                      return (
+                        <div
+                          key={item.title}
+                          className={cn(
+                            "absolute left-1/2 top-1/2 will-change-transform",
+                            !isFocus && !isSide && "pointer-events-none",
+                          )}
+                          style={{
+                            transform: `translate3d(calc(-50% + ${progress * 50}vw), -50%, 0) scale(${scale})`,
+                            transition: `transform ${TOOLBOX_SLIDE_TRANSITION_MS}ms cubic-bezier(0.22, 1, 0.36, 1), opacity ${TOOLBOX_SLIDE_TRANSITION_MS}ms ease-out`,
+                            transformOrigin: "center center",
+                            zIndex: 30 - Math.round(Math.abs(progress) * 10),
+                            opacity,
+                          }}
+                          onTransitionEnd={
+                            index === 0
+                              ? handleToolboxSlideTransitionEnd
+                              : undefined
+                          }
+                        >
+                          {isFocus ? (
+                            renderCardInner(item, true)
+                          ) : isSide ? (
+                            <button
+                              type="button"
+                              aria-label={item.title}
+                              className="pointer-events-auto block transition-opacity duration-300 hover:opacity-95"
+                              onClick={() => goToToolbox(index)}
+                            >
+                              {renderCardInner(item, false)}
+                            </button>
+                          ) : (
+                            renderCardInner(item, false)
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {total > 1 ? (
+                    <div className="pointer-events-none relative z-40 flex items-center justify-center gap-2 sm:gap-4">
+                      <button
+                        type="button"
+                        aria-label={t("home.toolbox.prev")}
+                        onClick={goToolboxPrev}
+                        className={arrowBtnClass}
+                      >
+                        <ChevronLeft className="h-6 w-6" />
+                      </button>
+                      <div
+                        className="shrink-0"
+                        style={{
+                          width: "min(810px, calc(100vw - 48px))",
+                          height: 1,
+                        }}
+                        aria-hidden
+                      />
+                      <button
+                        type="button"
+                        aria-label={t("home.toolbox.next")}
+                        onClick={goToolboxNext}
+                        className={arrowBtnClass}
+                      >
+                        <ChevronRight className="h-6 w-6" />
+                      </button>
+                    </div>
+                  ) : (
+                    toolboxItems[0] && (
+                      <div className="relative z-40 flex items-center justify-center">
+                        {renderCardInner(toolboxItems[0], true)}
+                      </div>
+                    )
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+
+          <div className="mt-8 flex items-center justify-center gap-2">
+            {toolboxItems.map((item, index) => (
+              <button
+                key={`toolbox-dot-${item.title}`}
+                type="button"
+                aria-label={item.title}
+                onClick={() => goToToolbox(index)}
+                className={cn(
+                  "h-1.5 rounded-full transition-all duration-300",
+                  activeToolbox === index
+                    ? "w-7 bg-gradient-to-r from-sky-400 to-blue-600 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
+                    : "w-2 bg-white/25",
+                )}
               />
-              {/* 悬浮蓝色科技光效层（无外部发光边框） */}
-              <div className='absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none tech-blue-overlay' />
-              {/* 窄光束扫过 */}
-              <div className='absolute inset-0 overflow-hidden pointer-events-none'>
-                <div className='tech-scan-line-narrow' />
-              </div>
-              {/* 文字 - 居中覆盖在图片上方 */}
-              <span className='absolute inset-0 flex items-center justify-center text-white text-base md:text-lg font-medium tracking-widest z-10 transition-transform duration-500 group-hover:scale-105'>
-                {t("home.hero.startNow")}
-              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="scenes" className="relative z-10 w-full mt-[100px]">
+        <div className="relative z-10 mx-auto w-full max-w-[1200px] px-4">
+          <div className="mb-10 flex flex-col items-center text-center md:mb-12">
+            <div className="flex items-center justify-center gap-3 sm:gap-4">
+              <img
+                src={leftIconImage}
+                alt=""
+                aria-hidden
+                className="h-auto w-[20px] shrink-0 object-contain"
+              />
+              <h2 className="text-[32px] text-white">
+                {t("home.scenes.title")}
+              </h2>
+              <img
+                src={rightIconImage}
+                alt=""
+                aria-hidden
+                className="h-auto w-[20px] shrink-0 object-contain"
+              />
+            </div>
+            <p className="mt-4 max-w-2xl text-[14px] text-white/80">
+              {t("home.scenes.subtitle")}
+            </p>
+          </div>
+
+          <div className="mb-8 flex items-center justify-between">
+            <div className="flex flex-wrap items-center gap-[38px]">
+              {SCENE_FILTER_KEYS.map((key) => {
+                const isActive = activeSceneFilter === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setActiveSceneFilter(key)}
+                    className={cn(
+                      SCENE_FILTER_BTN_CLASS,
+                      isActive
+                        ? "bg-[#2563eb] text-white shadow-[0_0_15px_2px_rgba(37,99,235,0.55)] hover:shadow-[0_0_18px_3px_rgba(37,99,235,0.75)]"
+                        : cn("text-white/65", SCENE_FILTER_BTN_HOVER_CLASS),
+                    )}
+                  >
+                    {t(`home.scenes.filters.${key}`)}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate("/app")}
+              className="flex shrink-0 items-center gap-1 self-end text-sm text-white/70 transition-colors hover:text-white lg:self-auto"
+            >
+              <span>{t("home.scenes.more")}</span>
+              <ChevronRight className="h-4 w-4" />
             </button>
           </div>
 
-          {/* 底部四个特性图标 */}
-          <div className='mb-28 mx-auto flex flex-col items-center gap-8 relative z-10 px-4'>
-            {/* 四个图标上方的长光标横线 */}
-            <span className='typing-cursor-line-long' />
-
-            <div className='flex items-start justify-center gap-16 md:gap-28'>
-              {/* 第一个图标 - 带选中光标 */}
-              <div className='relative flex items-center gap-5'>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            {filteredSceneItems.map((item, index) => (
+              <button
+                key={`${item.title}-${index}`}
+                type="button"
+                onClick={() => navigate("/app")}
+                className="group relative aspect-[4/3] overflow-hidden rounded-xl border border-white/[0.06] text-left transition-transform duration-300 hover:scale-[1.02]"
+              >
                 <img
-                  src="/image1.png"
-                  alt={t("home.features.items.0.label")}
-                  className='h-auto max-w-[3.5rem] md:max-w-[5rem] select-none feature-icon-glow'
+                  src={item.image}
+                  alt={item.title}
+                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                 />
-                <div className='flex flex-col'>
-                  <span className='text-white text-base md:text-lg font-medium leading-tight'>{t("home.features.items.0.label")}</span>
-                  <span className='text-slate-400 text-xs md:text-sm leading-tight mt-0.5'>{t("home.features.items.0.desc")}</span>
-                </div>
-                
+                <div className="absolute inset-0 bg-gradient-to-t from-[#020818]/90 via-[#020818]/20 to-transparent" />
+                <p className="absolute bottom-0 left-0 right-0 px-2 pb-3 pt-8 text-center text-xs leading-snug text-white sm:text-sm">
+                  {item.title}
+                </p>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="relative z-10 w-full pt-[106px] pb-[84px]">
+        <div className="relative z-10 mx-auto flex max-w-[1200px] flex-col items-center px-4 text-center">
+          <img
+            src={logoImage}
+            alt="TAI"
+            draggable={false}
+            className="h-auto w-auto max-w-[250px]"
+          />
+          <p className="text-[14px] text-white/80 mt-[10px]">
+            {t("home.ctaBanner.tagline")}
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate("/app")}
+            className={cn(CTA_BTN_CLASS, "mt-[22px]")}
+          >
+            <span>{t("home.hero.startNow")}</span>
+          </button>
+        </div>
+      </section>
+
+      <footer className="relative z-10 pt-12 bg-[#000]">
+        <div className="mx-auto max-w-[1440px] px-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <img
+                  src="/TAI-logo.png"
+                  alt="TAI"
+                  draggable={false}
+                  className="h-8 w-auto object-contain"
+                />
+              </div>
+              <p className="mt-4 text-[14px] leading-relaxed text-white/60">
+                {t("home.footer.slogan")}
+              </p>
+            </div>
+
+            <div className="flex">
+              <div className="mr-[140px]">
+                <h3 className="mb-4 text-sm font-medium text-white">
+                  {t("home.footer.products")}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => navigate("https://www.tgkw.com/dfc_new.html")}
+                  className="text-sm text-white/55 transition-colors hover:text-white/85"
+                >
+                  {t("home.footer.dfc")}
+                </button>
               </div>
 
-              <div className='flex items-center gap-5'>
-                <img
-                  src="/image2.png"
-                  alt={t("home.features.items.1.label")}
-                  className='h-auto max-w-[3.5rem] md:max-w-[5rem] select-none feature-icon-glow'
-                />
-                <div className='flex flex-col'>
-                  <span className='text-white text-base md:text-lg font-medium leading-tight'>{t("home.features.items.1.label")}</span>
-                  <span className='text-slate-400 text-xs md:text-sm leading-tight mt-0.5'>{t("home.features.items.1.desc")}</span>
-                </div>
-              </div>
-
-              <div className='flex items-center gap-5'>
-                <img
-                  src="/image3.png"
-                  alt={t("home.features.items.2.label")}
-                  className='h-auto max-w-[3.5rem] md:max-w-[5rem] select-none feature-icon-glow'
-                />
-                <div className='flex flex-col'>
-                  <span className='text-white text-base md:text-lg font-medium leading-tight'>{t("home.features.items.2.label")}</span>
-                  <span className='text-slate-400 text-xs md:text-sm leading-tight mt-0.5'>{t("home.features.items.2.desc")}</span>
-                </div>
-              </div>
-
-              <div className='flex items-center gap-5'>
-                <img
-                  src="/image4.png"
-                  alt={t("home.features.items.3.label")}
-                  className='h-auto max-w-[3.5rem] md:max-w-[5rem] select-none feature-icon-glow'
-                />
-                <div className='flex flex-col'>
-                  <span className='text-white text-base md:text-lg font-medium leading-tight'>{t("home.features.items.3.label")}</span>
-                  <span className='text-slate-400 text-xs md:text-sm leading-tight mt-0.5'>{t("home.features.items.3.desc")}</span>
+              <div>
+                <h3 className="mb-4 text-sm font-medium text-white">
+                  {t("home.footer.follow")}
+                </h3>
+                <div className="flex items-center gap-3">
+                  <FooterSocialIcon
+                    icon={wechatIconImage}
+                    label="WeChat"
+                    qrCode={wxErweimaImage}
+                  />
+                  <FooterSocialIcon
+                    icon={xhsIconImage}
+                    label="Xiaohongshu"
+                    qrCode={xhsErweimaImage}
+                  />
+                  <FooterSocialIcon
+                    icon={dyIconImage}
+                    label="TikTok"
+                    qrCode={dyErweimaImage}
+                  />
                 </div>
               </div>
             </div>
-        </div>
-          {/* 向下滚动提示 */}
-          <div className='absolute bottom-12 animate-bounce z-10'>
-            <svg
-              className='w-6 h-6 text-white drop-shadow-md'
-              fill='none'
-              stroke='currentColor'
-              viewBox='0 0 24 24'
-            >
-              <path
-                strokeLinecap='round'
-                strokeLinejoin='round'
-                strokeWidth={2}
-                d='M19 14l-7 7m0 0l-7-7m7 7V3'
-              />
-            </svg>
           </div>
 
-          {/* 备案�?*/}
-          <div className='absolute bottom-4 left-4 z-10'>
+          <div className="mt-12 border-t border-[rgba(255,255,255,0.1)] h-[70px] leading-[70px] text-center text-[12px] text-white/40">
             <a
-              href='https://beian.miit.gov.cn/'
-              target='_blank'
-              rel='noopener noreferrer'
-              className='text-xs text-white/60 hover:text-white/80 transition-colors'
+              href="https://beian.miit.gov.cn/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition-colors hover:text-white/60"
             >
               {t("home.icp")}
             </a>
+            <span className="mx-3">·</span>
+            <span>{t("home.footer.copyright")}</span>
           </div>
-        </section>
+        </div>
+      </footer>
 
-        {/* 第二�?- 功能介绍 */}
-        <section className='h-screen w-full flex flex-col items-center justify-center px-4 bg-gradient-to-b from-sky-50 to-white'>
-          <div className='max-w-4xl mx-auto text-center'>
-            <h2 className='text-4xl font-bold mb-12'>{t("home.features.title")}</h2>
-            <div className='grid grid-cols-1 md:grid-cols-3 gap-8'>
-              <div className='p-6 rounded-2xl bg-white shadow-lg'>
-                <div className='w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-4'>
-                  <svg
-                    className='w-6 h-6 text-blue-600'
-                    fill='none'
-                    stroke='currentColor'
-                    viewBox='0 0 24 24'
-                  >
-                    <path
-                      strokeLinecap='round'
-                      strokeLinejoin='round'
-                      strokeWidth={2}
-                      d='M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z'
-                    />
-                  </svg>
-                </div>
-                <h3 className='text-lg font-semibold mb-2'>{t("home.features.aiTitle")}</h3>
-                <p className='text-slate-600 text-sm'>
-                  {t("home.features.aiDesc")}
-                </p>
-              </div>
-              <div className='p-6 rounded-2xl bg-white shadow-lg'>
-                <div className='w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-4'>
-                  <svg
-                    className='w-6 h-6 text-green-600'
-                    fill='none'
-                    stroke='currentColor'
-                    viewBox='0 0 24 24'
-                  >
-                    <path
-                      strokeLinecap='round'
-                      strokeLinejoin='round'
-                      strokeWidth={2}
-                      d='M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z'
-                    />
-                  </svg>
-                </div>
-                <h3 className='text-lg font-semibold mb-2'>{t("home.features.drawingTitle")}</h3>
-                <p className='text-slate-600 text-sm'>
-                  {t("home.features.drawingDesc")}
-                </p>
-              </div>
-              <div className='p-6 rounded-2xl bg-white shadow-lg'>
-                <div className='w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mx-auto mb-4'>
-                  <svg
-                    className='w-6 h-6 text-purple-600'
-                    fill='none'
-                    stroke='currentColor'
-                    viewBox='0 0 24 24'
-                  >
-                    <path
-                      strokeLinecap='round'
-                      strokeLinejoin='round'
-                      strokeWidth={2}
-                      d='M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01'
-                    />
-                  </svg>
-                </div>
-                <h3 className='text-lg font-semibold mb-2'>{t("home.features.styleTitle")}</h3>
-                <p className='text-slate-600 text-sm'>
-                  {t("home.features.styleDesc")}
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* 第三�?- CTA �?Footer */}
-        <section className='min-h-screen w-full flex flex-col bg-gradient-to-b from-white to-sky-50'>
-          <div className='flex-1 flex flex-col items-center justify-center px-4'>
-            <div className='mist-card-wrapper w-full sm:w-[800px] mx-auto'>
-              <div className='mist-glow'></div>
-              <div className='mist-layer-1'></div>
-              <div className='mist-layer-2'></div>
-              <div className='w-full border rounded-xl py-16 px-12 hover:shadow transition text-center mist-card'>
-                <div className='mist-content'>
-                  <h3 className='text-2xl font-semibold mb-4'>
-                    {t("home.cta.ready")}
-                  </h3>
-                  <p className='text-slate-600 mb-8'>
-                    {t("home.cta.desc")}
-                  </p>
-                  <Button
-                    className='bg-gray-700 hover:bg-gray-500 text-white rounded-2xl h-12 px-8 text-lg'
-                    onClick={() => navigate("/app")}
-                  >
-                    {t("home.cta.start")}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-          <footer className='border-t py-6 text-center text-sm text-slate-500'>
-            © {new Date().getFullYear()} TAI · v1.0.0
-          </footer>
-        </section>
-      </div>
-
-      {/* <EventSettingsModalHost /> */}
-
-      {/* 微信咨询悬浮按钮 - 放在最外层确保始终可见 */}
+      <EventSettingsModalHost />
+      <MembershipModal
+        open={membershipModalOpen}
+        onClose={() => setMembershipModalOpen(false)}
+      />
       <WeChatFloatingButton />
     </div>
   );
 }
-
-

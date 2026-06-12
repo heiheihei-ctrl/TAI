@@ -686,10 +686,18 @@ export default function TemplateModal({
               <div style={{ marginBottom: 18 }}>
                 <div
                   style={{
+                    position: "sticky",
+                    top: 0,
+                    zIndex: 10,
                     display: "flex",
                     gap: 8,
                     flexWrap: "wrap",
                     marginBottom: 14,
+                    marginLeft: -24,
+                    marginRight: -24,
+                    padding: "8px 24px 10px",
+                    background: "#fff",
+                    borderBottom: "1px solid #e5e7eb",
                   }}
                 >
                   {builtinCategories.map((cat) => {

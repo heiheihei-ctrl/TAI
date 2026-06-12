@@ -32,16 +32,22 @@ const enUS = {
     },
     header: {
       greeting: "Hi, {{name}}",
+      nav: {
+        toolbox: "Toolbox",
+        scenes: "Scene Library",
+        cocreate: "Co-create",
+      },
       actions: {
         login: "Log in",
         register: "Sign up",
         logout: "Log out",
+        membership: "Membership",
         myCredits: "My Credits",
       },
     },
     hero: {
       logoAlt: "Explore the Realm of Creation",
-      subtitle: "Make every design smarter than the last",
+      subtitle: "TAI's next-generation intelligent creative platform — rooted in architecture and education, using AI to understand the industry and unleash creativity.",
       startNow: "Start Now",
     },
     features: {
@@ -57,6 +63,23 @@ const enUS = {
         { label: "Efficient Collaboration", desc: "Real-time team collaboration" },
         { label: "Precision & Professional", desc: "Details make quality" },
         { label: "Continuous Evolution", desc: "Every step forward" },
+      ],
+      cards: [
+        {
+          category: "CONSTRUCTION INDUSTRY",
+          title: "Architecture",
+          desc: "Full-discipline AI support in one click",
+        },
+        {
+          category: "EDUCATIONAL TRAINING",
+          title: "Education & Training",
+          desc: "Upgrade your classroom with immersive teaching",
+        },
+        {
+          category: "CREATIVE DESIGN",
+          title: "Creative Design",
+          desc: "Spark inspiration and craft one-of-a-kind creative work",
+        },
       ],
     },
     cta: {
@@ -80,6 +103,83 @@ const enUS = {
       text: "Try this intelligent canvas app!",
     },
     icp: "ICP License: 粤ICP备2023120022号",
+    toolbox: {
+      title: "Toolbox",
+      subtitle: "Powerful AI-driven features that make creation smarter and more efficient",
+      prev: "Previous",
+      next: "Next",
+      items: [
+        {
+          title: "Infinite Canvas",
+          titleEn: "Infinite Canvas",
+          desc: "Free zoom and pan with a borderless creative space and multi-level content organization.",
+          duration: "02:36",
+          icon: "wxhb",
+        },
+        {
+          title: "Chatbot Assistant",
+          titleEn: "Chatbot Assistant",
+          desc: "A multi-mode conversational creative assistant that turns design ideas into reality in one click.",
+          duration: "02:36",
+          icon: "chat",
+        },
+        {
+          title: "Smart Nodes",
+          titleEn: "Smart Nodes",
+          desc: "An AI node-based generation platform with custom node connections for flexible design and workflow orchestration.",
+          duration: "02:36",
+          icon: "znjd",
+        },
+        {
+          title: "Collaboration",
+          titleEn: "AI Assistant",
+          desc: "An AI-powered smart node system that connects context automatically for efficient information flow.",
+          duration: "02:36",
+          icon: "xthz",
+        },
+      ],
+    },
+    ctaBanner: {
+      tagline: "AI empowers industries · Unlimited creative possibilities",
+    },
+    footer: {
+      brandSuffix: "Tiangong · Shenjiang",
+      slogan: "Understand industries with AI, unlock creativity, and empower every creator",
+      products: "Products",
+      dfc: "DFC",
+      support: "Support",
+      helpCenter: "Help Center",
+      docs: "Documentation",
+      contact: "Contact Us",
+      follow: "Follow Us",
+      copyright: "© 2024 TAI All rights reserved.",
+    },
+    scenes: {
+      title: "Scene Library",
+      subtitle: "Covering architecture, education, and creative design to empower diverse creative needs",
+      more: "More Scenes",
+      filters: {
+        all: "All",
+        architecture: "Urban Planning",
+        education: "Architectural Design",
+        career: "Interior Space",
+        skills: "Landscape Design",
+        online: "Education & Training",
+        corporate: "Creative Design",
+      },
+      items: [
+        { title: "Urban Renewal", imageKey: "城市更新", category: "architecture" },
+        { title: "Urban Design", imageKey: "城市设计", category: "architecture" },
+        { title: "Concept Scheme", imageKey: "概念方案", category: "education" },
+        { title: "Building Renovation", imageKey: "建筑改造", category: "education" },
+        { title: "Rendering", imageKey: "效果图渲染", category: "education" },
+        { title: "Spatial Design", imageKey: "空间设计", category: "education" },
+        { title: "Seasonal Transformation", imageKey: "时节变换", category: "education" },
+        { title: "Chinese Home Design", imageKey: "中式家装", category: "career" },
+        { title: "Hotel Space", imageKey: "酒店空间", category: "career" },
+        { title: "Furniture Design", imageKey: "家具设计", category: "career" },
+      ],
+    },
   },
   auth: {
     modal: {

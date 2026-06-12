@@ -13,6 +13,15 @@ import type {
 } from '@/types/canvas';
 import type { ExtendedPath } from '@/types/paper';
 import type { DrawMode, LineStyle } from '@/stores/toolStore';
+import {
+  pressureToStrokeMultiplier,
+  type PointerInputKind,
+} from '@/utils/tabletPointer';
+
+export type FreeDrawPointOptions = {
+  pressure?: number;
+  pointerType?: PointerInputKind;
+};
 
 interface UseDrawingToolsProps {
   context: DrawingContext;
@@ -182,6 +191,35 @@ export const useDrawingTools = ({
     dragThreshold: 3
   });
 
+  const getFreeDrawMinDistance = useCallback(
+    (pointerType: PointerInputKind = 'mouse') => {
+      if (pointerType === 'pen') {
+        return Math.max(0.12, strokeWidth * 0.08);
+      }
+      return Math.max(1, strokeWidth * 0.5);
+    },
+    [strokeWidth],
+  );
+
+  const getFreeDrawDragThreshold = useCallback(
+    (pointerType: PointerInputKind = 'mouse') => {
+      return pointerType === 'pen' ? 0.45 : drawingState.dragThreshold;
+    },
+    [drawingState.dragThreshold],
+  );
+
+  const applyFreeDrawStrokeWidth = useCallback(
+    (path: paper.Path, pressure = 0.5) => {
+      const multiplier = pressureToStrokeMultiplier(pressure);
+      if (isEraser) {
+        path.strokeWidth = strokeWidth * 1.5 * multiplier;
+      } else {
+        path.strokeWidth = strokeWidth * multiplier;
+      }
+    },
+    [isEraser, strokeWidth],
+  );
+
   // ========== 自由绘制功能 ==========
   
   // 开始自由绘制
@@ -197,23 +235,25 @@ export const useDrawingTools = ({
   }, [eventHandlers.onDrawStart]);
 
   // 实际创建自由绘制路径（当确认用户在拖拽时）
-  const createFreeDrawPath = useCallback((startPoint: paper.Point) => {
+  const createFreeDrawPath = useCallback((
+    startPoint: paper.Point,
+    options?: FreeDrawPointOptions,
+  ) => {
     ensureDrawingLayer(); // 确保在正确的图层中绘制
     pathRef.current = new paper.Path();
 
     if (isEraser) {
       // 橡皮擦模式：红色虚线表示擦除轨迹
       pathRef.current.strokeColor = new paper.Color('#ff6b6b');
-      pathRef.current.strokeWidth = strokeWidth * 1.5; // 稍微粗一点
       pathRef.current.dashArray = [5, 5]; // 虚线效果
       pathRef.current.opacity = 0.7;
     } else {
       // 普通绘制模式
       pathRef.current.strokeColor = new paper.Color(currentColor);
-      pathRef.current.strokeWidth = strokeWidth;
       applyLineStyleToPath(pathRef.current as unknown as paper.Path, 'free');
     }
 
+    applyFreeDrawStrokeWidth(pathRef.current, options?.pressure ?? 0.5);
     pathRef.current.strokeCap = 'round';
     pathRef.current.strokeJoin = 'round';
     pathRef.current.add(startPoint);
@@ -226,45 +266,76 @@ export const useDrawingTools = ({
     isDrawingRef.current = true;
     
     eventHandlers.onPathCreate?.(pathRef.current);
-  }, [ensureDrawingLayer, currentColor, strokeWidth, isEraser, applyLineStyleToPath, eventHandlers.onPathCreate]);
+  }, [ensureDrawingLayer, currentColor, isEraser, applyLineStyleToPath, applyFreeDrawStrokeWidth, eventHandlers.onPathCreate]);
+
+  const appendFreeDrawPoint = useCallback((
+    point: paper.Point,
+    options?: FreeDrawPointOptions,
+  ) => {
+    if (!pathRef.current) return;
+
+    const pointerType = options?.pointerType ?? 'mouse';
+    const lastSegment = pathRef.current.lastSegment;
+    if (lastSegment) {
+      const distance = lastSegment.point.getDistance(point);
+      const minDistance = getFreeDrawMinDistance(pointerType);
+      if (distance < minDistance) {
+        return;
+      }
+    }
+
+    if (pointerType === 'pen') {
+      applyFreeDrawStrokeWidth(pathRef.current, options?.pressure ?? 0.5);
+    }
+
+    pathRef.current.add(point);
+
+    if (paper.project && (paper.project as any).emit) {
+      (paper.project as any).emit('change');
+    }
+  }, [applyFreeDrawStrokeWidth, getFreeDrawMinDistance]);
 
   // 继续自由绘制
-  const continueFreeDraw = useCallback((point: paper.Point) => {
+  const continueFreeDraw = useCallback((
+    point: paper.Point,
+    options?: FreeDrawPointOptions,
+  ) => {
+    const pointerType = options?.pointerType ?? 'mouse';
+    const dragThreshold = getFreeDrawDragThreshold(pointerType);
+
     // 如果还没有创建路径，检查是否超过拖拽阈值
     if (!pathRef.current && drawingState.initialClickPoint && !hasMovedRef.current) {
       const distance = drawingState.initialClickPoint.getDistance(point);
       
-      if (distance >= drawingState.dragThreshold) {
+      if (distance >= dragThreshold) {
         // 超过阈值，创建图元并开始绘制
         hasMovedRef.current = true; // 立即设置移动状态
         setDrawingState(prev => ({ ...prev, hasMoved: true }));
-        createFreeDrawPath(drawingState.initialClickPoint);
+        createFreeDrawPath(drawingState.initialClickPoint, options);
       } else {
         // 还没超过阈值，继续等待
         return;
       }
     }
 
-    if (pathRef.current) {
-      // 优化：只有当新点与最后一个点距离足够远时才添加
-      const lastSegment = pathRef.current.lastSegment;
-      if (lastSegment) {
-        const distance = lastSegment.point.getDistance(point);
-        // 距离阈值：避免添加过于接近的点
-        const minDistance = Math.max(1, strokeWidth * 0.5);
-        if (distance < minDistance) {
-          return; // 跳过过于接近的点
-        }
-      }
+    appendFreeDrawPoint(point, options);
+  }, [
+    appendFreeDrawPoint,
+    createFreeDrawPath,
+    drawingState.initialClickPoint,
+    getFreeDrawDragThreshold,
+  ]);
 
-      pathRef.current.add(point);
-
-      // 触发 Paper.js 的 change 事件以更新图层面板
-      if (paper.project && (paper.project as any).emit) {
-        (paper.project as any).emit('change');
-      }
-    }
-  }, [strokeWidth, createFreeDrawPath, drawingState.initialClickPoint, drawingState.hasMoved, drawingState.dragThreshold]);
+  const continueFreeDrawSamples = useCallback((
+    samples: Array<{ point: paper.Point } & FreeDrawPointOptions>,
+  ) => {
+    samples.forEach((sample) => {
+      continueFreeDraw(sample.point, {
+        pressure: sample.pressure,
+        pointerType: sample.pointerType,
+      });
+    });
+  }, [continueFreeDraw]);
 
   // ========== 矩形绘制功能 ==========
 
@@ -782,6 +853,7 @@ export const useDrawingTools = ({
     // 自由绘制
     startFreeDraw,
     continueFreeDraw,
+    continueFreeDrawSamples,
     createFreeDrawPath,
 
     // 矩形绘制
