@@ -24,6 +24,7 @@ interface ToolState {
   lineStyle: LineStyle;
   isEraser: boolean;
   hasFill: boolean;
+  abrBrushId: string | null;
 
   // 操作方法
   setDrawMode: (mode: DrawMode) => void;
@@ -31,6 +32,7 @@ interface ToolState {
   setFillColor: (color: string) => void;
   setStrokeWidth: (width: number) => void;
   setLineStyle: (style: LineStyle) => void;
+  setAbrBrushId: (brushId: string | null) => void;
   toggleEraser: () => void;
   toggleFill: () => void;
 
@@ -55,7 +57,7 @@ const ALL_DRAW_MODES: DrawMode[] = [
   '3d-model',
   'screenshot',
 ];
-const TOOL_SETTINGS_VERSION = 2;
+const TOOL_SETTINGS_VERSION = 3;
 
 const isDrawMode = (value: unknown): value is DrawMode =>
   typeof value === 'string' && ALL_DRAW_MODES.includes(value as DrawMode);
@@ -83,6 +85,7 @@ export const useToolStore = create<ToolState>()(
         lineStyle: 'solid',
         isEraser: false,
         hasFill: false,
+        abrBrushId: null,
 
         // 设置方法
         setDrawMode: (mode) => {
@@ -106,6 +109,10 @@ export const useToolStore = create<ToolState>()(
 
         setLineStyle: (style) => {
           set({ lineStyle: style });
+        },
+
+        setAbrBrushId: (brushId) => {
+          set({ abrBrushId: brushId });
         },
 
         toggleEraser: () => {
@@ -151,6 +158,8 @@ export const useToolStore = create<ToolState>()(
                 : 2,
             lineStyle: isLineStyle(state.lineStyle) ? state.lineStyle : 'solid',
             hasFill: typeof state.hasFill === 'boolean' ? state.hasFill : false,
+            abrBrushId:
+              typeof state.abrBrushId === 'string' ? state.abrBrushId : null,
           };
         },
         // 持久化工具设置，但不包括橡皮擦状态（通常是临时的）
@@ -161,6 +170,7 @@ export const useToolStore = create<ToolState>()(
           strokeWidth: state.strokeWidth,
           lineStyle: state.lineStyle,
           hasFill: state.hasFill,
+          abrBrushId: state.abrBrushId,
         }) as Partial<ToolState>,
       }
     )
@@ -176,6 +186,7 @@ export const useDrawingProps = () => useToolStore((state) => ({
   lineStyle: state.lineStyle,
   isEraser: state.isEraser,
   hasFill: state.hasFill,
+  abrBrushId: state.abrBrushId,
 }));
 export const useToolActions = () => useToolStore((state) => ({
   setDrawMode: state.setDrawMode,
@@ -183,6 +194,7 @@ export const useToolActions = () => useToolStore((state) => ({
   setFillColor: state.setFillColor,
   setStrokeWidth: state.setStrokeWidth,
   setLineStyle: state.setLineStyle,
+  setAbrBrushId: state.setAbrBrushId,
   toggleEraser: state.toggleEraser,
   toggleFill: state.toggleFill,
   nextDrawingTool: state.nextDrawingTool,

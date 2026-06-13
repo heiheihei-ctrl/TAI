@@ -13,6 +13,8 @@ import type {
 } from '@/types/canvas';
 import type { ExtendedPath } from '@/types/paper';
 import type { DrawMode, LineStyle } from '@/stores/toolStore';
+import type { AbrBrushPreset } from '@/types/abrBrush';
+import { BitmapBrushStroke } from '@/utils/bitmapBrushStroke';
 import {
   pressureToStrokeMultiplier,
   type PointerInputKind,
@@ -31,6 +33,9 @@ interface UseDrawingToolsProps {
   lineStyle: LineStyle;
   isEraser: boolean;
   hasFill: boolean;
+  abrBrushPreset?: AbrBrushPreset | null;
+  performEraseRastersBetweenPoints?: (from: paper.Point, to: paper.Point) => void;
+  performEraseRastersAtPoint?: (point: paper.Point) => void;
   eventHandlers?: DrawingToolEventHandlers;
 }
 
@@ -68,9 +73,18 @@ export const useDrawingTools = ({
   lineStyle,
   isEraser,
   hasFill,
+  abrBrushPreset = null,
+  performEraseRastersBetweenPoints,
+  performEraseRastersAtPoint,
   eventHandlers = {} 
 }: UseDrawingToolsProps) => {
   const { ensureDrawingLayer } = context;
+  const brushStrokeRef = useRef<BitmapBrushStroke | null>(null);
+
+  const useAbrBrush = useCallback(
+    () => !!abrBrushPreset && !isEraser,
+    [abrBrushPreset, isEraser],
+  );
 
   const applyLineStyleToPath = useCallback((path: paper.Path, mode: DrawMode) => {
     if (!path || isEraser) return;
@@ -239,6 +253,29 @@ export const useDrawingTools = ({
     startPoint: paper.Point,
     options?: FreeDrawPointOptions,
   ) => {
+    if (useAbrBrush() && abrBrushPreset) {
+      brushStrokeRef.current = new BitmapBrushStroke(
+        abrBrushPreset,
+        currentColor,
+        strokeWidth,
+      );
+      brushStrokeRef.current.stamp(
+        startPoint,
+        options?.pressure ?? 0.5,
+        ensureDrawingLayer(),
+      );
+      pathRef.current = { __abrStroke: true } as unknown as ExtendedPath;
+
+      setDrawingState(prev => ({
+        ...prev,
+        currentPath: null,
+        isDrawing: true,
+      }));
+      isDrawingRef.current = true;
+      eventHandlers.onDrawStart?.('free');
+      return;
+    }
+
     ensureDrawingLayer(); // 确保在正确的图层中绘制
     pathRef.current = new paper.Path();
 
@@ -258,6 +295,10 @@ export const useDrawingTools = ({
     pathRef.current.strokeJoin = 'round';
     pathRef.current.add(startPoint);
 
+    if (isEraser) {
+      performEraseRastersAtPoint?.(startPoint);
+    }
+
     setDrawingState(prev => ({
       ...prev,
       currentPath: pathRef.current,
@@ -266,12 +307,24 @@ export const useDrawingTools = ({
     isDrawingRef.current = true;
     
     eventHandlers.onPathCreate?.(pathRef.current);
-  }, [ensureDrawingLayer, currentColor, isEraser, applyLineStyleToPath, applyFreeDrawStrokeWidth, eventHandlers.onPathCreate]);
+  }, [ensureDrawingLayer, currentColor, isEraser, applyLineStyleToPath, applyFreeDrawStrokeWidth, eventHandlers.onPathCreate, useAbrBrush, abrBrushPreset, strokeWidth, eventHandlers.onDrawStart, performEraseRastersAtPoint]);
 
   const appendFreeDrawPoint = useCallback((
     point: paper.Point,
     options?: FreeDrawPointOptions,
   ) => {
+    if (brushStrokeRef.current) {
+      brushStrokeRef.current.stamp(
+        point,
+        options?.pressure ?? 0.5,
+        ensureDrawingLayer(),
+      );
+      if (paper.project && (paper.project as any).emit) {
+        (paper.project as any).emit('change');
+      }
+      return;
+    }
+
     if (!pathRef.current) return;
 
     const pointerType = options?.pointerType ?? 'mouse';
@@ -288,12 +341,17 @@ export const useDrawingTools = ({
       applyFreeDrawStrokeWidth(pathRef.current, options?.pressure ?? 0.5);
     }
 
+    const lastPoint = lastSegment?.point;
     pathRef.current.add(point);
+
+    if (isEraser && lastPoint) {
+      performEraseRastersBetweenPoints?.(lastPoint, point);
+    }
 
     if (paper.project && (paper.project as any).emit) {
       (paper.project as any).emit('change');
     }
-  }, [applyFreeDrawStrokeWidth, getFreeDrawMinDistance]);
+  }, [applyFreeDrawStrokeWidth, getFreeDrawMinDistance, ensureDrawingLayer, isEraser, performEraseRastersBetweenPoints]);
 
   // 继续自由绘制
   const continueFreeDraw = useCallback((
@@ -761,64 +819,53 @@ export const useDrawingTools = ({
       return;
     }
 
-    if (pathRef.current) {
-      // 如果是橡皮擦模式，执行擦除操作然后删除橡皮擦路径
-      if (isEraser && performErase) {
-        performErase(pathRef.current as any);
-        pathRef.current.remove(); // 删除橡皮擦路径本身
-      } else if (drawMode === 'image' && createImagePlaceholder && setDrawMode) {
-        // 图片模式：创建占位框
-        const startPoint = pathRef.current?.startPoint;
-        if (startPoint) {
-          const endPoint = new paper.Point(
-            pathRef.current.bounds.x + pathRef.current.bounds.width,
-            pathRef.current.bounds.y + pathRef.current.bounds.height
-          );
-
-          // 删除临时绘制的矩形
-          pathRef.current.remove();
-
-          // 创建图片占位框
-          createImagePlaceholder(startPoint, endPoint);
-
-          // 自动切换到选择模式
-          setDrawMode('select');
-        }
-      } else if (drawMode === '3d-model' && create3DModelPlaceholder && setDrawMode) {
-        // 3D模型模式：创建占位框
-        const startPoint = pathRef.current?.startPoint;
-        if (startPoint) {
-          const endPoint = new paper.Point(
-            pathRef.current.bounds.x + pathRef.current.bounds.width,
-            pathRef.current.bounds.y + pathRef.current.bounds.height
-          );
-
-          // 删除临时绘制的矩形
-          pathRef.current.remove();
-
-          // 创建3D模型占位框
-          create3DModelPlaceholder(startPoint, endPoint);
-
-          // 自动切换到选择模式
-          setDrawMode('select');
-        }
-      }
-
-      // 清理路径引用和临时数据
-      if (pathRef.current) {
-        let completedPath = pathRef.current as paper.Path;
-        delete pathRef.current.startPoint;
-        if (!isEraser && drawMode !== 'image' && drawMode !== '3d-model') {
-          completedPath = convertToSketchPath(completedPath, drawMode);
-        }
+    if (pathRef.current || brushStrokeRef.current) {
+      if (brushStrokeRef.current && drawMode === 'free' && !isEraser) {
+        const layer = ensureDrawingLayer();
+        const completedRaster = brushStrokeRef.current.finalize(layer);
+        brushStrokeRef.current = null;
         pathRef.current = null;
-        
-        if (!isEraser && drawMode !== 'image' && drawMode !== '3d-model') {
-          eventHandlers.onPathComplete?.(completedPath as any);
+        eventHandlers.onPathComplete?.(completedRaster as any);
+      } else if (pathRef.current && !(pathRef.current as { __abrStroke?: boolean }).__abrStroke) {
+        if (isEraser && performErase) {
+          performErase(pathRef.current as any);
+          pathRef.current.remove();
+        } else if (drawMode === 'image' && createImagePlaceholder && setDrawMode) {
+          const startPoint = pathRef.current?.startPoint;
+          if (startPoint) {
+            const endPoint = new paper.Point(
+              pathRef.current.bounds.x + pathRef.current.bounds.width,
+              pathRef.current.bounds.y + pathRef.current.bounds.height
+            );
+            pathRef.current.remove();
+            createImagePlaceholder(startPoint, endPoint);
+            setDrawMode('select');
+          }
+        } else if (drawMode === '3d-model' && create3DModelPlaceholder && setDrawMode) {
+          const startPoint = pathRef.current?.startPoint;
+          if (startPoint) {
+            const endPoint = new paper.Point(
+              pathRef.current.bounds.x + pathRef.current.bounds.width,
+              pathRef.current.bounds.y + pathRef.current.bounds.height
+            );
+            pathRef.current.remove();
+            create3DModelPlaceholder(startPoint, endPoint);
+            setDrawMode('select');
+          }
+        } else if (pathRef.current) {
+          let completedPath = pathRef.current as paper.Path;
+          delete pathRef.current.startPoint;
+          if (!isEraser && drawMode !== 'image' && drawMode !== '3d-model') {
+            completedPath = convertToSketchPath(completedPath, drawMode);
+          }
+          pathRef.current = null;
+
+          if (!isEraser && drawMode !== 'image' && drawMode !== '3d-model') {
+            eventHandlers.onPathComplete?.(completedPath as any);
+          }
         }
       }
 
-      // 触发 Paper.js 的 change 事件
       if (paper.project && (paper.project as any).emit) {
         (paper.project as any).emit('change');
       }
@@ -836,7 +883,7 @@ export const useDrawingTools = ({
     
     eventHandlers.onDrawEnd?.(drawMode);
     logger.debug(`结束${drawMode}绘制`);
-  }, [isEraser, drawingState.initialClickPoint, convertToSketchPath, eventHandlers.onPathComplete, eventHandlers.onDrawEnd]);
+  }, [isEraser, drawingState.initialClickPoint, convertToSketchPath, eventHandlers.onPathComplete, eventHandlers.onDrawEnd, ensureDrawingLayer]);
 
   return {
     // 状态

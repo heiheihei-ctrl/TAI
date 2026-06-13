@@ -7,6 +7,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { Loader2, Eye, EyeOff, Check } from "lucide-react";
 import { authApi } from "@/services/authApi";
 import ForgotPasswordModal from "@/components/auth/ForgotPasswordModal";
+import AgreementConsentModal from "@/components/auth/AgreementConsentModal";
 import { useTranslation } from "react-i18next";
 import WelcomeShaderBackground from "@/components/background/WelcomeShaderBackground";
 
@@ -19,6 +20,7 @@ export default function LoginPage() {
   const [code, setCode] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
+  const [isAgreementModalOpen, setIsAgreementModalOpen] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [sendCooldown, setSendCooldown] = useState(0);
   const [hasSentCode, setHasSentCode] = useState(false);
@@ -31,12 +33,7 @@ export default function LoginPage() {
     }
   }, [user, navigate]);
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!agreeTerms) {
-      alert(t("auth.agreements.mustAgree"));
-      return;
-    }
+  const performLogin = async () => {
     setIsSubmitting(true);
     try {
       if (tab === "password") {
@@ -48,6 +45,21 @@ export default function LoginPage() {
       console.error("登录失败:", err);
       setIsSubmitting(false);
     }
+  };
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!agreeTerms) {
+      setIsAgreementModalOpen(true);
+      return;
+    }
+    await performLogin();
+  };
+
+  const handleAgreementAgree = async () => {
+    setAgreeTerms(true);
+    setIsAgreementModalOpen(false);
+    await performLogin();
   };
 
   const sendSmsCode = async (targetPhone: string) => {
@@ -105,7 +117,7 @@ export default function LoginPage() {
   }, [sendCooldown]);
 
   const agreementSection = (
-    <div className='flex items-start gap-2'>
+    <div className='flex items-center gap-2'>
       <button
         type='button'
         onClick={() => setAgreeTerms(!agreeTerms)}
@@ -213,7 +225,7 @@ export default function LoginPage() {
                   <Button
                     type='submit'
                     className='w-full bg-blue-500 hover:bg-blue-600 text-white border-transparent rounded-xl h-12 font-medium backdrop-blur-sm transition-all duration-200 disabled:opacity-70 hover:shadow-lg'
-                    disabled={isSubmitting || !agreeTerms}
+                    disabled={isSubmitting}
                   >
                     {isSubmitting ? (
                       <>
@@ -282,7 +294,7 @@ export default function LoginPage() {
                   <Button
                     type='submit'
                     className='w-full bg-blue-500 hover:bg-blue-600 text-white border-transparent rounded-xl h-12 font-medium backdrop-blur-sm transition-all duration-200 disabled:opacity-70 hover:shadow-lg'
-                    disabled={isSubmitting || !agreeTerms}
+                    disabled={isSubmitting}
                   >
                     {isSubmitting ? (
                       <>
@@ -314,6 +326,12 @@ export default function LoginPage() {
           </div>
         </Card>
       </div>
+
+      <AgreementConsentModal
+        isOpen={isAgreementModalOpen}
+        onAgree={() => void handleAgreementAgree()}
+        onDisagree={() => setIsAgreementModalOpen(false)}
+      />
 
       <ForgotPasswordModal
         isOpen={isForgotPasswordOpen}

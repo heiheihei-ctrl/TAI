@@ -978,8 +978,13 @@ const FloatingHeader: React.FC = () => {
   const showLibraryButton = false; // temporarily hide library entry
   const handleLogout = async () => {
     if (loading) return;
+    const confirmed = window.confirm(
+      t("workspace.settings.advancedTab.logout.confirm")
+    );
+    if (!confirmed) return;
     try {
       console.log("[auth] logout start");
+      setIsSettingsOpen(false);
       await logout();
       console.log("[auth] logout success, redirecting");
       navigate("/auth/login", { replace: true });
@@ -2189,6 +2194,23 @@ const FloatingHeader: React.FC = () => {
               <span className='tabular-nums font-medium'>{topCreditsText}</span>
             </Button>
 
+            <Button
+              variant='ghost'
+              size='sm'
+              className='relative p-0 text-gray-600 transition-all duration-200 border rounded-full h-7 w-7 bg-liquid-glass-light backdrop-blur-minimal border-liquid-glass-light hover:bg-liquid-glass-hover'
+              title={t("workspace.header.referral")}
+              aria-label={t("workspace.header.referral")}
+              onClick={() => {
+                setActiveSettingsSection("referral");
+                setIsSettingsOpen(true);
+              }}
+            >
+              <Gift className='w-3.5 h-3.5' />
+              {showReferralNotification && (
+                <span className='absolute top-0.5 right-0.5 w-2 h-2 bg-red-500 rounded-full border border-white' />
+              )}
+            </Button>
+
             <WorkflowHistoryButton projectId={currentProject?.id ?? null} />
 
             <Button
@@ -2382,13 +2404,23 @@ const FloatingHeader: React.FC = () => {
 
                     {/* 闂傚倸鍊风粈浣革耿闁秴鍌ㄧ憸鏃堝箖濞差亜惟闁靛鍟浠嬪箖閵忋倖鍋傞幖杈剧秶缁辩敻姊绘担鍛婅础闁惧繐閰ｅ畷鏉课旈崨顓狅紱闂侀潧艌閺呮粓鎮¤箛鎾斀闁绘灏欑粻鎶芥煟閿濆鎲鹃柡宀嬬秮楠炴鈧稒顭囬ˇ銉╂煠閹稿骸濮嶉柡灞剧洴婵＄兘顢涘鍐ㄧ厒濠电姭鎷冮崟顐ょシ闂?*/}
                     <div className='px-6 pt-4 mt-auto'>
-                      <div className='flex items-center gap-2'>
-                        <div className='w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-medium text-white'>
+                      <div className='flex items-center gap-2 min-w-0'>
+                        <div className='w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-medium text-white shrink-0'>
                           {displayName.charAt(0).toUpperCase()}
                         </div>
-                        <span className='text-sm text-slate-600'>
+                        <span className='text-sm text-slate-600 truncate flex-1 min-w-0'>
                           {displayName}
                         </span>
+                        <button
+                          type='button'
+                          onClick={() => void handleLogout()}
+                          disabled={loading}
+                          title={t("workspace.settings.advancedTab.logout.button")}
+                          aria-label={t("workspace.settings.advancedTab.logout.button")}
+                          className='shrink-0 flex h-7 w-7 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50'
+                        >
+                          <LogOut className='w-3.5 h-3.5' />
+                        </button>
                       </div>
                     </div>
                   </aside>

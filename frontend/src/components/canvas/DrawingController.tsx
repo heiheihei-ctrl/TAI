@@ -43,6 +43,8 @@ import { useImageTool } from "./hooks/useImageTool";
 import { useModel3DTool } from "./hooks/useModel3DTool";
 import { useVideoTool } from "./hooks/useVideoTool";
 import { useDrawingTools } from "./hooks/useDrawingTools";
+import { getDryMediaBrushById } from "@/services/abrBrushService";
+import type { AbrBrushPreset } from "@/types/abrBrush";
 import { useSelectionTool } from "./hooks/useSelectionTool";
 import { usePathEditor } from "./hooks/usePathEditor";
 import { useEraserTool } from "./hooks/useEraserTool";
@@ -484,6 +486,7 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
     lineStyle,
     isEraser,
     hasFill,
+    abrBrushId,
     setDrawMode,
   } = useToolStore();
   const zoom = useCanvasStore((state) => state.zoom);
@@ -506,6 +509,7 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
   const [contextMenuState, setContextMenuState] =
     useState<CanvasContextMenuState | null>(null);
   const [isGlobalFlowRunning, setIsGlobalFlowRunning] = useState(false);
+  const [abrBrushPreset, setAbrBrushPreset] = useState<AbrBrushPreset | null>(null);
   const handleCanvasPasteRef = useRef<() => boolean>(() => false);
   const canvasToChatSyncTokenRef = useRef(0);
   const canvasBlobToFlowAssetRefCacheRef = useRef<Map<string, string>>(
@@ -522,6 +526,32 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
     zoomRef.current = zoom;
     panRef.current = { x: panX, y: panY };
   }, [zoom, panX, panY]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!abrBrushId || isEraser) {
+      setAbrBrushPreset(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    getDryMediaBrushById(abrBrushId)
+      .then((preset) => {
+        if (!cancelled) {
+          setAbrBrushPreset(preset);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAbrBrushPreset(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [abrBrushId, isEraser]);
 
   // 根据当前工具切换画布光标（图片/3D 工具展示对应图标）
   useEffect(() => {
@@ -3517,6 +3547,12 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
     handleModel3DUploaded,
   ]);
 
+  // ========== 初始化橡皮擦工具Hook ==========
+  const eraserTool = useEraserTool({
+    context: drawingContext,
+    strokeWidth,
+  });
+
   // ========== 初始化绘图工具Hook ==========
   const drawingTools = useDrawingTools({
     context: drawingContext,
@@ -3526,12 +3562,23 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
     lineStyle,
     isEraser,
     hasFill,
+    abrBrushPreset,
+    performEraseRastersBetweenPoints: eraserTool.performEraseRastersBetweenPoints,
+    performEraseRastersAtPoint: eraserTool.performEraseRastersAtPoint,
     eventHandlers: {
       onPathCreate: (path) => {
         logger.debug("路径创建:", path);
       },
-      onPathComplete: (path) => {
-        const completedPath = path as unknown as paper.Path;
+      onPathComplete: (item) => {
+        if (item instanceof paper.Raster) {
+          logger.debug("ABR 笔刷完成:", item);
+          if (paper && paper.project && paper.view) {
+            paperSaveService.triggerAutoSave();
+          }
+          return;
+        }
+
+        const completedPath = item as unknown as paper.Path;
         const mergeTarget = resolveDrawMergeTarget(completedPath);
         if (mergeTarget) {
           const clonedPath = completedPath.clone({ insert: false }) as paper.Path;
@@ -3624,12 +3671,6 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
   // ========== 初始化路径编辑器Hook ==========
   const pathEditor = usePathEditor({
     zoom,
-  });
-
-  // ========== 初始化橡皮擦工具Hook ==========
-  const eraserTool = useEraserTool({
-    context: drawingContext,
-    strokeWidth,
   });
 
   // ========== 初始化简单文本工具Hook ==========

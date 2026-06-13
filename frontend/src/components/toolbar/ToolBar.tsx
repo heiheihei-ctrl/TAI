@@ -5,6 +5,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/
 import { Eraser, Square, Trash2, Box, Image, Layers, Sparkles, Type, GitBranch, MousePointer2, LayoutTemplate, FolderOpen } from 'lucide-react';
 import TextStylePanel from './TextStylePanel';
 import ColorPicker from './ColorPicker';
+import AbrBrushPicker from './AbrBrushPicker';
 import { useToolStore, useUIStore } from '@/stores';
 import { useAIChatStore } from '@/stores/aiChatStore';
 import type { LineStyle } from '@/stores/toolStore';
@@ -355,11 +356,13 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
     lineStyle,
     isEraser,
     hasFill,
+    abrBrushId,
     setDrawMode,
     setCurrentColor,
     setFillColor,
     setStrokeWidth,
     setLineStyle,
+    setAbrBrushId,
     toggleEraser,
     toggleFill,
   } = useToolStore();
@@ -1007,6 +1010,22 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
 
               <Separator orientation="horizontal" className="w-6" />
 
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-xs font-medium text-gray-600">{lt('笔刷', 'Brush')}</span>
+                <AbrBrushPicker
+                  selectedBrushId={abrBrushId}
+                  disabled={isEraser}
+                  onSelectBrush={(brushId) => {
+                    setAbrBrushId(brushId);
+                    if (brushId) {
+                      setDrawMode('free');
+                    }
+                  }}
+                />
+              </div>
+
+              <Separator orientation="horizontal" className="w-6" />
+
               {/* 线条颜色选择器 */}
               <div className="flex flex-col items-center gap-1">
                 <span className="text-xs font-medium text-gray-600">{lt('线条', 'Stroke')}</span>
@@ -1024,7 +1043,7 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
                 <LineStylePicker
                   value={lineStyle}
                   onChange={setLineStyle}
-                  disabled={isEraser}
+                  disabled={isEraser || !!abrBrushId}
                   title={lt('线条样式', 'Line Style')}
                 />
               </div>

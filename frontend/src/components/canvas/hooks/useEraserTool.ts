@@ -7,6 +7,12 @@ import { useCallback } from 'react';
 import paper from 'paper';
 import { logger } from '@/utils/logger';
 import type { DrawingContext } from '@/types/canvas';
+import {
+  eraseRastersAlongPath,
+  eraseRastersAtPoint,
+  eraseRastersBetweenPoints,
+  getEraserRadius as computeEraserRadius,
+} from '@/utils/rasterEraser';
 
 interface UseEraserToolProps {
   context: DrawingContext;
@@ -23,22 +29,19 @@ export const useEraserTool = ({ context, strokeWidth }: UseEraserToolProps) => {
     const drawingLayer = ensureDrawingLayer();
     if (!drawingLayer) return;
 
-    // 获取橡皮擦路径的边界
     const eraserBounds = eraserPath.bounds;
-    const tolerance = strokeWidth + 5; // 橡皮擦容差
+    const tolerance = strokeWidth + 5;
 
-    // 遍历绘图图层中的所有路径
+    eraseRastersAlongPath(drawingLayer, eraserPath, strokeWidth);
+
     const itemsToRemove: paper.Item[] = [];
     drawingLayer.children.forEach((item) => {
       if (item instanceof paper.Path && item !== eraserPath) {
-        // 检查路径是否与橡皮擦区域相交
         if (item.bounds.intersects(eraserBounds)) {
-          // 更精确的相交检测
           const intersections = item.getIntersections(eraserPath);
           if (intersections.length > 0) {
             itemsToRemove.push(item);
           } else {
-            // 检查路径上的点是否在橡皮擦容差范围内
             for (const segment of item.segments) {
               const distance = eraserPath.getNearestLocation(segment.point)?.distance || Infinity;
               if (distance < tolerance) {
@@ -51,19 +54,45 @@ export const useEraserTool = ({ context, strokeWidth }: UseEraserToolProps) => {
       }
     });
 
-    // 删除相交的路径
     itemsToRemove.forEach(item => item.remove());
 
-    logger.debug(`🧹 橡皮擦删除了 ${itemsToRemove.length} 个路径`);
+    logger.debug(`🧹 橡皮擦处理了 ${itemsToRemove.length} 个矢量路径`);
     
     return itemsToRemove.length;
   }, [strokeWidth, ensureDrawingLayer]);
+
+  const performEraseRastersBetweenPoints = useCallback(
+    (from: paper.Point, to: paper.Point) => {
+      const drawingLayer = ensureDrawingLayer();
+      if (!drawingLayer) return;
+      eraseRastersBetweenPoints(
+        drawingLayer,
+        from,
+        to,
+        computeEraserRadius(strokeWidth),
+      );
+    },
+    [strokeWidth, ensureDrawingLayer],
+  );
+
+  const performEraseRastersAtPoint = useCallback(
+    (point: paper.Point) => {
+      const drawingLayer = ensureDrawingLayer();
+      if (!drawingLayer) return;
+      eraseRastersAtPoint(
+        drawingLayer,
+        point,
+        computeEraserRadius(strokeWidth),
+      );
+    },
+    [strokeWidth, ensureDrawingLayer],
+  );
 
   // ========== 橡皮擦辅助功能 ==========
 
   // 计算橡皮擦的有效范围
   const getEraserRadius = useCallback(() => {
-    return strokeWidth * 1.5; // 橡皮擦半径是笔刷宽度的1.5倍
+    return computeEraserRadius(strokeWidth);
   }, [strokeWidth]);
 
   // 检测指定点周围是否有可擦除的内容
@@ -199,6 +228,8 @@ export const useEraserTool = ({ context, strokeWidth }: UseEraserToolProps) => {
   return {
     // 核心橡皮擦功能
     performErase,
+    performEraseRastersBetweenPoints,
+    performEraseRastersAtPoint,
 
     // 辅助功能
     getEraserRadius,
