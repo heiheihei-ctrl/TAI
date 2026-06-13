@@ -233,8 +233,8 @@ export class BitmapBrushStroke {
         brushId: this.preset.id,
         brushName: this.preset.name,
       };
-      if (paper.project && (paper.project as { emit?: (event: string) => void }).emit) {
-        (paper.project as { emit: (event: string) => void }).emit('change');
+      if (paper.project && (paper.project as any).emit) {
+        (paper.project as any).emit('change');
       }
       const raster = this.previewRaster;
       this.previewRaster = null;
