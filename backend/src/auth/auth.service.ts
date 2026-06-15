@@ -4,11 +4,18 @@ import {
   BadRequestException,
   Inject,
   forwardRef,
+  Logger,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 import * as bcrypt from "bcryptjs";
-import { createHash, randomBytes } from "crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+  timingSafeEqual,
+} from "crypto";
 import { UsersService } from "../users/users.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { RegisterDto } from "./dto/register.dto";
@@ -114,8 +121,23 @@ type AuthenticatedUserProfile = {
   role: string;
 };
 
+type WechatOfficialCallbackEnvelope = {
+  plaintextXml: string;
+  encrypted: boolean;
+  requestEncrypt?: string;
+  toUserName?: string;
+  fromUserName?: string;
+};
+
+type WechatOfficialCallbackReply = {
+  body: string;
+  encrypted: boolean;
+  contentType: string;
+};
+
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private wechatOfficialAccessTokenCache:
     | { token: string; expiresAt: number }
     | null = null;
@@ -426,6 +448,9 @@ export class AuthService {
     const appId = (this.config.get<string>("WECHAT_OFFICIAL_APP_ID") || "").trim();
     const appSecret = (this.config.get<string>("WECHAT_OFFICIAL_APP_SECRET") || "").trim();
     const token = (this.config.get<string>("WECHAT_OFFICIAL_TOKEN") || "").trim();
+    const encodingAesKey = (
+      this.config.get<string>("WECHAT_OFFICIAL_ENCODING_AES_KEY") || ""
+    ).trim();
 
     if (requireCredentials) {
       const missing: string[] = [];
@@ -447,6 +472,8 @@ export class AuthService {
       appId,
       appSecret,
       token,
+      encodingAesKey,
+      secureModeEnabled: encodingAesKey.length === 43,
       qrExpireSeconds: Number.isFinite(qrExpireSeconds)
         ? Math.max(60, Math.min(2592000, Math.floor(qrExpireSeconds)))
         : 300,
@@ -458,12 +485,101 @@ export class AuthService {
 
   private computeWechatOfficialSignature(
     token: string,
-    timestamp?: string,
-    nonce?: string
+    ...parts: Array<string | undefined>
   ) {
     return createHash("sha1")
-      .update([token, timestamp || "", nonce || ""].sort().join(""))
+      .update([token, ...parts.map((part) => part || "")].sort().join(""))
       .digest("hex");
+  }
+
+  private secureHexEquals(left?: string, right?: string) {
+    if (!left || !right) return false;
+    const leftBuf = Buffer.from(left);
+    const rightBuf = Buffer.from(right);
+    if (leftBuf.length !== rightBuf.length) return false;
+    return timingSafeEqual(leftBuf, rightBuf);
+  }
+
+  private decodeWechatOfficialAesKey() {
+    const { encodingAesKey } = this.getWechatOfficialConfig(false);
+    if (!encodingAesKey || encodingAesKey.length !== 43) {
+      throw new BadRequestException(
+        "微信公众号安全模式配置不完整，缺少有效的 WECHAT_OFFICIAL_ENCODING_AES_KEY"
+      );
+    }
+
+    const key = Buffer.from(`${encodingAesKey}=`, "base64");
+    if (key.length !== 32) {
+      throw new BadRequestException("WECHAT_OFFICIAL_ENCODING_AES_KEY 格式不正确");
+    }
+    return key;
+  }
+
+  private addWechatOfficialPkcs7Padding(content: Buffer) {
+    const blockSize = 32;
+    const amountToPad = blockSize - (content.length % blockSize || blockSize);
+    const pad = Buffer.alloc(amountToPad, amountToPad);
+    return Buffer.concat([content, pad]);
+  }
+
+  private stripWechatOfficialPkcs7Padding(content: Buffer) {
+    if (!content.length) return content;
+    const pad = content[content.length - 1];
+    if (pad < 1 || pad > 32) {
+      throw new UnauthorizedException("微信公众号消息填充不合法");
+    }
+    return content.subarray(0, content.length - pad);
+  }
+
+  private encryptWechatOfficialPayload(plaintext: string) {
+    const { appId } = this.getWechatOfficialConfig();
+    const aesKey = this.decodeWechatOfficialAesKey();
+    const iv = aesKey.subarray(0, 16);
+    const randomPrefix = randomBytes(16);
+    const messageBuf = Buffer.from(plaintext, "utf8");
+    const messageLength = Buffer.alloc(4);
+    messageLength.writeUInt32BE(messageBuf.length, 0);
+    const appIdBuf = Buffer.from(appId, "utf8");
+    const payload = Buffer.concat([
+      randomPrefix,
+      messageLength,
+      messageBuf,
+      appIdBuf,
+    ]);
+    const padded = this.addWechatOfficialPkcs7Padding(payload);
+    const cipher = createCipheriv("aes-256-cbc", aesKey, iv);
+    cipher.setAutoPadding(false);
+    const encrypted = Buffer.concat([cipher.update(padded), cipher.final()]);
+    return encrypted.toString("base64");
+  }
+
+  private decryptWechatOfficialPayload(encryptedBase64: string) {
+    const { appId } = this.getWechatOfficialConfig();
+    const aesKey = this.decodeWechatOfficialAesKey();
+    const iv = aesKey.subarray(0, 16);
+    const encrypted = Buffer.from(encryptedBase64, "base64");
+    const decipher = createDecipheriv("aes-256-cbc", aesKey, iv);
+    decipher.setAutoPadding(false);
+    const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+    const unpadded = this.stripWechatOfficialPkcs7Padding(decrypted);
+    if (unpadded.length < 20) {
+      throw new UnauthorizedException("微信公众号消息体长度不合法");
+    }
+
+    const messageLength = unpadded.readUInt32BE(16);
+    const messageStart = 20;
+    const messageEnd = messageStart + messageLength;
+    if (messageEnd > unpadded.length) {
+      throw new UnauthorizedException("微信公众号消息体截断");
+    }
+
+    const message = unpadded.subarray(messageStart, messageEnd).toString("utf8");
+    const fromAppId = unpadded.subarray(messageEnd).toString("utf8");
+    if (fromAppId !== appId) {
+      throw new UnauthorizedException("微信公众号 AppID 校验失败");
+    }
+
+    return message;
   }
 
   verifyWechatOfficialRequest(signature?: string, timestamp?: string, nonce?: string) {
@@ -472,8 +588,26 @@ export class AuthService {
       return false;
     }
 
-    return (
-      this.computeWechatOfficialSignature(token, timestamp, nonce) === signature
+    return this.secureHexEquals(
+      this.computeWechatOfficialSignature(token, timestamp, nonce),
+      signature
+    );
+  }
+
+  private verifyWechatOfficialEncryptedRequest(
+    msgSignature?: string,
+    timestamp?: string,
+    nonce?: string,
+    encrypted?: string
+  ) {
+    const { token } = this.getWechatOfficialConfig(false);
+    if (!token || !msgSignature || !timestamp || !nonce || !encrypted) {
+      return false;
+    }
+
+    return this.secureHexEquals(
+      this.computeWechatOfficialSignature(token, timestamp, nonce, encrypted),
+      msgSignature
     );
   }
 
@@ -509,6 +643,154 @@ export class AuthService {
 <MsgType><![CDATA[text]]></MsgType>
 <Content><![CDATA[${content}]]></Content>
 </xml>`;
+  }
+
+  private buildWechatOfficialEncryptedResponse(
+    plaintextXml: string,
+    nonce?: string,
+    timestamp?: string
+  ) {
+    const { token } = this.getWechatOfficialConfig();
+    const encrypt = this.encryptWechatOfficialPayload(plaintextXml);
+    const safeNonce = nonce || randomBytes(8).toString("hex");
+    const safeTimestamp = timestamp || String(Math.floor(Date.now() / 1000));
+    const msgSignature = this.computeWechatOfficialSignature(
+      token,
+      safeTimestamp,
+      safeNonce,
+      encrypt
+    );
+
+    return `<xml>
+<Encrypt><![CDATA[${encrypt}]]></Encrypt>
+<MsgSignature><![CDATA[${msgSignature}]]></MsgSignature>
+<TimeStamp>${safeTimestamp}</TimeStamp>
+<Nonce><![CDATA[${safeNonce}]]></Nonce>
+</xml>`;
+  }
+
+  verifyWechatOfficialUrl(
+    params: {
+      signature?: string;
+      msgSignature?: string;
+      timestamp?: string;
+      nonce?: string;
+      echostr?: string;
+    }
+  ) {
+    const { secureModeEnabled } = this.getWechatOfficialConfig(false);
+    const signature = params.msgSignature || params.signature;
+    const echostr = params.echostr || "";
+
+    if (!echostr) {
+      throw new UnauthorizedException("缺少 echostr");
+    }
+
+    if (secureModeEnabled && params.msgSignature) {
+      const ok = this.verifyWechatOfficialEncryptedRequest(
+        params.msgSignature,
+        params.timestamp,
+        params.nonce,
+        echostr
+      );
+      if (!ok) {
+        throw new UnauthorizedException("微信公众号安全模式验签失败");
+      }
+      return this.decryptWechatOfficialPayload(echostr);
+    }
+
+    const ok = this.verifyWechatOfficialRequest(
+      signature,
+      params.timestamp,
+      params.nonce
+    );
+    if (!ok) {
+      throw new UnauthorizedException("微信公众号 URL 验签失败");
+    }
+
+    return echostr;
+  }
+
+  unwrapWechatOfficialCallback(
+    rawXml: string,
+    params: {
+      signature?: string;
+      msgSignature?: string;
+      timestamp?: string;
+      nonce?: string;
+    }
+  ): WechatOfficialCallbackEnvelope {
+    const parsed = this.parseWechatOfficialXml(rawXml);
+    const encrypted = parsed.Encrypt;
+
+    if (encrypted) {
+      const ok = this.verifyWechatOfficialEncryptedRequest(
+        params.msgSignature || params.signature,
+        params.timestamp,
+        params.nonce,
+        encrypted
+      );
+      if (!ok) {
+        throw new UnauthorizedException("微信公众号安全模式消息验签失败");
+      }
+      const plaintextXml = this.decryptWechatOfficialPayload(encrypted);
+      const inner = this.parseWechatOfficialXml(plaintextXml);
+      return {
+        plaintextXml,
+        encrypted: true,
+        requestEncrypt: encrypted,
+        toUserName: inner.ToUserName,
+        fromUserName: inner.FromUserName,
+      };
+    }
+
+    const ok = this.verifyWechatOfficialRequest(
+      params.signature,
+      params.timestamp,
+      params.nonce
+    );
+    if (!ok) {
+      throw new UnauthorizedException("微信公众号明文模式消息验签失败");
+    }
+
+    return {
+      plaintextXml: rawXml,
+      encrypted: false,
+      toUserName: parsed.ToUserName,
+      fromUserName: parsed.FromUserName,
+    };
+  }
+
+  finalizeWechatOfficialCallbackReply(
+    plaintextReplyXml: string | null,
+    envelope: WechatOfficialCallbackEnvelope,
+    params: { timestamp?: string; nonce?: string }
+  ): WechatOfficialCallbackReply {
+    if (!plaintextReplyXml) {
+      return {
+        body: "success",
+        encrypted: false,
+        contentType: "text/plain; charset=utf-8",
+      };
+    }
+
+    if (!envelope.encrypted) {
+      return {
+        body: plaintextReplyXml,
+        encrypted: false,
+        contentType: "application/xml; charset=utf-8",
+      };
+    }
+
+    return {
+      body: this.buildWechatOfficialEncryptedResponse(
+        plaintextReplyXml,
+        params.nonce,
+        params.timestamp
+      ),
+      encrypted: true,
+      contentType: "application/xml; charset=utf-8",
+    };
   }
 
   private async getWechatOfficialAccessToken(forceRefresh = false) {
@@ -567,18 +849,35 @@ export class AuthService {
 
   private async fetchWechatOfficialUserInfo(openId: string) {
     try {
-      const accessToken = await this.getWechatOfficialAccessToken();
-      const url = new URL("https://api.weixin.qq.com/cgi-bin/user/info");
-      url.searchParams.set("access_token", accessToken);
-      url.searchParams.set("openid", openId);
-      url.searchParams.set("lang", "zh_CN");
+      const fetchOnce = async (forceRefresh = false) => {
+        const accessToken = await this.getWechatOfficialAccessToken(forceRefresh);
+        const url = new URL("https://api.weixin.qq.com/cgi-bin/user/info");
+        url.searchParams.set("access_token", accessToken);
+        url.searchParams.set("openid", openId);
+        url.searchParams.set("lang", "zh_CN");
 
-      const res = await fetch(url.toString());
-      const data = (await res.json().catch(() => null)) as
-        | WechatOfficialUserInfoResponse
-        | null;
+        const res = await fetch(url.toString());
+        const data = (await res.json().catch(() => null)) as
+          | WechatOfficialUserInfoResponse
+          | null;
+
+        return { res, data };
+      };
+
+      let { res, data } = await fetchOnce(false);
+      if (
+        (!res.ok || !data || data.errcode || !data.openid) &&
+        this.shouldRefreshWechatOfficialAccessToken(data)
+      ) {
+        ({ res, data } = await fetchOnce(true));
+      }
 
       if (!res.ok || !data || data.errcode || !data.openid) {
+        this.logger.warn(
+          `微信公众号用户信息获取失败: openId=${openId}, status=${res.status}, errcode=${String(
+            data?.errcode ?? ""
+          )}, errmsg=${String(data?.errmsg ?? "")}`
+        );
         return null;
       }
 
@@ -588,7 +887,12 @@ export class AuthService {
         nickname: this.normalizeName(data.nickname),
         avatarUrl: data.headimgurl || null,
       };
-    } catch {
+    } catch (error) {
+      this.logger.warn(
+        `微信公众号用户信息获取异常: openId=${openId}, error=${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
       return null;
     }
   }
@@ -671,7 +975,6 @@ export class AuthService {
       },
       select: {
         id: true,
-        sceneKey: true,
         status: true,
         qrCodeUrl: true,
         expiresAt: true,
@@ -816,7 +1119,15 @@ export class AuthService {
 
       if (existingWechatUser) {
         if (userByPhone && userByPhone.id !== existingWechatUser.id) {
-          throw new UnauthorizedException("该手机号已绑定其他账号，请使用手机号登录后再处理");
+          await tx.user.update({
+            where: { id: existingWechatUser.id },
+            data: {
+              wechatOfficialOpenId: null,
+              wechatUnionId: null,
+            },
+            select: { id: true },
+          });
+          return this.attachWechatIdentityToUser(tx, userByPhone.id, profile);
         }
 
         await tx.user.update({
@@ -860,6 +1171,16 @@ export class AuthService {
       return createdUser;
     });
 
+    try {
+      await this.creditsService.getOrCreateAccount(user.id);
+    } catch (error) {
+      this.logger.warn(
+        `[WechatOfficialBind] 创建积分账户失败: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+
     const tokens = await this.login(
       { id: user.id, email: user.email || "", role: user.role },
       meta
@@ -893,6 +1214,7 @@ export class AuthService {
         id: true,
         status: true,
         userId: true,
+        consumedAt: true,
         expiresAt: true,
         returnTo: true,
       },
@@ -906,6 +1228,9 @@ export class AuthService {
     }
     if (session.status !== "authorized" || !session.userId) {
       throw new BadRequestException("微信登录尚未完成授权");
+    }
+    if (session.consumedAt) {
+      throw new BadRequestException("微信登录会话已被使用，请刷新二维码后重试");
     }
 
     const user = await this.prisma.user.findUnique({
@@ -940,9 +1265,8 @@ export class AuthService {
       traceId: null,
       category: "wechat_official",
       action: "callback_received",
-      message: "Received raw plaintext wechat official callback XML",
+      message: "Received wechat official callback XML",
       payload: {
-        mode: "plaintext",
         rawXml,
       },
       receivedAt: new Date().toISOString(),
@@ -955,18 +1279,18 @@ export class AuthService {
     const toUserName = message.ToUserName;
 
     if (msgType !== "event" || !event || !fromUserName || !toUserName) {
-      return "success";
+      return null;
     }
 
     const normalizedEvent = event.toUpperCase();
     if (normalizedEvent !== "SCAN" && normalizedEvent !== "SUBSCRIBE") {
-      return "success";
+      return null;
     }
 
     const rawEventKey = message.EventKey || "";
     const sceneKey =
       normalizedEvent === "SUBSCRIBE"
-        ? rawEventKey.replace(/^qrscene_/, "")
+        ? rawEventKey.replace(/^qrscene_/i, "")
         : rawEventKey;
 
     if (!sceneKey) {

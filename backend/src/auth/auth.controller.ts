@@ -5,6 +5,8 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { SmsLoginDto } from './dto/sms-login.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { CreateWechatOfficialSessionDto } from './dto/create-wechat-official-session.dto';
+import { BindWechatOfficialPhoneDto } from './dto/bind-wechat-official-phone.dto';
 import { JwtAuthGuard } from './guards/jwt.guard';
 import { RefreshAuthGuard } from './guards/refresh.guard';
 import { SmsService } from './sms.service';
@@ -13,6 +15,24 @@ import { SmsService } from './sms.service';
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService, private readonly sms: SmsService) {}
+
+  private toAuthUser(user: {
+    id: string;
+    email?: string | null;
+    name?: string | null;
+    phone?: string;
+    avatarUrl?: string | null;
+    role?: string;
+  }) {
+    return {
+      id: user.id,
+      email: user.email ?? null,
+      name: user.name ?? null,
+      phone: user.phone,
+      avatarUrl: user.avatarUrl ?? null,
+      role: user.role,
+    };
+  }
 
   @Post('register')
   async register(@Body() dto: RegisterDto, @Req() req: any) {
@@ -33,7 +53,7 @@ export class AuthController {
     );
     this.auth.setAuthCookies(res, tokens, req);
     return {
-      user: { id: user.id, email: user.email, name: user.name, phone: user.phone, avatarUrl: user.avatarUrl, role: user.role },
+      user: this.toAuthUser(user),
       tokens,
     };
   }
@@ -102,9 +122,117 @@ export class AuthController {
     });
     this.auth.setAuthCookies(res, tokens, req);
     return {
-      user: { id: user.id, email: user.email, name: user.name, phone: user.phone, avatarUrl: user.avatarUrl, role: user.role },
+      user: this.toAuthUser(user),
       tokens,
     };
+  }
+
+  @Post('wechat-official/sessions')
+  @HttpCode(HttpStatus.OK)
+  async createWechatOfficialSession(@Body() dto: CreateWechatOfficialSessionDto) {
+    return this.auth.createWechatOfficialLoginSession(dto.returnTo);
+  }
+
+  @Get('wechat-official/sessions/:id')
+  async getWechatOfficialSession(@Param('id') id: string) {
+    return this.auth.getWechatOfficialLoginSessionStatus(id);
+  }
+
+  @Post('wechat-official/sessions/:id/bind-phone')
+  @HttpCode(HttpStatus.OK)
+  async bindWechatOfficialPhone(
+    @Param('id') id: string,
+    @Body() dto: BindWechatOfficialPhoneDto,
+    @Req() req: any,
+    @Res({ passthrough: true }) res: any,
+  ) {
+    const result = await this.auth.bindWechatOfficialSessionPhone(id, dto.phone, dto.code, dto.inviteCode, {
+      ip: req.ip,
+      ua: req.headers['user-agent'],
+    });
+    this.auth.setAuthCookies(res, result.tokens, req);
+    return {
+      user: this.toAuthUser(result.user),
+      tokens: result.tokens,
+      returnTo: result.returnTo,
+    };
+  }
+
+  @Post('wechat-official/sessions/:id/consume')
+  @HttpCode(HttpStatus.OK)
+  async consumeWechatOfficialSession(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Res({ passthrough: true }) res: any,
+  ) {
+    const result = await this.auth.consumeWechatOfficialLoginSession(id, {
+      ip: req.ip,
+      ua: req.headers['user-agent'],
+    });
+    this.auth.setAuthCookies(res, result.tokens, req);
+    return {
+      user: this.toAuthUser(result.user),
+      tokens: result.tokens,
+      returnTo: result.returnTo,
+    };
+  }
+
+  @Get('wechat-official/callback')
+  async verifyWechatOfficialCallback(
+    @Query('signature') signature: string | undefined,
+    @Query('msg_signature') msgSignature: string | undefined,
+    @Query('timestamp') timestamp: string | undefined,
+    @Query('nonce') nonce: string | undefined,
+    @Query('echostr') echostr: string | undefined,
+    @Res() res: any,
+  ) {
+    try {
+      const plainEcho = this.auth.verifyWechatOfficialUrl({
+        signature,
+        msgSignature,
+        timestamp,
+        nonce,
+        echostr,
+      });
+      res.header('Content-Type', 'text/plain; charset=utf-8');
+      return res.status(HttpStatus.OK).send(plainEcho);
+    } catch (error: any) {
+      return res.status(HttpStatus.FORBIDDEN).send(error?.message || 'invalid signature');
+    }
+  }
+
+  @Post('wechat-official/callback')
+  async handleWechatOfficialCallback(
+    @Query('signature') signature: string | undefined,
+    @Query('msg_signature') msgSignature: string | undefined,
+    @Query('timestamp') timestamp: string | undefined,
+    @Query('nonce') nonce: string | undefined,
+    @Body() body: any,
+    @Res() res: any,
+  ) {
+    try {
+      const rawXml =
+        typeof body === 'string'
+          ? body
+          : Buffer.isBuffer(body)
+          ? body.toString('utf8')
+          : '';
+      const envelope = this.auth.unwrapWechatOfficialCallback(rawXml, {
+        signature,
+        msgSignature,
+        timestamp,
+        nonce,
+      });
+      const plaintextReply = await this.auth.handleWechatOfficialCallback(envelope.plaintextXml);
+      const reply = this.auth.finalizeWechatOfficialCallbackReply(plaintextReply, envelope, {
+        timestamp,
+        nonce,
+      });
+      res.header('Content-Type', reply.contentType);
+      return res.status(HttpStatus.OK).send(reply.body);
+    } catch (error: any) {
+      return res.status(HttpStatus.FORBIDDEN).send(error?.message || 'invalid signature');
+    }
   }
 
   // 忘记密码重置
