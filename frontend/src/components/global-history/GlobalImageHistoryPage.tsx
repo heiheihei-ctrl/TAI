@@ -11,6 +11,7 @@ import {
   getHistoryRequestPrompt,
   getHistoryRequestThumbnail,
 } from './historyRequestInfo';
+import { exportImageFile } from '@/utils/exportImage';
 
 interface GlobalImageHistoryPageProps {
   isOpen: boolean;
@@ -528,15 +529,26 @@ export const GlobalImageHistoryPage: React.FC<GlobalImageHistoryPageProps> = ({
   }, [deleteItem, hideItem, lt, pendingDelete, restoreHiddenItem]);
 
   // 下载媒体
-  const handleDownload = useCallback((item: GlobalImageHistoryItem) => {
-    const link = document.createElement('a');
-    link.href = getMediaUrl(item);
-    link.download =
-      getMediaType(item) === 'video' ? `video_${item.id}.mp4` : `image_${item.id}.png`;
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleDownload = useCallback(async (item: GlobalImageHistoryItem) => {
+    const mediaUrl = getMediaUrl(item);
+    const isVideo = getMediaType(item) === 'video';
+
+    if (isVideo) {
+      const link = document.createElement('a');
+      link.href = mediaUrl;
+      link.download = `video_${item.id}.mp4`;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      return;
+    }
+
+    try {
+      await exportImageFile(mediaUrl, `image_${item.id}.png`);
+    } catch (error) {
+      console.error('下载图片失败:', error);
+    }
   }, []);
 
   useEffect(() => {

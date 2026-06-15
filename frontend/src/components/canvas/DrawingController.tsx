@@ -60,7 +60,12 @@ import { paperSaveService } from "@/services/paperSaveService";
 import { historyService } from "@/services/historyService";
 import type { Model3DData, Model3DFormat } from "@/services/model3DUploadService";
 import { clientToProject } from "@/utils/paperCoords";
-import { downloadImage, getSuggestedFileName } from "@/utils/downloadHelper";
+import { getSuggestedFileName } from "@/utils/downloadHelper";
+import {
+  exportImageFile,
+  resolveExportWatermarkDecision,
+  type ExportWatermarkDecision,
+} from "@/utils/exportImage";
 import { applyCursorForDrawMode } from "@/utils/cursorStyles";
 import { proxifyRemoteAssetUrl } from "@/utils/assetProxy";
 import {
@@ -6301,7 +6306,10 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
   );
 
   const handleDownloadImage = useCallback(
-    async (imageId: string, options?: { silent?: boolean }) => {
+    async (
+      imageId: string,
+      options?: { silent?: boolean; decision?: ExportWatermarkDecision }
+    ) => {
       const silent = options?.silent ?? false;
       try {
         const instance = imageTool.imageInstances.find(
@@ -6352,7 +6360,12 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
           instance.imageData?.fileName,
           "image"
         );
-        downloadImage(dataUrl, fileName);
+        const started = await exportImageFile(dataUrl, fileName, {
+          decision: options?.decision,
+        });
+        if (!started) {
+          return false;
+        }
         if (!silent) {
           window.dispatchEvent(
             new CustomEvent("toast", {
@@ -6387,10 +6400,16 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
       return;
     }
 
+    const decision = await resolveExportWatermarkDecision();
+    if (decision.kind === "cancelled") {
+      return;
+    }
+
     let successCount = 0;
     for (let index = 0; index < imageIds.length; index += 1) {
       const started = await handleDownloadImage(imageIds[index], {
         silent: true,
+        decision,
       });
       if (started) successCount += 1;
       if (index < imageIds.length - 1) {

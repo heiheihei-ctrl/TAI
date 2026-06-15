@@ -15,6 +15,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { parseFlowImageAssetRef } from '@/services/flowImageAssetStore';
 import { useFlowImageAssetUrl } from '@/hooks/useFlowImageAssetUrl';
 import { toRenderableImageSrc } from '@/utils/imageSource';
+import { exportImageFile } from '@/utils/exportImage';
 import { useLocaleText } from '@/utils/localeText';
 import RunCreditBadge from './RunCreditBadge';
 import NodeSelect from './NodeSelect';
@@ -912,14 +913,13 @@ function GenerateProNodeInner({ id, data, selected }: Props) {
   }, [id]);
 
   // 下载图片（使用原图）
-  const handleDownload = React.useCallback(() => {
+  const handleDownload = React.useCallback(async () => {
     if (!fullSrc) return;
-    const link = document.createElement('a');
-    link.href = fullSrc;
-    link.download = `generate_pro_${id}_${Date.now()}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      await exportImageFile(fullSrc, `generate_pro_${id}_${Date.now()}.png`);
+    } catch (error) {
+      console.error('下载图片失败:', error);
+    }
   }, [fullSrc, id]);
 
   // 添加到个人库

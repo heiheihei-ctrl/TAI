@@ -231,9 +231,13 @@ function Nano2NodeInner({ id, data, selected }: Props) {
     return metadata.defaultData as Record<string, any>;
   }, [metadata]);
 
-  const titleZh = data.nodeConfigNameZh || "Nano2";
-  const titleEn = data.nodeConfigNameEn || "Nano2";
   const resolvedNodeType = inferNanoImageNodeType(metadata, data, defaultData);
+  const titleZh =
+    data.nodeConfigNameZh ||
+    (resolvedNodeType === "gptImage2" ? "GPT-Image-2" : "Nano2");
+  const titleEn =
+    data.nodeConfigNameEn ||
+    (resolvedNodeType === "gptImage2" ? "GPT-Image-2" : "Nano2");
   const resolvedProvider =
     data.modelProvider ||
     metadata?.provider ||

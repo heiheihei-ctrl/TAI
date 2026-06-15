@@ -162,7 +162,7 @@ const AbrBrushPicker: React.FC<AbrBrushPickerProps> = ({
                     key={brush.id}
                     type='button'
                     title={brush.name}
-                    className={cn(
+                    className={cn( 
                       'flex h-9 w-full items-center gap-2 rounded-lg border px-2 text-xs font-medium transition-colors',
                       isActive
                         ? 'border-gray-900 bg-gray-900 text-white shadow-sm'

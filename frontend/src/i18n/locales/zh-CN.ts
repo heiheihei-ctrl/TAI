@@ -631,6 +631,15 @@ const zhCN = {
       recommendation: "推荐使用 Chrome、Edge 或 Safari 浏览器",
     },
   },
+  export: {
+    watermark: {
+      title: "导出图片",
+      description: "请选择是否在导出的图片上添加水印。",
+      withWatermark: "添加水印并导出",
+      withoutWatermark: "不添加水印导出",
+      cancel: "取消",
+    },
+  },
 } as const;
 
 export default zhCN;

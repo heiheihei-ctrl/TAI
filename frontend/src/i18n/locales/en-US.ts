@@ -635,6 +635,15 @@ const enUS = {
       recommendation: "Recommended browsers: Chrome, Edge, or Safari",
     },
   },
+  export: {
+    watermark: {
+      title: "Export Image",
+      description: "Choose whether to add a watermark to the exported image.",
+      withWatermark: "Export with watermark",
+      withoutWatermark: "Export without watermark",
+      cancel: "Cancel",
+    },
+  },
 } as const;
 
 export default enUS;

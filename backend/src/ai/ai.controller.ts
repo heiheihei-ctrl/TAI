@@ -24,6 +24,7 @@ import { AIProviderFactory } from './ai-provider.factory';
 import { ApiKeyOrJwtGuard } from '../auth/guards/api-key-or-jwt.guard';
 import { ToolSelectionRequestDto } from './dto/tool-selection.dto';
 import { RemoveBackgroundDto } from './dto/background-removal.dto';
+import { ApplyWatermarkDto } from './dto/apply-watermark.dto';
 import { getGeminiApiKeyFromEnv } from './services/gemini-api-key.util';
 import {
   GenerateImageDto,
@@ -4326,6 +4327,32 @@ export class AiController {
       requestedProvider: dto.aiProvider,
       ...this.buildRequestPromptAndImageParams(dto.prompt),
     }, dto.providerOptions));
+  }
+
+  @Post('watermark/apply')
+  async applyWatermark(@Body() dto: ApplyWatermarkDto, @Req() req: any) {
+    let isAdmin = this.isPrivilegedAdminRole(req?.user?.role);
+    const userId = req?.user?.id || req?.user?.sub;
+
+    if (!isAdmin && userId) {
+      try {
+        const user = await this.usersService.findById(String(userId));
+        isAdmin = this.isPrivilegedAdminRole(user?.role);
+      } catch (error) {
+        this.logger.warn('Failed to resolve admin role for watermark apply', error);
+      }
+    }
+
+    if (!isAdmin) {
+      throw new ForbiddenException('Only administrators can apply export watermarks');
+    }
+
+    const watermarkedBase64 = await applyWatermarkToBase64(dto.imageData);
+    return {
+      success: true,
+      imageData: `data:image/png;base64,${watermarkedBase64}`,
+      format: 'png',
+    };
   }
 
   @Post('remove-background')
