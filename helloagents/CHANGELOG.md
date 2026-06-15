@@ -11,6 +11,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Settings modal user profile card now supports inline profile editing: users can open an edit dialog from the settings card, upload a persisted OSS avatar, and update their display name. The backend adds `PATCH /api/users/profile`, frontend auth state now carries `avatarUrl`, and settings/workspace UI reuse the saved avatar consistently.
 
 ### Fixed
+- Auth UI: expired WeChat login QR codes now show a gray refresh overlay on hover and refresh when clicked; the compact login card keeps a stable size while switching among WeChat, password, and SMS tabs, with long states scrolling inside the card.
 - Resizable flow nodes now treat stored height as a minimum and naturally expand for fields or runtime errors, avoiding both clipped content and observer-driven infinite height growth.
 - New Midjourney V7 and Niji 7 nodes now start at a compact 430px height instead of leaving a large blank area below their collapsed controls.
 

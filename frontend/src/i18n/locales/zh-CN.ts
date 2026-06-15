@@ -226,7 +226,6 @@ const zhCN = {
       wechatTitle: "微信登录",
       wechatScanAlt: "微信扫码登录二维码",
       wechatHint: "打开微信扫一扫，关注后可直接登录",
-      wechatSubhint: "如果二维码失效或未显示，点击下方刷新",
       wechatLoading: "二维码生成中",
       wechatUnavailable: "二维码暂不可用",
       wechatRefreshing: "刷新中...",

@@ -20,8 +20,8 @@
 
 ## 路由约定（节选）
 - 公开：`/`、`/auth/login`、`/auth/register`、`/oss`
-- 登录页已移除观猹 OAuth 入口按钮（后端授权接口仍保留），当前登录入口仅保留手机号密码与短信验证码方式。
-- 登录页与登录过期弹窗已移除「观猹登录按钮」与「微信扫码登录」入口，当前仅保留手机号密码登录与短信验证码登录（`frontend/src/pages/auth/Login.tsx`, `frontend/src/components/auth/LoginModal.tsx`）。
+- 登录页已移除观猹 OAuth 入口按钮（后端授权接口仍保留），当前提供微信扫码、手机号密码与短信验证码三种登录方式。
+- 登录页默认进入微信扫码登录；二维码过期后悬浮会显示刷新遮罩，点击二维码可重新生成。三种登录方式共用紧凑的固定尺寸卡片，较长状态在卡片内容区内部滚动（`frontend/src/pages/auth/Login.tsx`）。
 - 受保护：`/workspace`、`/app`、`/admin`、`/my-credits`
 - 登录页与注册页已补充移动端适配：小屏下认证卡片改为顶部对齐并允许纵向滚动，标签切换改为三列紧凑布局，验证码输入区改为纵向堆叠，协议文案允许多行左对齐，避免窄屏遮挡与横向溢出（`frontend/src/pages/auth/Login.tsx`, `frontend/src/pages/auth/Register.tsx`）。
 - 首页（`/`）与登录页（`/auth/login`）欢迎背景已统一切换为 Three.js Shader 动画，复用组件 `frontend/src/components/background/WelcomeShaderBackground.tsx` + `ShaderPlaneBackground.tsx`，替代原 `OpenVideo.mp4` 视频背景。
