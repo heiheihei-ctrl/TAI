@@ -95,6 +95,7 @@ import TencentSpeechNode from "./nodes/TencentSpeechNode";
 import Nano2Node from "./nodes/Nano2Node";
 import Seedream5Node from "./nodes/Seedream5Node";
 import NodeGroupNode from "./nodes/NodeGroupNode";
+import FlowMultiSelectionResizer from "./FlowMultiSelectionResizer";
 import { resolveFlowNodeSendAnchorClient } from "./utils/flowNodeSendAnchor";
 import { FLOW_IMAGE_ASSET_PREFIX } from "@/services/flowImageAssetStore";
 import {
@@ -1245,6 +1246,34 @@ const QUICK_CONNECT_HOVER_DELAY_MS = 520;
 const QUICK_CONNECT_MAX_ITEMS = 6;
 const QUICK_CONNECT_USAGE_STORAGE_KEY = "tanva-quick-connect-usage-v1";
 
+const QUICK_CONNECT_NODE_LABELS: Partial<
+  Record<FlowNodeType, { zh: string; en: string }>
+> = {
+  gptImage2: { zh: "GPT-Image-2", en: "GPT-Image-2" },
+  nano2: { zh: "Nano Banana 2", en: "Nano Banana 2" },
+};
+
+const resolveQuickConnectLabel = (
+  nodeType: string,
+  meta: { label: string } | undefined,
+  ltFn: (zh: string, en: string) => string
+): string => {
+  const normalized = normalizeFlowNodeType(nodeType);
+  const override = normalized ? QUICK_CONNECT_NODE_LABELS[normalized] : undefined;
+  if (override) return ltFn(override.zh, override.en);
+  return meta?.label || nodeType;
+};
+
+const findPaletteConfigByFlowNodeType = (
+  configs: Partial<NodeConfig>[],
+  nodeType: string
+): Partial<NodeConfig> | undefined =>
+  configs.find(
+    (config) =>
+      normalizeFlowNodeType(config.nodeKey) === nodeType ||
+      resolveFlowNodeTypeFromConfig(config) === nodeType
+  );
+
 type QuickConnectUsageEntry = {
   count: number;
   lastUsedAt: number;
@@ -1456,7 +1485,7 @@ const NODE_PALETTE_ITEMS = [
   { key: "generate4", zh: "生成多张图片节点", en: "Multi Generate", category: "image" },
   { key: "generatePro", zh: "自定义节点", en: "Agent", category: "image" },
   { key: "midjourney", zh: "Midjourney生成", en: "Midjourney", category: "image" },
-  { key: "gptImage2", zh: "Gpt-Imgae-2", en: "Gpt-Imgae-2", category: "image" },
+  { key: "gptImage2", zh: "GPT-Image-2", en: "GPT-Image-2", category: "image" },
   { key: "analysis", zh: "图像分析节点", en: "Analysis Node", category: "image" },
   { key: "imageGrid", zh: "图片拼合节点", en: "Image Grid", category: "image" },
   { key: "imageSplit", zh: "图片分割节点", en: "Image Split", category: "image" },
@@ -2515,9 +2544,9 @@ const resolveFlowNodeTypeFromConfig = (config: Partial<NodeConfig>): string => {
     typeof metadata.type === "string" ? metadata.type : undefined,
     typeof metadata.flowNodeType === "string" ? metadata.flowNodeType : undefined,
     typeof metadata.nodeKey === "string" ? metadata.nodeKey : undefined,
-    typeof metadata.provider === "string" ? metadata.provider : undefined,
     config.nodeKey,
     config.serviceType,
+    typeof metadata.provider === "string" ? metadata.provider : undefined,
     config.nameEn,
     config.nameZh,
   ];
@@ -3822,13 +3851,15 @@ function FlowInner() {
     prepared.forEach((config, index) => {
       const resolvedType = resolveFlowNodeTypeFromConfig(config);
       const normalizedType = normalizeFlowNodeType(resolvedType);
-      const dedupeKey = normalizedType || resolvedType || config.nodeKey || `unknown-${index}`;
+      const nodeKeyType = normalizeFlowNodeType(config.nodeKey);
+      const dedupeKey =
+        nodeKeyType || normalizedType || resolvedType || config.nodeKey || `unknown-${index}`;
       const unifiedTitle = normalizedType ? UNIFIED_VIDEO_NODE_TITLES[normalizedType] : undefined;
       const normalizedConfig: NodeConfig =
         normalizedType || unifiedTitle
           ? {
               ...config,
-              nodeKey: normalizedType || config.nodeKey,
+              nodeKey: config.nodeKey || normalizedType,
               nameZh: unifiedTitle?.nameZh || config.nameZh,
               nameEn: unifiedTitle?.nameEn || config.nameEn,
             }
@@ -8703,7 +8734,8 @@ function FlowInner() {
     const map = new Map<string, { label: string; status?: string }>();
 
     nodePaletteConfigs.forEach((config) => {
-      const type = resolveFlowNodeTypeFromConfig(config);
+      const type =
+        normalizeFlowNodeType(config.nodeKey) || resolveFlowNodeTypeFromConfig(config);
       if (!type) return;
       map.set(type, {
         label: lt(config.nameZh || type, config.nameEn || type),
@@ -8804,8 +8836,9 @@ function FlowInner() {
 
         const meta = quickConnectMetaByType.get(resolvedType);
         const status = meta?.status;
-        const sourceConfig = nodePaletteConfigs.find(
-          (config) => resolveFlowNodeTypeFromConfig(config) === resolvedType
+        const sourceConfig = findPaletteConfigByFlowNodeType(
+          nodePaletteConfigs,
+          resolvedType
         );
         if (
           HIDDEN_FLOW_NODE_TYPES.has(resolvedType as FlowNodeType) &&
@@ -8824,7 +8857,7 @@ function FlowInner() {
         picked.push({
           nodeType: resolvedType,
           targetHandle: preset.targetHandle,
-          label: meta?.label || resolvedType,
+          label: resolveQuickConnectLabel(resolvedType, meta, lt),
         });
       }
 
@@ -8837,6 +8870,8 @@ function FlowInner() {
       quickConnectMetaByType,
       rankQuickConnectOptions,
       pinQuickConnectBaseOption,
+      lt,
+      nodePaletteConfigs,
     ]
   );
   const getReverseQuickConnectOptions = React.useCallback(
@@ -8862,8 +8897,9 @@ function FlowInner() {
 
         const meta = quickConnectMetaByType.get(resolvedType);
         const status = meta?.status;
-        const sourceConfig = nodePaletteConfigs.find(
-          (config) => resolveFlowNodeTypeFromConfig(config) === resolvedType
+        const sourceConfig = findPaletteConfigByFlowNodeType(
+          nodePaletteConfigs,
+          resolvedType
         );
         if (
           HIDDEN_FLOW_NODE_TYPES.has(resolvedType as FlowNodeType) &&
@@ -8882,7 +8918,7 @@ function FlowInner() {
         picked.push({
           nodeType: resolvedType,
           sourceHandle: preset.sourceHandle,
-          label: meta?.label || resolvedType,
+          label: resolveQuickConnectLabel(resolvedType, meta, lt),
         });
       }
 
@@ -8895,6 +8931,8 @@ function FlowInner() {
       quickConnectMetaByType,
       rankQuickConnectOptions,
       pinQuickConnectBaseOption,
+      lt,
+      nodePaletteConfigs,
     ]
   );
   React.useEffect(() => {
@@ -22103,6 +22141,21 @@ function FlowInner() {
           </>
         )}
       </ReactFlow>
+
+      <FlowMultiSelectionResizer
+        nodes={nodes as RFNode[]}
+        setNodes={setNodes}
+        isGroupNode={isGroupNode}
+        hiddenNodeIds={collapsedChildNodeIds}
+        disabled={
+          effectiveFlowLowDetailMode || isConnecting || isNodeDragging
+        }
+        onResizeEnd={() => {
+          try {
+            historyService.commit("flow-multi-resize").catch(() => {});
+          } catch {}
+        }}
+      />
 
       {!effectiveFlowLowDetailMode && flowSnapAlignments.length > 0 && (
         <svg className='tanva-flow-snap-guides' aria-hidden='true'>

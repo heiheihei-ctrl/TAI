@@ -10,6 +10,7 @@ import * as fs from "fs";
 import * as os from "os";
 import { OssService } from "../../oss/oss.service";
 import type OSS from "ali-oss";
+import { createFullTiledWatermarkOverlay } from "./tiled-watermark.util";
 
 interface VideoWatermarkOptions {
   text?: string;
@@ -17,41 +18,71 @@ interface VideoWatermarkOptions {
   ossKey?: string;
 }
 
-// 水印相关常量与路径解析（支持环境变量覆盖并尝试多个候选路径）
-const DEFAULT_WATERMARK_FILENAME = "tanvas_ai.png";
-const WATERMARK_SCALE = 1.8;
-const WATERMARK_MARGIN = 25;
-const WATERMARK_OPACITY = 0.7;
-
-function resolveWatermarkImagePath(): string | null {
-  const candidates = [
-    process.env.WATERMARK_PATH,
-    path.resolve(process.cwd(), "frontend/public", DEFAULT_WATERMARK_FILENAME),
-    path.resolve(__dirname, "../../../../frontend/public", DEFAULT_WATERMARK_FILENAME),
-    path.resolve(__dirname, "../../public", DEFAULT_WATERMARK_FILENAME),
-  ].filter(Boolean) as string[];
-
-  for (const p of candidates) {
-    try {
-      if (fs.existsSync(p)) return p;
-    } catch (e) {
-      // ignore and try next
-    }
-  }
-  return null;
-}
-
 @Injectable()
 export class VideoWatermarkService {
   private readonly logger = new Logger(VideoWatermarkService.name);
   private readonly DEFAULT_TEXT = "Tanvas AI";
-  private readonly DEFAULT_TIMEOUT = 180_000; // 增加超时时间，因为图片水印处理更复杂
+  private readonly DEFAULT_TIMEOUT = 180_000;
 
   constructor(private readonly oss: OssService) {}
 
+  private async probeVideoSize(
+    sourceUrl: string,
+    timeoutMs: number
+  ): Promise<{ width: number; height: number } | null> {
+    return new Promise((resolve) => {
+      const ffprobe = spawn(
+        "ffprobe",
+        [
+          "-v",
+          "error",
+          "-select_streams",
+          "v:0",
+          "-show_entries",
+          "stream=width,height",
+          "-of",
+          "csv=s=x:p=0",
+          sourceUrl,
+        ],
+        { stdio: ["ignore", "pipe", "pipe"] }
+      );
+
+      let stdout = "";
+      ffprobe.stdout?.on("data", (chunk) => {
+        stdout += chunk.toString();
+      });
+
+      const timer = setTimeout(() => {
+        ffprobe.kill("SIGKILL");
+        resolve(null);
+      }, Math.min(timeoutMs, 30_000));
+
+      ffprobe.on("error", () => {
+        clearTimeout(timer);
+        resolve(null);
+      });
+
+      ffprobe.on("close", (code) => {
+        clearTimeout(timer);
+        if (code !== 0) {
+          resolve(null);
+          return;
+        }
+
+        const [widthRaw, heightRaw] = stdout.trim().split("x");
+        const width = Number(widthRaw);
+        const height = Number(heightRaw);
+        if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+          resolve({ width, height });
+          return;
+        }
+        resolve(null);
+      });
+    });
+  }
+
   /**
-   * 为视频添加图片水印（样式与图片水印一致：右下角半透明 logo），并上传至 OSS
-   * 使用临时文件处理，因为 MP4 格式不支持管道输出
+   * 为视频添加 45° 平铺图片/文字水印，并上传至 OSS
    */
   async addWatermarkAndUpload(
     sourceUrl: string,
@@ -63,37 +94,37 @@ export class VideoWatermarkService {
       options?.ossKey ||
       `videos/watermarked/${this.buildDatePrefix()}/video-${this.safeRandomId()}.mp4`;
 
-    // 检查水印图片是否存在（尝试多个候选路径）
-    const watermarkPath = resolveWatermarkImagePath();
-    if (!watermarkPath) {
-      this.logger.warn(
-        `水印图片不存在（候选路径均无），回退到文字水印`
-      );
+    const tempDir = os.tmpdir();
+    const tempFile = path.join(tempDir, `watermark-${this.safeRandomId()}.mp4`);
+    const overlayTemp = path.join(tempDir, `watermark-overlay-${this.safeRandomId()}.png`);
+
+    const dimensions =
+      (await this.probeVideoSize(sourceUrl, timeoutMs)) ?? {
+        width: 1920,
+        height: 1080,
+      };
+
+    const overlayBuffer = await createFullTiledWatermarkOverlay(
+      dimensions.width,
+      dimensions.height,
+      { text: options?.text || this.DEFAULT_TEXT }
+    );
+
+    if (!overlayBuffer) {
+      this.logger.warn("无法生成平铺水印图层，回退到文字水印");
       return this.addTextWatermarkAndUpload(sourceUrl, options);
     }
 
-    // 创建临时文件路径
-    const tempDir = os.tmpdir();
-    const tempFile = path.join(tempDir, `watermark-${this.safeRandomId()}.mp4`);
+    fs.writeFileSync(overlayTemp, overlayBuffer);
 
-    // 构造 filter_complex 滤镜：
-    // 使用 scale2ref 根据主视频尺寸缩放水印图片（与图片水印逻辑一致）
-    // 水印宽度 = min(主视频宽,高) * WATERMARK_SCALE
-    const filterComplex = [
-      // 缩放水印：宽度 = min(主视频宽,高) * WATERMARK_SCALE，保持宽高比
-      `[1:v][0:v]scale2ref=w='min(main_w,main_h)*${WATERMARK_SCALE}':h='ow/mdar':flags=lanczos[wm][base]`,
-      // 设置水印透明度
-      `[wm]format=rgba,colorchannelmixer=aa=${WATERMARK_OPACITY}[wm_alpha]`,
-      // 叠加到右下角，留边距
-      `[base][wm_alpha]overlay=main_w-overlay_w-${WATERMARK_MARGIN}:main_h-overlay_h-${WATERMARK_MARGIN}`,
-    ].join(";");
+    const filterComplex = "[1:v][0:v]scale2ref[wm][base];[base][wm]overlay=0:0";
 
     const ffArgs = [
       "-y",
       "-i",
-      sourceUrl, // 输入视频
+      sourceUrl,
       "-i",
-      watermarkPath, // 输入水印图片（已解析）
+      overlayTemp,
       "-filter_complex",
       filterComplex,
       "-c:v",
@@ -106,13 +137,12 @@ export class VideoWatermarkService {
       "copy",
       "-movflags",
       "+faststart",
-      tempFile, // 输出到临时文件
+      tempFile,
     ];
 
-    this.logger.log(`🎥 Start video watermarking -> temp: ${tempFile}`);
+    this.logger.log(`🎥 Start tiled video watermarking -> temp: ${tempFile}`);
 
     try {
-      // 执行 ffmpeg 命令
       await new Promise<void>((resolve, reject) => {
         const ffmpeg = spawn("ffmpeg", ffArgs, {
           stdio: ["ignore", "pipe", "pipe"],
@@ -150,12 +180,10 @@ export class VideoWatermarkService {
         });
       });
 
-      // 检查临时文件是否存在
       if (!fs.existsSync(tempFile)) {
         throw new ServiceUnavailableException("ffmpeg 未生成输出文件");
       }
 
-      // 上传到 OSS
       this.logger.log(`🎥 Uploading watermarked video to OSS: ${key}`);
       const fileStream = fs.createReadStream(tempFile);
       const uploadOptions: OSS.PutStreamOptions = {
@@ -172,13 +200,14 @@ export class VideoWatermarkService {
       );
       return { url, key, durationMs: elapsed };
     } finally {
-      // 清理临时文件
-      try {
-        if (fs.existsSync(tempFile)) {
-          fs.unlinkSync(tempFile);
+      for (const file of [tempFile, overlayTemp]) {
+        try {
+          if (fs.existsSync(file)) {
+            fs.unlinkSync(file);
+          }
+        } catch {
+          this.logger.warn(`清理临时文件失败: ${file}`);
         }
-      } catch (e) {
-        this.logger.warn(`清理临时文件失败: ${tempFile}`);
       }
     }
   }

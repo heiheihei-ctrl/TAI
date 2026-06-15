@@ -13,8 +13,15 @@
 .tanva-flow-overlay .react-flow__node-resizer-handle,
 .tanva-flow-overlay .tanva-flow-toolbar,
 .tanva-flow-overlay .tanva-add-panel,
-.tanva-flow-overlay .tanva-edge-label-editor {
+.tanva-flow-overlay .tanva-edge-label-editor,
+.tanva-flow-overlay .tanva-flow-multi-selection-resizer,
+.tanva-flow-overlay .tanva-flow-multi-selection-toolbar,
+.tanva-flow-overlay .tanva-flow-multi-selection-handle {
   pointer-events: auto;
+}
+
+body.tanva-flow-multi-resizing .tanva-flow-overlay .react-flow__pane {
+  cursor: inherit;
 }
 
 .tanva-flow-overlay .react-flow__node-nodeGroup {
