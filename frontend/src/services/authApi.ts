@@ -21,6 +21,29 @@ export type GoogleApiKeyInfo = {
   mode: "official" | "custom";
 };
 
+export type WechatOfficialSessionStatus =
+  | "pending"
+  | "needs_phone_bind"
+  | "authorized"
+  | "expired";
+
+export type WechatOfficialSession = {
+  id: string;
+  status: WechatOfficialSessionStatus;
+  qrCodeUrl: string | null;
+  expiresAt: string;
+  returnTo: string;
+};
+
+export type WechatOfficialSessionDetail = WechatOfficialSession & {
+  authorizedAt?: string | null;
+  needsPhoneBind: boolean;
+  hasScannedIdentity: boolean;
+  nickname?: string | null;
+  displayName?: string | null;
+  avatarUrl?: string | null;
+};
+
 const isMock = import.meta.env.VITE_AUTH_MODE === "mock";
 
 // 后端基础地址，统一从 .env 中读取：
@@ -127,6 +150,18 @@ function clearSession() {
   } catch {}
 }
 
+function completeAuthSession<T extends { user: UserInfo; tokens?: { accessToken?: string; refreshToken?: string } }>(
+  out: T,
+): T {
+  if (out.tokens) {
+    setTokens(out.tokens);
+  }
+  saveSession(out.user);
+  setStoredTokenExpiry(Date.now() + 24 * 60 * 60 * 1000);
+  setStoredLastAuthAt(Date.now());
+  return out;
+}
+
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
@@ -177,6 +212,79 @@ export const authApi = {
   getWatchaAuthorizeUrl(returnTo = "/app") {
     const params = new URLSearchParams({ returnTo });
     return `${base}/api/auth/watcha/authorize?${params.toString()}`;
+  },
+
+  async createWechatOfficialSession(payload: {
+    returnTo?: string;
+  }): Promise<WechatOfficialSession> {
+    if (isMock) {
+      throw new Error("Mock 模式暂不支持公众号扫码登录");
+    }
+    const res = await fetchWithAuth(`${base}/api/auth/wechat-official/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      credentials: "include",
+      auth: "omit",
+      allowRefresh: false,
+    });
+    return json<WechatOfficialSession>(res);
+  },
+
+  async getWechatOfficialSession(sessionId: string): Promise<WechatOfficialSessionDetail> {
+    if (isMock) {
+      throw new Error("Mock 模式暂不支持公众号扫码登录");
+    }
+    const res = await fetchWithAuth(
+      `${base}/api/auth/wechat-official/sessions/${encodeURIComponent(sessionId)}`,
+      {
+        credentials: "include",
+        auth: "omit",
+        allowRefresh: false,
+      },
+    );
+    return json<WechatOfficialSessionDetail>(res);
+  },
+
+  async bindWechatOfficialPhone(
+    sessionId: string,
+    payload: { phone: string; code: string; inviteCode?: string },
+  ): Promise<{ user: UserInfo; returnTo: string; tokens?: { accessToken?: string; refreshToken?: string } }> {
+    if (isMock) {
+      throw new Error("Mock 模式暂不支持公众号扫码登录");
+    }
+    const res = await fetchWithAuth(
+      `${base}/api/auth/wechat-official/sessions/${encodeURIComponent(sessionId)}/bind-phone`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        credentials: "include",
+        auth: "omit",
+        allowRefresh: false,
+      },
+    );
+    const out = await json<{ user: UserInfo; returnTo: string; tokens?: { accessToken?: string; refreshToken?: string } }>(res);
+    return completeAuthSession(out);
+  },
+
+  async consumeWechatOfficialSession(
+    sessionId: string,
+  ): Promise<{ user: UserInfo; returnTo: string; tokens?: { accessToken?: string; refreshToken?: string } }> {
+    if (isMock) {
+      throw new Error("Mock 模式暂不支持公众号扫码登录");
+    }
+    const res = await fetchWithAuth(
+      `${base}/api/auth/wechat-official/sessions/${encodeURIComponent(sessionId)}/consume`,
+      {
+        method: "POST",
+        credentials: "include",
+        auth: "omit",
+        allowRefresh: false,
+      },
+    );
+    const out = await json<{ user: UserInfo; returnTo: string; tokens?: { accessToken?: string; refreshToken?: string } }>(res);
+    return completeAuthSession(out);
   },
 
 
@@ -362,15 +470,7 @@ export const authApi = {
       allowRefresh: false,
     });
     const out = await json<{ user: UserInfo; tokens?: { accessToken?: string; refreshToken?: string } }>(res);
-    if (out.tokens) {
-      setTokens(out.tokens);
-    }
-    // 本地持久化用户，提升刷新体验（用于开发环境或后端短暂不可用时）
-    saveSession(out.user);
-    // 设置token过期时间（24小时）
-    setStoredTokenExpiry(Date.now() + 24 * 60 * 60 * 1000);
-    setStoredLastAuthAt(Date.now());
-    return out;
+    return completeAuthSession(out);
   },
   async loginWithSms(payload: { phone: string; code: string }) {
     if (isMock) {
@@ -397,14 +497,7 @@ export const authApi = {
       allowRefresh: false,
     });
     const out = await json<{ user: UserInfo; tokens?: { accessToken?: string; refreshToken?: string } }>(res);
-    if (out.tokens) {
-      setTokens(out.tokens);
-    }
-    saveSession(out.user);
-    // 设置token过期时间（24小时）
-    setStoredTokenExpiry(Date.now() + 24 * 60 * 60 * 1000);
-    setStoredLastAuthAt(Date.now());
-    return out;
+    return completeAuthSession(out);
   },
   async sendSms(payload: { phone: string }) {
     if (isMock) {

@@ -10,10 +10,13 @@ import { BindWechatOfficialPhoneDto } from './dto/bind-wechat-official-phone.dto
 import { JwtAuthGuard } from './guards/jwt.guard';
 import { RefreshAuthGuard } from './guards/refresh.guard';
 import { SmsService } from './sms.service';
+import { Logger } from '@nestjs/common';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(private readonly auth: AuthService, private readonly sms: SmsService) {}
 
   private toAuthUser(user: {
@@ -187,6 +190,11 @@ export class AuthController {
     @Res() res: any,
   ) {
     try {
+      this.logger.log(
+        `[wechat-official][verify] incoming signature=${Boolean(signature)} msg_signature=${Boolean(
+          msgSignature,
+        )} timestamp=${timestamp || '-'} nonce=${nonce || '-'} echostr_len=${echostr?.length ?? 0}`,
+      );
       const plainEcho = this.auth.verifyWechatOfficialUrl({
         signature,
         msgSignature,
@@ -194,9 +202,15 @@ export class AuthController {
         nonce,
         echostr,
       });
+      this.logger.log(
+        `[wechat-official][verify] success plain_echo_len=${plainEcho.length}`,
+      );
       res.header('Content-Type', 'text/plain; charset=utf-8');
       return res.status(HttpStatus.OK).send(plainEcho);
     } catch (error: any) {
+      this.logger.error(
+        `[wechat-official][verify] failed message=${error?.message || 'unknown error'}`,
+      );
       return res.status(HttpStatus.FORBIDDEN).send(error?.message || 'invalid signature');
     }
   }
@@ -217,20 +231,40 @@ export class AuthController {
           : Buffer.isBuffer(body)
           ? body.toString('utf8')
           : '';
+      this.logger.log(
+        `[wechat-official][callback] incoming signature=${Boolean(signature)} msg_signature=${Boolean(
+          msgSignature,
+        )} timestamp=${timestamp || '-'} nonce=${nonce || '-'} raw_xml_len=${rawXml.length}`,
+      );
       const envelope = this.auth.unwrapWechatOfficialCallback(rawXml, {
         signature,
         msgSignature,
         timestamp,
         nonce,
       });
+      this.logger.log(
+        `[wechat-official][callback] unwrapped encrypted=${String(
+          envelope.encrypted,
+        )} plaintext_xml_len=${envelope.plaintextXml.length} from=${envelope.fromUserName || '-'} to=${
+          envelope.toUserName || '-'
+        }`,
+      );
       const plaintextReply = await this.auth.handleWechatOfficialCallback(envelope.plaintextXml);
       const reply = this.auth.finalizeWechatOfficialCallbackReply(plaintextReply, envelope, {
         timestamp,
         nonce,
       });
+      this.logger.log(
+        `[wechat-official][callback] reply encrypted=${String(reply.encrypted)} content_type=${
+          reply.contentType
+        } body_len=${reply.body.length}`,
+      );
       res.header('Content-Type', reply.contentType);
       return res.status(HttpStatus.OK).send(reply.body);
     } catch (error: any) {
+      this.logger.error(
+        `[wechat-official][callback] failed message=${error?.message || 'unknown error'}`,
+      );
       return res.status(HttpStatus.FORBIDDEN).send(error?.message || 'invalid signature');
     }
   }

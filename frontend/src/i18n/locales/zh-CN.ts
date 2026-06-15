@@ -223,7 +223,7 @@ const zhCN = {
       watchaName: "观猹",
       thirdPartyDivider: "第三方登录",
       watchaSubmit: "使用观猹登录",
-      wechatTitle: "公众号扫码登录",
+      wechatTitle: "微信登录",
       wechatScanAlt: "微信扫码登录二维码",
       wechatHint: "打开微信扫一扫，关注后可直接登录",
       wechatSubhint: "如果二维码失效或未显示，点击下方刷新",

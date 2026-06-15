@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 ### Added
+- Auth: login page now exposes the full “微信公众号扫码登录”闭环 again. Backend controller routes were added for session create/status/bind/consume and WeChat callback URL verification/event intake; frontend `/auth/login` now defaults to a WeChat tab with QR creation, 1.8s polling, `needs_phone_bind` handling, SMS bind, and authorized-session consumption into the existing JWT/cookie login state.
+- Auth/WeChat Official: callback handling now supports secure mode as well as plaintext mode. Backend URL verification can decrypt encrypted `echostr`, POST callback handling now validates `msg_signature`, decrypts `Encrypt` payloads with `WECHAT_OFFICIAL_ENCODING_AES_KEY`, and encrypts passive XML replies back to WeChat.
 - Settings modal user profile card now supports inline profile editing: users can open an edit dialog from the settings card, upload a persisted OSS avatar, and update their display name. The backend adds `PATCH /api/users/profile`, frontend auth state now carries `avatarUrl`, and settings/workspace UI reuse the saved avatar consistently.
 
 ### Fixed

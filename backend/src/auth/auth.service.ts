@@ -585,13 +585,23 @@ export class AuthService {
   verifyWechatOfficialRequest(signature?: string, timestamp?: string, nonce?: string) {
     const { token } = this.getWechatOfficialConfig(false);
     if (!token || !signature || !timestamp || !nonce) {
+      this.logger.warn(
+        `[wechat-official][signature] missing params token=${Boolean(token)} signature=${Boolean(
+          signature,
+        )} timestamp=${Boolean(timestamp)} nonce=${Boolean(nonce)}`,
+      );
       return false;
     }
 
-    return this.secureHexEquals(
-      this.computeWechatOfficialSignature(token, timestamp, nonce),
+    const computed = this.computeWechatOfficialSignature(token, timestamp, nonce);
+    const ok = this.secureHexEquals(
+      computed,
       signature
     );
+    this.logger.log(
+      `[wechat-official][signature] plaintext_verify ok=${String(ok)} timestamp=${timestamp} nonce=${nonce}`,
+    );
+    return ok;
   }
 
   private verifyWechatOfficialEncryptedRequest(
@@ -602,13 +612,25 @@ export class AuthService {
   ) {
     const { token } = this.getWechatOfficialConfig(false);
     if (!token || !msgSignature || !timestamp || !nonce || !encrypted) {
+      this.logger.warn(
+        `[wechat-official][signature] missing encrypted params token=${Boolean(token)} msg_signature=${Boolean(
+          msgSignature,
+        )} timestamp=${Boolean(timestamp)} nonce=${Boolean(nonce)} encrypted=${Boolean(encrypted)}`,
+      );
       return false;
     }
 
-    return this.secureHexEquals(
-      this.computeWechatOfficialSignature(token, timestamp, nonce, encrypted),
+    const computed = this.computeWechatOfficialSignature(token, timestamp, nonce, encrypted);
+    const ok = this.secureHexEquals(
+      computed,
       msgSignature
     );
+    this.logger.log(
+      `[wechat-official][signature] encrypted_verify ok=${String(ok)} timestamp=${timestamp} nonce=${nonce} encrypted_len=${
+        encrypted.length
+      }`,
+    );
+    return ok;
   }
 
   private parseWechatOfficialXml(rawXml: string) {
@@ -687,6 +709,7 @@ export class AuthService {
     }
 
     if (secureModeEnabled && params.msgSignature) {
+      this.logger.log('[wechat-official][verify] secure mode url verification start');
       const ok = this.verifyWechatOfficialEncryptedRequest(
         params.msgSignature,
         params.timestamp,
@@ -696,9 +719,14 @@ export class AuthService {
       if (!ok) {
         throw new UnauthorizedException("微信公众号安全模式验签失败");
       }
-      return this.decryptWechatOfficialPayload(echostr);
+      const plaintextEcho = this.decryptWechatOfficialPayload(echostr);
+      this.logger.log(
+        `[wechat-official][verify] secure mode url verification decrypted echostr_len=${plaintextEcho.length}`,
+      );
+      return plaintextEcho;
     }
 
+    this.logger.log('[wechat-official][verify] plaintext mode url verification start');
     const ok = this.verifyWechatOfficialRequest(
       signature,
       params.timestamp,
@@ -724,6 +752,9 @@ export class AuthService {
     const encrypted = parsed.Encrypt;
 
     if (encrypted) {
+      this.logger.log(
+        `[wechat-official][callback] secure envelope detected encrypted_len=${encrypted.length}`,
+      );
       const ok = this.verifyWechatOfficialEncryptedRequest(
         params.msgSignature || params.signature,
         params.timestamp,
@@ -735,6 +766,11 @@ export class AuthService {
       }
       const plaintextXml = this.decryptWechatOfficialPayload(encrypted);
       const inner = this.parseWechatOfficialXml(plaintextXml);
+      this.logger.log(
+        `[wechat-official][callback] secure envelope decrypted msgType=${inner.MsgType || '-'} event=${
+          inner.Event || '-'
+        } from=${inner.FromUserName || '-'} to=${inner.ToUserName || '-'}`,
+      );
       return {
         plaintextXml,
         encrypted: true,
@@ -744,6 +780,11 @@ export class AuthService {
       };
     }
 
+    this.logger.log(
+      `[wechat-official][callback] plaintext envelope msgType=${parsed.MsgType || '-'} event=${
+        parsed.Event || '-'
+      } from=${parsed.FromUserName || '-'} to=${parsed.ToUserName || '-'}`,
+    );
     const ok = this.verifyWechatOfficialRequest(
       params.signature,
       params.timestamp,
@@ -767,6 +808,7 @@ export class AuthService {
     params: { timestamp?: string; nonce?: string }
   ): WechatOfficialCallbackReply {
     if (!plaintextReplyXml) {
+      this.logger.log('[wechat-official][reply] returning success without xml body');
       return {
         body: "success",
         encrypted: false,
@@ -775,6 +817,7 @@ export class AuthService {
     }
 
     if (!envelope.encrypted) {
+      this.logger.log('[wechat-official][reply] returning plaintext xml reply');
       return {
         body: plaintextReplyXml,
         encrypted: false,
@@ -782,6 +825,7 @@ export class AuthService {
       };
     }
 
+    this.logger.log('[wechat-official][reply] returning encrypted xml reply');
     return {
       body: this.buildWechatOfficialEncryptedResponse(
         plaintextReplyXml,
@@ -1284,6 +1328,9 @@ export class AuthService {
 
     const normalizedEvent = event.toUpperCase();
     if (normalizedEvent !== "SCAN" && normalizedEvent !== "SUBSCRIBE") {
+      this.logger.log(
+        `[wechat-official][event] ignored event=${normalizedEvent} msgType=${msgType}`,
+      );
       return null;
     }
 
@@ -1293,7 +1340,14 @@ export class AuthService {
         ? rawEventKey.replace(/^qrscene_/i, "")
         : rawEventKey;
 
+    this.logger.log(
+      `[wechat-official][event] accepted event=${normalizedEvent} openId=${fromUserName} sceneKey=${sceneKey || '-'}`,
+    );
+
     if (!sceneKey) {
+      this.logger.warn(
+        `[wechat-official][event] missing sceneKey for event=${normalizedEvent} openId=${fromUserName}`,
+      );
       return this.buildWechatOfficialTextResponse(
         fromUserName,
         toUserName,
@@ -1310,6 +1364,11 @@ export class AuthService {
     });
 
     if (!session || session.expiresAt.getTime() <= Date.now()) {
+      this.logger.warn(
+        `[wechat-official][event] session missing or expired sceneKey=${sceneKey} found=${Boolean(
+          session,
+        )}`,
+      );
       return this.buildWechatOfficialTextResponse(
         fromUserName,
         toUserName,
@@ -1331,6 +1390,12 @@ export class AuthService {
       if (!this.isPrimaryPhone(user.phone)) return null;
       return this.attachWechatIdentityToUser(tx, user.id, profile);
     });
+
+    this.logger.log(
+      `[wechat-official][event] session_hit sceneKey=${sceneKey} sessionId=${session.id} linkedUserId=${
+        linkedUser?.id || '-'
+      } nextStatus=${linkedUser ? 'authorized' : 'needs_phone_bind'}`,
+    );
 
     await this.prisma.wechatLoginSession.update({
       where: { id: session.id },

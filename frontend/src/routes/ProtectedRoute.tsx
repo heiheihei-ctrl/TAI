@@ -1,9 +1,10 @@
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useEffect, useRef } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { AuthWrapper } from '@/components/AuthWrapper';
 
 export default function ProtectedRoute() {
+  const location = useLocation();
   const user = useAuthStore((s) => s.user);
   const initializing = useAuthStore((s) => s.initializing);
   const init = useAuthStore((s) => s.init);
@@ -23,6 +24,9 @@ export default function ProtectedRoute() {
     return <AuthWrapper><Outlet /></AuthWrapper>;
   }
 
-  if (!user) return <Navigate to="/auth/login" replace />;
+  if (!user) {
+    const returnTo = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to={`/auth/login?returnTo=${encodeURIComponent(returnTo)}`} replace state={{ from: returnTo }} />;
+  }
   return <Outlet />;
 }
