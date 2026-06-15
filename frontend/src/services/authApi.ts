@@ -12,6 +12,7 @@ export type UserInfo = {
   name?: string;
   role?: string;
   phone?: string;
+  avatarUrl?: string | null;
 };
 
 export type GoogleApiKeyInfo = {
@@ -104,6 +105,11 @@ function saveSession(user: UserInfo) {
   try {
     localStorage.setItem(LS_USER_KEY, JSON.stringify(user));
   } catch {}
+}
+
+function mergeSession(partialUser: UserInfo) {
+  const current = loadSession();
+  saveSession({ ...(current || {}), ...partialUser } as UserInfo);
 }
 
 function loadSession(): UserInfo | null {
@@ -571,6 +577,40 @@ export const authApi = {
       allowRefresh: false,
     });
     return json<{ success: boolean; hasCustomKey: boolean; mode: string }>(res);
+  },
+
+  async updateProfile(dto: {
+    name?: string;
+    avatarUrl?: string | null;
+  }): Promise<{ user: UserInfo }> {
+    if (isMock) {
+      await delay(200);
+      const currentUser = loadSession();
+      if (!currentUser) {
+        throw new Error("用户未登录");
+      }
+      const nextUser: UserInfo = {
+        ...currentUser,
+        ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+        ...(dto.avatarUrl !== undefined ? { avatarUrl: dto.avatarUrl || null } : {}),
+      };
+      saveSession(nextUser);
+      return { user: nextUser };
+    }
+
+    const res = await fetchWithAuth(`${base}/api/users/profile`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...getAccessAuthHeader() },
+      body: JSON.stringify(dto),
+      credentials: "include",
+      auth: "omit",
+      allowRefresh: false,
+    });
+    const result = await json<{ user: UserInfo }>(res);
+    if (result.user) {
+      mergeSession(result.user);
+    }
+    return result;
   },
 
   // 忘记密码重置

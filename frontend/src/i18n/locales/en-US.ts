@@ -329,6 +329,22 @@ const enUS = {
           empty: "No credit info available.",
         },
       },
+      profileEditor: {
+        editButton: "Edit",
+        title: "Edit profile",
+        subtitle: "Update your username and avatar",
+        avatarLabel: "Avatar",
+        avatarHint: "Upload an image for your avatar",
+        removeAvatar: "Remove avatar",
+        nameLabel: "Username",
+        cancel: "Cancel",
+        save: "Save",
+        saving: "Saving...",
+        uploading: "Uploading avatar...",
+        uploadFailed: "Failed to upload avatar. Please try again.",
+        saveFailed: "Failed to save profile. Please try again.",
+        invalidImage: "Please choose an image file",
+      },
       referralTab: {
         alerts: {
           checkInSuccess: "Check-in successful. You earned {{reward}} credits{{bonus}}",

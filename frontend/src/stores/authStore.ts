@@ -9,6 +9,7 @@ type AuthState = {
   error: string | null;
   connection: 'mock' | 'server' | 'refresh' | 'local' | null;
   setAuthenticatedUser: (user: UserInfo, connection?: AuthState['connection']) => void;
+  updateProfile: (payload: { name?: string; avatarUrl?: string | null }) => Promise<UserInfo>;
   init: () => Promise<void>;
   login: (phone: string, password: string) => Promise<void>;
   loginWithSms: (phone: string, code: string) => Promise<void>;
@@ -26,6 +27,21 @@ export const useAuthStore = create<AuthState>((set) => ({
   connection: null,
   setAuthenticatedUser: (user, connection = 'server') => {
     set({ user, connection, error: null, loading: false, initializing: false });
+  },
+  updateProfile: async (payload) => {
+    set({ loading: true, error: null });
+    try {
+      const { user } = await authApi.updateProfile(payload);
+      set((state) => ({
+        user: state.user ? { ...state.user, ...user } : user,
+        loading: false,
+        error: null,
+      }));
+      return user;
+    } catch (e: any) {
+      set({ loading: false, error: e?.message || '更新资料失败' });
+      throw e;
+    }
   },
   init: async () => {
     set({ initializing: true, error: null });

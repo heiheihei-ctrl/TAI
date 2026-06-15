@@ -48,6 +48,9 @@ import {
   Plus,
   Sun,
   Moon,
+  Pencil,
+  Camera,
+  X,
 } from "lucide-react";
 import MemoryDebugPanel from "@/components/debug/MemoryDebugPanel";
 import HistoryDebugPanel from "@/components/debug/HistoryDebugPanel";
@@ -82,6 +85,7 @@ import {
   type DailyRewardStatus,
   type UserCreditsInfo,
 } from "@/services/adminApi";
+import { uploadToOSS } from "@/services/ossUploadService";
 
 // Nano Banana 闂傚倸鍊搁崐鎼佸磹妞嬪孩顐介柨鐔哄Т绾惧鏌涘☉鍗炲箻闁哄棗妫濋弻娑樷槈濮楀牆濮涘銈傛櫆閻擄繝寮诲☉銏犵婵＄偠顕ф禍楣冩⒑缁嬫鍎愰柟鎼佺畺楠炲骞橀鑲╊槹濡炪倖鎸炬慨纾嬨亹鎼淬劍鈷掑ù锝堟鐢稓绱掗鎯р枅鐎规洖缍婇獮搴ㄦ寠婢跺鈧剙顪冮妶鍡樼５闁稿鎸婚〃銉╂倷鐎电顫ч梺鐟板槻閹虫ê鐣烽妸锔剧瘈閹煎瓨绻勯弫?
 type BananaPricingTier = "fast" | "pro" | "ultra";
@@ -576,9 +580,15 @@ const FloatingHeader: React.FC = () => {
   const [activeSettingsSection, setActiveSettingsSection] =
     useState<SettingsSectionId>("workspace");
   const settingsContentScrollRef = useRef<HTMLDivElement | null>(null);
+  const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
   const [showReferralNotification, setShowReferralNotification] =
     useState(false);
   const [isGlobalHistoryOpen, setIsGlobalHistoryOpen] = useState(false);
+  const [isProfileEditorOpen, setIsProfileEditorOpen] = useState(false);
+  const [profileNameInput, setProfileNameInput] = useState("");
+  const [profileAvatarDraftUrl, setProfileAvatarDraftUrl] = useState("");
+  const [profileAvatarUploading, setProfileAvatarUploading] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
   // 闂傚倸鍊搁崐鐑芥嚄閸洖纾块柣銏㈩焾閻ょ偓绻濇繝鍌滃闁搞劌鍊块弻锝夊閵忊晝鍔哥紓浣哄У閼归箖鈥︾捄銊﹀磯闁惧繐婀辨导鍥╃磼妤ｅ啰鐣虹紒鐘崇墵瀵鎮㈢悰鈥充壕闁汇垺顔栭悞鎯归悩娆忓枤閻斿棝鎮峰▎蹇擃仼濠殿喖娲﹂妵鍕敇閻愭潙浠撮悗瑙勬礀閵堢鐣烽崡鐐嶆棃鍩€椤掑嫬姹查柣鏂挎啞閸欏繘鏌ㄥ┑鍡樺櫧濠⒀嶇畵閺岋紕浠﹂崜褉妲堥梺瀹狀嚙闁帮綁鐛崱妯奸檮濠㈣泛顦遍弫鏍⒑?
   useEffect(() => {
     setGridSizeInput(String(gridSize));
@@ -752,7 +762,7 @@ const FloatingHeader: React.FC = () => {
     })();
   };
 
-  const { user, logout, loading, connection } = useAuthStore();
+  const { user, logout, loading, connection, updateProfile } = useAuthStore();
 
   // 闂傚倸鍊搁崐椋庣矆娓氣偓楠炲鍨鹃幇浣圭稁缂傚倷鐒﹁摫闁告瑥绻橀弻鐔碱敍閿濆洣姹楅悷婊呭鐢帡鎮欐繝鍐︿簻闁瑰搫绉堕ˇ锕€霉閻樿櫕銇濇慨濠冩そ濡啫鈽夋潏鈺佸綃缂傚倷鑳舵慨鐢稿垂閸ф绠栭柨鐔哄Т閸楁娊鏌曡箛銉х？闁?Google API Key 闂傚倸鍊峰ù鍥х暦閸偅鍙忕€规洖娲ㄩ惌鍡椕归敐鍫綈婵炲懐濮撮湁闁绘ê妯婇崕鎰版煕?
   useEffect(() => {
@@ -883,6 +893,8 @@ const FloatingHeader: React.FC = () => {
     user?.email ||
     user?.id?.slice(-4) ||
     t("common.user");
+  const avatarInitial = displayName.charAt(0).toUpperCase();
+  const currentAvatarUrl = (user?.avatarUrl || "").trim();
   const secondaryId =
     user?.email ||
     (user?.phone
@@ -905,6 +917,74 @@ const FloatingHeader: React.FC = () => {
   })();
   const normalizedRole = (user?.role || "").trim().toLowerCase();
   const isAdmin = normalizedRole === "admin" || normalizedRole === "normal_admin";
+
+  useEffect(() => {
+    if (!isProfileEditorOpen) return;
+    setProfileNameInput(user?.name || "");
+    setProfileAvatarDraftUrl(user?.avatarUrl || "");
+  }, [isProfileEditorOpen, user?.avatarUrl, user?.name]);
+
+  const openProfileEditor = useCallback(() => {
+    setProfileNameInput(user?.name || "");
+    setProfileAvatarDraftUrl(user?.avatarUrl || "");
+    setIsProfileEditorOpen(true);
+  }, [user?.avatarUrl, user?.name]);
+
+  const handleProfileAvatarSelect = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      if (!file.type.startsWith("image/")) {
+        alert(t("workspace.settings.profileEditor.invalidImage"));
+        event.target.value = "";
+        return;
+      }
+
+      setProfileAvatarUploading(true);
+      try {
+        const uploadResult = await uploadToOSS(file, {
+          dir: "uploads/avatars/",
+          fileName: file.name || `avatar-${user?.id || Date.now()}.png`,
+          contentType: file.type || "image/png",
+        });
+        if (!uploadResult.success || !uploadResult.url) {
+          throw new Error(
+            uploadResult.error || t("workspace.settings.profileEditor.uploadFailed")
+          );
+        }
+        setProfileAvatarDraftUrl(uploadResult.url);
+      } catch (error: any) {
+        alert(
+          error?.message || t("workspace.settings.profileEditor.uploadFailed")
+        );
+      } finally {
+        setProfileAvatarUploading(false);
+        event.target.value = "";
+      }
+    },
+    [t, user?.id]
+  );
+
+  const handleProfileSave = useCallback(async () => {
+    const trimmedName = profileNameInput.trim();
+    if (!trimmedName) {
+      alert(t("auth.register.usernameRequired"));
+      return;
+    }
+    setProfileSaving(true);
+    try {
+      await updateProfile({
+        name: trimmedName,
+        avatarUrl: profileAvatarDraftUrl.trim() || null,
+      });
+      setIsProfileEditorOpen(false);
+    } catch (error: any) {
+      alert(error?.message || t("workspace.settings.profileEditor.saveFailed"));
+    } finally {
+      setProfileSaving(false);
+    }
+  }, [profileAvatarDraftUrl, profileNameInput, t, updateProfile]);
+
   useEffect(() => {
     if (!isAdmin || typeof window === "undefined") {
       setFpsOverlayAdminButtonLayout(null);
@@ -1032,8 +1112,16 @@ const FloatingHeader: React.FC = () => {
           <div className='pb-6 space-y-5 '>
             {/* User Greeting Section */}
             <div className='flex items-center gap-4 mb-10 mt-8'>
-              <div className='w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center text-base font-medium text-slate-600 shrink-0'>
-                {displayName.charAt(0).toUpperCase()}
+              <div className='w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center text-base font-medium text-slate-600 shrink-0 overflow-hidden'>
+                {currentAvatarUrl ? (
+                  <img
+                    src={currentAvatarUrl}
+                    alt={displayName}
+                    className='w-full h-full object-cover'
+                  />
+                ) : (
+                  avatarInitial
+                )}
               </div>
               <div className='flex-1 min-w-0'>
                 <div className='flex items-center gap-2 mb-0.5'>
@@ -1045,6 +1133,14 @@ const FloatingHeader: React.FC = () => {
                 </div>
                 <div className='text-sm text-slate-400'>{secondaryId}</div>
               </div>
+              <button
+                type='button'
+                onClick={openProfileEditor}
+                className='inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900'
+              >
+                <Pencil className='h-3.5 w-3.5' />
+                <span>{t("workspace.settings.profileEditor.editButton")}</span>
+              </button>
               <div className='shrink-0 text-sm leading-none text-right select-none'>
                 <AutosaveStatus />
               </div>
@@ -2405,12 +2501,29 @@ const FloatingHeader: React.FC = () => {
                     {/* 闂傚倸鍊风粈浣革耿闁秴鍌ㄧ憸鏃堝箖濞差亜惟闁靛鍟浠嬪箖閵忋倖鍋傞幖杈剧秶缁辩敻姊绘担鍛婅础闁惧繐閰ｅ畷鏉课旈崨顓狅紱闂侀潧艌閺呮粓鎮¤箛鎾斀闁绘灏欑粻鎶芥煟閿濆鎲鹃柡宀嬬秮楠炴鈧稒顭囬ˇ銉╂煠閹稿骸濮嶉柡灞剧洴婵＄兘顢涘鍐ㄧ厒濠电姭鎷冮崟顐ょシ闂?*/}
                     <div className='px-6 pt-4 mt-auto'>
                       <div className='flex items-center gap-2 min-w-0'>
-                        <div className='w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-medium text-white shrink-0'>
-                          {displayName.charAt(0).toUpperCase()}
+                        <div className='w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-medium text-white shrink-0 overflow-hidden'>
+                          {currentAvatarUrl ? (
+                            <img
+                              src={currentAvatarUrl}
+                              alt={displayName}
+                              className='w-full h-full object-cover'
+                            />
+                          ) : (
+                            avatarInitial
+                          )}
                         </div>
                         <span className='text-sm text-slate-600 truncate flex-1 min-w-0'>
                           {displayName}
                         </span>
+                        <button
+                          type='button'
+                          onClick={openProfileEditor}
+                          title={t("workspace.settings.profileEditor.editButton")}
+                          aria-label={t("workspace.settings.profileEditor.editButton")}
+                          className='shrink-0 flex h-7 w-7 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700'
+                        >
+                          <Pencil className='w-3.5 h-3.5' />
+                        </button>
                         <button
                           type='button'
                           onClick={() => void handleLogout()}
@@ -2451,6 +2564,132 @@ const FloatingHeader: React.FC = () => {
                       })}
                     </div>
                     {renderSettingsContent()}
+                  </div>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
+
+        {isProfileEditorOpen &&
+          typeof document !== "undefined" &&
+          createPortal(
+            <div
+              className='fixed inset-0 z-[1200] flex items-center justify-center bg-black/30 px-4 backdrop-blur-[2px]'
+              onClick={() => {
+                if (profileSaving || profileAvatarUploading) return;
+                setIsProfileEditorOpen(false);
+              }}
+            >
+              <div
+                className='w-full max-w-md rounded-3xl border border-slate-200/80 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.18)]'
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className='mb-5 flex items-start justify-between gap-4'>
+                  <div>
+                    <h3 className='text-lg font-semibold text-slate-900'>
+                      {t("workspace.settings.profileEditor.title")}
+                    </h3>
+                    <p className='mt-1 text-sm text-slate-500'>
+                      {t("workspace.settings.profileEditor.subtitle")}
+                    </p>
+                  </div>
+                  <button
+                    type='button'
+                    onClick={() => setIsProfileEditorOpen(false)}
+                    disabled={profileSaving || profileAvatarUploading}
+                    className='flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50'
+                  >
+                    <X className='h-4 w-4' />
+                  </button>
+                </div>
+
+                <div className='space-y-5'>
+                  <div className='flex items-center gap-4'>
+                    <div className='relative h-20 w-20 shrink-0 overflow-hidden rounded-full bg-slate-200'>
+                      {profileAvatarDraftUrl.trim() ? (
+                        <img
+                          src={profileAvatarDraftUrl}
+                          alt={displayName}
+                          className='h-full w-full object-cover'
+                        />
+                      ) : (
+                        <div className='flex h-full w-full items-center justify-center text-2xl font-semibold text-slate-600'>
+                          {avatarInitial}
+                        </div>
+                      )}
+                      <button
+                        type='button'
+                        onClick={() => avatarFileInputRef.current?.click()}
+                        disabled={profileAvatarUploading || profileSaving}
+                        className='absolute bottom-1 right-1 flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-white shadow-lg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60'
+                      >
+                        <Camera className='h-4 w-4' />
+                      </button>
+                    </div>
+                    <div className='min-w-0 flex-1'>
+                      <div className='text-sm font-medium text-slate-800'>
+                        {t("workspace.settings.profileEditor.avatarLabel")}
+                      </div>
+                      <div className='mt-1 text-xs text-slate-500'>
+                        {profileAvatarUploading
+                          ? t("workspace.settings.profileEditor.uploading")
+                          : t("workspace.settings.profileEditor.avatarHint")}
+                      </div>
+                      {!!profileAvatarDraftUrl.trim() && (
+                        <button
+                          type='button'
+                          onClick={() => setProfileAvatarDraftUrl("")}
+                          disabled={profileAvatarUploading || profileSaving}
+                          className='mt-2 text-xs font-medium text-slate-500 transition-colors hover:text-slate-900 disabled:opacity-50'
+                        >
+                          {t("workspace.settings.profileEditor.removeAvatar")}
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      ref={avatarFileInputRef}
+                      type='file'
+                      accept='image/*'
+                      className='hidden'
+                      onChange={(event) => void handleProfileAvatarSelect(event)}
+                    />
+                  </div>
+
+                  <label className='block'>
+                    <div className='mb-2 text-sm font-medium text-slate-800'>
+                      {t("workspace.settings.profileEditor.nameLabel")}
+                    </div>
+                    <input
+                      type='text'
+                      value={profileNameInput}
+                      onChange={(event) => setProfileNameInput(event.target.value)}
+                      maxLength={50}
+                      disabled={profileSaving}
+                      placeholder={t("auth.register.namePlaceholder")}
+                      className='w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-colors focus:border-slate-400'
+                    />
+                  </label>
+
+                  <div className='flex justify-end gap-3'>
+                    <button
+                      type='button'
+                      onClick={() => setIsProfileEditorOpen(false)}
+                      disabled={profileSaving || profileAvatarUploading}
+                      className='rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50'
+                    >
+                      {t("workspace.settings.profileEditor.cancel")}
+                    </button>
+                    <button
+                      type='button'
+                      onClick={() => void handleProfileSave()}
+                      disabled={profileSaving || profileAvatarUploading}
+                      className='rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60'
+                    >
+                      {profileSaving
+                        ? t("workspace.settings.profileEditor.saving")
+                        : t("workspace.settings.profileEditor.save")}
+                    </button>
                   </div>
                 </div>
               </div>

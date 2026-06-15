@@ -328,6 +328,22 @@ const zhCN = {
           empty: "暂无积分信息",
         },
       },
+      profileEditor: {
+        editButton: "编辑",
+        title: "编辑用户信息",
+        subtitle: "修改用户名和头像",
+        avatarLabel: "头像",
+        avatarHint: "支持上传图片作为头像",
+        removeAvatar: "移除头像",
+        nameLabel: "用户名",
+        cancel: "取消",
+        save: "保存",
+        saving: "保存中...",
+        uploading: "头像上传中...",
+        uploadFailed: "头像上传失败，请稍后重试",
+        saveFailed: "保存用户信息失败，请稍后重试",
+        invalidImage: "请选择图片文件",
+      },
       referralTab: {
         alerts: {
           checkInSuccess: "签到成功，获得 {{reward}} 积分{{bonus}}",

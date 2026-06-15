@@ -2,6 +2,7 @@ import { Body, Controller, Get, Patch, Req, UseGuards } from '@nestjs/common';
 import { ApiBody, ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { UsersService, UpdateGoogleApiKeyDto } from './users.service';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 
 @ApiTags('users')
 @Controller('users')
@@ -53,5 +54,15 @@ export class UsersController {
       hasCustomKey: !!result.googleCustomApiKey,
       mode: result.googleKeyMode,
     };
+  }
+
+  @Patch('profile')
+  @ApiCookieAuth('access_token')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: '更新当前用户资料' })
+  async updateProfile(@Req() req: any, @Body() dto: UpdateProfileDto) {
+    const userId = req.user.sub as string;
+    const user = await this.usersService.updateProfile(userId, dto);
+    return { user };
   }
 }
