@@ -1735,6 +1735,37 @@ const isHiddenFlowNodeType = (rawType?: string): boolean => {
   return Boolean(normalized && HIDDEN_FLOW_NODE_TYPES.has(normalized));
 };
 
+const SEED_3D_PALETTE_NAME_CANONICALS = new Set(["seed3d"]);
+
+const isSeed3DPaletteConfig = (config?: Partial<NodeConfig>): boolean => {
+  if (!config) return false;
+  const metadata = (config.metadata ?? {}) as Record<string, unknown>;
+  const nodeConfig =
+    metadata.nodeConfig && typeof metadata.nodeConfig === "object"
+      ? (metadata.nodeConfig as Record<string, unknown>)
+      : undefined;
+  const candidates = [
+    config.nodeKey,
+    config.nameZh,
+    config.nameEn,
+    typeof metadata.type === "string" ? metadata.type : undefined,
+    typeof metadata.flowNodeType === "string" ? metadata.flowNodeType : undefined,
+    typeof metadata.nodeKey === "string" ? metadata.nodeKey : undefined,
+    typeof metadata.provider === "string" ? metadata.provider : undefined,
+    typeof nodeConfig?.flowNodeType === "string" ? nodeConfig.flowNodeType : undefined,
+    typeof nodeConfig?.nameZh === "string" ? nodeConfig.nameZh : undefined,
+    typeof nodeConfig?.nameEn === "string" ? nodeConfig.nameEn : undefined,
+  ];
+
+  return candidates.some((candidate) => {
+    if (typeof candidate !== "string") return false;
+    const trimmed = candidate.trim();
+    if (!trimmed) return false;
+    const lowered = trimmed.toLowerCase();
+    return lowered.includes("seed 3d") || SEED_3D_PALETTE_NAME_CANONICALS.has(canonicalizeNodeTypeKey(trimmed));
+  });
+};
+
 type BananaPricingTier = "fast" | "pro" | "ultra";
 
 const BANANA_ROUTE_PRICING: Record<
@@ -3777,6 +3808,7 @@ function FlowInner() {
         return config;
       })
       .filter((config) => !BETA_NODE_KEYS.has(config.nodeKey))
+      .filter((config) => !isSeed3DPaletteConfig(config))
       .filter((config) => {
         const resolvedType = resolveFlowNodeTypeFromConfig(config);
         if (isManagedPaletteConfig(config)) {
