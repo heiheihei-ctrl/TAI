@@ -8,6 +8,7 @@ import {
   ArrowUp,
   ClipboardPaste,
   Copy,
+  Scissors,
   Download,
   Trash2,
   FolderPlus,
@@ -34,6 +35,17 @@ import { BoundsCalculator } from '@/utils/BoundsCalculator';
 import { createImageGroupBlock, formatImageGroupTitle, removeGroupBlockTitle } from '@/utils/paperImageGroupBlock';
 import { contextManager } from '@/services/contextManager';
 import { clipboardService, type CanvasClipboardData, type PathClipboardSnapshot } from '@/services/clipboardService';
+import {
+  CANVAS_CLIPBOARD_FALLBACK_TEXT,
+  CANVAS_CLIPBOARD_MIME,
+  CANVAS_CLIPBOARD_TYPE,
+  computeCanvasPasteOffset,
+  getCanvasClipboardOrigin,
+  parseCanvasClipboardPayload,
+  readCanvasClipboardFromDataTransfer,
+  serializeCanvasClipboard,
+  writeCanvasClipboardToSystem,
+} from '@/utils/canvasClipboard';
 import { isGroup, isRaster } from '@/utils/paperCoords';
 import type { ImageAssetSnapshot, ModelAssetSnapshot, TextAssetSnapshot, VideoAssetSnapshot } from '@/types/project';
 import ContextMenu from '@/components/ui/context-menu';
@@ -445,10 +457,6 @@ const looksLikeSvgMarkup = (value: string): boolean => {
   return trimmed.includes("<svg");
 };
 
-const CANVAS_CLIPBOARD_MIME = "application/x-tanva-canvas";
-const CANVAS_CLIPBOARD_FALLBACK_TEXT = "Tanva canvas selection";
-const CANVAS_CLIPBOARD_TYPE = "tanva-canvas";
-
 interface DrawingControllerProps {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
 }
@@ -471,6 +479,8 @@ type ContextMenuTargetType =
 interface CanvasContextMenuState {
   x: number;
   y: number;
+  projectX: number;
+  projectY: number;
   type: ContextMenuTargetType;
   targetId?: string;
 }
@@ -515,7 +525,11 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
     useState<CanvasContextMenuState | null>(null);
   const [isGlobalFlowRunning, setIsGlobalFlowRunning] = useState(false);
   const [abrBrushPreset, setAbrBrushPreset] = useState<AbrBrushPreset | null>(null);
-  const handleCanvasPasteRef = useRef<() => boolean>(() => false);
+  const handleCanvasPasteRef = useRef<
+    (options?: { anchor?: { x: number; y: number } | null }) => boolean
+  >(() => false);
+  const handleCanvasCutRef = useRef<() => boolean>(() => false);
+  const canvasPasteAnchorRef = useRef<{ x: number; y: number } | null>(null);
   const canvasToChatSyncTokenRef = useRef(0);
   const canvasBlobToFlowAssetRefCacheRef = useRef<Map<string, string>>(
     new Map()
@@ -1087,30 +1101,15 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
           if (!clipboardData) return;
 
           // 先尝试处理画布内的结构化剪贴板数据
-          const rawCanvasData =
-            clipboardData.getData(CANVAS_CLIPBOARD_MIME) ||
-            clipboardData.getData("application/json");
+          const payload = readCanvasClipboardFromDataTransfer(clipboardData);
           let hasStructuredCanvasPayload = false;
-          if (rawCanvasData) {
-            try {
-              const parsed = JSON.parse(rawCanvasData);
-              const payload: CanvasClipboardData | null =
-                parsed?.type === CANVAS_CLIPBOARD_TYPE
-                  ? parsed.data
-                  : parsed?.images && parsed?.paths
-                  ? parsed
-                  : null;
-              if (payload) {
-                hasStructuredCanvasPayload = true;
-                clipboardService.setCanvasData(payload);
-                const handled = handleCanvasPasteRef.current();
-                if (handled) {
-                  e.preventDefault();
-                  return;
-                }
-              }
-            } catch (err) {
-              logger.warn("解析画布剪贴板数据失败", err);
+          if (payload) {
+            hasStructuredCanvasPayload = true;
+            clipboardService.setCanvasData(payload);
+            const handled = handleCanvasPasteRef.current();
+            if (handled) {
+              e.preventDefault();
+              return;
             }
           }
 
@@ -5598,7 +5597,21 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
       const imageSnapshots: ImageAssetSnapshot[] = imageTool.imageInstances
         .filter((img) => selectedImageIdsSet.has(img.id))
         .map((img) => {
+          const remoteCandidate = [
+            (img.imageData as { remoteUrl?: string }).remoteUrl,
+            img.imageData.url,
+            img.imageData.src,
+            img.imageData.key,
+          ]
+            .map((candidate) =>
+              typeof candidate === "string"
+                ? normalizePersistableImageRef(candidate) || candidate
+                : null,
+            )
+            .find((candidate) => candidate && isRemoteUrl(candidate));
+
           const source =
+            remoteCandidate ||
             img.imageData.localDataUrl ||
             img.imageData.src ||
             img.imageData.url;
@@ -5608,15 +5621,15 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
           }
           return {
             id: img.id,
-            url: img.imageData.url || source,
-            src: img.imageData.src || source,
-            key: img.imageData.key,
+            url: remoteCandidate || img.imageData.url || source,
+            src: remoteCandidate || img.imageData.src || source,
+            key: remoteCandidate || img.imageData.key,
             fileName: img.imageData.fileName,
             width: img.imageData.width ?? img.bounds.width,
             height: img.imageData.height ?? img.bounds.height,
             contentType: img.imageData.contentType,
-            pendingUpload: img.imageData.pendingUpload,
-            localDataUrl: img.imageData.localDataUrl,
+            pendingUpload: remoteCandidate ? false : img.imageData.pendingUpload,
+            localDataUrl: remoteCandidate ? undefined : img.imageData.localDataUrl,
             locked: img.locked ?? img.imageData.locked,
             bounds: { ...img.bounds },
             layerId: img.layerId ?? null,
@@ -5677,6 +5690,12 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
           json: path.exportJSON({ asString: true }),
           layerName: path.layer?.name,
           position: { x: path.position.x, y: path.position.y },
+          bounds: {
+            x: path.bounds.x,
+            y: path.bounds.y,
+            width: path.bounds.width,
+            height: path.bounds.height,
+          },
           strokeWidth: path.data?.originalStrokeWidth ?? path.strokeWidth,
           strokeColor: path.strokeColor
             ? path.strokeColor.toCSS(true)
@@ -5697,6 +5716,12 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
           position: {
             x: item.paperText.position.x,
             y: item.paperText.position.y,
+          },
+          bounds: {
+            x: item.paperText.bounds.x,
+            y: item.paperText.bounds.y,
+            width: item.paperText.bounds.width,
+            height: item.paperText.bounds.height,
           },
           style: { ...item.style },
           layerId: item.paperText.layer?.name ?? null,
@@ -5744,13 +5769,15 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
 
       if (!hasAny) return null;
 
-      return {
+      const clipboardData: CanvasClipboardData = {
         images: imageSnapshots,
         models: modelSnapshots,
         texts: textSnapshots,
         videos: videoSnapshots,
         paths: pathSnapshots,
       };
+      clipboardData.origin = getCanvasClipboardOrigin(clipboardData);
+      return clipboardData;
     }, [
       imageTool.imageInstances,
       imageTool.selectedImageIds,
@@ -5770,6 +5797,7 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
       return false;
     }
     clipboardService.setCanvasData(payload);
+    void writeCanvasClipboardToSystem(payload);
     logger.debug("画布内容已复制到剪贴板:", {
       images: payload.images.length,
       models: payload.models.length,
@@ -5779,7 +5807,9 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
     return true;
   }, [collectCanvasClipboardData]);
 
-  const handleCanvasPaste = useCallback(() => {
+  const handleCanvasPaste = useCallback(
+    (options?: { anchor?: { x: number; y: number } | null }) => {
+    clipboardService.setActiveZone("canvas");
     const payload = clipboardService.getCanvasData();
     if (!payload) return false;
     logger.debug("尝试从剪贴板粘贴画布内容:", {
@@ -5789,7 +5819,8 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
       paths: payload.paths.length,
     });
 
-    const offset = { x: 32, y: 32 };
+    const anchor = options?.anchor ?? canvasPasteAnchorRef.current;
+    const offset = computeCanvasPasteOffset(payload, anchor);
 
     clearAllSelections();
     deselectSimpleText();
@@ -6009,6 +6040,10 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
       const target = event.target as Node | null;
       if (target && canvas.contains(target)) {
         clipboardService.setActiveZone("canvas");
+        try {
+          const point = clientToProject(canvas, event.clientX, event.clientY);
+          canvasPasteAnchorRef.current = { x: point.x, y: point.y };
+        } catch {}
       }
     };
     window.addEventListener("pointerdown", handlePointerDown, {
@@ -6090,11 +6125,7 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
         const payload = clipboardService.getCanvasData();
         if (!payload) return;
 
-        const serialized = JSON.stringify({
-          type: CANVAS_CLIPBOARD_TYPE,
-          version: 1,
-          data: payload,
-        });
+        const serialized = serializeCanvasClipboard(payload);
 
         if (event.clipboardData) {
           event.clipboardData.setData(CANVAS_CLIPBOARD_MIME, serialized);
@@ -6133,10 +6164,13 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
       const isCopy =
         (event.key === "c" || event.key === "C") &&
         (event.metaKey || event.ctrlKey);
+      const isCut =
+        (event.key === "x" || event.key === "X") &&
+        (event.metaKey || event.ctrlKey);
       const isPaste =
         (event.key === "v" || event.key === "V") &&
         (event.metaKey || event.ctrlKey);
-      if (!isCopy && !isPaste) return;
+      if (!isCopy && !isCut && !isPaste) return;
 
       const active = document.activeElement as Element | null;
       const tagName = active?.tagName?.toLowerCase();
@@ -6159,6 +6193,15 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
         const handled = handleCanvasCopy();
         if (handled) {
           // 继续让浏览器触发原生 copy 事件以写入系统剪贴板
+        }
+        return;
+      }
+
+      if (isCut) {
+        if (zone !== "canvas" && !fromCanvas) return;
+        const handled = handleCanvasCutRef.current();
+        if (handled) {
+          event.preventDefault();
         }
         return;
       }
@@ -6926,12 +6969,27 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
     if (!canvasElement) return;
 
     const handleContextMenu = (event: MouseEvent) => {
+      const projectPoint = clientToProject(
+        canvasElement,
+        event.clientX,
+        event.clientY,
+      );
+      canvasPasteAnchorRef.current = {
+        x: projectPoint.x,
+        y: projectPoint.y,
+      };
+
       const target = resolveContextTarget(event);
+      const menuBase = {
+        x: event.clientX,
+        y: event.clientY,
+        projectX: projectPoint.x,
+        projectY: projectPoint.y,
+      };
       if (target) {
         ensureSelectionForTarget(target);
         setContextMenuState({
-          x: event.clientX,
-          y: event.clientY,
+          ...menuBase,
           type: target.type as ContextMenuTargetType,
           targetId: "id" in target ? target.id : undefined,
         });
@@ -6940,8 +6998,7 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
           ? "selection"
           : "canvas";
         setContextMenuState({
-          x: event.clientX,
-          y: event.clientY,
+          ...menuBase,
           type: fallbackType,
         });
       }
@@ -7099,6 +7156,15 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
     simpleTextTool.selectedTextId,
   ]);
 
+  const handleCanvasCut = useCallback(() => {
+    const copied = handleCanvasCopy();
+    if (!copied) return false;
+    handleDeleteSelection();
+    return true;
+  }, [handleCanvasCopy, handleDeleteSelection]);
+
+  handleCanvasCutRef.current = handleCanvasCut;
+
   const closeContextMenu = useCallback(() => setContextMenuState(null), []);
 
   const showToast = useCallback(
@@ -7159,10 +7225,24 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
         disabled: !canCopy,
       },
       {
+        label: "剪切",
+        icon: <Scissors className='w-4 h-4' />,
+        onClick: () => {
+          handleCanvasCut();
+        },
+        disabled: !canCopy,
+      },
+      {
         label: "粘贴",
         icon: <ClipboardPaste className='w-4 h-4' />,
         onClick: () => {
-          handleCanvasPaste();
+          handleCanvasPaste({
+            anchor: {
+              x: contextMenuState.projectX,
+              y: contextMenuState.projectY,
+            },
+          });
+          closeContextMenu();
         },
         disabled: !canPaste,
       },
@@ -7274,6 +7354,7 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
   }, [
     contextMenuState,
     handleCanvasCopy,
+    handleCanvasCut,
     handleCanvasPaste,
     handleExportCanvasJson,
     handleImportCanvasJson,

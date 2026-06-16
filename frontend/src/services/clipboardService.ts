@@ -1,5 +1,9 @@
 import type { ImageAssetSnapshot, ModelAssetSnapshot, TextAssetSnapshot, VideoAssetSnapshot } from '@/types/project';
 import type { TemplateEdge, TemplateNode } from '@/types/template';
+import {
+  CANVAS_CLIPBOARD_STORAGE_KEY,
+  normalizeCanvasClipboardForStorage,
+} from '@/utils/canvasClipboard';
 
 export type ClipboardZone = 'canvas' | 'flow';
 
@@ -7,6 +11,7 @@ export interface PathClipboardSnapshot {
   json: any;
   layerName?: string;
   position: { x: number; y: number };
+  bounds?: { x: number; y: number; width: number; height: number };
   strokeWidth?: number;
   strokeColor?: string;
   fillColor?: string;
@@ -18,6 +23,8 @@ export interface CanvasClipboardData {
   texts: TextAssetSnapshot[];
   videos: VideoAssetSnapshot[];
   paths: PathClipboardSnapshot[];
+  /** 复制时选中内容的左上角，用于粘贴定位 */
+  origin?: { x: number; y: number };
 }
 
 export interface ClipboardFlowNode extends TemplateNode {
@@ -39,8 +46,16 @@ class ClipboardService {
   private activeZone: ClipboardZone | null = null;
 
   setCanvasData(data: CanvasClipboardData) {
-    this.canvasPayload = { data, timestamp: Date.now() };
+    const normalized = normalizeCanvasClipboardForStorage(data);
+    const timestamp = Date.now();
+    this.canvasPayload = { data: normalized, timestamp };
     this.activeZone = 'canvas';
+    try {
+      sessionStorage.setItem(
+        CANVAS_CLIPBOARD_STORAGE_KEY,
+        JSON.stringify({ data: normalized, timestamp }),
+      );
+    } catch {}
   }
 
   setFlowData(data: FlowClipboardData) {
@@ -49,7 +64,26 @@ class ClipboardService {
   }
 
   getCanvasData(): CanvasClipboardData | null {
-    return this.canvasPayload?.data ?? null;
+    if (this.canvasPayload?.data) {
+      return this.canvasPayload.data;
+    }
+
+    try {
+      const raw = sessionStorage.getItem(CANVAS_CLIPBOARD_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as {
+        data?: CanvasClipboardData;
+        timestamp?: number;
+      };
+      if (!parsed?.data) return null;
+      this.canvasPayload = {
+        data: parsed.data,
+        timestamp: parsed.timestamp ?? Date.now(),
+      };
+      return parsed.data;
+    } catch {
+      return null;
+    }
   }
 
   getFlowData(): FlowClipboardData | null {
@@ -72,6 +106,19 @@ class ClipboardService {
     this.canvasPayload = null;
     this.flowPayload = null;
     this.activeZone = null;
+    try {
+      sessionStorage.removeItem(CANVAS_CLIPBOARD_STORAGE_KEY);
+    } catch {}
+  }
+
+  clearCanvas() {
+    this.canvasPayload = null;
+    if (this.activeZone === 'canvas') {
+      this.activeZone = null;
+    }
+    try {
+      sessionStorage.removeItem(CANVAS_CLIPBOARD_STORAGE_KEY);
+    } catch {}
   }
 }
 

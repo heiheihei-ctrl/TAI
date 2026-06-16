@@ -29,6 +29,7 @@ export interface TextAssetSnapshot {
   id: string;
   content: string;
   position: { x: number; y: number };
+  bounds?: { x: number; y: number; width: number; height: number };
   style: {
     fontFamily: string;
     fontWeight: 'normal' | 'bold';
