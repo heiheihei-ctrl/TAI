@@ -1090,24 +1090,42 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
       </div>
 
       {/* 橡皮擦工具 - 统一画板下仅对绘图生效，节点擦除关闭 */}
-      <Tooltip open={isSubMenuOpen ? false : undefined}>
-        <TooltipTrigger asChild>
-          <Button
-            onClick={toggleEraser}
-            variant={isEraser ? "default" : "outline"}
-            size="sm"
-            className={cn(
-              "p-0 h-8 w-8 rounded-full",
-              getActiveButtonStyle(isEraser)
-            )}
-          >
-            <Eraser className="w-4 h-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="right">
-          {isEraser ? lt("点击切换到画笔", "Switch to brush") : lt("点击切换到橡皮擦", "Switch to eraser")}
-        </TooltipContent>
-      </Tooltip>
+      <div className="relative flex flex-col items-center gap-2">
+        <Tooltip open={isSubMenuOpen ? false : undefined}>
+          <TooltipTrigger asChild>
+            <Button
+              onClick={toggleEraser}
+              variant={isEraser ? "default" : "outline"}
+              size="sm"
+              className={cn(
+                "p-0 h-8 w-8 rounded-full",
+                getActiveButtonStyle(isEraser)
+              )}
+            >
+              <Eraser className="w-4 h-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">
+            {isEraser ? lt("点击切换到画笔", "Switch to brush") : lt("点击切换到橡皮擦", "Switch to eraser")}
+          </TooltipContent>
+        </Tooltip>
+
+        {isEraser && (
+          <div className="flex flex-col items-center gap-1">
+            <span className="text-xs font-medium text-gray-600 tabular-nums">
+              {strokeWidth}
+            </span>
+            <VerticalSlider
+              value={strokeWidth}
+              min={2}
+              max={50}
+              onChange={setStrokeWidth}
+              disabled={false}
+            />
+            <span className="text-[10px] text-gray-500">{lt('大小', 'Size')}</span>
+          </div>
+        )}
+      </div>
 
       {/* 独立工具按钮 */}
       <div className="flex flex-col items-center gap-2">

@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { loadDryMediaBrushes } from '@/services/abrBrushService';
 import type { AbrBrushPreset } from '@/types/abrBrush';
 import { useLocaleText } from '@/utils/localeText';
+import { getBrushDisplayName } from '@/utils/abrBrushLabels';
 
 type AbrBrushPickerProps = {
   selectedBrushId: string | null;
@@ -11,15 +12,12 @@ type AbrBrushPickerProps = {
   onSelectBrush: (brushId: string | null) => void;
 };
 
-const formatBrushName = (name: string) =>
-  name.replace(/^Kyle's Dry Media - /, '');
-
 const AbrBrushPicker: React.FC<AbrBrushPickerProps> = ({
   selectedBrushId,
   disabled = false,
   onSelectBrush,
 }) => {
-  const { lt } = useLocaleText();
+  const { lt, language } = useLocaleText();
   const [isOpen, setIsOpen] = useState(false);
   const [brushes, setBrushes] = useState<AbrBrushPreset[]>([]);
   const [loading, setLoading] = useState(false);
@@ -110,7 +108,7 @@ const AbrBrushPicker: React.FC<AbrBrushPickerProps> = ({
         {selectedBrush ? (
           <img
             src={selectedBrush.previewDataUrl}
-            alt={selectedBrush.name}
+            alt={getBrushDisplayName(selectedBrush.name, language)}
             className='h-5 w-5 rounded-sm object-contain'
           />
         ) : (
@@ -161,7 +159,7 @@ const AbrBrushPicker: React.FC<AbrBrushPickerProps> = ({
                   <button
                     key={brush.id}
                     type='button'
-                    title={brush.name}
+                    title={getBrushDisplayName(brush.name, language)}
                     className={cn( 
                       'flex h-9 w-full items-center gap-2 rounded-lg border px-2 text-xs font-medium transition-colors',
                       isActive
@@ -172,11 +170,11 @@ const AbrBrushPicker: React.FC<AbrBrushPickerProps> = ({
                   >
                     <img
                       src={brush.previewDataUrl}
-                      alt={brush.name}
+                      alt={getBrushDisplayName(brush.name, language)}
                       className='h-6 w-6 shrink-0 rounded-sm bg-white object-contain'
                     />
                     <span className='truncate text-left'>
-                      {formatBrushName(brush.name)}
+                      {getBrushDisplayName(brush.name, language)}
                     </span>
                   </button>
                 );

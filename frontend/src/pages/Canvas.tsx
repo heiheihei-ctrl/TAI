@@ -13,7 +13,10 @@ import AIChatDialog from '@/components/chat/AIChatDialog';
 import FloatingHeader from '@/components/layout/FloatingHeader';
 import CodeSandboxPanel from '@/components/sandbox/CodeSandboxPanel';
 import SelectionBoxOverlay from '@/components/canvas/SelectionBoxOverlay';
+import EraserCursorOverlay from '@/components/canvas/EraserCursorOverlay';
 import { useLayerStore } from '@/stores';
+import { useCanvasStore } from '@/stores/canvasStore';
+import { useToolStore } from '@/stores/toolStore';
 // import CachedImageDebug from '@/components/debug/CachedImageDebug';
 import FlowOverlay from '@/components/flow/FlowOverlay';
 import { migrateImageHistoryToRemote } from '@/services/imageHistoryService';
@@ -27,6 +30,10 @@ import GlobalZoomCapture from '@/components/canvas/GlobalZoomCapture';
 const Canvas: React.FC = () => {
     const chatTheme = useAIChatStore((state) => state.chatTheme);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const zoom = useCanvasStore((state) => state.zoom);
+    const isEraser = useToolStore((state) => state.isEraser);
+    const strokeWidth = useToolStore((state) => state.strokeWidth);
+    const drawMode = useToolStore((state) => state.drawMode);
     const [isPaperInitialized, setIsPaperInitialized] = useState(false);
     const [isPaperReady, setIsPaperReady] = useState(false); // Delay Paper.js init.
     // AI image display now goes through fast upload flow; no extra hook needed.
@@ -80,6 +87,13 @@ const Canvas: React.FC = () => {
                 ref={canvasRef}
                 className="tanva-main-canvas absolute inset-0 w-full h-full"
                 style={{ background: 'white' }}
+            />
+
+            <EraserCursorOverlay
+                canvasRef={canvasRef}
+                visible={isEraser && drawMode === 'free'}
+                strokeWidth={strokeWidth}
+                zoom={zoom}
             />
 
             {/* Paper.js manager - delayed init */}

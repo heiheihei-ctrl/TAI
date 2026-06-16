@@ -173,6 +173,20 @@ export class BitmapBrushStroke {
     this.ctx.restore();
   }
 
+  private syncRasterBinding(raster: paper.Raster) {
+    (raster as paper.Raster & { canvas?: HTMLCanvasElement }).canvas = this.canvas;
+    raster.image = this.canvas;
+    raster.data = {
+      ...(raster.data ?? {}),
+      type: raster.data?.type ?? 'abr-brush-preview',
+      brushId: this.preset.id,
+      isAbrBrushRaster: true,
+      sourceCanvas: this.canvas,
+      projectOriginX: this.bounds.minX,
+      projectOriginY: this.bounds.minY,
+    };
+  }
+
   private updatePreviewRaster(layer: paper.Layer) {
     const center = new paper.Point(
       this.bounds.minX + this.canvas.width / 2,
@@ -182,15 +196,12 @@ export class BitmapBrushStroke {
     if (!this.previewRaster) {
       this.previewRaster = new paper.Raster(this.canvas);
       this.previewRaster.position = center;
-      this.previewRaster.data = {
-        type: 'abr-brush-preview',
-        brushId: this.preset.id,
-      };
+      this.syncRasterBinding(this.previewRaster);
       layer.addChild(this.previewRaster);
       return;
     }
 
-    this.previewRaster.image = this.canvas;
+    this.syncRasterBinding(this.previewRaster);
     this.previewRaster.position = center;
   }
 
@@ -228,10 +239,16 @@ export class BitmapBrushStroke {
 
   finalize(layer: paper.Layer): paper.Raster {
     if (this.previewRaster) {
+      this.syncRasterBinding(this.previewRaster);
       this.previewRaster.data = {
+        ...(this.previewRaster.data ?? {}),
         type: 'abr-brush-stroke',
         brushId: this.preset.id,
         brushName: this.preset.name,
+        isAbrBrushRaster: true,
+        sourceCanvas: this.canvas,
+        projectOriginX: this.bounds.minX,
+        projectOriginY: this.bounds.minY,
       };
       if (paper.project && (paper.project as any).emit) {
         (paper.project as any).emit('change');
@@ -246,10 +263,15 @@ export class BitmapBrushStroke {
       this.bounds.minX + this.canvas.width / 2,
       this.bounds.minY + this.canvas.height / 2,
     );
+    (raster as paper.Raster & { canvas?: HTMLCanvasElement }).canvas = this.canvas;
     raster.data = {
       type: 'abr-brush-stroke',
       brushId: this.preset.id,
       brushName: this.preset.name,
+      isAbrBrushRaster: true,
+      sourceCanvas: this.canvas,
+      projectOriginX: this.bounds.minX,
+      projectOriginY: this.bounds.minY,
     };
     layer.addChild(raster);
     return raster;

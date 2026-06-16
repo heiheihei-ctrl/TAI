@@ -1,6 +1,6 @@
 /**
  * 橡皮擦工具Hook
- * 处理橡皮擦功能，删除与橡皮擦路径相交的绘图内容
+ * 圆形橡皮擦：按半径擦除位图笔刷与矢量路径内容
  */
 
 import { useCallback } from 'react';
@@ -13,6 +13,11 @@ import {
   eraseRastersBetweenPoints,
   getEraserRadius as computeEraserRadius,
 } from '@/utils/rasterEraser';
+import {
+  erasePathsAtPoint,
+  erasePathsBetweenPoints,
+  erasePathsAlongPath,
+} from '@/utils/vectorEraser';
 
 interface UseEraserToolProps {
   context: DrawingContext;
@@ -22,226 +27,136 @@ interface UseEraserToolProps {
 export const useEraserTool = ({ context, strokeWidth }: UseEraserToolProps) => {
   const { ensureDrawingLayer } = context;
 
-  // ========== 橡皮擦核心功能 ==========
+  const getEraserRadius = useCallback(() => computeEraserRadius(strokeWidth), [strokeWidth]);
 
-  // 橡皮擦功能 - 删除与橡皮擦路径相交的绘图内容
-  const performErase = useCallback((eraserPath: paper.Path) => {
-    const drawingLayer = ensureDrawingLayer();
-    if (!drawingLayer) return;
+  const performEraseAtPoint = useCallback(
+    (point: paper.Point) => {
+      const drawingLayer = ensureDrawingLayer();
+      if (!drawingLayer) return 0;
 
-    const eraserBounds = eraserPath.bounds;
-    const tolerance = strokeWidth + 5;
+      const radius = getEraserRadius();
+      const rasterCount = eraseRastersAtPoint(drawingLayer, point, radius);
+      const pathCount = erasePathsAtPoint(drawingLayer, point, radius);
+      return rasterCount + pathCount;
+    },
+    [ensureDrawingLayer, getEraserRadius],
+  );
 
-    eraseRastersAlongPath(drawingLayer, eraserPath, strokeWidth);
+  const performEraseBetweenPoints = useCallback(
+    (from: paper.Point, to: paper.Point) => {
+      const drawingLayer = ensureDrawingLayer();
+      if (!drawingLayer) return 0;
 
-    const itemsToRemove: paper.Item[] = [];
-    drawingLayer.children.forEach((item) => {
-      if (item instanceof paper.Path && item !== eraserPath) {
-        if (item.bounds.intersects(eraserBounds)) {
-          const intersections = item.getIntersections(eraserPath);
-          if (intersections.length > 0) {
-            itemsToRemove.push(item);
-          } else {
-            for (const segment of item.segments) {
-              const distance = eraserPath.getNearestLocation(segment.point)?.distance || Infinity;
-              if (distance < tolerance) {
-                itemsToRemove.push(item);
-                break;
-              }
-            }
-          }
-        }
-      }
-    });
+      const radius = getEraserRadius();
+      const rasterCount = eraseRastersBetweenPoints(drawingLayer, from, to, radius);
+      const pathCount = erasePathsBetweenPoints(drawingLayer, from, to, radius);
+      return rasterCount + pathCount;
+    },
+    [ensureDrawingLayer, getEraserRadius],
+  );
 
-    itemsToRemove.forEach(item => item.remove());
+  const performErase = useCallback(
+    (eraserPath: paper.Path) => {
+      const drawingLayer = ensureDrawingLayer();
+      if (!drawingLayer) return 0;
 
-    logger.debug(`🧹 橡皮擦处理了 ${itemsToRemove.length} 个矢量路径`);
-    
-    return itemsToRemove.length;
-  }, [strokeWidth, ensureDrawingLayer]);
+      const rasterCount = eraseRastersAlongPath(drawingLayer, eraserPath, strokeWidth);
+      const pathCount = erasePathsAlongPath(drawingLayer, eraserPath, strokeWidth);
+      const total = rasterCount + pathCount;
+      logger.debug(`🧹 圆形橡皮擦处理了 ${total} 个图元`);
+      return total;
+    },
+    [strokeWidth, ensureDrawingLayer],
+  );
 
   const performEraseRastersBetweenPoints = useCallback(
     (from: paper.Point, to: paper.Point) => {
-      const drawingLayer = ensureDrawingLayer();
-      if (!drawingLayer) return;
-      eraseRastersBetweenPoints(
-        drawingLayer,
-        from,
-        to,
-        computeEraserRadius(strokeWidth),
-      );
+      performEraseBetweenPoints(from, to);
     },
-    [strokeWidth, ensureDrawingLayer],
+    [performEraseBetweenPoints],
   );
 
   const performEraseRastersAtPoint = useCallback(
     (point: paper.Point) => {
-      const drawingLayer = ensureDrawingLayer();
-      if (!drawingLayer) return;
-      eraseRastersAtPoint(
-        drawingLayer,
-        point,
-        computeEraserRadius(strokeWidth),
-      );
+      performEraseAtPoint(point);
     },
-    [strokeWidth, ensureDrawingLayer],
+    [performEraseAtPoint],
   );
 
-  // ========== 橡皮擦辅助功能 ==========
+  const hasErasableContentAt = useCallback(
+    (point: paper.Point, radius?: number): boolean => {
+      const drawingLayer = ensureDrawingLayer();
+      if (!drawingLayer) return false;
 
-  // 计算橡皮擦的有效范围
-  const getEraserRadius = useCallback(() => {
-    return computeEraserRadius(strokeWidth);
-  }, [strokeWidth]);
+      const checkRadius = radius || getEraserRadius();
 
-  // 检测指定点周围是否有可擦除的内容
-  const hasErasableContentAt = useCallback((point: paper.Point, radius?: number): boolean => {
-    const drawingLayer = ensureDrawingLayer();
-    if (!drawingLayer) return false;
-
-    const checkRadius = radius || getEraserRadius();
-    let hasContent = false;
-
-    drawingLayer.children.forEach((item) => {
-      if (item instanceof paper.Path && !hasContent) {
-        // 检查路径上的任意点是否在橡皮擦范围内
-        for (const segment of item.segments) {
-          const distance = segment.point.getDistance(point);
-          if (distance <= checkRadius) {
-            hasContent = true;
-            break;
-          }
+      return drawingLayer.children.some((item) => {
+        if (item instanceof paper.Path) {
+          return item.segments.some(
+            (segment) => segment.point.getDistance(point) <= checkRadius,
+          );
         }
-      }
-    });
-
-    return hasContent;
-  }, [ensureDrawingLayer, getEraserRadius]);
-
-  // 预览橡皮擦影响范围（返回会被擦除的路径数量）
-  const previewEraseAt = useCallback((point: paper.Point, radius?: number): number => {
-    const drawingLayer = ensureDrawingLayer();
-    if (!drawingLayer) return 0;
-
-    const checkRadius = radius || getEraserRadius();
-    let affectedCount = 0;
-
-    drawingLayer.children.forEach((item) => {
-      if (item instanceof paper.Path) {
-        // 检查路径上的任意点是否在橡皮擦范围内
-        for (const segment of item.segments) {
-          const distance = segment.point.getDistance(point);
-          if (distance <= checkRadius) {
-            affectedCount++;
-            break;
-          }
+        if (item instanceof paper.Raster && item.bounds.contains(point)) {
+          return true;
         }
-      }
-    });
+        return false;
+      });
+    },
+    [ensureDrawingLayer, getEraserRadius],
+  );
 
-    return affectedCount;
-  }, [ensureDrawingLayer, getEraserRadius]);
+  const previewEraseAt = useCallback(
+    (point: paper.Point, radius?: number): number => {
+      const drawingLayer = ensureDrawingLayer();
+      if (!drawingLayer) return 0;
 
-  // ========== 橡皮擦模式检测 ==========
+      const checkRadius = radius || getEraserRadius();
+      let affectedCount = 0;
 
-  // 检查指定路径是否是橡皮擦路径（基于样式特征）
-  const isEraserPath = useCallback((path: paper.Path): boolean => {
-    // 橡皮擦路径特征：红色虚线，特定透明度
-    const strokeColor = path.strokeColor;
-    if (!strokeColor) return false;
-
-    // 检查是否是红色系（容忍一定误差）
-    const isReddish = strokeColor.red > 0.8 && strokeColor.green < 0.5 && strokeColor.blue < 0.5;
-    
-    // 检查是否有虚线样式
-    const hasDashArray = path.dashArray && path.dashArray.length > 0;
-    
-    // 检查透明度
-    const hasTransparency = path.opacity < 1.0;
-
-    return isReddish && hasDashArray && hasTransparency;
-  }, []);
-
-  // ========== 橡皮擦路径创建辅助 ==========
-
-  // 创建橡皮擦样式的路径配置
-  const getEraserPathStyle = useCallback(() => {
-    return {
-      strokeColor: new paper.Color('#ff6b6b'), // 红色
-      strokeWidth: strokeWidth * 1.5, // 稍微粗一点
-      dashArray: [5, 5], // 虚线效果
-      opacity: 0.7, // 半透明
-      strokeCap: 'round' as const,
-      strokeJoin: 'round' as const,
-    };
-  }, [strokeWidth]);
-
-  // 应用橡皮擦样式到路径
-  const applyEraserStyle = useCallback((path: paper.Path) => {
-    const style = getEraserPathStyle();
-    Object.assign(path, style);
-  }, [getEraserPathStyle]);
-
-  // ========== 批量橡皮擦操作 ==========
-
-  // 在指定区域内执行橡皮擦操作
-  const performEraseInArea = useCallback((bounds: paper.Rectangle): number => {
-    const drawingLayer = ensureDrawingLayer();
-    if (!drawingLayer) return 0;
-
-    const itemsToRemove: paper.Item[] = [];
-    
-    drawingLayer.children.forEach((item) => {
-      if (item instanceof paper.Path) {
-        // 检查路径是否与指定区域相交
-        if (item.bounds.intersects(bounds)) {
-          itemsToRemove.push(item);
+      drawingLayer.children.forEach((item) => {
+        if (item instanceof paper.Path) {
+          const hit = item.segments.some(
+            (segment) => segment.point.getDistance(point) <= checkRadius,
+          );
+          if (hit) affectedCount += 1;
         }
-      }
-    });
+      });
 
-    // 删除相交的路径
-    itemsToRemove.forEach(item => item.remove());
+      return affectedCount;
+    },
+    [ensureDrawingLayer, getEraserRadius],
+  );
 
-    logger.debug(`🧹 区域橡皮擦删除了 ${itemsToRemove.length} 个路径`);
-    
-    return itemsToRemove.length;
-  }, [ensureDrawingLayer]);
+  const performEraseInArea = useCallback(
+    (bounds: paper.Rectangle): number => performEraseAtPoint(bounds.center),
+    [performEraseAtPoint],
+  );
 
-  // 清空整个绘图图层
   const clearDrawingLayer = useCallback((): number => {
     const drawingLayer = ensureDrawingLayer();
     if (!drawingLayer) return 0;
 
-    const pathCount = drawingLayer.children.filter(item => item instanceof paper.Path).length;
-    
-    // 移除所有路径（保留非路径元素）
-    const itemsToRemove = drawingLayer.children.filter(item => item instanceof paper.Path);
-    itemsToRemove.forEach(item => item.remove());
+    const pathCount = drawingLayer.children.filter(
+      (item) => item instanceof paper.Path || item instanceof paper.Raster,
+    ).length;
 
-    logger.debug(`🧹 清空绘图图层，删除了 ${pathCount} 个路径`);
-    
+    drawingLayer.children
+      .filter((item) => item instanceof paper.Path || item instanceof paper.Raster)
+      .forEach((item) => item.remove());
+
+    logger.debug(`🧹 清空绘图图层，删除了 ${pathCount} 个图元`);
     return pathCount;
   }, [ensureDrawingLayer]);
 
   return {
-    // 核心橡皮擦功能
     performErase,
+    performEraseAtPoint,
+    performEraseBetweenPoints,
     performEraseRastersBetweenPoints,
     performEraseRastersAtPoint,
-
-    // 辅助功能
     getEraserRadius,
     hasErasableContentAt,
     previewEraseAt,
-
-    // 样式和检测
-    isEraserPath,
-    getEraserPathStyle,
-    applyEraserStyle,
-
-    // 批量操作
     performEraseInArea,
     clearDrawingLayer,
   };

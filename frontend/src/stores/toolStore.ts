@@ -103,7 +103,9 @@ export const useToolStore = create<ToolState>()(
         },
 
         setStrokeWidth: (width) => {
-          const validWidth = Math.max(1, Math.min(20, width)); // 限制范围 1-20
+          const { isEraser } = get();
+          const max = isEraser ? 50 : 20;
+          const validWidth = Math.max(1, Math.min(max, width));
           set({ strokeWidth: validWidth });
         },
 
@@ -116,13 +118,18 @@ export const useToolStore = create<ToolState>()(
         },
 
         toggleEraser: () => {
-          const { isEraser } = get();
+          const { isEraser, strokeWidth } = get();
           if (isEraser) {
-            // 如果当前是橡皮擦模式，关闭橡皮擦
-            set({ isEraser: false });
+            set({
+              isEraser: false,
+              strokeWidth: Math.min(20, strokeWidth),
+            });
           } else {
-            // 如果当前不是橡皮擦模式，开启橡皮擦并切换到自由绘制模式
-            set({ isEraser: true, drawMode: 'free' });
+            set({
+              isEraser: true,
+              drawMode: 'free',
+              strokeWidth: Math.max(8, strokeWidth),
+            });
           }
         },
 
