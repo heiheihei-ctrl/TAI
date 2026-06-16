@@ -112,6 +112,7 @@ interface ImageTool {
   imageResizeState: ImageResizeState;
   setImageDragState: (state: ImageDragState) => void;
   setImageResizeState: (state: ImageResizeState) => void;
+  requestImageUpload?: (placeholder?: paper.Group | null) => void;
   handleImageMove: (id: string, position: { x: number; y: number }, skipPaperUpdate?: boolean) => void;
   handleImagesMove?: (moves: Array<{ id: string; position: { x: number; y: number } }>, skipPaperUpdate?: boolean) => void;
   handleImageResize: (id: string, bounds: { x: number; y: number; width: number; height: number }) => void;
@@ -734,15 +735,9 @@ export const useInteractionController = ({
 
           if (hotspotType === 'image' && imagePlaceholder) {
             try {
-              const placeholderRef = (latestImageTool as any)?.currentPlaceholderRef;
-              if (placeholderRef) {
-                placeholderRef.current = imagePlaceholder;
-              }
-            } catch {}
-            try {
-              const triggerUpload = (latestImageTool as any)?.setTriggerImageUpload;
-              if (typeof triggerUpload === 'function') {
-                triggerUpload(true);
+              const requestUpload = latestImageTool.requestImageUpload;
+              if (typeof requestUpload === 'function') {
+                requestUpload(imagePlaceholder);
               }
             } catch {}
             logger.upload('📸 命中图片上传按钮，触发上传');
@@ -1770,6 +1765,11 @@ export const useInteractionController = ({
     if (!canvas) return;
 
     const isPen = isPenPointer(event);
+    const isTouch = event.pointerType === 'touch';
+    if (!isPen && !isTouch) {
+      return;
+    }
+
     if (isPen) {
       activeTabletPointerIdRef.current = event.pointerId;
       try {
@@ -1785,6 +1785,12 @@ export const useInteractionController = ({
   }, [handleMouseDown, canvasRef]);
 
   const handlePointerMove = useCallback((event: PointerEvent) => {
+    const isPen = isPenPointer(event);
+    const isTouch = event.pointerType === 'touch';
+    if (!isPen && !isTouch) {
+      return;
+    }
+
     if (
       activeTabletPointerIdRef.current !== null &&
       event.pointerId !== activeTabletPointerIdRef.current
@@ -1801,7 +1807,7 @@ export const useInteractionController = ({
     if (
       currentDrawMode === 'free' &&
       latestDrawingTools?.continueFreeDrawSamples &&
-      (isPenPointer(event) || event.pointerType === 'touch')
+      (isPen || isTouch)
     ) {
       const samples = getCoalescedPointerSamples(event).map((sample) => ({
         point: clientToProject(canvas, sample.clientX, sample.clientY),
@@ -2260,11 +2266,21 @@ export const useInteractionController = ({
   }, [canvasRef, isLockedImage, resetGroupPathDrag, stopSpacePan]);
 
   const handlePointerUp = useCallback((event: PointerEvent) => {
+    const isPen = isPenPointer(event);
+    const isTouch = event.pointerType === 'touch';
+    if (!isPen && !isTouch) {
+      return;
+    }
     releaseTabletPointer(event);
     handleMouseUp(event as unknown as MouseEvent);
   }, [handleMouseUp, releaseTabletPointer]);
 
   const handlePointerCancel = useCallback((event: PointerEvent) => {
+    const isPen = isPenPointer(event);
+    const isTouch = event.pointerType === 'touch';
+    if (!isPen && !isTouch) {
+      return;
+    }
     releaseTabletPointer(event);
     handleMouseUp(event as unknown as MouseEvent);
   }, [handleMouseUp, releaseTabletPointer]);

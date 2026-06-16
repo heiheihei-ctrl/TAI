@@ -832,7 +832,10 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
                         "p-0 h-8 w-8 rounded-full",
                         getSubPanelButtonStyle(drawMode === 'image')
                       )}
-                      onClick={() => setDrawMode('image')}
+                      onClick={() => {
+                        setDrawMode('image');
+                        setAddToolsMenuOpen(false);
+                      }}
                     >
                       <Image className="w-4 h-4" />
                     </Button>

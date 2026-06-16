@@ -10,7 +10,7 @@ import { useTranslation } from 'react-i18next';
 interface ImageUploadComponentProps {
   onImageUploaded: (asset: StoredImageAsset) => void;
   onUploadError: (error: string) => void;
-  trigger: boolean; // External trigger signal.
+  trigger: boolean | number; // External trigger signal.
   onTriggerHandled: () => void; // Callback after trigger handling.
   projectId?: string | null;
 }
@@ -26,6 +26,7 @@ const ImageUploadComponent: React.FC<ImageUploadComponentProps> = ({
   const isZh = (i18n.resolvedLanguage || i18n.language || '').toLowerCase().startsWith('zh');
   const lt = useCallback((zhText: string, enText: string) => (isZh ? zhText : enText), [isZh]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastTriggerRef = useRef<boolean | number>(trigger);
   const resetInputValue = useCallback(() => {
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -143,7 +144,12 @@ const ImageUploadComponent: React.FC<ImageUploadComponentProps> = ({
 
   // Handle external trigger.
   React.useEffect(() => {
-    if (!trigger) return;
+    if (Object.is(lastTriggerRef.current, trigger)) return;
+    lastTriggerRef.current = trigger;
+
+    const shouldOpen =
+      typeof trigger === 'number' ? trigger > 0 : Boolean(trigger);
+    if (!shouldOpen) return;
 
     try {
       resetInputValue();

@@ -197,6 +197,8 @@ export const useDrawingTools = ({
   const pathRef = useRef<ExtendedPath | null>(null);
   const isDrawingRef = useRef(false);
   const hasMovedRef = useRef(false); // 立即跟踪移动状态，避免异步问题
+  const imageDrawStartPointRef = useRef<paper.Point | null>(null);
+  const model3DDrawStartPointRef = useRef<paper.Point | null>(null);
   const [drawingState, setDrawingState] = useState<DrawingToolState>({
     currentPath: null,
     isDrawing: false,
@@ -568,6 +570,11 @@ export const useDrawingTools = ({
 
   // 开始绘制图片占位框
   const startImageDraw = useCallback((point: paper.Point) => {
+    if (pathRef.current) {
+      try { pathRef.current.remove(); } catch {}
+      pathRef.current = null;
+    }
+    imageDrawStartPointRef.current = point;
     hasMovedRef.current = false; // 重置移动状态
     setDrawingState(prev => ({
       ...prev,
@@ -602,15 +609,16 @@ export const useDrawingTools = ({
 
   // 更新图片占位框绘制
   const updateImageDraw = useCallback((point: paper.Point) => {
+    const initialPoint = imageDrawStartPointRef.current || drawingState.initialClickPoint;
     // 如果还没有创建路径，检查是否超过拖拽阈值
-    if (!pathRef.current && drawingState.initialClickPoint && !hasMovedRef.current) {
-      const distance = drawingState.initialClickPoint.getDistance(point);
+    if (!pathRef.current && initialPoint && !hasMovedRef.current) {
+      const distance = initialPoint.getDistance(point);
       
       if (distance >= drawingState.dragThreshold) {
         // 超过阈值，创建图元并开始绘制
         hasMovedRef.current = true; // 立即设置移动状态
         setDrawingState(prev => ({ ...prev, hasMoved: true }));
-        createImagePath(drawingState.initialClickPoint);
+        createImagePath(initialPoint);
       } else {
         // 还没超过阈值，继续等待
         return;
@@ -638,6 +646,11 @@ export const useDrawingTools = ({
 
   // 开始绘制3D模型占位框
   const start3DModelDraw = useCallback((point: paper.Point) => {
+    if (pathRef.current) {
+      try { pathRef.current.remove(); } catch {}
+      pathRef.current = null;
+    }
+    model3DDrawStartPointRef.current = point;
     hasMovedRef.current = false; // 重置移动状态
     setDrawingState(prev => ({
       ...prev,
@@ -672,15 +685,16 @@ export const useDrawingTools = ({
 
   // 更新3D模型占位框绘制
   const update3DModelDraw = useCallback((point: paper.Point) => {
+    const initialPoint = model3DDrawStartPointRef.current || drawingState.initialClickPoint;
     // 如果还没有创建路径，检查是否超过拖拽阈值
-    if (!pathRef.current && drawingState.initialClickPoint && !hasMovedRef.current) {
-      const distance = drawingState.initialClickPoint.getDistance(point);
+    if (!pathRef.current && initialPoint && !hasMovedRef.current) {
+      const distance = initialPoint.getDistance(point);
       
       if (distance >= drawingState.dragThreshold) {
         // 超过阈值，创建图元并开始绘制
         hasMovedRef.current = true; // 立即设置移动状态
         setDrawingState(prev => ({ ...prev, hasMoved: true }));
-        create3DModelPath(drawingState.initialClickPoint);
+        create3DModelPath(initialPoint);
       } else {
         // 还没超过阈值，继续等待
         return;
@@ -838,6 +852,8 @@ export const useDrawingTools = ({
               pathRef.current.bounds.y + pathRef.current.bounds.height
             );
             pathRef.current.remove();
+            pathRef.current = null;
+            imageDrawStartPointRef.current = null;
             createImagePlaceholder(startPoint, endPoint);
             setDrawMode('select');
           }
@@ -849,6 +865,8 @@ export const useDrawingTools = ({
               pathRef.current.bounds.y + pathRef.current.bounds.height
             );
             pathRef.current.remove();
+            pathRef.current = null;
+            model3DDrawStartPointRef.current = null;
             create3DModelPlaceholder(startPoint, endPoint);
             setDrawMode('select');
           }
@@ -879,6 +897,8 @@ export const useDrawingTools = ({
       initialClickPoint: null,
       hasMoved: false
     }));
+    imageDrawStartPointRef.current = null;
+    model3DDrawStartPointRef.current = null;
     isDrawingRef.current = false;
     
     eventHandlers.onDrawEnd?.(drawMode);
