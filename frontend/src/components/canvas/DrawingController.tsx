@@ -498,6 +498,7 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
     currentColor,
     fillColor,
     strokeWidth,
+    eraserSize,
     lineStyle,
     isEraser,
     hasFill,
@@ -3554,7 +3555,7 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
   // ========== 初始化橡皮擦工具Hook ==========
   const eraserTool = useEraserTool({
     context: drawingContext,
-    strokeWidth,
+    eraserSize,
   });
 
   // ========== 初始化绘图工具Hook ==========
@@ -3563,12 +3564,12 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
     currentColor,
     fillColor,
     strokeWidth,
+    eraserSize,
     lineStyle,
     isEraser,
     hasFill,
     abrBrushPreset,
-    performEraseRastersBetweenPoints: eraserTool.performEraseRastersBetweenPoints,
-    performEraseRastersAtPoint: eraserTool.performEraseRastersAtPoint,
+    performVectorEraseAlongTrail: eraserTool.performVectorEraseAlongTrail,
     eventHandlers: {
       onPathCreate: (path) => {
         logger.debug("路径创建:", path);

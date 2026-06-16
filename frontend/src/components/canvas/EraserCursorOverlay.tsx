@@ -1,74 +1,121 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { getEraserRadius } from '@/utils/rasterEraser';
 
 type EraserCursorOverlayProps = {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   visible: boolean;
-  strokeWidth: number;
+  eraserSize: number;
   zoom: number;
 };
 
 const EraserCursorOverlay: React.FC<EraserCursorOverlayProps> = ({
   canvasRef,
   visible,
-  strokeWidth,
+  eraserSize,
   zoom,
 }) => {
-  const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const cursorRef = useRef<{ x: number; y: number } | null>(null);
+  const needsRedrawRef = useRef(false);
+  const rafRef = useRef<number | null>(null);
 
-  const radius = useMemo(() => getEraserRadius(strokeWidth), [strokeWidth]);
+  const radius = useMemo(() => getEraserRadius(eraserSize), [eraserSize]);
   const diameter = radius * 2 * Math.max(zoom, 0.0001);
+
+  const redraw = useCallback(() => {
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+
+    const cursor = cursorRef.current;
+    if (!cursor) {
+      overlay.style.display = 'none';
+      needsRedrawRef.current = false;
+      return;
+    }
+
+    overlay.style.display = 'block';
+    overlay.style.left = `${cursor.x}px`;
+    overlay.style.top = `${cursor.y}px`;
+    overlay.style.width = `${diameter}px`;
+    overlay.style.height = `${diameter}px`;
+    needsRedrawRef.current = false;
+  }, [diameter]);
+
+  const scheduleRedraw = useCallback(() => {
+    if (rafRef.current !== null) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      if (needsRedrawRef.current) {
+        redraw();
+      }
+    });
+  }, [redraw]);
+
+  useEffect(() => {
+    if (needsRedrawRef.current) {
+      scheduleRedraw();
+    }
+  }, [diameter, scheduleRedraw]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !visible) {
-      setCursor(null);
+      cursorRef.current = null;
+      needsRedrawRef.current = true;
+      scheduleRedraw();
       return undefined;
     }
 
-    const handleMove = (event: MouseEvent) => {
+    const updateCursor = (clientX: number, clientY: number) => {
       const rect = canvas.getBoundingClientRect();
-      setCursor({
-        x: event.clientX - rect.left,
-        y: event.clientY - rect.top,
-      });
+      cursorRef.current = {
+        x: clientX - rect.left,
+        y: clientY - rect.top,
+      };
+      needsRedrawRef.current = true;
+      scheduleRedraw();
     };
 
-    const handleLeave = () => {
-      setCursor(null);
+    const handlePointerMove = (event: PointerEvent) => {
+      updateCursor(event.clientX, event.clientY);
+    };
+
+    const handlePointerLeave = () => {
+      cursorRef.current = null;
+      needsRedrawRef.current = true;
+      scheduleRedraw();
     };
 
     canvas.style.cursor = 'none';
-    canvas.addEventListener('mousemove', handleMove);
-    canvas.addEventListener('mouseenter', handleMove);
-    canvas.addEventListener('mouseleave', handleLeave);
+    canvas.addEventListener('pointerenter', handlePointerMove);
+    canvas.addEventListener('pointermove', handlePointerMove);
+    canvas.addEventListener('pointerleave', handlePointerLeave);
 
     return () => {
       canvas.style.cursor = '';
-      canvas.removeEventListener('mousemove', handleMove);
-      canvas.removeEventListener('mouseenter', handleMove);
-      canvas.removeEventListener('mouseleave', handleLeave);
+      canvas.removeEventListener('pointerenter', handlePointerMove);
+      canvas.removeEventListener('pointermove', handlePointerMove);
+      canvas.removeEventListener('pointerleave', handlePointerLeave);
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
     };
-  }, [canvasRef, visible]);
+  }, [canvasRef, visible, scheduleRedraw]);
 
-  if (!visible || !cursor) {
+  if (!visible) {
     return null;
   }
 
   return (
     <div
-      className="pointer-events-none absolute z-[12]"
+      ref={overlayRef}
+      className="pointer-events-none absolute z-[12] hidden"
       style={{
-        left: cursor.x,
-        top: cursor.y,
-        width: diameter,
-        height: diameter,
         transform: 'translate(-50%, -50%)',
       }}
     >
-      <div
-        className="h-full w-full rounded-full border border-gray-700/70 bg-white/10 shadow-[0_0_0_1px_rgba(255,255,255,0.65)_inset]"
-      />
+      <div className="h-full w-full rounded-full border border-gray-700/70 bg-white/10 shadow-[0_0_0_1px_rgba(255,255,255,0.65)_inset]" />
     </div>
   );
 };

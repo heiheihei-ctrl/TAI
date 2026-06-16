@@ -200,6 +200,11 @@ import {
   type FlowRenderMode,
 } from "./FlowRenderModeContext";
 import { resolveTextFromSourceNode } from "./utils/textSource";
+import { collectTargetNodeImageMentionItems } from "./utils/imageMentionCandidates";
+import {
+  resolveImageMentionUrls,
+  stripImageMentionTokens,
+} from "@/utils/imageMentions";
 import { sanitizeFlowTextForMidjourneyV7 } from "./utils/mjV7PromptSanitize";
 import { useLocaleText } from "@/utils/localeText";
 import { resolveFlowModelProvider } from "@/utils/flowModelProvider";
@@ -5144,6 +5149,22 @@ function FlowInner() {
   const draggingGroupNodeRef = React.useRef(false);
   const [isNodeDragging, setIsNodeDragging] = React.useState(false);
   const commitTimerRef = React.useRef<number | null>(null);
+  const suppressFlowAutoCommitUntilRef = React.useRef(0);
+
+  React.useEffect(() => {
+    const handleHistoryRestoreStart = () => {
+      if (commitTimerRef.current) {
+        window.clearTimeout(commitTimerRef.current);
+        commitTimerRef.current = null;
+      }
+      suppressFlowAutoCommitUntilRef.current = Date.now() + 800;
+    };
+
+    window.addEventListener("history:restore-start", handleHistoryRestoreStart);
+    return () => {
+      window.removeEventListener("history:restore-start", handleHistoryRestoreStart);
+    };
+  }, []);
 
   React.useEffect(() => {
     if (isNodeDragging) {
@@ -5408,6 +5429,38 @@ function FlowInner() {
         label: e.label,
       })) as any,
     []
+  );
+
+  const commitFlowSnapshotImmediately = React.useCallback(
+    (label: string, nextNodes: RFNode[], nextEdges: Edge[] = edgesRef.current) => {
+      if (!projectId || !hydrated) return;
+
+      nodesRef.current = nextNodes;
+      edgesRef.current = nextEdges;
+      const nodesSnapshot = rfNodesToTplNodes(nextNodes as any);
+      const edgesSnapshot = rfEdgesToTplEdges(nextEdges);
+      const json = getFlowSnapshotSignature(nodesSnapshot, edgesSnapshot);
+
+      if (commitTimerRef.current) {
+        window.clearTimeout(commitTimerRef.current);
+        commitTimerRef.current = null;
+      }
+      historyService.captureInitialIfEmptySync();
+      lastSyncedJSONRef.current = json;
+      updateProjectPartial(
+        { flow: { nodes: nodesSnapshot, edges: edgesSnapshot } },
+        { markDirty: true }
+      );
+      historyService.commitContentSnapshot(label, useProjectContentStore.getState().content);
+    },
+    [
+      projectId,
+      hydrated,
+      rfNodesToTplNodes,
+      rfEdgesToTplEdges,
+      getFlowSnapshotSignature,
+      updateProjectPartial,
+    ]
   );
 
   // Flow -> Canvas：将含有图片的节点转换为可在画板粘贴的剪贴板数据
@@ -5772,18 +5825,21 @@ function FlowInner() {
       })
       .filter(Boolean) as Edge[];
 
-    setNodes((prev: any[]) =>
-      prev.map((node) => ({ ...node, selected: false })).concat(newNodes)
-    );
+    const nextNodes = (nodesRef.current as RFNode[])
+      .map((node) => ({ ...node, selected: false } as RFNode))
+      .concat(newNodes as RFNode[]);
+    const nextEdges = newEdges.length
+      ? (edgesRef.current as Edge[]).concat(newEdges)
+      : (edgesRef.current as Edge[]);
+
+    setNodes(nextNodes);
     if (newEdges.length) {
-      setEdges((prev: any[]) => prev.concat(newEdges));
+      setEdges(nextEdges);
     }
 
-    try {
-      historyService.commit("flow-paste").catch(() => {});
-    } catch {}
+    commitFlowSnapshotImmediately("flow-paste", nextNodes, nextEdges);
     return true;
-  }, [sanitizeNodeData, setEdges, setNodes, rf]);
+  }, [sanitizeNodeData, setEdges, setNodes, rf, commitFlowSnapshotImmediately]);
 
   // Flow 复制：写入系统剪贴板（覆盖系统截图内容），以便粘贴时能优先恢复节点而非图片
   React.useEffect(() => {
@@ -6132,15 +6188,28 @@ function FlowInner() {
       if (hydratingFromStoreRef.current) return;
       if (nodeDraggingRef.current) return; // 拖拽时不高频写回
       if (!hasHydratedFlowRef.current) return;
+      if (Date.now() < suppressFlowAutoCommitUntilRef.current) return;
       const json = getFlowSnapshotSignature(nodesSnapshot, edgesSnapshot);
       if (json && lastSyncedJSONRef.current === json) return;
       if (commitTimerRef.current) window.clearTimeout(commitTimerRef.current);
       commitTimerRef.current = window.setTimeout(() => {
+        const previousNodeCount =
+          useProjectContentStore.getState().content?.flow?.nodes?.length ?? 0;
+        const shouldRecordNodeAdd = nodesSnapshot.length > previousNodeCount;
+        if (shouldRecordNodeAdd) {
+          historyService.captureInitialIfEmptySync();
+        }
         lastSyncedJSONRef.current = json;
         updateProjectPartial(
           { flow: { nodes: nodesSnapshot, edges: edgesSnapshot } },
           { markDirty: true }
         );
+        if (shouldRecordNodeAdd) {
+          historyService.commitContentSnapshot(
+            "flow-auto-add-node",
+            useProjectContentStore.getState().content
+          );
+        }
         commitTimerRef.current = null;
       }, 120); // 轻微节流，避免频繁渲染
     },
@@ -8685,14 +8754,14 @@ function FlowInner() {
         boxW: size.w,
         boxH: size.h,
       };
-      setNodes((ns) => ns.concat([{ id, type, position: pos, data } as any]));
-      try {
-        historyService.commit("flow-add-node").catch(() => {});
-      } catch {}
+      const newNode = { id, type, position: pos, data } as RFNode;
+      const nextNodes = (nodesRef.current as RFNode[]).concat([newNode]);
+      setNodes(nextNodes);
+      commitFlowSnapshotImmediately("flow-add-node", nextNodes);
       setAddPanel((v) => ({ ...v, visible: false }));
       return id;
     },
-    [aiProvider, setNodes]
+    [aiProvider, setNodes, commitFlowSnapshotImmediately]
   );
 
   const textSourceTypes = React.useMemo(
@@ -12678,23 +12747,48 @@ function FlowInner() {
         const textEdge = currentEdges.find(
           (e) => e.target === targetId && e.targetHandle === "text"
         );
-        if (!textEdge) return { text: "", hasEdge: false };
+        if (!textEdge) return { text: "", rawText: "", hasEdge: false, imageMentionUrls: [] as string[] };
         const promptNode = rf.getNode(textEdge.source);
-        if (!promptNode) return { text: "", hasEdge: true };
+        if (!promptNode) return { text: "", rawText: "", hasEdge: true, imageMentionUrls: [] as string[] };
         const resolved = resolveTextFromSourceNode(
           promptNode,
           textEdge.sourceHandle
         );
-        return { text: resolved?.trim() || "", hasEdge: true };
+        const rawText = resolved?.trim() || "";
+        const imageMentionItems = collectTargetNodeImageMentionItems(
+          targetId,
+          currentEdges,
+          (id) => rf.getNode(id)
+        );
+        return {
+          text: rawText ? stripImageMentionTokens(rawText) : "",
+          rawText,
+          hasEdge: true,
+          imageMentionUrls: resolveImageMentionUrls(rawText, imageMentionItems),
+        };
       };
 
       const getTextPromptsForNode = (targetId: string) => {
         const textEdges = currentEdges.filter(
           (e) => e.target === targetId && e.targetHandle === "text"
         );
-        if (!textEdges.length) return { texts: [] as string[], hasEdge: false };
+        if (!textEdges.length) {
+          return {
+            texts: [] as string[],
+            rawTexts: [] as string[],
+            hasEdge: false,
+            imageMentionUrls: [] as string[],
+          };
+        }
 
         const texts: string[] = [];
+        const rawTexts: string[] = [];
+        const imageMentionItems = collectTargetNodeImageMentionItems(
+          targetId,
+          currentEdges,
+          (id) => rf.getNode(id)
+        );
+        const imageMentionUrls: string[] = [];
         for (const edge of textEdges) {
           const promptNode = rf.getNode(edge.source);
           if (!promptNode) continue;
@@ -12703,10 +12797,21 @@ function FlowInner() {
             edge.sourceHandle
           );
           const trimmed = resolved?.trim() || "";
-          if (trimmed) texts.push(trimmed);
+          if (trimmed) {
+            rawTexts.push(trimmed);
+            texts.push(stripImageMentionTokens(trimmed));
+            imageMentionUrls.push(
+              ...resolveImageMentionUrls(trimmed, imageMentionItems)
+            );
+          }
         }
 
-        return { texts, hasEdge: true };
+        return {
+          texts,
+          rawTexts,
+          hasEdge: true,
+          imageMentionUrls: Array.from(new Set(imageMentionUrls)),
+        };
       };
 
       // Wan2.6 节点处理逻辑
@@ -17175,7 +17280,7 @@ function FlowInner() {
 
       // Nano2 节点处理逻辑
       if (node.type === "midjourneyV7" || node.type === "niji7") {
-        const { text: promptText } = getTextPromptForNode(nodeId);
+        const { text: promptText, imageMentionUrls } = getTextPromptForNode(nodeId);
         const presetRaw = (node.data as any)?.presetPrompt;
         const preset =
           typeof presetRaw === "string" ? presetRaw.trim() : "";
@@ -17186,7 +17291,12 @@ function FlowInner() {
           (e) => e.target === nodeId && e.targetHandle === "img"
         );
         const imgEdges = totalImgEdges.slice(0, 10);
-        let imageDatas = await resolveEdgesAsDataUrls(imgEdges);
+        let imageDatas = Array.from(
+          new Set([
+            ...(await resolveEdgesAsDataUrls(imgEdges)),
+            ...(imageMentionUrls || []),
+          ])
+        ).slice(0, 10);
 
         const omniImageEdges = currentEdges.filter(
           (e) =>
@@ -17207,7 +17317,7 @@ function FlowInner() {
           const crefDatas = await resolveEdgesAsDataUrls([omniImageEdges[0]]);
           if (crefDatas.length > 0) {
             const beforeCount = imageDatas.length;
-            imageDatas = [crefDatas[0], ...imageDatas].slice(0, 10);
+            imageDatas = Array.from(new Set([crefDatas[0], ...imageDatas])).slice(0, 10);
             if (beforeCount >= 10) {
               window.dispatchEvent(
                 new CustomEvent("toast", {
@@ -17594,7 +17704,11 @@ function FlowInner() {
           (typeof metadata?.model === "string" && metadata.model.trim()) ||
           (typeof defaultData?.model === "string" && defaultData.model.trim()) ||
           "gemini-3.1-flash-image-preview";
-        const { text: promptText, hasEdge: hasText } = getTextPromptForNode(nodeId);
+        const {
+          text: promptText,
+          hasEdge: hasText,
+          imageMentionUrls,
+        } = getTextPromptForNode(nodeId);
         if (!hasText || !promptText) {
           setNodes((ns) =>
             ns.map((n) =>
@@ -17610,7 +17724,12 @@ function FlowInner() {
         const imgEdges = currentEdges
           .filter((e) => e.target === nodeId && e.targetHandle === "img")
           .slice(0, maxReferenceImages);
-        const imageDatas = await resolveEdgesAsDataUrls(imgEdges);
+        const imageDatas = Array.from(
+          new Set([
+            ...(await resolveEdgesAsDataUrls(imgEdges)),
+            ...(imageMentionUrls || []),
+          ])
+        );
 
         setNodes((ns) =>
           ns.map((n) =>
@@ -18029,9 +18148,22 @@ function FlowInner() {
       )
         return;
 
-      const { text: promptFromText, hasEdge: hasPromptEdge } =
+      const {
+        text: promptFromText,
+        hasEdge: hasPromptEdge,
+        imageMentionUrls: promptImageMentionUrls,
+      } =
         getTextPromptForNode(nodeId);
-      const { texts: promptsFromTextEdges } = getTextPromptsForNode(nodeId);
+      const {
+        texts: promptsFromTextEdges,
+        imageMentionUrls: multiPromptImageMentionUrls,
+      } = getTextPromptsForNode(nodeId);
+      const promptMentionImageUrls = Array.from(
+        new Set([
+          ...(promptImageMentionUrls || []),
+          ...(multiPromptImageMentionUrls || []),
+        ])
+      );
 
       const failWithMessage = (message: string) => {
         setNodes((ns) =>
@@ -18083,7 +18215,7 @@ function FlowInner() {
               .filter(
                 (p: unknown) => typeof p === "string" && p.trim().length > 0
               )
-              .map((p: string) => p.trim());
+              .map((p: string) => stripImageMentionTokens(p.trim()));
           }
           return [];
         })();
@@ -18156,6 +18288,10 @@ function FlowInner() {
           .filter((e) => e.target === nodeId && e.targetHandle === "img")
           .slice(0, 6);
         imageDatas = await resolveEdgesAsDataUrls(imgEdges);
+      }
+
+      if (promptMentionImageUrls.length > 0) {
+        imageDatas = Array.from(new Set([...imageDatas, ...promptMentionImageUrls]));
       }
 
       // 运行时图片输入归一化（优先走 sourceImageUrl，避免大体积 sourceImage 触发上游 500）：
@@ -20932,13 +21068,12 @@ function FlowInner() {
               }
             : { imageData: undefined },
       };
-      setNodes((ns) => ns.concat([base]));
-      try {
-        historyService.commit("flow-add-at-center").catch(() => {});
-      } catch {}
+      const nextNodes = (nodesRef.current as RFNode[]).concat([base as RFNode]);
+      setNodes(nextNodes);
+      commitFlowSnapshotImmediately("flow-add-at-center", nextNodes);
       return id;
     },
-    [aiProvider, rf, setNodes]
+    [aiProvider, rf, setNodes, commitFlowSnapshotImmediately]
   );
 
   const showFlowPanel = useUIStore((s) => s.showFlowPanel);

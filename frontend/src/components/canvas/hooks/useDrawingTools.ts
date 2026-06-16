@@ -15,6 +15,7 @@ import type { ExtendedPath } from '@/types/paper';
 import type { DrawMode, LineStyle } from '@/stores/toolStore';
 import type { AbrBrushPreset } from '@/types/abrBrush';
 import { BitmapBrushStroke } from '@/utils/bitmapBrushStroke';
+import { BitmapEraserStroke } from '@/utils/bitmapEraserStroke';
 import {
   pressureToStrokeMultiplier,
   type PointerInputKind,
@@ -30,12 +31,12 @@ interface UseDrawingToolsProps {
   currentColor: string;
   fillColor: string;
   strokeWidth: number;
+  eraserSize: number;
   lineStyle: LineStyle;
   isEraser: boolean;
   hasFill: boolean;
   abrBrushPreset?: AbrBrushPreset | null;
-  performEraseRastersBetweenPoints?: (from: paper.Point, to: paper.Point) => void;
-  performEraseRastersAtPoint?: (point: paper.Point) => void;
+  performVectorEraseAlongTrail?: (trail: paper.Point[]) => void;
   eventHandlers?: DrawingToolEventHandlers;
 }
 
@@ -70,17 +71,17 @@ export const useDrawingTools = ({
   currentColor, 
   fillColor,
   strokeWidth, 
+  eraserSize,
   lineStyle,
   isEraser,
   hasFill,
   abrBrushPreset = null,
-  performEraseRastersBetweenPoints,
-  performEraseRastersAtPoint,
+  performVectorEraseAlongTrail,
   eventHandlers = {} 
 }: UseDrawingToolsProps) => {
   const { ensureDrawingLayer } = context;
   const brushStrokeRef = useRef<BitmapBrushStroke | null>(null);
-  const eraserLastPointRef = useRef<paper.Point | null>(null);
+  const eraserStrokeRef = useRef<BitmapEraserStroke | null>(null);
 
   const useAbrBrush = useCallback(
     () => !!abrBrushPreset && !isEraser,
@@ -211,14 +212,14 @@ export const useDrawingTools = ({
   const getFreeDrawMinDistance = useCallback(
     (pointerType: PointerInputKind = 'mouse') => {
       if (isEraser) {
-        return Math.max(0.5, strokeWidth * 0.15);
+        return Math.max(0.5, eraserSize * 0.15);
       }
       if (pointerType === 'pen') {
         return Math.max(0.12, strokeWidth * 0.08);
       }
       return Math.max(1, strokeWidth * 0.5);
     },
-    [strokeWidth, isEraser],
+    [strokeWidth, eraserSize, isEraser],
   );
 
   const getFreeDrawDragThreshold = useCallback(
@@ -233,27 +234,15 @@ export const useDrawingTools = ({
     (path: ExtendedPath, pressure = 0.5) => {
       const multiplier = pressureToStrokeMultiplier(pressure);
       if (isEraser) {
-        path.strokeWidth = strokeWidth * 1.5 * multiplier;
+        path.strokeWidth = eraserSize * 1.5 * multiplier;
       } else {
         path.strokeWidth = strokeWidth * multiplier;
       }
     },
-    [isEraser, strokeWidth],
+    [isEraser, strokeWidth, eraserSize],
   );
 
   // ========== 自由绘制功能 ==========
-  
-  // 开始自由绘制
-  const startFreeDraw = useCallback((point: paper.Point) => {
-    // 不立即创建图元，而是等待用户开始移动
-    hasMovedRef.current = false; // 重置移动状态
-    setDrawingState(prev => ({
-      ...prev,
-      initialClickPoint: point,
-      hasMoved: false
-    }));
-    eventHandlers.onDrawStart?.('free');
-  }, [eventHandlers.onDrawStart]);
 
   // 实际创建自由绘制路径（当确认用户在拖拽时）
   const createFreeDrawPath = useCallback((
@@ -263,9 +252,13 @@ export const useDrawingTools = ({
     ensureDrawingLayer();
 
     if (isEraser) {
-      eraserLastPointRef.current = startPoint.clone();
+      eraserStrokeRef.current = new BitmapEraserStroke(eraserSize);
+      eraserStrokeRef.current.stamp(
+        startPoint,
+        options?.pressure ?? 0.5,
+        ensureDrawingLayer(),
+      );
       pathRef.current = { __eraserStroke: true } as unknown as ExtendedPath;
-      performEraseRastersAtPoint?.(startPoint);
 
       setDrawingState((prev) => ({
         ...prev,
@@ -320,32 +313,48 @@ export const useDrawingTools = ({
     isDrawingRef.current = true;
 
     eventHandlers.onPathCreate?.(pathRef.current);
-  }, [ensureDrawingLayer, currentColor, isEraser, applyLineStyleToPath, applyFreeDrawStrokeWidth, eventHandlers.onPathCreate, useAbrBrush, abrBrushPreset, strokeWidth, eventHandlers.onDrawStart, performEraseRastersAtPoint]);
+  }, [ensureDrawingLayer, currentColor, isEraser, eraserSize, applyLineStyleToPath, applyFreeDrawStrokeWidth, eventHandlers.onPathCreate, useAbrBrush, abrBrushPreset, strokeWidth, eventHandlers.onDrawStart]);
+
+  // 开始自由绘制
+  const startFreeDraw = useCallback((point: paper.Point, options?: FreeDrawPointOptions) => {
+    hasMovedRef.current = false;
+    if (isEraser || (useAbrBrush() && abrBrushPreset)) {
+      createFreeDrawPath(point, options);
+      setDrawingState((prev) => ({
+        ...prev,
+        initialClickPoint: point,
+        hasMoved: false,
+      }));
+      return;
+    }
+
+    setDrawingState((prev) => ({
+      ...prev,
+      initialClickPoint: point,
+      hasMoved: false,
+    }));
+    eventHandlers.onDrawStart?.('free');
+  }, [abrBrushPreset, createFreeDrawPath, eventHandlers.onDrawStart, isEraser, useAbrBrush]);
 
   const appendFreeDrawPoint = useCallback((
     point: paper.Point,
     options?: FreeDrawPointOptions,
   ) => {
+    if (eraserStrokeRef.current) {
+      eraserStrokeRef.current.queuePoint(
+        point,
+        options?.pressure ?? 0.5,
+        ensureDrawingLayer(),
+      );
+      return;
+    }
+
     if (brushStrokeRef.current) {
       brushStrokeRef.current.stamp(
         point,
         options?.pressure ?? 0.5,
         ensureDrawingLayer(),
       );
-      if (paper.project && (paper.project as any).emit) {
-        (paper.project as any).emit('change');
-      }
-      return;
-    }
-
-    if ((pathRef.current as { __eraserStroke?: boolean } | null)?.__eraserStroke) {
-      const lastPoint = eraserLastPointRef.current;
-      if (lastPoint) {
-        performEraseRastersBetweenPoints?.(lastPoint, point);
-      } else {
-        performEraseRastersAtPoint?.(point);
-      }
-      eraserLastPointRef.current = point.clone();
       if (paper.project && (paper.project as any).emit) {
         (paper.project as any).emit('change');
       }
@@ -373,7 +382,7 @@ export const useDrawingTools = ({
     if (paper.project && (paper.project as any).emit) {
       (paper.project as any).emit('change');
     }
-  }, [applyFreeDrawStrokeWidth, getFreeDrawMinDistance, isEraser, performEraseRastersBetweenPoints, performEraseRastersAtPoint]);
+  }, [applyFreeDrawStrokeWidth, ensureDrawingLayer, getFreeDrawMinDistance]);
 
   // 继续自由绘制
   const continueFreeDraw = useCallback((
@@ -832,10 +841,12 @@ export const useDrawingTools = ({
     logger.debug(`finishDraw被调用: drawMode=${drawMode}, pathRef=${!!pathRef.current}, initialClickPoint=${!!drawingState.initialClickPoint}, hasMoved=${hasMovedRef.current}`);
     
     // 处理画线类工具的特殊情况：如果用户只是点击而没有拖拽，切换到选择模式
+    // ABR 笔刷在按下时已落笔，不应进入此分支
     if (
       !isEraser &&
       (drawMode === 'free' || drawMode === 'rect' || drawMode === 'circle') &&
       !pathRef.current &&
+      !brushStrokeRef.current &&
       drawingState.initialClickPoint &&
       !hasMovedRef.current
     ) {
@@ -859,9 +870,12 @@ export const useDrawingTools = ({
       return;
     }
 
-    if (isEraser && drawingState.initialClickPoint && !hasMovedRef.current) {
-      performEraseRastersAtPoint?.(drawingState.initialClickPoint);
-      eraserLastPointRef.current = null;
+    if (isEraser && drawingState.initialClickPoint && !hasMovedRef.current && !eraserStrokeRef.current) {
+      const layer = ensureDrawingLayer();
+      const tapStroke = new BitmapEraserStroke(eraserSize);
+      tapStroke.stamp(drawingState.initialClickPoint, 0.5, layer);
+      const trail = tapStroke.getTrail();
+      tapStroke.finalize(layer);
       pathRef.current = null;
       hasMovedRef.current = false;
       setDrawingState((prev) => ({
@@ -872,12 +886,24 @@ export const useDrawingTools = ({
         currentPath: null,
       }));
       isDrawingRef.current = false;
+      if (trail.length > 0) {
+        performVectorEraseAlongTrail?.(trail);
+      }
       eventHandlers.onDrawEnd?.(drawMode);
       return;
     }
 
-    if (pathRef.current || brushStrokeRef.current) {
-      if (brushStrokeRef.current && drawMode === 'free' && !isEraser) {
+    if (pathRef.current || brushStrokeRef.current || eraserStrokeRef.current) {
+      if (eraserStrokeRef.current && drawMode === 'free' && isEraser) {
+        const layer = ensureDrawingLayer();
+        const trail = eraserStrokeRef.current.getTrail();
+        eraserStrokeRef.current.finalize(layer);
+        eraserStrokeRef.current = null;
+        pathRef.current = null;
+        if (trail.length > 0) {
+          performVectorEraseAlongTrail?.(trail);
+        }
+      } else if (brushStrokeRef.current && drawMode === 'free' && !isEraser) {
         const layer = ensureDrawingLayer();
         const completedRaster = brushStrokeRef.current.finalize(layer);
         brushStrokeRef.current = null;
@@ -927,11 +953,10 @@ export const useDrawingTools = ({
           }
         }
       } else if ((pathRef.current as { __eraserStroke?: boolean } | null)?.__eraserStroke) {
-        eraserLastPointRef.current = null;
         pathRef.current = null;
       }
 
-      if (paper.project && (paper.project as any).emit) {
+      if (paper.project && (paper.project as { emit?: (name: string) => void }).emit) {
         (paper.project as any).emit('change');
       }
     }
@@ -950,7 +975,7 @@ export const useDrawingTools = ({
     
     eventHandlers.onDrawEnd?.(drawMode);
     logger.debug(`结束${drawMode}绘制`);
-  }, [isEraser, drawingState.initialClickPoint, convertToSketchPath, eventHandlers.onPathComplete, eventHandlers.onDrawEnd, ensureDrawingLayer, performEraseRastersAtPoint]);
+  }, [isEraser, eraserSize, drawingState.initialClickPoint, convertToSketchPath, eventHandlers.onPathComplete, eventHandlers.onDrawEnd, ensureDrawingLayer, performVectorEraseAlongTrail]);
 
   return {
     // 状态

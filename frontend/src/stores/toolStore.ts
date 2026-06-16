@@ -21,6 +21,7 @@ interface ToolState {
   currentColor: string;
   fillColor: string;
   strokeWidth: number;
+  eraserSize: number;
   lineStyle: LineStyle;
   isEraser: boolean;
   hasFill: boolean;
@@ -31,6 +32,7 @@ interface ToolState {
   setCurrentColor: (color: string) => void;
   setFillColor: (color: string) => void;
   setStrokeWidth: (width: number) => void;
+  setEraserSize: (size: number) => void;
   setLineStyle: (style: LineStyle) => void;
   setAbrBrushId: (brushId: string | null) => void;
   toggleEraser: () => void;
@@ -57,7 +59,7 @@ const ALL_DRAW_MODES: DrawMode[] = [
   '3d-model',
   'screenshot',
 ];
-const TOOL_SETTINGS_VERSION = 3;
+const TOOL_SETTINGS_VERSION = 4;
 
 const isDrawMode = (value: unknown): value is DrawMode =>
   typeof value === 'string' && ALL_DRAW_MODES.includes(value as DrawMode);
@@ -82,6 +84,7 @@ export const useToolStore = create<ToolState>()(
         currentColor: '#ff0000',
         fillColor: '#ffffff',
         strokeWidth: 2,
+        eraserSize: 16,
         lineStyle: 'solid',
         isEraser: false,
         hasFill: false,
@@ -103,10 +106,13 @@ export const useToolStore = create<ToolState>()(
         },
 
         setStrokeWidth: (width) => {
-          const { isEraser } = get();
-          const max = isEraser ? 50 : 20;
-          const validWidth = Math.max(1, Math.min(max, width));
+          const validWidth = Math.max(1, Math.min(20, width));
           set({ strokeWidth: validWidth });
+        },
+
+        setEraserSize: (size) => {
+          const validSize = Math.max(2, Math.min(50, size));
+          set({ eraserSize: validSize });
         },
 
         setLineStyle: (style) => {
@@ -118,17 +124,13 @@ export const useToolStore = create<ToolState>()(
         },
 
         toggleEraser: () => {
-          const { isEraser, strokeWidth } = get();
+          const { isEraser } = get();
           if (isEraser) {
-            set({
-              isEraser: false,
-              strokeWidth: Math.min(20, strokeWidth),
-            });
+            set({ isEraser: false });
           } else {
             set({
               isEraser: true,
               drawMode: 'free',
-              strokeWidth: Math.max(8, strokeWidth),
             });
           }
         },
@@ -163,6 +165,10 @@ export const useToolStore = create<ToolState>()(
               typeof state.strokeWidth === 'number'
                 ? Math.max(1, Math.min(20, state.strokeWidth))
                 : 2,
+            eraserSize:
+              typeof state.eraserSize === 'number'
+                ? Math.max(2, Math.min(50, state.eraserSize))
+                : 16,
             lineStyle: isLineStyle(state.lineStyle) ? state.lineStyle : 'solid',
             hasFill: typeof state.hasFill === 'boolean' ? state.hasFill : false,
             abrBrushId:
@@ -175,6 +181,7 @@ export const useToolStore = create<ToolState>()(
           currentColor: state.currentColor,
           fillColor: state.fillColor,
           strokeWidth: state.strokeWidth,
+          eraserSize: state.eraserSize,
           lineStyle: state.lineStyle,
           hasFill: state.hasFill,
           abrBrushId: state.abrBrushId,
@@ -190,6 +197,7 @@ export const useDrawingProps = () => useToolStore((state) => ({
   currentColor: state.currentColor,
   fillColor: state.fillColor,
   strokeWidth: state.strokeWidth,
+  eraserSize: state.eraserSize,
   lineStyle: state.lineStyle,
   isEraser: state.isEraser,
   hasFill: state.hasFill,
@@ -200,6 +208,7 @@ export const useToolActions = () => useToolStore((state) => ({
   setCurrentColor: state.setCurrentColor,
   setFillColor: state.setFillColor,
   setStrokeWidth: state.setStrokeWidth,
+  setEraserSize: state.setEraserSize,
   setLineStyle: state.setLineStyle,
   setAbrBrushId: state.setAbrBrushId,
   toggleEraser: state.toggleEraser,
