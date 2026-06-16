@@ -292,6 +292,36 @@ function cloneContent(content: ProjectContentSnapshot): ProjectContentSnapshot {
   return JSON.parse(JSON.stringify(content));
 }
 
+function getComparableContent(content: ProjectContentSnapshot): unknown {
+  return {
+    layers: content.layers ?? [],
+    activeLayerId: content.activeLayerId ?? null,
+    canvas: content.canvas ?? null,
+    paperJson: content.paperJson ?? '',
+    assets: content.assets ?? null,
+    flow: content.flow ?? null,
+    aiChatSessions: content.aiChatSessions ?? [],
+    aiChatActiveSessionId: content.aiChatActiveSessionId ?? null,
+  };
+}
+
+function getComparableSnapshotContent(snapshot: Snapshot | null | undefined, st: HistoryState): ProjectContentSnapshot | null {
+  if (!snapshot) return null;
+  return resolveIncrementalSnapshot(snapshot, st).content;
+}
+
+function isSameMeaningfulContent(
+  a: ProjectContentSnapshot | null | undefined,
+  b: ProjectContentSnapshot | null | undefined,
+): boolean {
+  if (!a || !b) return false;
+  try {
+    return JSON.stringify(getComparableContent(a)) === JSON.stringify(getComparableContent(b));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * 获取快照的实际内存占用（考虑增量存储）
  */
@@ -301,11 +331,6 @@ function getSnapshotMemorySize(snapshot: Snapshot | null | undefined): number {
   if (snapshot.isIncremental && snapshot.paperJsonDelta) {
     return snapshot.paperJsonDelta.length;
   }
-  return snapshot.content.paperJson?.length ?? 0;
-}
-
-function getPaperJsonLen(snapshot: Snapshot | null | undefined): number {
-  if (!snapshot) return 0;
   return snapshot.content.paperJson?.length ?? 0;
 }
 
@@ -352,6 +377,47 @@ async function captureCurrentSnapshot(
   };
 }
 
+function captureCurrentSnapshotSync(label?: string): Omit<Snapshot, 'id'> | null {
+  const store = useProjectContentStore.getState();
+  if (!store.projectId || !store.content) return null;
+  return {
+    content: cloneContent(store.content),
+    version: store.version,
+    savedAt: store.lastSavedAt,
+    label,
+  };
+}
+
+function pushSnapshot(st: HistoryState, snap: Omit<Snapshot, 'id'>): void {
+  const presentContent = getComparableSnapshotContent(st.present, st);
+  if (isSameMeaningfulContent(presentContent, snap.content)) {
+    return;
+  }
+
+  const snapWithId: Snapshot = { ...snap, id: allocateSnapshotId(st) };
+
+  // 尝试创建增量快照
+  const incrementalResult = createIncrementalSnapshot(snapWithId.content, st);
+
+  // 构建最终快照
+  const finalSnap: Snapshot = {
+    ...snapWithId,
+    content: incrementalResult.content,
+    isIncremental: incrementalResult.isIncremental,
+    baseSnapshotId: incrementalResult.baseId,
+    paperJsonDelta: incrementalResult.delta,
+  };
+
+  if (st.present) {
+    st.past.push(st.present);
+    while (st.past.length > MAX_DEPTH) dropOldestPastChunk(st);
+  }
+  st.present = finalSnap;
+  st.future = [];
+
+  trimHistoryByBudget(st);
+}
+
 function sameIdSet(a: Array<{ id: string }> = [], b: Array<{ id: string }> = []) {
   if (a.length !== b.length) return false;
   const setA = new Set(a.map((x) => x.id).filter(Boolean));
@@ -378,6 +444,12 @@ async function restoreSnapshot(to: Snapshot, opts?: { from?: Snapshot | null; op
   const st = getOrInitState(pid);
   st.restoring = true;
   try {
+    try {
+      window.dispatchEvent(new CustomEvent('history:restore-start', {
+        detail: { op: opts?.op ?? 'restore' },
+      }));
+    } catch {}
+
     // 恢复 store 内容
     useProjectContentStore.getState().hydrate(to.content, to.version, to.savedAt ?? undefined);
 
@@ -416,6 +488,11 @@ async function restoreSnapshot(to: Snapshot, opts?: { from?: Snapshot | null; op
     try { paperSaveService.triggerAutoSave('history-restore'); } catch {}
   } finally {
     st.restoring = false;
+    try {
+      window.dispatchEvent(new CustomEvent('history:restore-end', {
+        detail: { op: opts?.op ?? 'restore' },
+      }));
+    } catch {}
   }
 }
 
@@ -513,6 +590,18 @@ export const historyService = {
     }
   },
 
+  captureInitialIfEmptySync(label: string = 'initial') {
+    const pid = getProjectId();
+    if (!pid) return;
+    const st = getOrInitState(pid);
+    if (st.present) return;
+    const snap = captureCurrentSnapshotSync(label);
+    if (!snap) return;
+    st.present = { ...snap, id: allocateSnapshotId(st) };
+    st.past = [];
+    st.future = [];
+  },
+
   async commit(label?: string) {
     const pid = getProjectId();
     if (!pid) return;
@@ -520,28 +609,21 @@ export const historyService = {
     if (st.restoring) return;
     const snap = await captureCurrentSnapshot(label);
     if (!snap) return;
-    const snapWithId: Snapshot = { ...snap, id: allocateSnapshotId(st) };
+    pushSnapshot(st, snap);
+  },
 
-    // 尝试创建增量快照
-    const incrementalResult = createIncrementalSnapshot(snapWithId.content, st);
-
-    // 构建最终快照
-    const finalSnap: Snapshot = {
-      ...snapWithId,
-      content: incrementalResult.content,
-      isIncremental: incrementalResult.isIncremental,
-      baseSnapshotId: incrementalResult.baseId,
-      paperJsonDelta: incrementalResult.delta,
-    };
-
-    if (st.present) {
-      st.past.push(st.present);
-      while (st.past.length > MAX_DEPTH) dropOldestPastChunk(st);
-    }
-    st.present = finalSnap;
-    st.future = [];
-
-    trimHistoryByBudget(st);
+  commitContentSnapshot(label?: string, content?: ProjectContentSnapshot | null) {
+    const pid = getProjectId();
+    if (!pid || !content) return;
+    const st = getOrInitState(pid);
+    if (st.restoring) return;
+    const store = useProjectContentStore.getState();
+    pushSnapshot(st, {
+      content: cloneContent(content),
+      version: store.version,
+      savedAt: store.lastSavedAt,
+      label,
+    });
   },
 
   async undo() {
@@ -551,7 +633,17 @@ export const historyService = {
     if (!st.present) await this.captureInitialIfEmpty();
     if (st.past.length === 0 || !st.present) return;
     const from = st.present;
-    const prev = st.past.pop()!;
+    let prev: Snapshot | null = null;
+    const fromContent = getComparableSnapshotContent(from, st);
+    while (st.past.length > 0) {
+      const candidate = st.past.pop()!;
+      const candidateContent = getComparableSnapshotContent(candidate, st);
+      if (!isSameMeaningfulContent(fromContent, candidateContent)) {
+        prev = candidate;
+        break;
+      }
+    }
+    if (!prev) return;
     st.future.push(st.present);
     st.present = prev;
     trimHistoryByBudget(st);
@@ -566,7 +658,17 @@ export const historyService = {
     const st = getOrInitState(pid);
     if (st.future.length === 0 || !st.present) return;
     const from = st.present;
-    const next = st.future.pop()!;
+    let next: Snapshot | null = null;
+    const fromContent = getComparableSnapshotContent(from, st);
+    while (st.future.length > 0) {
+      const candidate = st.future.pop()!;
+      const candidateContent = getComparableSnapshotContent(candidate, st);
+      if (!isSameMeaningfulContent(fromContent, candidateContent)) {
+        next = candidate;
+        break;
+      }
+    }
+    if (!next) return;
     st.past.push(st.present);
     st.present = next;
     trimHistoryByBudget(st);
