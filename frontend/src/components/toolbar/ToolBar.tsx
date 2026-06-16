@@ -353,6 +353,7 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
     currentColor,
     fillColor,
     strokeWidth,
+    eraserSize,
     lineStyle,
     isEraser,
     hasFill,
@@ -361,6 +362,7 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
     setCurrentColor,
     setFillColor,
     setStrokeWidth,
+    setEraserSize,
     setLineStyle,
     setAbrBrushId,
     toggleEraser,
@@ -478,6 +480,12 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
+      if (
+        target instanceof Element &&
+        target.closest('[data-abr-brush-library]')
+      ) {
+        return;
+      }
 
       if (selectionMenuEnabled) {
         if (
@@ -1116,13 +1124,13 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
         {isEraser && (
           <div className="flex flex-col items-center gap-1">
             <span className="text-xs font-medium text-gray-600 tabular-nums">
-              {strokeWidth}
+              {eraserSize}
             </span>
             <VerticalSlider
-              value={strokeWidth}
+              value={eraserSize}
               min={2}
               max={50}
-              onChange={setStrokeWidth}
+              onChange={setEraserSize}
               disabled={false}
             />
             <span className="text-[10px] text-gray-500">{lt('大小', 'Size')}</span>

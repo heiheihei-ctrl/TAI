@@ -1,10 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Paintbrush } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { loadDryMediaBrushes } from '@/services/abrBrushService';
+import { loadAbrBrushes } from '@/services/abrBrushService';
 import type { AbrBrushPreset } from '@/types/abrBrush';
 import { useLocaleText } from '@/utils/localeText';
 import { getBrushDisplayName } from '@/utils/abrBrushLabels';
+import AbrBrushLibraryModal from './AbrBrushLibraryModal';
+
+const QUICK_BRUSH_COUNT = 10;
 
 type AbrBrushPickerProps = {
   selectedBrushId: string | null;
@@ -19,6 +22,7 @@ const AbrBrushPicker: React.FC<AbrBrushPickerProps> = ({
 }) => {
   const { lt, language } = useLocaleText();
   const [isOpen, setIsOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [brushes, setBrushes] = useState<AbrBrushPreset[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +32,7 @@ const AbrBrushPicker: React.FC<AbrBrushPickerProps> = ({
   const loadStartedRef = useRef(false);
 
   useEffect(() => {
-    loadDryMediaBrushes()
+    loadAbrBrushes()
       .then((presets) => {
         setBrushes(presets);
       })
@@ -43,7 +47,7 @@ const AbrBrushPicker: React.FC<AbrBrushPickerProps> = ({
     setLoading(true);
     setError(null);
 
-    loadDryMediaBrushes()
+    loadAbrBrushes()
       .then((presets) => {
         if (cancelled) return;
         setBrushes(presets);
@@ -67,6 +71,7 @@ const AbrBrushPicker: React.FC<AbrBrushPickerProps> = ({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      if (libraryOpen) return;
       const target = event.target as Node;
       const clickedInPanel = panelRef.current?.contains(target);
       const clickedInButton = buttonRef.current?.contains(target);
@@ -81,14 +86,44 @@ const AbrBrushPicker: React.FC<AbrBrushPickerProps> = ({
         document.removeEventListener('mousedown', handleClickOutside, true);
       };
     }
-  }, [isOpen]);
+  }, [isOpen, libraryOpen]);
 
   const selectedBrush =
     brushes.find((brush) => brush.id === selectedBrushId) ?? null;
 
+  const quickBrushes = brushes.slice(0, QUICK_BRUSH_COUNT);
+  const hasMoreBrushes = brushes.length > QUICK_BRUSH_COUNT;
+
   const handleSelect = (brushId: string | null) => {
     onSelectBrush(brushId);
     setIsOpen(false);
+  };
+
+  const renderBrushButton = (brush: AbrBrushPreset) => {
+    const isActive = selectedBrushId === brush.id;
+    return (
+      <button
+        key={brush.id}
+        type='button'
+        title={getBrushDisplayName(brush.name, language, brush.packId)}
+        className={cn(
+          'flex h-9 w-full items-center gap-2 rounded-lg border px-2 text-xs font-medium transition-colors',
+          isActive
+            ? 'border-gray-900 bg-gray-900 text-white shadow-sm'
+            : 'border-gray-200 bg-white/95 text-gray-700 hover:border-gray-300 hover:bg-gray-50',
+        )}
+        onClick={() => handleSelect(brush.id)}
+      >
+        <img
+          src={brush.previewDataUrl}
+          alt={getBrushDisplayName(brush.name, language, brush.packId)}
+          className='h-6 w-6 shrink-0 rounded-sm bg-white object-contain'
+        />
+        <span className='truncate text-left'>
+          {getBrushDisplayName(brush.name, language, brush.packId)}
+        </span>
+      </button>
+    );
   };
 
   return (
@@ -108,7 +143,7 @@ const AbrBrushPicker: React.FC<AbrBrushPickerProps> = ({
         {selectedBrush ? (
           <img
             src={selectedBrush.previewDataUrl}
-            alt={getBrushDisplayName(selectedBrush.name, language)}
+            alt={getBrushDisplayName(selectedBrush.name, language, selectedBrush.packId)}
             className='h-5 w-5 rounded-sm object-contain'
           />
         ) : (
@@ -153,36 +188,32 @@ const AbrBrushPicker: React.FC<AbrBrushPickerProps> = ({
                 <span className='truncate'>{lt('矢量笔', 'Vector')}</span>
               </button>
 
-              {brushes.map((brush) => {
-                const isActive = selectedBrushId === brush.id;
-                return (
-                  <button
-                    key={brush.id}
-                    type='button'
-                    title={getBrushDisplayName(brush.name, language)}
-                    className={cn( 
-                      'flex h-9 w-full items-center gap-2 rounded-lg border px-2 text-xs font-medium transition-colors',
-                      isActive
-                        ? 'border-gray-900 bg-gray-900 text-white shadow-sm'
-                        : 'border-gray-200 bg-white/95 text-gray-700 hover:border-gray-300 hover:bg-gray-50',
-                    )}
-                    onClick={() => handleSelect(brush.id)}
-                  >
-                    <img
-                      src={brush.previewDataUrl}
-                      alt={getBrushDisplayName(brush.name, language)}
-                      className='h-6 w-6 shrink-0 rounded-sm bg-white object-contain'
-                    />
-                    <span className='truncate text-left'>
-                      {getBrushDisplayName(brush.name, language)}
-                    </span>
-                  </button>
-                );
-              })}
+              {quickBrushes.map(renderBrushButton)}
+
+              {hasMoreBrushes && (
+                <button
+                  type='button'
+                  className='mt-1 flex h-9 w-full items-center justify-center rounded-lg border border-dashed border-gray-300 bg-white/80 px-2 text-xs font-medium text-gray-600 transition-colors hover:border-gray-400 hover:bg-gray-50 hover:text-gray-900'
+                  onClick={() => {
+                    setLibraryOpen(true);
+                    setIsOpen(false);
+                  }}
+                >
+                  {lt('更多', 'More')}
+                </button>
+              )}
             </div>
           )}
         </div>
       )}
+
+      <AbrBrushLibraryModal
+        isOpen={libraryOpen}
+        brushes={brushes}
+        selectedBrushId={selectedBrushId}
+        onClose={() => setLibraryOpen(false)}
+        onSelectBrush={(brushId) => handleSelect(brushId)}
+      />
     </div>
   );
 };
