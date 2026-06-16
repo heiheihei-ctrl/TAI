@@ -147,7 +147,7 @@ export const useImageTool = ({ context, canvasRef, eventHandlers = {} }: UseImag
   const { ensureDrawingLayer, zoom } = context;
 
   // 图片相关状态
-  const [triggerImageUpload, setTriggerImageUpload] = useState(false);
+  const [triggerImageUpload, setTriggerImageUpload] = useState(0);
   const currentPlaceholderRef = useRef<paper.Group | null>(null);
   const [imageInstances, setImageInstances] = useState<ImageInstance[]>([]);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);  // 支持多选
@@ -267,9 +267,8 @@ export const useImageTool = ({ context, canvasRef, eventHandlers = {} }: UseImag
     const triggerUpload = () => {
       logger.upload('📸 点击图片上传按钮，触发上传');
       currentPlaceholderRef.current = group;
-      setTriggerImageUpload(true);
+      setTriggerImageUpload((prev) => prev + 1);
     };
-    buttonGroup.onClick = triggerUpload;
 
     // 点击占位框（非按钮区域）选中占位框
     placeholder.onClick = () => {
@@ -284,6 +283,13 @@ export const useImageTool = ({ context, canvasRef, eventHandlers = {} }: UseImag
 
     return group;
   }, [ensureDrawingLayer]);
+
+  const requestImageUpload = useCallback((placeholder?: paper.Group | null) => {
+    if (placeholder) {
+      currentPlaceholderRef.current = placeholder;
+    }
+    setTriggerImageUpload((prev) => prev + 1);
+  }, []);
 
   // ========== 处理图片上传成功 ==========
   const handleImageUploaded = useCallback((
@@ -1411,7 +1417,7 @@ export const useImageTool = ({ context, canvasRef, eventHandlers = {} }: UseImag
 
   // ========== 处理上传触发完成 ==========
   const handleUploadTriggerHandled = useCallback(() => {
-    setTriggerImageUpload(false);
+    // triggerImageUpload uses a monotonic signal; nothing to reset.
   }, []);
 
   // ========== 删除占位框 ==========
@@ -1849,6 +1855,7 @@ export const useImageTool = ({ context, canvasRef, eventHandlers = {} }: UseImag
 
     // 占位框相关
     createImagePlaceholder,
+    requestImageUpload,
     currentPlaceholderRef,
     selectedPlaceholderId,
     deletePlaceholder,
