@@ -4,8 +4,11 @@ export interface AbrBrushSample {
   alpha: Uint8Array;
 }
 
+export type AbrBrushPackId = 'dry-media' | 'comic' | 'pencil-brush';
+
 export interface AbrBrushPreset {
   id: string;
+  packId: AbrBrushPackId;
   name: string;
   baseSize: number;
   spacing: number;

@@ -1,9 +1,18 @@
 import { readAbr, type SampleInfo } from 'ag-psd';
-import dryMediaAbrUrl from '@/assets/dry_media.abr?url';
-import type { AbrBrushPreset } from '@/types/abrBrush';
+import { ABR_BRUSH_REMOTE_URLS } from '@/config/abrBrushAssets';
+import type { AbrBrushPackId, AbrBrushPreset } from '@/types/abrBrush';
+import { proxifyRemoteAssetUrl } from '@/utils/assetProxy';
+import { logger } from '@/utils/logger';
+import { stripAbrPatternSections } from '@/utils/stripAbrPatternSections';
 
 let cachedPresets: AbrBrushPreset[] | null = null;
 let loadPromise: Promise<AbrBrushPreset[]> | null = null;
+
+const ABR_PACKS: Array<{ id: AbrBrushPackId; url: string; stripPatterns?: boolean }> = [
+  { id: 'dry-media', url: ABR_BRUSH_REMOTE_URLS['dry-media'] },
+  { id: 'comic', url: ABR_BRUSH_REMOTE_URLS.comic },
+  { id: 'pencil-brush', url: ABR_BRUSH_REMOTE_URLS['pencil-brush'], stripPatterns: true },
+];
 
 const createPreviewDataUrl = (sample: SampleInfo): string => {
   const { w, h } = sample.bounds;
@@ -47,13 +56,18 @@ const createPreviewDataUrl = (sample: SampleInfo): string => {
   return canvas.toDataURL('image/png');
 };
 
-const parseDryMediaAbr = (buffer: ArrayBuffer): AbrBrushPreset[] => {
-  const abr = readAbr(new Uint8Array(buffer));
+const parseAbrPack = (
+  buffer: ArrayBuffer,
+  packId: AbrBrushPackId,
+  stripPatterns = false,
+): AbrBrushPreset[] => {
+  const bytes = stripPatterns ? stripAbrPatternSections(buffer) : new Uint8Array(buffer);
+  const abr = readAbr(bytes);
   const sampleMap = new Map(abr.samples.map((sample) => [sample.id, sample]));
 
   return abr.brushes
     .filter((brush) => brush.shape.type === 'sampled')
-    .map((brush) => {
+    .map((brush, index) => {
       const shape = brush.shape;
       if (shape.type !== 'sampled') {
         throw new Error('Unexpected brush shape');
@@ -65,7 +79,8 @@ const parseDryMediaAbr = (buffer: ArrayBuffer): AbrBrushPreset[] => {
       }
 
       return {
-        id: shape.sampledData,
+        id: `${packId}-${index}`,
+        packId,
         name: brush.name,
         baseSize: shape.size,
         spacing: shape.spacingOn ? Math.max(0.01, shape.spacing) : 0.25,
@@ -83,27 +98,50 @@ const parseDryMediaAbr = (buffer: ArrayBuffer): AbrBrushPreset[] => {
     });
 };
 
-export const loadDryMediaBrushes = async (): Promise<AbrBrushPreset[]> => {
+const loadAbrPack = async ({
+  id,
+  url,
+  stripPatterns = false,
+}: (typeof ABR_PACKS)[number]): Promise<AbrBrushPreset[]> => {
+  const response = await fetch(proxifyRemoteAssetUrl(url));
+  if (!response.ok) {
+    throw new Error(`Failed to load ${id}.abr (${response.status})`);
+  }
+  const buffer = await response.arrayBuffer();
+  return parseAbrPack(buffer, id, stripPatterns);
+};
+
+export const loadAbrBrushes = async (): Promise<AbrBrushPreset[]> => {
   if (cachedPresets) return cachedPresets;
   if (loadPromise) return loadPromise;
 
   loadPromise = (async () => {
-    const response = await fetch(dryMediaAbrUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to load dry_media.abr (${response.status})`);
-    }
-    const buffer = await response.arrayBuffer();
-    cachedPresets = parseDryMediaAbr(buffer);
+    const packs = await Promise.all(
+      ABR_PACKS.map(async (pack) => {
+        try {
+          return await loadAbrPack(pack);
+        } catch (error) {
+          logger.warn(`Failed to load ${pack.id}.abr`, error);
+          return [];
+        }
+      }),
+    );
+
+    cachedPresets = packs.flat();
     return cachedPresets;
   })();
 
   return loadPromise;
 };
 
-export const getDryMediaBrushById = async (
+export const loadDryMediaBrushes = loadAbrBrushes;
+
+export const getAbrBrushById = async (
   brushId: string | null,
 ): Promise<AbrBrushPreset | null> => {
   if (!brushId) return null;
-  const presets = await loadDryMediaBrushes();
+  const presets = await loadAbrBrushes();
   return presets.find((preset) => preset.id === brushId) ?? null;
 };
+
+export const getDryMediaBrushById = getAbrBrushById;

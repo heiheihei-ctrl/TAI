@@ -32,7 +32,7 @@ const Canvas: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const zoom = useCanvasStore((state) => state.zoom);
     const isEraser = useToolStore((state) => state.isEraser);
-    const strokeWidth = useToolStore((state) => state.strokeWidth);
+    const eraserSize = useToolStore((state) => state.eraserSize);
     const drawMode = useToolStore((state) => state.drawMode);
     const [isPaperInitialized, setIsPaperInitialized] = useState(false);
     const [isPaperReady, setIsPaperReady] = useState(false); // Delay Paper.js init.
@@ -92,7 +92,7 @@ const Canvas: React.FC = () => {
             <EraserCursorOverlay
                 canvasRef={canvasRef}
                 visible={isEraser && drawMode === 'free'}
-                strokeWidth={strokeWidth}
+                eraserSize={eraserSize}
                 zoom={zoom}
             />
 

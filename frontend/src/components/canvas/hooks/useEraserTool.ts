@@ -21,13 +21,13 @@ import {
 
 interface UseEraserToolProps {
   context: DrawingContext;
-  strokeWidth: number;
+  eraserSize: number;
 }
 
-export const useEraserTool = ({ context, strokeWidth }: UseEraserToolProps) => {
+export const useEraserTool = ({ context, eraserSize }: UseEraserToolProps) => {
   const { ensureDrawingLayer } = context;
 
-  const getEraserRadius = useCallback(() => computeEraserRadius(strokeWidth), [strokeWidth]);
+  const getEraserRadius = useCallback(() => computeEraserRadius(eraserSize), [eraserSize]);
 
   const performEraseAtPoint = useCallback(
     (point: paper.Point) => {
@@ -60,27 +60,85 @@ export const useEraserTool = ({ context, strokeWidth }: UseEraserToolProps) => {
       const drawingLayer = ensureDrawingLayer();
       if (!drawingLayer) return 0;
 
-      const rasterCount = eraseRastersAlongPath(drawingLayer, eraserPath, strokeWidth);
-      const pathCount = erasePathsAlongPath(drawingLayer, eraserPath, strokeWidth);
+      const rasterCount = eraseRastersAlongPath(drawingLayer, eraserPath, eraserSize);
+      const pathCount = erasePathsAlongPath(drawingLayer, eraserPath, eraserSize);
       const total = rasterCount + pathCount;
       logger.debug(`🧹 圆形橡皮擦处理了 ${total} 个图元`);
       return total;
     },
-    [strokeWidth, ensureDrawingLayer],
+    [eraserSize, ensureDrawingLayer],
   );
 
   const performEraseRastersBetweenPoints = useCallback(
     (from: paper.Point, to: paper.Point) => {
-      performEraseBetweenPoints(from, to);
+      const drawingLayer = ensureDrawingLayer();
+      if (!drawingLayer) return 0;
+
+      const radius = getEraserRadius();
+      return eraseRastersBetweenPoints(drawingLayer, from, to, radius);
     },
-    [performEraseBetweenPoints],
+    [ensureDrawingLayer, getEraserRadius],
   );
 
   const performEraseRastersAtPoint = useCallback(
     (point: paper.Point) => {
-      performEraseAtPoint(point);
+      const drawingLayer = ensureDrawingLayer();
+      if (!drawingLayer) return 0;
+
+      const radius = getEraserRadius();
+      return eraseRastersAtPoint(drawingLayer, point, radius);
     },
-    [performEraseAtPoint],
+    [ensureDrawingLayer, getEraserRadius],
+  );
+
+  const performVectorEraseAtPoint = useCallback(
+    (point: paper.Point) => {
+      const drawingLayer = ensureDrawingLayer();
+      if (!drawingLayer) return 0;
+
+      return erasePathsAtPoint(drawingLayer, point, getEraserRadius());
+    },
+    [ensureDrawingLayer, getEraserRadius],
+  );
+
+  const performVectorEraseAlongTrail = useCallback(
+    (trail: paper.Point[]) => {
+      const drawingLayer = ensureDrawingLayer();
+      if (!drawingLayer || trail.length === 0) return 0;
+
+      const radius = getEraserRadius();
+      const step = Math.max(1, radius * 0.35);
+      const sampled: paper.Point[] = [trail[0].clone()];
+
+      for (let i = 1; i < trail.length; i += 1) {
+        const point = trail[i];
+        const last = sampled[sampled.length - 1];
+        if (point.getDistance(last) >= step) {
+          sampled.push(point.clone());
+        }
+      }
+
+      const tail = trail[trail.length - 1];
+      if (tail.getDistance(sampled[sampled.length - 1]) > 0.5) {
+        sampled.push(tail.clone());
+      }
+
+      if (sampled.length === 1) {
+        return erasePathsAtPoint(drawingLayer, sampled[0], radius);
+      }
+
+      let affected = 0;
+      for (let i = 1; i < sampled.length; i += 1) {
+        affected += erasePathsBetweenPoints(
+          drawingLayer,
+          sampled[i - 1],
+          sampled[i],
+          radius,
+        );
+      }
+      return affected;
+    },
+    [ensureDrawingLayer, getEraserRadius],
   );
 
   const hasErasableContentAt = useCallback(
@@ -154,6 +212,8 @@ export const useEraserTool = ({ context, strokeWidth }: UseEraserToolProps) => {
     performEraseBetweenPoints,
     performEraseRastersBetweenPoints,
     performEraseRastersAtPoint,
+    performVectorEraseAtPoint,
+    performVectorEraseAlongTrail,
     getEraserRadius,
     hasErasableContentAt,
     previewEraseAt,
