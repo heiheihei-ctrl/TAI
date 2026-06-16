@@ -3669,6 +3669,22 @@ export const useAIChatStore = create<AIChatState>()(
             const parallelGroupId = currentMessageForRequest?.groupId;
             const parallelGroupIndex = currentMessageForRequest?.groupIndex ?? 0;
             const parallelGroupTotal = currentMessageForRequest?.groupTotal ?? 1;
+            const generationReferenceImageUrls: string[] = [];
+            const generationReferenceSeen = new Set<string>();
+            [
+              state.sourceImageForEditing,
+              state.sourceImageForAnalysis,
+              ...(Array.isArray(state.sourceImagesForBlending)
+                ? state.sourceImagesForBlending
+                : []),
+            ].forEach((value) => {
+              const remote =
+                typeof value === "string" ? normalizeRemoteUrl(value) : null;
+              if (!remote || !isLikelyBackendAllowedRemoteUrl(remote)) return;
+              if (generationReferenceSeen.has(remote)) return;
+              generationReferenceSeen.add(remote);
+              generationReferenceImageUrls.push(remote);
+            });
 
             const generateRequest =
               effectiveProvider === "nano2"
@@ -3679,6 +3695,10 @@ export const useAIChatStore = create<AIChatState>()(
                     providerOptions,
                     aspectRatio: state.aspectRatio || undefined,
                     imageSize: state.imageSize ?? "1K",
+                    imageUrls:
+                      generationReferenceImageUrls.length > 0
+                        ? generationReferenceImageUrls
+                        : undefined,
                     outputImageCount: parallelGroupTotal > 1 ? parallelGroupTotal : undefined,
                     parallelGroupId,
                     parallelGroupIndex,
@@ -3696,6 +3716,10 @@ export const useAIChatStore = create<AIChatState>()(
                     imageSize: state.imageSize ?? "1K", // 自动模式下优先使用1K
                     thinkingLevel: state.thinkingLevel || undefined,
                     imageOnly: state.imageOnly,
+                    imageUrls:
+                      generationReferenceImageUrls.length > 0
+                        ? generationReferenceImageUrls
+                        : undefined,
                     outputImageCount: parallelGroupTotal > 1 ? parallelGroupTotal : undefined,
                     parallelGroupId,
                     parallelGroupIndex,

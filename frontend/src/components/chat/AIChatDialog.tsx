@@ -16,7 +16,6 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { fetchWithAuth } from "@/services/authFetch";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   DropdownMenu,
@@ -27,12 +26,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 // 比例选择改为自定义浮层（定位到对话框上方）
 import ImagePreviewModal from "@/components/ui/ImagePreviewModal";
+import InlineImageMentionEditor from "@/components/common/InlineImageMentionEditor";
 import SmartImage from "@/components/ui/SmartImage";
 import SmoothSmartImage from "@/components/ui/SmoothSmartImage";
 import { useAIChatStore, getTextModelForProvider } from "@/stores/aiChatStore";
+import { useProjectStore } from "@/stores/projectStore";
+import { useProjectContentStore } from "@/stores/projectContentStore";
 import { useUIStore } from "@/stores";
 import type { ManualAIMode, ChatMessage } from "@/stores/aiChatStore";
 import { clipboardJsonService } from "@/services/clipboardJsonService";
+import { globalImageHistoryApi, type GlobalImageHistoryItem } from "@/services/globalImageHistoryApi";
 import {
   Send,
   AlertCircle,
@@ -70,7 +73,14 @@ import PromptOptimizationPanel from "@/components/chat/PromptOptimizationPanel";
 import type { PromptOptimizationSettings } from "@/components/chat/PromptOptimizationPanel";
 import promptOptimizationService from "@/services/promptOptimizationService";
 import { contextManager } from "@/services/contextManager";
+import { resolvePublicAssetUrlFromKey } from "@/utils/assetProxy";
 import { toRenderableImageSrc } from "@/utils/imageSource";
+import {
+  dedupeImageMentionItems,
+  resolveImageMentionUrls,
+  stripImageMentionTokens,
+  type ImageMentionItem,
+} from "@/utils/imageMentions";
 import {
   getTencentBananaMaxReferenceImages,
   isTencentBananaAnalyzeSupported,
@@ -295,6 +305,7 @@ const AIChatDialog: React.FC = () => {
     setSourcePdfForAnalysis,
     sourcePdfForAnalysis,
     sourcePdfFileName,
+    setSourceImagesFromCanvas,
     addImageForBlending,
     removeImageFromBlending,
     clearImagesForBlending,
@@ -328,6 +339,10 @@ const AIChatDialog: React.FC = () => {
   } = useAIChatStore();
   const focusMode = useUIStore((state) => state.focusMode);
   const showLibraryPanel = useUIStore((state) => state.showLibraryPanel);
+  const currentProjectId = useProjectStore((state) => state.currentProjectId);
+  const projectContentImages = useProjectContentStore(
+    (state) => state.content?.assets?.images ?? []
+  );
   const isBlackTheme = chatTheme === "black";
   const chatLogoSrc = "/logo.png";
   const aiBrandTextClass = isBlackTheme
@@ -346,7 +361,7 @@ const AIChatDialog: React.FC = () => {
     });
   }, [aiProvider]);
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = useRef<HTMLDivElement>(null);
   const inputAreaRef = useRef<HTMLDivElement>(null); // 输入区域容器 ref
   const dialogRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -357,6 +372,7 @@ const AIChatDialog: React.FC = () => {
   const [hoverToggleZone, setHoverToggleZone] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
+  const [projectImageHistory, setProjectImageHistory] = useState<GlobalImageHistoryItem[]>([]);
   const ownedObjectUrlsRef = useRef<Set<string>>(new Set());
   const historyRef = useRef<HTMLDivElement>(null);
   const historyInitialHeightRef = useRef<number | null>(null);
@@ -596,6 +612,92 @@ const AIChatDialog: React.FC = () => {
     currentProviderOption?.label ?? t("chat.labels.domesticModel");
   // 统一向上展开（最大化时避免溢出，紧凑模式保持原有行为）
   const dropdownSide: "top" | "bottom" = "top";
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!currentProjectId) {
+      setProjectImageHistory([]);
+      return;
+    }
+
+    globalImageHistoryApi
+      .list({ sourceProjectId: currentProjectId, limit: 80 })
+      .then((res) => {
+        if (!cancelled) {
+          setProjectImageHistory(res.items || []);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.warn("加载项目图片 @ 候选失败:", error);
+          setProjectImageHistory([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentProjectId]);
+
+  const projectImageMentionItems = useMemo<ImageMentionItem[]>(() => {
+    const normalizeRef = (value?: unknown): string | null => {
+      if (typeof value !== "string") return null;
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      if (/^(data:|blob:)/i.test(trimmed)) return null;
+      if (/^[A-Za-z0-9+/=\r\n]+$/.test(trimmed) && trimmed.length > 256) {
+        return null;
+      }
+      const withoutLeading = trimmed.replace(/^\/+/, "");
+      if (/^(projects|uploads|templates|videos)\//i.test(withoutLeading)) {
+        return resolvePublicAssetUrlFromKey(withoutLeading) || withoutLeading;
+      }
+      return trimmed;
+    };
+
+    const historyItems = projectImageHistory
+      .map((item) => {
+        const url =
+          normalizeRef(item.mediaUrl) ||
+          normalizeRef(item.imageUrl) ||
+          normalizeRef(item.thumbnailUrl);
+        if (!url) return null;
+        const label =
+          item.prompt?.trim() ||
+          item.sourceType?.trim() ||
+          item.sourceProjectName?.trim() ||
+          "项目图片";
+        return {
+          id: `history:${item.id}`,
+          label: label.length > 28 ? `${label.slice(0, 28)}...` : label,
+          url,
+          thumbnailUrl: normalizeRef(item.thumbnailUrl) || url,
+        } satisfies ImageMentionItem;
+      })
+      .filter((item): item is ImageMentionItem => Boolean(item));
+
+    const assetItems = projectContentImages
+      .map((asset) => {
+        const url =
+          normalizeRef((asset as any).remoteUrl) ||
+          normalizeRef(asset.url) ||
+          normalizeRef(asset.src) ||
+          normalizeRef(asset.key);
+        if (!url) return null;
+        const label =
+          (asset.fileName && asset.fileName.trim()) ||
+          `画布图片 ${asset.id.slice(0, 6)}`;
+        return {
+          id: `asset:${asset.id}`,
+          label,
+          url,
+          thumbnailUrl: url,
+        } satisfies ImageMentionItem;
+      })
+      .filter((item): item is ImageMentionItem => Boolean(item));
+
+    return dedupeImageMentionItems([...historyItems, ...assetItems]);
+  }, [projectContentImages, projectImageHistory]);
 
   const handleCycleAutoMultiplier = useCallback(
     (event?: React.MouseEvent) => {
@@ -885,12 +987,11 @@ const AIChatDialog: React.FC = () => {
 
   // 输入框高度自适应逻辑
   useLayoutEffect(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.style.height = "auto";
-      const scrollHeight = textarea.scrollHeight;
-      // 限制最大高度为 260px
-      textarea.style.height = `${Math.min(scrollHeight, 260)}px`;
+    const editor = textareaRef.current;
+    if (editor) {
+      editor.style.height = "auto";
+      const scrollHeight = editor.scrollHeight;
+      editor.style.height = `${Math.min(scrollHeight, 260)}px`;
     }
   }, [currentInput]);
 
@@ -903,19 +1004,14 @@ const AIChatDialog: React.FC = () => {
   const ensureInputVisible = useCallback(() => {
     if (!isVisible) return;
 
-    const textarea = textareaRef.current;
-    if (!textarea) return;
+    const editor = textareaRef.current;
+    if (!editor) return;
 
-    const selectionStart = textarea.selectionStart ?? 0;
-    const selectionEnd = textarea.selectionEnd ?? 0;
-    const hasSelection = selectionStart !== selectionEnd;
-    const isCaretNearEnd =
-      !hasSelection && textarea.value.length - selectionEnd <= 80;
     const hiddenBottom =
-      textarea.scrollHeight - textarea.clientHeight - textarea.scrollTop;
+      editor.scrollHeight - editor.clientHeight - editor.scrollTop;
 
-    if (isCaretNearEnd && hiddenBottom > 4) {
-      textarea.scrollTop = textarea.scrollHeight;
+    if (hiddenBottom > 4) {
+      editor.scrollTop = editor.scrollHeight;
     }
 
     const inputContainer = inputAreaRef.current;
@@ -2257,8 +2353,8 @@ const AIChatDialog: React.FC = () => {
 
   
   const getModeSupport = useCallback(
-    (mode: ManualAIMode) => {
-      const count = selectedImageCount;
+    (mode: ManualAIMode, countOverride?: number) => {
+      const count = countOverride ?? selectedImageCount;
       switch (mode) {
         case "auto":
           return { supported: true };
@@ -2300,27 +2396,12 @@ const AIChatDialog: React.FC = () => {
     ]
   );
 
-  const isManualModeSupported = useMemo(() => {
-    if (manualAIMode === "auto") return true;
-    return getModeSupport(manualAIMode).supported;
-  }, [getModeSupport, manualAIMode]);
-
-  const imageInputLimitWarning = useMemo(() => {
-    if (!isTencentStableBanana || tencentBananaMaxRefCount === null) return null;
-    if (selectedImageCount <= tencentBananaMaxRefCount) return null;
-    return `稳定通道下当前模型最多支持${tencentBananaMaxRefCount}张参考图，请减少图片数量`;
-  }, [
-    isTencentStableBanana,
-    selectedImageCount,
-    tencentBananaMaxRefCount,
-  ]);
-
-  const manualModeWarning = useMemo(() => {
+  const getManualModeWarning = useCallback((count: number) => {
     if (manualAIMode === "auto") return null;
-    if (isManualModeSupported) return null;
+    if (getModeSupport(manualAIMode, count).supported) return null;
     // 根据模式提供更清晰的提示
     if (manualAIMode === "edit") {
-      return selectedImageCount === 0
+      return count === 0
         ? "Edit模式需要添加1张图片"
         : "Edit模式仅支持1张图片";
     }
@@ -2328,7 +2409,7 @@ const AIChatDialog: React.FC = () => {
       if (
         isTencentStableBanana &&
         tencentBananaMaxRefCount !== null &&
-        selectedImageCount > tencentBananaMaxRefCount
+        count > tencentBananaMaxRefCount
       ) {
         return `Blend模式在稳定通道下最多支持${tencentBananaMaxRefCount}张图片`;
       }
@@ -2342,13 +2423,12 @@ const AIChatDialog: React.FC = () => {
         ? "PDF分析模式不支持同时添加图片"
         : "Analysis模式至少需要添加1张图片";
     }
-    return `当前模式不支持${selectedImageCount}张图`;
+    return `当前模式不支持${count}张图`;
   }, [
     hasPdfForAnalysis,
     isTencentStableBanana,
-    isManualModeSupported,
+    getModeSupport,
     manualAIMode,
-    selectedImageCount,
     tencentBananaMaxRefCount,
   ]);
 
@@ -2363,13 +2443,29 @@ const AIChatDialog: React.FC = () => {
     )
       return;
 
-    if (imageInputLimitWarning) {
-      showToast(imageInputLimitWarning, "error");
+    const mentionedImageUrls = resolveImageMentionUrls(
+      trimmedInput,
+      projectImageMentionItems
+    );
+    const effectiveImageCount =
+      selectedImageCount + mentionedImageUrls.length;
+
+    if (
+      isTencentStableBanana &&
+      tencentBananaMaxRefCount !== null &&
+      effectiveImageCount > tencentBananaMaxRefCount
+    ) {
+      showToast(
+        `稳定通道下当前模型最多支持${tencentBananaMaxRefCount}张参考图，请减少图片数量`,
+        "error"
+      );
       return;
     }
 
-    if (manualModeWarning) {
-      showToast(manualModeWarning, "error");
+    const effectiveManualModeWarning =
+      manualAIMode === "auto" ? null : getManualModeWarning(effectiveImageCount);
+    if (effectiveManualModeWarning) {
+      showToast(effectiveManualModeWarning, "error");
       return;
     }
     sendInFlightRef.current = true;
@@ -2387,7 +2483,9 @@ const AIChatDialog: React.FC = () => {
       // 🔥 立即增加待处理任务计数（敲击回车的反馈）
       setPendingTaskCount((prev) => prev + 1);
 
-      let promptToSend = trimmedInput;
+      let promptToSend = mentionedImageUrls.length
+        ? stripImageMentionTokens(trimmedInput)
+        : trimmedInput;
 
       if (autoOptimizeEnabled) {
         setAutoOptimizing(true);
@@ -2421,6 +2519,24 @@ const AIChatDialog: React.FC = () => {
         }
       }
 
+      if (mentionedImageUrls.length > 0) {
+        const existingImages = [
+          ...(sourceImagesForBlending || []),
+          ...(sourceImageForEditing ? [sourceImageForEditing] : []),
+          ...(sourceImageForAnalysis ? [sourceImageForAnalysis] : []),
+        ];
+        const mergedImages = Array.from(
+          new Set(
+            [...existingImages, ...mentionedImageUrls].filter(
+              (value): value is string =>
+                typeof value === "string" && value.trim().length > 0
+            )
+          )
+        );
+        setSourceImageForAnalysis(null);
+        setSourceImagesFromCanvas(mergedImages);
+      }
+
       clearInput();
       await processUserInput(promptToSend);
     } finally {
@@ -2451,10 +2567,6 @@ const AIChatDialog: React.FC = () => {
   };
 
   // 处理输入变化
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setCurrentInput(e.target.value);
-  };
-
   // 处理图片预览
   const handleImagePreview = (src: string, title: string) => {
     setPreviewImage({ src, title });
@@ -2832,10 +2944,27 @@ const AIChatDialog: React.FC = () => {
   if (!isVisible) return null;
 
   // 🔥 修改发送按钮的禁用条件：允许在生成中继续发送（并行模式）
+  const currentMentionedImageCount = resolveImageMentionUrls(
+    currentInput,
+    projectImageMentionItems
+  ).length;
+  const currentEffectiveImageCount =
+    selectedImageCount + currentMentionedImageCount;
+  const currentEffectiveManualModeWarning =
+    manualAIMode === "auto"
+      ? null
+      : getManualModeWarning(currentEffectiveImageCount);
+  const currentEffectiveImageLimitWarning =
+    isTencentStableBanana &&
+    tencentBananaMaxRefCount !== null &&
+    currentEffectiveImageCount > tencentBananaMaxRefCount
+      ? `稳定通道下当前模型最多支持${tencentBananaMaxRefCount}张参考图，请减少图片数量`
+      : null;
   const canSend =
     currentInput.trim().length > 0 &&
     !autoOptimizing &&
-    (manualAIMode === "auto" || isManualModeSupported);
+    !currentEffectiveImageLimitWarning &&
+    !currentEffectiveManualModeWarning;
   const hasHistoryContent = messages.length > 0 || isStreaming;
   const shouldShowHistoryPanel =
     (showHistory || isMaximized) && (hasHistoryContent || showHistory);
@@ -2888,7 +3017,9 @@ const AIChatDialog: React.FC = () => {
       ? lt("快捷键：Enter 发送，Shift+Enter 换行", "Shortcut: Enter to send, Shift+Enter for newline")
       : lt("快捷键：Ctrl/Cmd + Enter 发送，Enter 换行", "Shortcut: Ctrl/Cmd + Enter to send, Enter for newline");
   const sendButtonTitle =
-    imageInputLimitWarning || manualModeWarning || sendShortcutHint;
+    currentEffectiveImageLimitWarning ||
+    currentEffectiveManualModeWarning ||
+    sendShortcutHint;
 
   // 计算拖拽时是否使用自定义位置
   const useDragPosition = showHistory && !isMaximized && dragOffsetX !== null;
@@ -3246,22 +3377,40 @@ const AIChatDialog: React.FC = () => {
                 </div>
               )}
 
-              <Textarea
-                ref={textareaRef}
+              <InlineImageMentionEditor
+                editorRef={textareaRef}
                 value={currentInput}
-                onChange={handleInputChange}
-                onKeyDown={handleKeyDown}
-                onPaste={handlePaste}
-                onFocus={scheduleEnsureInputVisible}
-                onClick={scheduleEnsureInputVisible}
-                onKeyUp={scheduleEnsureInputVisible}
+                items={projectImageMentionItems}
+                onChange={setCurrentInput}
+                emptyText={lt("当前项目暂无可引用图片", "No project images")}
                 placeholder={shouldHidePlaceholder ? "" : getSmartPlaceholder()}
-                disabled={false}
-                className={cn(
-                  "resize-none px-4 pb-12 min-h-[80px] max-h-[260px] text-sm bg-transparent border-gray-300 focus:ring-0 transition-colors duration-200 overflow-y-auto",
-                  isBlackTheme && "text-white placeholder:text-[#888888]"
-                )}
-                rows={1}
+                onFocus={() => {
+                  scheduleEnsureInputVisible();
+                }}
+                onClick={() => {
+                  scheduleEnsureInputVisible();
+                }}
+                onKeyUp={() => {
+                  scheduleEnsureInputVisible();
+                }}
+                onPaste={(event) => {
+                  event.preventDefault();
+                  handlePaste(event as unknown as React.ClipboardEvent<HTMLTextAreaElement>);
+                }}
+                menuStyle={{ position: "absolute", left: 12, bottom: "100%", marginBottom: 8 }}
+                style={{
+                  minHeight: 80,
+                  maxHeight: 260,
+                  overflowY: "auto",
+                  padding: "8px 16px 48px",
+                  fontSize: 14,
+                  lineHeight: 1.5,
+                  borderRadius: 6,
+                  border: "1px solid #d1d5db",
+                  background: "transparent",
+                  color: isBlackTheme ? "#ffffff" : "#111827",
+                  caretColor: isBlackTheme ? "#ffffff" : "#111827",
+                }}
               />
 
               {/* 左侧按钮组 */}

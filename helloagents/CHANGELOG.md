@@ -6,11 +6,17 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 ### Added
+- AI Chat/Flow prompts now support image mentions: chat input can reference images from the current project, Prompt/TextPromptPro nodes can reference images already connected to their downstream model node, and runtime requests resolve those lightweight mentions into reference image URLs without storing inline image data in project JSON.
 - Auth: login page now exposes the full “微信公众号扫码登录”闭环 again. Backend controller routes were added for session create/status/bind/consume and WeChat callback URL verification/event intake; frontend `/auth/login` now defaults to a WeChat tab with QR creation, 1.8s polling, `needs_phone_bind` handling, SMS bind, and authorized-session consumption into the existing JWT/cookie login state.
 - Auth/WeChat Official: callback handling now supports secure mode as well as plaintext mode. Backend URL verification can decrypt encrypted `echostr`, POST callback handling now validates `msg_signature`, decrypts `Encrypt` payloads with `WECHAT_OFFICIAL_ENCODING_AES_KEY`, and encrypts passive XML replies back to WeChat.
 - Settings modal user profile card now supports inline profile editing: users can open an edit dialog from the settings card, upload a persisted OSS avatar, and update their display name. The backend adds `PATCH /api/users/profile`, frontend auth state now carries `avatarUrl`, and settings/workspace UI reuse the saved avatar consistently.
 
 ### Fixed
+- Image mentions now use the `tai-image:` token prefix, render as inline thumbnail chips in chat and prompt textareas instead of exposing raw token strings, and support repeated `@` insertion in the same input reliably.
+- Image mention trigger/query handling no longer requires whitespace before `@`, and chat/prompt textareas now block keyboard `Backspace`/`Delete` from deleting mention tokens while snapping the caret out of hidden token internals.
+- Image mention textareas now hide browser selection text for the underlying token layer and collapse mouse drag selections that touch mentions, preventing raw `tai-image:` token strings from appearing during long-press selection.
+- Chat and prompt editors now decouple visible typing from stored image-mention tokens: textareas edit plain text only, mentioned images render as removable chip rows above the input, caret positioning no longer drifts when images are mentioned, and chip delete buttons are directly clickable.
+- Prompt nodes now use an inline image-mention editor instead of a textarea overlay: mentioned images stay interleaved with surrounding text in their authored order, each inline chip has a directly clickable delete button, and the saved prompt still preserves mention tokens for model-side reference resolution.
 - Auth UI: expired WeChat login QR codes now show a gray refresh overlay on hover and refresh when clicked; the compact login card keeps a stable size while switching among WeChat, password, and SMS tabs, with long states scrolling inside the card.
 - Resizable flow nodes now treat stored height as a minimum and naturally expand for fields or runtime errors, avoiding both clipped content and observer-driven infinite height growth.
 - New Midjourney V7 and Niji 7 nodes now start at a compact 430px height instead of leaving a large blank area below their collapsed controls.

@@ -1,10 +1,12 @@
 import React from 'react';
-import { Handle, Position, useReactFlow } from 'reactflow';
+import { Handle, Position, useReactFlow, useStore, type ReactFlowState } from 'reactflow';
 import { Link } from 'lucide-react';
 import { resolveTextFromSourceNode } from '../utils/textSource';
+import { collectPromptNodeImageMentionItems } from '../utils/imageMentionCandidates';
 import useNodeInternalsSync from '../hooks/useNodeInternalsSync';
 import { useLocaleText } from '@/utils/localeText';
 import { useCanvasStore } from '@/stores';
+import InlineImageMentionEditor from '@/components/common/InlineImageMentionEditor';
 
 type Props = {
   id: string;
@@ -22,7 +24,7 @@ const MAX_BOX_WIDTH = 600;
 const DEFAULT_BOX_WIDTH = 320;
 const MIN_BOX_HEIGHT = 60;
 const MAX_BOX_HEIGHT = 400;
-const DEFAULT_BOX_HEIGHT = 80;
+const DEFAULT_BOX_HEIGHT = 64;
 
 const stopNodeDrag = (event: React.SyntheticEvent) => {
   event.stopPropagation();
@@ -34,11 +36,12 @@ const stopNodeDrag = (event: React.SyntheticEvent) => {
 function TextPromptProNodeInner({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
   const rf = useReactFlow();
+  const edges = useStore((state: ReactFlowState) => state.edges);
   const [hover, setHover] = React.useState<string | null>(null);
   const [isTextFocused, setIsTextFocused] = React.useState(false);
   const [isResizing, setIsResizing] = React.useState(false);
   const nodeRootRef = React.useRef<HTMLDivElement | null>(null);
-  const shouldPassWheelToCanvas = React.useCallback((event: React.WheelEvent<HTMLTextAreaElement>) => {
+  const shouldPassWheelToCanvas = React.useCallback((event: React.WheelEvent<Element>) => {
     const store = useCanvasStore.getState();
     const isModifierWheel = event.ctrlKey || event.metaKey;
     return store.wheelZoomMode === 'direct' ? !isModifierWheel : isModifierWheel;
@@ -51,6 +54,13 @@ function TextPromptProNodeInner({ id, data, selected }: Props) {
     const p = data.prompts || [''];
     return p.length > 0 ? p : [''];
   }, [data.prompts]);
+  const imageMentionItems = React.useMemo(
+    () => collectPromptNodeImageMentionItems(id, edges, (nodeId) => rf.getNode(nodeId)),
+    [edges, id, rf]
+  );
+  const isInlineMentionInteractiveTarget = React.useCallback((target: EventTarget | null) => {
+    return target instanceof HTMLElement && Boolean(target.closest("[data-inline-mention-interactive='true']"));
+  }, []);
 
   const updateNodeData = React.useCallback((patch: Record<string, unknown>) => {
     window.dispatchEvent(new CustomEvent('flow:updateNodeData', { detail: { id, patch } }));
@@ -283,7 +293,7 @@ function TextPromptProNodeInner({ id, data, selected }: Props) {
             background: '#fff',
             borderRadius: 16,
             border: '1px solid #e5e7eb',
-            padding: '12px 16px',
+            padding: '10px 16px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
             position: 'relative',
             width: boxWidth,
@@ -330,38 +340,49 @@ function TextPromptProNodeInner({ id, data, selected }: Props) {
           )}
 
           {/* 本地输入框 */}
-          <textarea
-            className="nodrag nopan nowheel"
+          <InlineImageMentionEditor
             value={prompts[0] || ''}
-            onChange={(event) => updatePrompt(0, event.target.value)}
+            items={imageMentionItems}
+            onChange={(nextValue) => updatePrompt(0, nextValue)}
+            emptyText={lt('下游模型暂无已连接图片', 'No connected images')}
             placeholder={externalPrompts.length > 0 ? lt('输入额外提示词...', 'Enter additional prompt...') : lt('输入提示词...', 'Enter prompt...')}
-            style={{
-              width: '100%',
+            menuStyle={{ position: 'absolute', left: 12, bottom: 12 }}
+            containerStyle={{
+              display: 'flex',
+              flexDirection: 'column',
               flex: 1,
-              minHeight: 40,
-              fontSize: 14,
-              lineHeight: 1.5,
-              border: 'none',
-              outline: 'none',
-              background: 'transparent',
-              resize: 'none',
-              color: '#374151',
+              minHeight: 0,
             }}
             onWheelCapture={(event) => {
+              if (isInlineMentionInteractiveTarget(event.target)) return;
               if (shouldPassWheelToCanvas(event)) return;
               event.stopPropagation();
               (event.nativeEvent as Event & { stopImmediatePropagation?: () => void })?.stopImmediatePropagation?.();
             }}
             onPointerDownCapture={(event) => {
+              if (isInlineMentionInteractiveTarget(event.target)) return;
               event.stopPropagation();
               (event.nativeEvent as Event & { stopImmediatePropagation?: () => void })?.stopImmediatePropagation?.();
             }}
             onMouseDownCapture={(event) => {
+              if (isInlineMentionInteractiveTarget(event.target)) return;
               event.stopPropagation();
               (event.nativeEvent as Event & { stopImmediatePropagation?: () => void })?.stopImmediatePropagation?.();
             }}
             onFocus={() => setIsTextFocused(true)}
             onBlur={() => setIsTextFocused(false)}
+            style={{
+              width: '100%',
+              flex: 1,
+              minHeight: 0,
+              fontSize: 14,
+              lineHeight: 1.5,
+              border: 'none',
+              outline: 'none',
+              background: 'transparent',
+              color: '#374151',
+              caretColor: '#374151',
+            }}
           />
         </div>
 

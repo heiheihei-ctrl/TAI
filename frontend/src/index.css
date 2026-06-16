@@ -76,6 +76,17 @@ html, body, #root {
   overflow: hidden;
 }
 
+.tai-image-mention-source::selection {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background: rgba(37, 99, 235, 0.16);
+}
+
+.tai-image-mention-source::-moz-selection {
+  color: transparent;
+  background: rgba(37, 99, 235, 0.16);
+}
+
 /* ==================== 自定义光标系统 ==================== */
 /* 使用系统默认光标（移除自定义覆盖） */
 
