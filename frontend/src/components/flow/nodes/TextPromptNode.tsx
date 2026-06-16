@@ -1,9 +1,11 @@
 import React from 'react';
 import { Handle, Position, useReactFlow, useStore, useUpdateNodeInternals, type ReactFlowState, type Edge } from 'reactflow';
 import { resolveTextFromSourceNode } from '../utils/textSource';
+import { collectPromptNodeImageMentionItems } from '../utils/imageMentionCandidates';
 import { useLocaleText } from '@/utils/localeText';
 import { useCanvasStore } from '@/stores';
 import FlowResizableNodeShell from './FlowResizableNodeShell';
+import InlineImageMentionEditor from '@/components/common/InlineImageMentionEditor';
 
 type Props = {
   id: string;
@@ -33,11 +35,24 @@ function TextPromptNodeInner({ id, data, selected }: Props) {
   const updateNodeInternals = useUpdateNodeInternals();
   const incomingCount = incomingTexts.length;
   const hasIncoming = incomingCount > 0;
-  const shouldPassWheelToCanvas = React.useCallback((event: React.WheelEvent<HTMLTextAreaElement>) => {
+  const shouldPassWheelToCanvas = React.useCallback((event: React.WheelEvent<Element>) => {
     const store = useCanvasStore.getState();
     const isModifierWheel = event.ctrlKey || event.metaKey;
     return store.wheelZoomMode === 'direct' ? !isModifierWheel : isModifierWheel;
   }, []);
+  const imageMentionItems = React.useMemo(
+    () => collectPromptNodeImageMentionItems(id, edges, (nodeId) => rf.getNode(nodeId)),
+    [edges, id, rf]
+  );
+  const isInlineMentionInteractiveTarget = React.useCallback((target: EventTarget | null) => {
+    return target instanceof HTMLElement && Boolean(target.closest("[data-inline-mention-interactive='true']"));
+  }, []);
+
+  const commitValue = React.useCallback((nextValue: string) => {
+    setValue(nextValue);
+    const ev = new CustomEvent('flow:updateNodeData', { detail: { id, patch: { text: nextValue } } });
+    window.dispatchEvent(ev);
+  }, [id]);
 
   const applyIncomingText = React.useCallback((incoming: string) => {
     setValue((prev) => (prev === incoming ? prev : incoming));
@@ -100,7 +115,8 @@ function TextPromptNodeInner({ id, data, selected }: Props) {
 
   React.useEffect(() => {
     // keep internal state in sync if external changes happen
-    if ((data.text || '') !== value) setValue(data.text || '');
+    const nextValue = data.text || '';
+    if (nextValue !== value) setValue(nextValue);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.text]);
 
@@ -191,8 +207,9 @@ function TextPromptNodeInner({ id, data, selected }: Props) {
       data={data}
       selected={selected}
       nodeType="textPrompt"
+      defaultHeight={104}
       minWidth={180}
-      minHeight={120}
+      minHeight={88}
       style={{
         padding: 8,
         background: '#fff',
@@ -259,47 +276,50 @@ function TextPromptNodeInner({ id, data, selected }: Props) {
           </div>
         )}
       </div>
-      <textarea
-        className="nodrag nopan nowheel"
+      <InlineImageMentionEditor
         value={value}
-        onChange={(e) => {
-          const v = e.target.value;
-          setValue(v);
-          // write through to node data via DOM event (handled in FlowOverlay)
-          const ev = new CustomEvent('flow:updateNodeData', { detail: { id, patch: { text: v } } });
-          window.dispatchEvent(ev);
+        items={imageMentionItems}
+        onChange={commitValue}
+        emptyText={lt("下游模型暂无已连接图片", "No connected images")}
+        placeholder={lt("输入提示词", "Enter prompt")}
+        menuStyle={{ position: 'absolute', left: 8, bottom: 8 }}
+        containerStyle={{
+          display: 'flex',
+          flexDirection: 'column',
+          flex: 1,
+          minHeight: 0,
         }}
         onWheelCapture={(event) => {
+          if (isInlineMentionInteractiveTarget(event.target)) return;
           if (shouldPassWheelToCanvas(event)) return;
           event.stopPropagation();
-          if (event.nativeEvent?.stopImmediatePropagation) {
-            event.nativeEvent.stopImmediatePropagation();
+          if ((event.nativeEvent as Event & { stopImmediatePropagation?: () => void })?.stopImmediatePropagation) {
+            (event.nativeEvent as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.();
           }
         }}
         onPointerDownCapture={(event) => {
+          if (isInlineMentionInteractiveTarget(event.target)) return;
           event.stopPropagation();
-          if (event.nativeEvent?.stopImmediatePropagation) {
-            event.nativeEvent.stopImmediatePropagation();
-          }
+          (event.nativeEvent as Event & { stopImmediatePropagation?: () => void })?.stopImmediatePropagation?.();
         }}
         onMouseDownCapture={(event) => {
+          if (isInlineMentionInteractiveTarget(event.target)) return;
           event.stopPropagation();
         }}
-        placeholder={lt("输入提示词", "Enter prompt")}
         style={{
           width: '100%',
           flex: 1,
-          resize: 'none',
+          minHeight: 0,
           maxHeight: '100%',
-          minHeight: 60,
           overflowY: 'auto',
           fontSize: 12,
+          lineHeight: 1.4,
           border: '1px solid #e5e7eb',
           borderRadius: 6,
           padding: 6,
-          outline: 'none',
-          pointerEvents: 'auto',
           background: 'rgba(255,255,255,0.92)',
+          color: '#111827',
+          pointerEvents: 'auto',
           cursor: 'text'
         }}
       />
