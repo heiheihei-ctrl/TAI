@@ -17,6 +17,14 @@ export default function KeyboardShortcuts() {
   const { i18n } = useTranslation();
   const isZh = (i18n.resolvedLanguage || i18n.language || '').toLowerCase().startsWith('zh');
   const lt = useCallback((zhText: string, enText: string) => (isZh ? zhText : enText), [isZh]);
+  const projectId = useProjectContentStore((state) => state.projectId);
+  const hydrated = useProjectContentStore((state) => state.hydrated);
+  const hasContent = useProjectContentStore((state) => Boolean(state.content));
+
+  useEffect(() => {
+    if (!projectId || !hydrated || !hasContent) return;
+    historyService.captureInitialIfEmpty().catch(() => {});
+  }, [projectId, hydrated, hasContent]);
 
   useEffect(() => {
     const showToast = (message: string, type: "success" | "error" = "success") => {
@@ -33,9 +41,41 @@ export default function KeyboardShortcuts() {
       }
     };
 
+    const isEditableTarget = (element: Element | null): boolean => {
+      if (!element) return false;
+      const tagName = element.tagName?.toLowerCase();
+      return tagName === 'input' || tagName === 'textarea' || (element as HTMLElement).isContentEditable;
+    };
+
+    const getHistoryShortcut = (event: KeyboardEvent): 'undo' | 'redo' | null => {
+      if (!(event.ctrlKey || event.metaKey)) return null;
+      const key = event.key?.toLowerCase?.() || '';
+      if (key === 'z' && event.shiftKey) return 'redo';
+      if (key === 'y') return 'redo';
+      if (key === 'z') return 'undo';
+      return null;
+    };
+
+    const onHistoryKeyDownCapture = (event: KeyboardEvent) => {
+      const shortcut = getHistoryShortcut(event);
+      if (!shortcut) return;
+
+      const active = document.activeElement as Element | null;
+      const target = event.target as Element | null;
+      if (isEditableTarget(active) || isEditableTarget(target)) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      if (shortcut === 'undo') {
+        historyService.undo().catch(() => {});
+      } else {
+        historyService.redo().catch(() => {});
+      }
+    };
+
     const onKeyDown = async (e: KeyboardEvent) => {
       const active = document.activeElement as Element | null;
-      const isEditable = !!active && ((active.tagName?.toLowerCase() === 'input') || (active.tagName?.toLowerCase() === 'textarea') || (active as HTMLElement).isContentEditable);
+      const isEditable = isEditableTarget(active);
       const target = e.target as HTMLElement | null;
       const inChat = !!target?.closest?.("[data-chat-content]");
       const path = typeof e.composedPath === "function" ? e.composedPath() : [];
@@ -89,14 +129,13 @@ export default function KeyboardShortcuts() {
 
       // Undo / Redo
       if (!isEditable && (e.ctrlKey || e.metaKey)) {
-        // Redo: Ctrl+Y or Shift+Ctrl+Z
-        if ((e.shiftKey && (e.key === 'z' || e.key === 'Z')) || e.key === 'y' || e.key === 'Y') {
+        const shortcut = getHistoryShortcut(e);
+        if (shortcut === 'redo') {
           e.preventDefault();
           await historyService.redo();
           return;
         }
-        // Undo: Ctrl+Z
-        if (e.key === 'z' || e.key === 'Z') {
+        if (shortcut === 'undo') {
           e.preventDefault();
           await historyService.undo();
           return;
@@ -157,9 +196,12 @@ export default function KeyboardShortcuts() {
         }
       }
     };
+    window.addEventListener('keydown', onHistoryKeyDownCapture, true);
     window.addEventListener('keydown', onKeyDown);
-    historyService.captureInitialIfEmpty().catch(() => {});
-    return () => window.removeEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onHistoryKeyDownCapture, true);
+      window.removeEventListener('keydown', onKeyDown);
+    };
   }, [lt]);
 
   return null;
