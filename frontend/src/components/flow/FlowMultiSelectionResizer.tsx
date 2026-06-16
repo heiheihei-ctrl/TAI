@@ -84,7 +84,7 @@ export function FlowMultiSelectionResizer({
     (snapshots: FlowNodeResizeSnapshot[]) => {
       snapshots.forEach((item) => {
         try {
-          rf.updateNodeInternals(item.id);
+          (rf as any).updateNodeInternals?.(item.id);
         } catch {}
       });
     },

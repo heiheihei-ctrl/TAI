@@ -394,7 +394,7 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
       if (isTogglingFromButtonRef.current) return;
       const detail = (event as CustomEvent<any>)?.detail || {};
       // 只在面板关闭时同步状态（外部关闭，如点击空白、ESC）
-      if (!detail.visible) {
+      if (!detail.visible && useUIStore.getState().showTemplatePanel) {
         setShowTemplatePanel(false);
       }
     };

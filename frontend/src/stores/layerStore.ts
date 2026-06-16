@@ -185,6 +185,14 @@ export const useLayerStore = create<LayerState>()(subscribeWithSelector((set, ge
     },
 
     activateLayer: (id) => {
+        if (get().activeLayerId === id) {
+            const existingLayer = findLayerByStoreId(id);
+            if (existingLayer) {
+                try { existingLayer.activate(); } catch {}
+            }
+            return;
+        }
+
         const paperLayer = findLayerByStoreId(id);
         if (paperLayer) {
             paperLayer.activate();

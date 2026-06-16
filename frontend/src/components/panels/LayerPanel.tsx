@@ -424,8 +424,9 @@ const LayerPanel: React.FC = () => {
                 return next;
             });
 
-            if (activeLayerId !== nextLayerId) {
-                activateLayer(nextLayerId);
+            const currentActiveLayerId = useLayerStore.getState().activeLayerId;
+            if (currentActiveLayerId !== nextLayerId) {
+                useLayerStore.getState().activateLayer(nextLayerId);
             }
         };
 
@@ -439,7 +440,7 @@ const LayerPanel: React.FC = () => {
             window.removeEventListener('tanva-canvas-selection-updated', syncCanvasSelectionToLayerPanel as EventListener);
             window.removeEventListener('paper-project-changed', syncCanvasSelectionToLayerPanel as EventListener);
         };
-    }, [showLayerPanel, allLayerItems, activeLayerId, activateLayer]);
+    }, [showLayerPanel, allLayerItems]);
 
     const generateLayerThumb = async (id: string): Promise<{ src: string; revoke?: () => void } | null> => {
         try {

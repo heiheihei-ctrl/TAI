@@ -23,7 +23,7 @@ const clonePathStyle = (source: paper.Path, target: paper.Path) => {
   target.strokeCap = source.strokeCap;
   target.strokeJoin = source.strokeJoin;
   target.opacity = source.opacity;
-  target.dashArray = source.dashArray ? [...source.dashArray] : null;
+  target.dashArray = source.dashArray ? [...source.dashArray] : [];
   target.dashOffset = source.dashOffset;
   target.closed = source.closed;
   target.data = { ...(source.data ?? {}) };

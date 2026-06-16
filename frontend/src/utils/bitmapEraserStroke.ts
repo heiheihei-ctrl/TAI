@@ -275,8 +275,8 @@ export class BitmapEraserStroke {
       this.bounds.minY,
     );
 
-    if (paper.project && (paper.project as { emit?: (name: string) => void }).emit) {
-      (paper.project as { emit: (name: string) => void }).emit('change');
+    if ((paper.project as any)?.emit) {
+      (paper.project as any).emit('change');
     }
 
     return affected;

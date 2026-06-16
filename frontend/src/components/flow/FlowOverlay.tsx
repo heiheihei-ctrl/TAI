@@ -6812,7 +6812,7 @@ function FlowInner() {
       const detail = (event as CustomEvent<any>)?.detail || {};
       const shouldOpen = detail.visible !== false;
       if (!shouldOpen) {
-        setAddPanel((v) => ({ ...v, visible: false }));
+        setAddPanel((v) => (v.visible ? { ...v, visible: false } : v));
         return;
       }
       const allowed: AddPanelTab[] | undefined = Array.isArray(
@@ -6856,7 +6856,15 @@ function FlowInner() {
   }, [openAddPanelAt, setAddTabWithMemory, setTemplateScope]);
 
   // 把面板可见性和当前页签通知给外部（例如工具栏按钮同步状态）
+  const lastPanelBroadcastRef = React.useRef("");
   React.useEffect(() => {
+    const payload = JSON.stringify({
+      visible: addPanel.visible,
+      tab: addTab,
+      allowedTabs: allowedAddTabs,
+    });
+    if (lastPanelBroadcastRef.current === payload) return;
+    lastPanelBroadcastRef.current = payload;
     try {
       window.dispatchEvent(
         new CustomEvent("flow:add-panel-visibility-change", {

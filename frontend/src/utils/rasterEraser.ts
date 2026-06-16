@@ -155,10 +155,10 @@ export const refreshRasterAfterErase = (
   );
 
   try {
-    raster.setImage(canvas);
+    (raster as any).setImage?.(canvas);
   } catch {}
 
-  raster.changed?.();
+  (raster as any).changed?.();
 };
 
 export const buildStampPoints = (
@@ -267,7 +267,7 @@ const eraseRastersWithStamps = (
       }
     } else {
       try {
-        raster.changed?.();
+        (raster as any).changed?.();
       } catch {}
     }
 

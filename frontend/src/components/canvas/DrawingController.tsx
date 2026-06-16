@@ -531,6 +531,7 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
   >(() => false);
   const handleCanvasCutRef = useRef<() => boolean>(() => false);
   const canvasPasteAnchorRef = useRef<{ x: number; y: number } | null>(null);
+  const lastCanvasSelectionBroadcastRef = useRef("");
   const canvasToChatSyncTokenRef = useRef(0);
   const canvasBlobToFlowAssetRefCacheRef = useRef<Map<string, string>>(
     new Map()
@@ -3984,6 +3985,16 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
         textIds: selectedTextIds,
         paths: selectedPaths,
       };
+      const broadcastKey = JSON.stringify({
+        imageIds: imageTool.selectedImageIds ?? [],
+        modelIds: model3DTool.selectedModel3DIds ?? [],
+        textIds: selectedTextIds,
+        pathIds: selectedPaths.map((path) => path.id),
+      });
+      if (lastCanvasSelectionBroadcastRef.current === broadcastKey) {
+        return;
+      }
+      lastCanvasSelectionBroadcastRef.current = broadcastKey;
       window.dispatchEvent(
         new CustomEvent("tanva-canvas-selection-updated", {
           detail: {
