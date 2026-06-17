@@ -283,52 +283,14 @@ const LayerPanel: React.FC = () => {
     };
 
     // 更新所有图层的图元
-    const isScanningLayerItemsRef = useRef(false);
-
-    const layerItemsEqual = (
-        prev: Record<string, LayerItemData[]>,
-        next: Record<string, LayerItemData[]>,
-    ) => {
-        const prevKeys = Object.keys(prev);
-        const nextKeys = Object.keys(next);
-        if (prevKeys.length !== nextKeys.length) return false;
-        for (const key of prevKeys) {
-            const prevItems = prev[key] ?? [];
-            const nextItems = next[key] ?? [];
-            if (prevItems.length !== nextItems.length) return false;
-            for (let i = 0; i < prevItems.length; i += 1) {
-                const a = prevItems[i];
-                const b = nextItems[i];
-                if (
-                    a.id !== b.id ||
-                    a.name !== b.name ||
-                    a.type !== b.type ||
-                    a.visible !== b.visible ||
-                    a.locked !== b.locked ||
-                    a.selected !== b.selected
-                ) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    };
-
     const updateAllLayerItems = () => {
-        isScanningLayerItemsRef.current = true;
-        try {
-            const newLayerItems: Record<string, LayerItemData[]> = {};
+        const newLayerItems: Record<string, LayerItemData[]> = {};
 
-            layers.forEach(layer => {
-                const items = scanLayerItems(layer.id);
-                newLayerItems[layer.id] = items;
-            });
-            setLayerItems((prev) =>
-                layerItemsEqual(prev, newLayerItems) ? prev : newLayerItems,
-            );
-        } finally {
-            isScanningLayerItemsRef.current = false;
-        }
+        layers.forEach(layer => {
+            const items = scanLayerItems(layer.id);
+            newLayerItems[layer.id] = items;
+        });
+        setLayerItems(newLayerItems);
     };
 
     // 监听 Paper.js 的变化
@@ -343,7 +305,6 @@ const LayerPanel: React.FC = () => {
         let pendingUpdate = false;
 
         const handleChange = () => {
-            if (isScanningLayerItemsRef.current) return;
             const now = Date.now();
             if (now - lastUpdateTime > throttleDelay) {
                 updateAllLayerItems();
@@ -463,9 +424,8 @@ const LayerPanel: React.FC = () => {
                 return next;
             });
 
-            const currentActiveLayerId = useLayerStore.getState().activeLayerId;
-            if (currentActiveLayerId !== nextLayerId) {
-                useLayerStore.getState().activateLayer(nextLayerId);
+            if (activeLayerId !== nextLayerId) {
+                activateLayer(nextLayerId);
             }
         };
 
@@ -479,7 +439,7 @@ const LayerPanel: React.FC = () => {
             window.removeEventListener('tanva-canvas-selection-updated', syncCanvasSelectionToLayerPanel as EventListener);
             window.removeEventListener('paper-project-changed', syncCanvasSelectionToLayerPanel as EventListener);
         };
-    }, [showLayerPanel, allLayerItems]);
+    }, [showLayerPanel, allLayerItems, activeLayerId, activateLayer]);
 
     const generateLayerThumb = async (id: string): Promise<{ src: string; revoke?: () => void } | null> => {
         try {

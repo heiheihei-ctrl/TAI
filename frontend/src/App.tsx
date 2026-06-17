@@ -13,7 +13,6 @@ import ExportWatermarkModalHost from '@/components/export/ExportWatermarkModalHo
 import { tokenRefreshManager } from '@/services/tokenRefreshManager';
 import { useAuthStore } from '@/stores/authStore';
 import { AppLoadingIndicator } from '@/components/AppLoadingIndicator';
-import AppErrorBoundary from '@/components/AppErrorBoundary';
 import { useTranslation } from 'react-i18next';
 
 // 检测是否为移动设备
@@ -182,23 +181,21 @@ const App: React.FC = () => {
   }
 
   return (
-    <AppErrorBoundary>
-      <div className="w-screen h-screen">
-        <KeyboardShortcuts />
-        <ProjectAutosaveManager projectId={projectId} />
-        <Canvas />
-        <LoginModal />
-        <EventSettingsModalHost />
-        <ExportWatermarkModalHost />
+    <div className="w-screen h-screen">
+      <KeyboardShortcuts />
+      <ProjectAutosaveManager projectId={projectId} />
+      <Canvas />
+      <LoginModal />
+      <EventSettingsModalHost />
+      <ExportWatermarkModalHost />
 
-        {/* 认证初始化加载指示器 */}
-        {authLoading && !user && (
-          <AppLoadingIndicator message={t('app.authChecking')} />
-        )}
+      {/* 认证初始化加载指示器 */}
+      {authLoading && !user && (
+        <AppLoadingIndicator message={t('app.authChecking')} />
+      )}
 
-        <SaveDebugPanel />
-      </div>
-    </AppErrorBoundary>
+      <SaveDebugPanel />
+    </div>
   );
 };
 
