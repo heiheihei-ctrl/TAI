@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { useShallow } from 'zustand/react/shallow';
 import { logger } from '@/utils/logger';
 import { createSafeStorage } from './storageUtils';
 import { isBitmapBrushSupported } from '@/utils/abrBrushSupport';
@@ -200,25 +201,29 @@ export const useToolStore = create<ToolState>()(
 
 // 性能优化：导出常用的选择器
 export const useCurrentTool = () => useToolStore((state) => state.drawMode);
-export const useDrawingProps = () => useToolStore((state) => ({
-  currentColor: state.currentColor,
-  fillColor: state.fillColor,
-  strokeWidth: state.strokeWidth,
-  eraserSize: state.eraserSize,
-  lineStyle: state.lineStyle,
-  isEraser: state.isEraser,
-  hasFill: state.hasFill,
-  abrBrushId: state.abrBrushId,
-}));
-export const useToolActions = () => useToolStore((state) => ({
-  setDrawMode: state.setDrawMode,
-  setCurrentColor: state.setCurrentColor,
-  setFillColor: state.setFillColor,
-  setStrokeWidth: state.setStrokeWidth,
-  setEraserSize: state.setEraserSize,
-  setLineStyle: state.setLineStyle,
-  setAbrBrushId: state.setAbrBrushId,
-  toggleEraser: state.toggleEraser,
-  toggleFill: state.toggleFill,
-  nextDrawingTool: state.nextDrawingTool,
-}));
+export const useDrawingProps = () => useToolStore(
+  useShallow((state) => ({
+    currentColor: state.currentColor,
+    fillColor: state.fillColor,
+    strokeWidth: state.strokeWidth,
+    eraserSize: state.eraserSize,
+    lineStyle: state.lineStyle,
+    isEraser: state.isEraser,
+    hasFill: state.hasFill,
+    abrBrushId: state.abrBrushId,
+  })),
+);
+export const useToolActions = () => useToolStore(
+  useShallow((state) => ({
+    setDrawMode: state.setDrawMode,
+    setCurrentColor: state.setCurrentColor,
+    setFillColor: state.setFillColor,
+    setStrokeWidth: state.setStrokeWidth,
+    setEraserSize: state.setEraserSize,
+    setLineStyle: state.setLineStyle,
+    setAbrBrushId: state.setAbrBrushId,
+    toggleEraser: state.toggleEraser,
+    toggleFill: state.toggleFill,
+    nextDrawingTool: state.nextDrawingTool,
+  })),
+);

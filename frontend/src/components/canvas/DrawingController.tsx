@@ -18,6 +18,7 @@ import {
   Square,
 } from 'lucide-react';
 import { useToolStore, useCanvasStore, useLayerStore } from '@/stores';
+import { useShallow } from 'zustand/react/shallow';
 import { useAIChatStore, type PreciseEditContext } from '@/stores/aiChatStore';
 import { useProjectContentStore } from '@/stores/projectContentStore';
 import ImageUploadComponent from './ImageUploadComponent';
@@ -505,16 +506,35 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
     hasFill,
     abrBrushId,
     setDrawMode,
-  } = useToolStore();
+  } = useToolStore(
+    useShallow((state) => ({
+      drawMode: state.drawMode,
+      currentColor: state.currentColor,
+      fillColor: state.fillColor,
+      strokeWidth: state.strokeWidth,
+      eraserSize: state.eraserSize,
+      lineStyle: state.lineStyle,
+      isEraser: state.isEraser,
+      hasFill: state.hasFill,
+      abrBrushId: state.abrBrushId,
+      setDrawMode: state.setDrawMode,
+    })),
+  );
   const zoom = useCanvasStore((state) => state.zoom);
   const panX = useCanvasStore((state) => state.panX);
   const panY = useCanvasStore((state) => state.panY);
-  const { toggleVisibility } = useLayerStore();
+  const toggleVisibility = useLayerStore((state) => state.toggleVisibility);
   const {
     setSourceImageForEditing,
     setPreciseEditContext,
     showDialog: showAIDialog,
-  } = useAIChatStore();
+  } = useAIChatStore(
+    useShallow((state) => ({
+      setSourceImageForEditing: state.setSourceImageForEditing,
+      setPreciseEditContext: state.setPreciseEditContext,
+      showDialog: state.showDialog,
+    })),
+  );
   const projectId = useProjectContentStore((s) => s.projectId);
   const projectAssets = useProjectContentStore((s) => s.content?.assets);
   const drawingLayerManagerRef = useRef<DrawingLayerManager | null>(null);

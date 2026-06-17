@@ -107,6 +107,7 @@ import {
   FlowBackgroundVariant,
   FlowEdgeColorMode,
 } from "@/stores/flowStore";
+import { useShallow } from "zustand/react/shallow";
 import { useProjectContentStore } from "@/stores/projectContentStore";
 import { useImageHistoryStore } from "@/stores/imageHistoryStore";
 import { useUIStore } from "@/stores";
@@ -3512,7 +3513,15 @@ const TemplatePlaceholder: React.FC<{
 // Flow独立的视口管理，不再与Canvas同步
 function useFlowViewport() {
   const { flowZoom, flowPanX, flowPanY, setFlowZoom, setFlowPan } =
-    useFlowStore();
+    useFlowStore(
+      useShallow((state) => ({
+        flowZoom: state.flowZoom,
+        flowPanX: state.flowPanX,
+        flowPanY: state.flowPanY,
+        setFlowZoom: state.setFlowZoom,
+        setFlowPan: state.setFlowPan,
+      })),
+    );
   const rf = useReactFlow();
 
   const updateViewport = React.useCallback(

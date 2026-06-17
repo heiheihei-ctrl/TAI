@@ -7,6 +7,7 @@ import TextStylePanel from './TextStylePanel';
 import ColorPicker from './ColorPicker';
 import AbrBrushPicker from './AbrBrushPicker';
 import { useToolStore, useUIStore } from '@/stores';
+import { useShallow } from 'zustand/react/shallow';
 import { useAIChatStore } from '@/stores/aiChatStore';
 import type { LineStyle } from '@/stores/toolStore';
 import { logger } from '@/utils/logger';
@@ -367,7 +368,28 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
     setAbrBrushId,
     toggleEraser,
     toggleFill,
-  } = useToolStore();
+  } = useToolStore(
+    useShallow((state) => ({
+      drawMode: state.drawMode,
+      currentColor: state.currentColor,
+      fillColor: state.fillColor,
+      strokeWidth: state.strokeWidth,
+      eraserSize: state.eraserSize,
+      lineStyle: state.lineStyle,
+      isEraser: state.isEraser,
+      hasFill: state.hasFill,
+      abrBrushId: state.abrBrushId,
+      setDrawMode: state.setDrawMode,
+      setCurrentColor: state.setCurrentColor,
+      setFillColor: state.setFillColor,
+      setStrokeWidth: state.setStrokeWidth,
+      setEraserSize: state.setEraserSize,
+      setLineStyle: state.setLineStyle,
+      setAbrBrushId: state.setAbrBrushId,
+      toggleEraser: state.toggleEraser,
+      toggleFill: state.toggleFill,
+    })),
+  );
 
   const {
     showLayerPanel: isLayerPanelOpen,
@@ -381,7 +403,21 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
     setShowTemplatePanel,
     showLibraryPanel,
     toggleLibraryPanel,
-  } = useUIStore();
+  } = useUIStore(
+    useShallow((state) => ({
+      showLayerPanel: state.showLayerPanel,
+      toggleLayerPanel: state.toggleLayerPanel,
+      toggleFlowPanel: state.toggleFlowPanel,
+      showFlowPanel: state.showFlowPanel,
+      flowUIEnabled: state.flowUIEnabled,
+      focusMode: state.focusMode,
+      showTemplatePanel: state.showTemplatePanel,
+      toggleTemplatePanel: state.toggleTemplatePanel,
+      setShowTemplatePanel: state.setShowTemplatePanel,
+      showLibraryPanel: state.showLibraryPanel,
+      toggleLibraryPanel: state.toggleLibraryPanel,
+    })),
+  );
 
   // 用于防止事件循环的标志
   const isTogglingFromButtonRef = React.useRef(false);

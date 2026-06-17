@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { useShallow } from 'zustand/react/shallow';
 import { createSafeStorage } from './storageUtils';
 
 // Flow背景样式枚举
@@ -188,22 +189,28 @@ export const useFlowStore = create<FlowState>()(
 );
 
 // 性能优化：导出常用的选择器
-export const useFlowBackground = () => useFlowStore((state) => ({
-  enabled: state.backgroundEnabled,
-  variant: state.backgroundVariant,
-  gap: state.backgroundGap,
-  size: state.backgroundSize,
-  color: state.backgroundColor,
-  opacity: state.backgroundOpacity,
-}));
+export const useFlowBackground = () => useFlowStore(
+  useShallow((state) => ({
+    enabled: state.backgroundEnabled,
+    variant: state.backgroundVariant,
+    gap: state.backgroundGap,
+    size: state.backgroundSize,
+    color: state.backgroundColor,
+    opacity: state.backgroundOpacity,
+  })),
+);
 
-export const useFlowViewport = () => useFlowStore((state) => ({
-  zoom: state.flowZoom,
-  panX: state.flowPanX,
-  panY: state.flowPanY,
-}));
+export const useFlowViewport = () => useFlowStore(
+  useShallow((state) => ({
+    zoom: state.flowZoom,
+    panX: state.flowPanX,
+    panY: state.flowPanY,
+  })),
+);
 
-export const useFlowInteraction = () => useFlowStore((state) => ({
-  isConnecting: state.isConnecting,
-  snapToGrid: state.snapToGrid,
-}));
+export const useFlowInteraction = () => useFlowStore(
+  useShallow((state) => ({
+    isConnecting: state.isConnecting,
+    snapToGrid: state.snapToGrid,
+  })),
+);

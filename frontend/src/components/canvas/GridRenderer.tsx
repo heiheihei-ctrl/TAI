@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import paper from 'paper';
 import { useCanvasStore, useUIStore, GridStyle } from '@/stores';
+import { useShallow } from 'zustand/react/shallow';
 import { useAIChatStore } from '@/stores/aiChatStore';
 import { memoryMonitor } from '@/utils/memoryMonitor';
 import { logger } from '@/utils/logger';
@@ -58,12 +59,26 @@ const resolveThemeAwareGridBgColor = (
 };
 
 const GridRenderer: React.FC<GridRendererProps> = ({ canvasRef, isPaperInitialized }) => {
-  const { gridSize, gridStyle, zoom, isDragging, panX, panY } = useCanvasStore();
+  const { gridSize, gridStyle, zoom, isDragging, panX, panY } = useCanvasStore(
+    useShallow((state) => ({
+      gridSize: state.gridSize,
+      gridStyle: state.gridStyle,
+      zoom: state.zoom,
+      isDragging: state.isDragging,
+      panX: state.panX,
+      panY: state.panY,
+    })),
+  );
   const gridColor = useCanvasStore(state => state.gridColor);
   const gridBgColor = useCanvasStore(state => state.gridBgColor);
   const gridBgEnabled = useCanvasStore(state => state.gridBgEnabled);
   const chatTheme = useAIChatStore(state => state.chatTheme);
-  const { showGrid, showAxis } = useUIStore();
+  const { showGrid, showAxis } = useUIStore(
+    useShallow((state) => ({
+      showGrid: state.showGrid,
+      showAxis: state.showAxis,
+    })),
+  );
   const effectiveGridColor = resolveThemeAwareGridColor(gridColor, chatTheme);
   const effectiveGridBgColor = resolveThemeAwareGridBgColor(gridBgColor, chatTheme, gridStyle);
   const gridLayerRef = useRef<paper.Layer | null>(null);

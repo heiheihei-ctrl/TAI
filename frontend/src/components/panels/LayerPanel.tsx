@@ -7,6 +7,7 @@ import SmartImage from '../ui/SmartImage';
 import { X, Plus, Eye, EyeOff, Trash2, Lock, Unlock, ChevronLeft, ChevronRight, ChevronDown, Circle, Square, Minus, Image, Box, Pen, Sparkles, ImageUp } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useLayerStore } from '@/stores';
+import { useShallow } from 'zustand/react/shallow';
 import { useAIChatStore } from '@/stores/aiChatStore';
 import ContextMenu from '../ui/context-menu';
 import { isRaster } from '@/utils/paperCoords';
@@ -29,9 +30,41 @@ interface LayerItemData {
 
 const LayerPanel: React.FC = () => {
     const { lt } = useLocaleText();
-    const { showLayerPanel, setShowLayerPanel } = useUIStore();
-    const { layers, activeLayerId, createLayer, deleteLayer, toggleVisibility, activateLayer, renameLayer, toggleLocked, reorderLayer } = useLayerStore();
-    const { setSourceImageForEditing, showDialog } = useAIChatStore();
+    const { showLayerPanel, setShowLayerPanel } = useUIStore(
+        useShallow((state) => ({
+            showLayerPanel: state.showLayerPanel,
+            setShowLayerPanel: state.setShowLayerPanel,
+        })),
+    );
+    const {
+        layers,
+        activeLayerId,
+        createLayer,
+        deleteLayer,
+        toggleVisibility,
+        activateLayer,
+        renameLayer,
+        toggleLocked,
+        reorderLayer,
+    } = useLayerStore(
+        useShallow((state) => ({
+            layers: state.layers,
+            activeLayerId: state.activeLayerId,
+            createLayer: state.createLayer,
+            deleteLayer: state.deleteLayer,
+            toggleVisibility: state.toggleVisibility,
+            activateLayer: state.activateLayer,
+            renameLayer: state.renameLayer,
+            toggleLocked: state.toggleLocked,
+            reorderLayer: state.reorderLayer,
+        })),
+    );
+    const { setSourceImageForEditing, showDialog } = useAIChatStore(
+        useShallow((state) => ({
+            setSourceImageForEditing: state.setSourceImageForEditing,
+            showDialog: state.showDialog,
+        })),
+    );
     const content = useProjectContentStore((state) => state.content);
     const localizeLayerName = (name?: string): string => {
         const raw = typeof name === 'string' ? name.trim() : '';
