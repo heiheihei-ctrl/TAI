@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
 import { ConfigService } from '@nestjs/config';
+import { getSharpLoadError, isSharpAvailable } from '../../utils/sharp-loader';
 
 /**
  * 后端背景移除服务
@@ -198,14 +199,31 @@ export class BackgroundRemovalService {
     return this.tryResolveLocalModelDistDir() !== null;
   }
 
-  private canAttemptAnyLocalRemoval(): boolean {
-    return Boolean(this.resolveLocalWorkerPath()) || this.tryResolveRemovalModuleEntry() !== null;
+  private isLocalRemovalEnabled(): boolean {
+    const flag = (
+      this.configService.get<string>('BACKGROUND_REMOVAL_LOCAL') ||
+      process.env.BACKGROUND_REMOVAL_LOCAL ||
+      'true'
+    )
+      .trim()
+      .toLowerCase();
+    return flag !== 'false' && flag !== '0' && isSharpAvailable();
+  }
+
+  private isSharpLoadable(): boolean {
+    return isSharpAvailable();
   }
 
   /**
    * 使用本地 ONNX 模块移除背景：worker 优先，失败再回退主进程
    */
   private async removeBackgroundLocal(imageBuffer: Buffer, mimeType: string): Promise<string> {
+    if (!this.isLocalRemovalEnabled()) {
+      throw new Error(
+        `Local background removal requires sharp. ${getSharpLoadError() ?? 'sharp unavailable'}`
+      );
+    }
+
     const workerPath = this.resolveLocalWorkerPath();
     if (workerPath) {
       try {
@@ -264,6 +282,11 @@ export class BackgroundRemovalService {
     if (!diagnostics.resourcesFound) {
       hints.push('确认 node_modules/@imgly/background-removal-node/dist/resources.json 存在');
     }
+    if (!diagnostics.sharpLoadable) {
+      hints.push(
+        'sharp 不可用：在后端执行 rm -rf node_modules && pnpm install（@img 包需从 npmjs 拉取）；或配置 REMOVE_BG_API_KEY 走云端抠图'
+      );
+    }
 
     const hintText = hints.length > 0 ? hints.join('；') : '请检查后端部署';
     return `Background removal is unavailable: local ONNX failed and REMOVE_BG_API_KEY is not configured. ${hintText}`;
@@ -275,16 +298,28 @@ export class BackgroundRemovalService {
     sourceLabel: 'base64' | 'url' | 'file',
   ): Promise<string> {
     const hasRemoveBgKey = this.hasRemoveBgKey();
+    const localEnabled = this.isLocalRemovalEnabled();
 
     if (hasRemoveBgKey) {
+      this.logger.log('🌐 REMOVE_BG_API_KEY configured, will use remove.bg cloud API');
       try {
         return await this.removeBackgroundViaRemoveBg(imageBuffer);
       } catch (error) {
-        this.logger.warn(`⚠️ remove.bg API failed for ${sourceLabel}, trying local module...`, error);
+        const removeBgMessage =
+          error instanceof Error ? error.message : String(error);
+        this.logger.error(`❌ remove.bg API failed for ${sourceLabel}:`, removeBgMessage);
+
+        if (!localEnabled) {
+          throw new BadRequestException(
+            `remove.bg 抠图失败: ${removeBgMessage}。本地抠图因 sharp 不可用已跳过，请检查 API Key 或网络。`
+          );
+        }
+
+        this.logger.warn(`⚠️ remove.bg failed for ${sourceLabel}, trying local module...`);
       }
     }
 
-    if (!hasRemoveBgKey && !this.canAttemptAnyLocalRemoval()) {
+    if (!localEnabled) {
       throw new BadRequestException(this.buildUnavailableMessage());
     }
 
@@ -427,8 +462,13 @@ export class BackgroundRemovalService {
     resourcesFound: boolean;
     moduleInstalled: boolean;
     hasRemoveBgKey: boolean;
+    sharpLoadable: boolean;
+    sharpError?: string;
   } {
     const moduleEntry = this.tryResolveRemovalModuleEntry();
+    const sharpLoadable = this.isSharpLoadable();
+    const sharpError = sharpLoadable ? undefined : getSharpLoadError();
+
     return {
       backendRoot: this.resolveBackendRoot(),
       workerPath: this.resolveLocalWorkerPath(),
@@ -436,6 +476,8 @@ export class BackgroundRemovalService {
       resourcesFound: this.hasLocalResources(),
       moduleInstalled: moduleEntry !== null,
       hasRemoveBgKey: this.hasRemoveBgKey(),
+      sharpLoadable,
+      sharpError,
     };
   }
 
@@ -505,7 +547,8 @@ export class BackgroundRemovalService {
     if (this.hasRemoveBgKey()) {
       return true;
     }
-    return this.canAttemptAnyLocalRemoval();
+    const diagnostics = this.getDiagnostics();
+    return diagnostics.sharpLoadable && (Boolean(diagnostics.workerPath) || diagnostics.moduleInstalled);
   }
 
   async getInfo(): Promise<{
@@ -536,20 +579,25 @@ export class BackgroundRemovalService {
     }
 
     if (diagnostics.workerPath || diagnostics.moduleInstalled) {
+      const sharpReady = diagnostics.sharpLoadable;
       return {
-        available: true,
+        available: sharpReady,
         version: diagnostics.workerPath ? 'isolated-worker' : 'local-onnx',
         provider: diagnostics.workerPath ? 'local-onnx-worker' : 'local-onnx',
         platform: process.platform,
         diagnostics,
-        reason: diagnostics.workerPath
-          ? '将通过隔离子进程尝试本地 ONNX 抠图；若失败可配置 REMOVE_BG_API_KEY。'
-          : '将尝试主进程本地 ONNX 抠图；若失败可配置 REMOVE_BG_API_KEY。',
-        features: [
-          'Remove background with transparency',
-          'Support PNG, JPEG, GIF, WebP',
-          'Isolated worker processing',
-        ],
+        reason: sharpReady
+          ? diagnostics.workerPath
+            ? '将通过隔离子进程尝试本地 ONNX 抠图；若失败可配置 REMOVE_BG_API_KEY。'
+            : '将尝试主进程本地 ONNX 抠图；若失败可配置 REMOVE_BG_API_KEY。'
+          : `sharp 原生模块不可用：${diagnostics.sharpError ?? 'unknown'}. 请执行 pnpm rebuild sharp 或配置 REMOVE_BG_API_KEY。`,
+        features: sharpReady
+          ? [
+              'Remove background with transparency',
+              'Support PNG, JPEG, GIF, WebP',
+              'Isolated worker processing',
+            ]
+          : [],
       };
     }
 

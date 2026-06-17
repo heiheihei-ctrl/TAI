@@ -5,6 +5,8 @@
   "scripts": {
     "start": "node -r ./dist/tracing.bootstrap.js dist/main.js",
     "build": "tsc -p tsconfig.build.json && node -e \"const fs=require('fs');const p='dist/ai/workers/background-removal.worker.js';if(!fs.existsSync(p)){console.error('Missing worker:',p);process.exit(1)}console.log('background-removal worker ok')\"",
+    "postinstall": "node scripts/postinstall-native-deps.js",
+    "verify:native": "node -e \"try{require('sharp');console.log('sharp ok')}catch(e){console.error(e.message);process.exit(1)}\"",
     "dev": "ts-node-dev --respawn --transpile-only -r ./src/tracing.bootstrap.ts src/main.ts",
     "lint": "echo 'no lint configured'",
     "sanitize:design-json": "ts-node scripts/sanitize-design-json.ts",
@@ -58,6 +60,27 @@
     "rxjs": "^7.8.1",
     "sharp": "^0.34.5",
     "wechatpay-node-v3": "^2.2.1"
+  },
+  "optionalDependencies": {
+    "@img/sharp-linux-x64": "0.34.5",
+    "@img/sharp-linuxmusl-x64": "0.34.5",
+    "@img/sharp-wasm32": "0.34.5"
+  },
+  "overrides": {
+    "@imgly/background-removal-node": {
+      "sharp": "$sharp"
+    }
+  },
+  "pnpm": {
+    "overrides": {
+      "@imgly/background-removal-node>sharp": "$sharp"
+    },
+    "onlyBuiltDependencies": [
+      "sharp",
+      "onnxruntime-node",
+      "@prisma/client",
+      "prisma"
+    ]
   },
   "devDependencies": {
     "@types/ali-oss": "^6.16.11",

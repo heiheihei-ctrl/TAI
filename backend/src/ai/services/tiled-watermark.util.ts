@@ -1,4 +1,5 @@
-import sharp from "sharp";
+import { loadSharp, isSharpAvailable, getSharpLoadError } from '../../utils/sharp-loader';
+import type { Sharp } from 'sharp';
 
 const DEFAULT_WATERMARK_ANGLE = -45;
 const DEFAULT_WATERMARK_OPACITY = 0.22;
@@ -47,7 +48,16 @@ function resolveTiledWatermarkConfig(options?: TiledWatermarkOptions) {
   };
 }
 
+function getSharp(): Sharp {
+  const sharp = loadSharp();
+  if (!sharp) {
+    throw new Error(getSharpLoadError() ?? 'sharp 不可用');
+  }
+  return sharp as unknown as Sharp;
+}
+
 async function applyOpacityToPng(buffer: Buffer, opacity: number): Promise<Buffer> {
+  const sharp = getSharp();
   const clampedOpacity = Math.min(1, Math.max(0, opacity));
   if (clampedOpacity >= 0.999) {
     return buffer;
@@ -109,6 +119,7 @@ async function buildTextStamp(
   angle: number,
   opacity: number
 ): Promise<TextStamp> {
+  const sharp = getSharp();
   const fontSize = Math.max(16, Math.round(shortSide * 0.028));
   const approxTextWidth = text.length * fontSize * 0.62;
   const canvasSize = Math.ceil(Math.max(approxTextWidth, fontSize * 2) * 1.8);
@@ -131,6 +142,7 @@ async function buildStaggeredPatternUnit(
   colStep: number,
   rowStep: number
 ): Promise<Buffer> {
+  const sharp = getSharp();
   const patternWidth = colStep;
   const patternHeight = rowStep * 2;
   const row0Left = Math.max(0, Math.round((colStep - stamp.width) / 2));
@@ -176,6 +188,7 @@ async function buildStaggeredWatermarkOverlay(
   );
   const pattern = await buildStaggeredPatternUnit(stamp, colStep, rowStep);
 
+  const sharp = getSharp();
   return sharp({
     create: {
       width,
@@ -216,6 +229,11 @@ export async function applyTiledWatermarkToBuffer(
   imageBuffer: Buffer,
   options?: TiledWatermarkOptions
 ): Promise<Buffer> {
+  if (!isSharpAvailable()) {
+    throw new Error(getSharpLoadError() ?? 'sharp 不可用，跳过水印');
+  }
+
+  const sharp = getSharp();
   const metadata = await sharp(imageBuffer).metadata();
   const width = metadata.width ?? 0;
   const height = metadata.height ?? 0;
