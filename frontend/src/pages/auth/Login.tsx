@@ -11,12 +11,17 @@ import AgreementConsentModal from "@/components/auth/AgreementConsentModal";
 import { useTranslation } from "react-i18next";
 import WelcomeShaderBackground from "@/components/background/WelcomeShaderBackground";
 
+const WECHAT_LOGIN_HIDDEN_ORIGINS = new Set(["http://101.96.217.132:8080"]);
+
 export default function LoginPage() {
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
-  const wechatLoginEnabled = true;
-  const [tab, setTab] = useState<"wechat" | "password" | "sms">("wechat");
+  const currentOrigin = typeof window !== "undefined" ? window.location.origin : "";
+  const wechatLoginEnabled = !WECHAT_LOGIN_HIDDEN_ORIGINS.has(currentOrigin);
+  const [tab, setTab] = useState<"wechat" | "password" | "sms">(
+    wechatLoginEnabled ? "wechat" : "password"
+  );
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [phone, setPhone] = useState("");
@@ -54,6 +59,12 @@ export default function LoginPage() {
       navigate(returnTo, { replace: true });
     }
   }, [user, navigate, returnTo]);
+
+  useEffect(() => {
+    if (!wechatLoginEnabled && tab === "wechat") {
+      setTab("password");
+    }
+  }, [wechatLoginEnabled, tab]);
 
   const finalizeWechatLogin = (nextUser: any, nextReturnTo?: string) => {
     setAuthenticatedUser(nextUser, "server");

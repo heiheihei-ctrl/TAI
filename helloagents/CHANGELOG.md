@@ -7,6 +7,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ## [Unreleased]
 ### Added
 - AI Chat/Flow prompts now support image mentions: chat input can reference images from the current project, Prompt/TextPromptPro nodes can reference images already connected to their downstream model node, and runtime requests resolve those lightweight mentions into reference image URLs without storing inline image data in project JSON.
+- Auth UI: WeChat login is hidden on the test origin `http://101.96.217.132:8080` and the login page defaults to password login there, while production origins such as `https://tgtai.com` keep the WeChat tab (`frontend/src/pages/auth/Login.tsx`).
 - Auth UI: WeChat login now replaces the QR panel with the phone-binding card once a scan is recognized and the session enters `needs_phone_bind`, instead of stacking the binding form below the QR code (`frontend/src/pages/auth/Login.tsx`).
 - Auth/WeChat Official: callback telemetry ingestion is now fire-and-forget, so OpenObserve latency/failure no longer blocks WeChat passive replies or causes the Official Account chat page to show a service fault (`backend/src/auth/auth.service.ts`).
 - Auth/WeChat Official: backend now accepts both `WECHAT_OFFICIAL_ENCODING_AES_KEY` and the WeChat-console-style `EncodingAESKey` env var for encrypted Official Account callbacks, preventing subscribe/scan callbacks from failing when production uses the console field name (`backend/src/auth/auth.service.ts`).
