@@ -11,6 +11,7 @@ import { useLayerStore } from '@/stores/layerStore';
 import { useToolStore } from '@/stores/toolStore';
 import { useAIChatStore } from '@/stores/aiChatStore';
 import type { TextAssetSnapshot } from '@/types/project';
+import { ensureTextToolFontLoaded } from '@/utils/textToolFontLoader';
 
 interface TextStyle {
   fontFamily: string;
@@ -135,6 +136,16 @@ export const useSimpleTextTool = ({ currentColor, ensureDrawingLayer }: UseSimpl
 
     // 将文本添加到图层中（正确的方法）
     drawingLayer.addChild(paperText);
+
+    void ensureTextToolFontLoaded(textStyle.fontFamily).then((loaded) => {
+      if (!loaded) return;
+      try {
+        paperText.fontFamily = textStyle.fontFamily;
+        paper.view?.draw();
+      } catch {
+        // ignore
+      }
+    });
 
     const textItem: TextItem = {
       id,
@@ -309,7 +320,15 @@ export const useSimpleTextTool = ({ currentColor, ensureDrawingLayer }: UseSimpl
           item.paperText.fontSize = updates.fontSize;
         }
         if (updates.fontFamily !== undefined) {
-          item.paperText.fontFamily = updates.fontFamily;
+          void ensureTextToolFontLoaded(updates.fontFamily).then((loaded) => {
+            if (!loaded) return;
+            try {
+              item.paperText.fontFamily = updates.fontFamily as string;
+              paper.view?.draw();
+            } catch {
+              // ignore
+            }
+          });
         }
         if (updates.fontWeight !== undefined) {
           item.paperText.fontWeight = updates.fontWeight === 'bold' ? 'bold' : 'normal';
@@ -839,7 +858,15 @@ export const useSimpleTextTool = ({ currentColor, ensureDrawingLayer }: UseSimpl
       };
 
       try {
-        item.paperText.fontFamily = style.fontFamily;
+        void ensureTextToolFontLoaded(style.fontFamily).then((loaded) => {
+          if (!loaded) return;
+          try {
+            item.paperText.fontFamily = style.fontFamily;
+            paper.view?.draw();
+          } catch {
+            // ignore
+          }
+        });
         item.paperText.fontSize = style.fontSize;
         item.paperText.fontWeight = style.fontWeight === 'bold' ? 'bold' : 'normal';
         (item.paperText as any).fontStyle = style.italic ? 'italic' : 'normal';

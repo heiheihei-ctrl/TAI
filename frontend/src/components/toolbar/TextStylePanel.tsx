@@ -3,12 +3,21 @@
  * 提供字体、字号、颜色、对齐等样式控制
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { AlignLeft, AlignCenter, AlignRight, Bold, Italic } from 'lucide-react';
+import { AlignLeft, AlignCenter, AlignRight, Italic } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
+import {
+  TEXT_TOOL_SYSTEM_FONTS,
+  TEXT_TOOL_WEB_FONTS,
+  getTextToolFontOptionByValue,
+} from '@/constants/textToolFonts';
+import {
+  ensureTextToolFontLoaded,
+  preloadTextToolWebFonts,
+} from '@/utils/textToolFontLoader';
 
 interface TextStyle {
   fontFamily: string;
@@ -33,23 +42,30 @@ const TextStylePanel: React.FC<TextStylePanelProps> = ({
     .toLowerCase()
     .startsWith('zh');
   const lt = (zh: string, en: string) => (isZh ? zh : en);
-  
-  // 字体选项
-  const fontFamilies = [
-    // 中文字体（默认推荐黑体）
-    { value: '"Heiti SC", "SimHei", "黑体", sans-serif', label: lt('黑体', 'Heiti') },
-    { value: '"PingFang SC", "Microsoft YaHei", "微软雅黑", sans-serif', label: lt('苹方/微软雅黑', 'PingFang / YaHei') },
-    { value: '"Songti SC", "SimSun", "宋体", serif', label: lt('宋体', 'Songti') },
-    { value: '"Kaiti SC", "KaiTi", "楷体", serif', label: lt('楷体', 'Kaiti') },
-    // 英文字体
-    { value: 'Inter, sans-serif', label: 'Inter' },
-    { value: 'Arial, sans-serif', label: 'Arial' },
-    { value: 'Helvetica, sans-serif', label: 'Helvetica' },
-    { value: 'Georgia, serif', label: 'Georgia' },
-    { value: 'Times, serif', label: 'Times' },
-    { value: 'Courier, monospace', label: 'Courier' },
-    { value: 'Verdana, sans-serif', label: 'Verdana' }
-  ];
+
+  useEffect(() => {
+    preloadTextToolWebFonts();
+  }, []);
+
+  const handleFontFamilyChange = useCallback(
+    async (fontFamily: string) => {
+      await ensureTextToolFontLoaded(fontFamily);
+      const option = getTextToolFontOptionByValue(fontFamily);
+      const updates: Partial<TextStyle> = { fontFamily };
+      if (option?.isPresetBold) {
+        updates.fontWeight = 'bold';
+      }
+      onStyleChange(updates);
+    },
+    [onStyleChange]
+  );
+
+  const renderFontOptions = (fonts: typeof TEXT_TOOL_WEB_FONTS) =>
+    fonts.map((font) => (
+      <option key={font.value} value={font.value}>
+        {isZh ? font.labelZh : font.labelEn}
+      </option>
+    ));
 
   // 字重选项
   const fontWeights = [
@@ -75,15 +91,16 @@ const TextStylePanel: React.FC<TextStylePanelProps> = ({
         <div className="w-full">
           <select
             value={currentStyle.fontFamily}
-            onChange={(e) => onStyleChange({ fontFamily: e.target.value })}
+            onChange={(e) => void handleFontFamilyChange(e.target.value)}
             className="tanva-text-style-panel-field w-full text-xs px-2 py-1.5 rounded border border-gray-300 bg-white cursor-pointer"
             title={lt('字体', 'Font')}
           >
-            {fontFamilies.map(font => (
-              <option key={font.value} value={font.value}>
-                {font.label}
-              </option>
-            ))}
+            <optgroup label={lt('在线字体（思源宋体）', 'Web fonts (Source Han Serif)')}>
+              {renderFontOptions(TEXT_TOOL_WEB_FONTS)}
+            </optgroup>
+            <optgroup label={lt('系统字体', 'System fonts')}>
+              {renderFontOptions(TEXT_TOOL_SYSTEM_FONTS)}
+            </optgroup>
           </select>
         </div>
 

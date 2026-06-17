@@ -9,6 +9,7 @@ import { projectToClient } from '@/utils/paperCoords';
 import { useToolStore } from '@/stores/toolStore';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useAIChatStore } from '@/stores/aiChatStore';
+import { ensureTextToolFontLoaded } from '@/utils/textToolFontLoader';
 
 interface TextStyle {
   fontFamily: string;
@@ -72,6 +73,11 @@ const SimpleTextEditor: React.FC<SimpleTextEditorProps> = ({
       color: style?.color ?? paperText.fillColor?.toCSS?.(true) ?? '#000000'
     };
   }, [currentEditingText]);
+
+  useEffect(() => {
+    if (!currentEditingText) return;
+    void ensureTextToolFontLoaded(getTextStyle().fontFamily);
+  }, [currentEditingText, getTextStyle]);
 
   // 计算输入框位置和尺寸
   const getInputPosition = useCallback(() => {
