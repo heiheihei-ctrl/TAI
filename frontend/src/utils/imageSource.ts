@@ -226,7 +226,17 @@ export const isAssetKeyRef = (value?: string | null): boolean => {
   const trimmed = value.trim();
   if (!trimmed) return false;
   const withoutLeading = trimmed.replace(/^\/+/, "");
-  return /^(templates|projects|uploads|videos)\//i.test(withoutLeading);
+  return /^(templates|projects|uploads|videos|ai)\//i.test(withoutLeading);
+};
+
+const hasManagedAssetPath = (value: string): boolean => {
+  try {
+    const parsed = new URL(value);
+    const pathKey = decodeURIComponent(parsed.pathname).replace(/^\/+/, "");
+    return isAssetKeyRef(pathKey);
+  } catch {
+    return false;
+  }
 };
 
 const normalizeUrlHost = (value?: string | null): string | null => {
@@ -295,7 +305,9 @@ export const isLikelyBackendAllowedRemoteUrl = (
 ): value is RemoteUrl => {
   if (!isRemoteUrl(value)) return false;
   try {
-    const hostname = new URL(value.trim()).hostname.toLowerCase();
+    const trimmed = value.trim();
+    if (hasManagedAssetPath(trimmed)) return true;
+    const hostname = new URL(trimmed).hostname.toLowerCase();
     if (!hostname) return false;
     const allowedHosts = getLikelyBackendAllowedHosts();
     for (const allowedHost of allowedHosts) {
@@ -315,9 +327,11 @@ export const isLikelyManagedAssetUrl = (url: string): boolean => {
     const parsed = new URL(url);
     const host = parsed.hostname.toLowerCase();
     if (getManagedAssetHosts().has(host)) return true;
+    const pathKey = decodeURIComponent(parsed.pathname).replace(/^\/+/, "");
+    if (isAssetKeyRef(pathKey)) return true;
     if (
       host.endsWith(".aliyuncs.com") &&
-      /^\/(?:projects|uploads|templates|videos)\//i.test(parsed.pathname)
+      /^\/(?:projects|uploads|templates|videos|ai)\//i.test(parsed.pathname)
     ) {
       return true;
     }
@@ -567,15 +581,15 @@ export const resolveImageToDataUrl = async (
     }
     const preferProxy = options?.preferProxy ?? true;
     if (preferProxy) {
-      try {
-        addCandidate(proxifyRemoteAssetUrl(trimmed));
-      } catch {}
       // 即使全局关闭了渲染代理，分析/上传链路仍应优先尝试后端代理，避免浏览器端 CORS 不稳定。
       if (isLikelyBackendAllowedRemoteUrl(trimmed)) {
         try {
           addCandidate(proxifyRemoteAssetUrl(trimmed, { forceProxy: true }));
         } catch {}
       }
+      try {
+        addCandidate(proxifyRemoteAssetUrl(trimmed));
+      } catch {}
     }
     addCandidate(trimmed);
   } else if (isBlobUrl(trimmed)) {
@@ -697,14 +711,14 @@ export const resolveImageToBlob = async (
     }
     const preferProxy = options?.preferProxy ?? true;
     if (preferProxy) {
-      try {
-        addCandidate(proxifyRemoteAssetUrl(trimmed));
-      } catch {}
       if (isLikelyBackendAllowedRemoteUrl(trimmed)) {
         try {
           addCandidate(proxifyRemoteAssetUrl(trimmed, { forceProxy: true }));
         } catch {}
       }
+      try {
+        addCandidate(proxifyRemoteAssetUrl(trimmed));
+      } catch {}
     }
     addCandidate(trimmed);
   } else if (isBlobUrl(trimmed) || isDataUrl(trimmed)) {

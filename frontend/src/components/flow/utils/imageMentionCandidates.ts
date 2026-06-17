@@ -25,6 +25,9 @@ export const isFlowImageInputHandle = (handle?: string | null): boolean => {
   );
 };
 
+const isFlowTextPromptInputHandle = (handle?: string | null): boolean =>
+  handle === "text" || handle === "prompt";
+
 export const readFlowNodeImageForMention = (
   node: Node | undefined,
   sourceHandle?: string | null
@@ -119,7 +122,11 @@ export const collectPromptNodeImageMentionItems = (
 ): ImageMentionItem[] => {
   const downstreamTargets = new Set(
     edges
-      .filter((edge) => edge.source === promptNodeId && edge.targetHandle === "text")
+      .filter(
+        (edge) =>
+          edge.source === promptNodeId &&
+          isFlowTextPromptInputHandle(edge.targetHandle)
+      )
       .map((edge) => edge.target)
   );
   const items: ImageMentionItem[] = [];

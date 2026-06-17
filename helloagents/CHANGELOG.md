@@ -12,11 +12,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Settings modal user profile card now supports inline profile editing: users can open an edit dialog from the settings card, upload a persisted OSS avatar, and update their display name. The backend adds `PATCH /api/users/profile`, frontend auth state now carries `avatarUrl`, and settings/workspace UI reuse the saved avatar consistently.
 
 ### Fixed
+- Canvas HD upscale now uses the deterministic RealESRGAN x4 workflow instead of prompt-based `edit-image`, resolving cases where 4K upscaling redraws the selected image into unrelated content.
+- Frontend image source resolution now treats managed asset paths (`projects/`, `uploads/`, `templates/`, `videos/`, `ai/`) as first-party even when served through a custom CDN domain. Blob/DataURL conversion tries `/api/assets/proxy` before browser direct fetch for those URLs, preventing local CORS noise after fast background removal without changing `VITE_ASSET_PUBLIC_BASE_URL`.
 - Image mentions now use the `tai-image:` token prefix, render as inline thumbnail chips in chat and prompt textareas instead of exposing raw token strings, and support repeated `@` insertion in the same input reliably.
 - Image mention trigger/query handling no longer requires whitespace before `@`, and chat/prompt textareas now block keyboard `Backspace`/`Delete` from deleting mention tokens while snapping the caret out of hidden token internals.
 - Image mention textareas now hide browser selection text for the underlying token layer and collapse mouse drag selections that touch mentions, preventing raw `tai-image:` token strings from appearing during long-press selection.
 - Chat and prompt editors now decouple visible typing from stored image-mention tokens: textareas edit plain text only, mentioned images render as removable chip rows above the input, caret positioning no longer drifts when images are mentioned, and chip delete buttons are directly clickable.
 - Prompt nodes now use an inline image-mention editor instead of a textarea overlay: mentioned images stay interleaved with surrounding text in their authored order, each inline chip has a directly clickable delete button, and the saved prompt still preserves mention tokens for model-side reference resolution.
+- Flow image mentions now also work when a prompt node is connected to Seedream-style `prompt` inputs: downstream connected images appear as `@` candidates, and Seedream resolves mentioned images into reference inputs at run time.
+- Chat image mention suggestions now exclude video history/media entries, including legacy video URLs without an explicit `mediaType`.
 - Auth UI: expired WeChat login QR codes now show a gray refresh overlay on hover and refresh when clicked; the compact login card keeps a stable size while switching among WeChat, password, and SMS tabs, with long states scrolling inside the card.
 - Resizable flow nodes now treat stored height as a minimum and naturally expand for fields or runtime errors, avoiding both clipped content and observer-driven infinite height growth.
 - New Midjourney V7 and Niji 7 nodes now start at a compact 430px height instead of leaving a large blank area below their collapsed controls.
@@ -166,7 +170,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - OpenObserve `backend_request` 写入前新增请求体整体长度上限：`body` 序列化后若超�?`4096` 字符，会改写为包�?`preview` / `originalLength` 的摘要对象，避免完整 base64 请求体原样落�?`backend_requests`；可通过 `OPENOBSERVE_BACKEND_REQUEST_BODY_MAX_LENGTH` 调整（`backend/src/telemetry/openobserve-telemetry.service.ts`）�?
 - 公众号明文模式回调新�?OpenObserve 结构化事件日志：收到 `/api/auth/wechat-official/callback` 时会把原�?XML 明文写入 `backend_events` 流，并在命中扫码登录授权后追加一条授权成功事件，便于直接�?OpenObserve 中排查公众号回调内容（`backend/src/auth/auth.service.ts`, `backend/src/telemetry/openobserve-telemetry.service.ts`）�?
 - OpenObserve 改为默认保留明文请求日志并在生产默认开启：`backend_requests` 新增原始请求�?请求体，`upstream_requests` 不再对文�?header/body 做脱敏或截断，`frontend_error` 前端上报在生产默认开启，后端 tracing 也改为生产默认启用（`backend/src/telemetry/*`, `frontend/src/bootstrap/runtimeStability.ts`）�?
-- Canvas：`ImageContainer` 的“高清放大”现在会先读取原图尺寸并推导最近似长宽比，一并传�?`gemini-3-pro-image-preview`；同时强化提示词，明确要求保持原始宽高比、禁止裁�?补边/拉伸/改构图，降低 4K 放大时输出尺寸漂移的概率（`frontend/src/components/canvas/ImageContainer.tsx`）�?
+- Canvas：`ImageContainer` 的“高清放大”改回 RealESRGAN x4 超分链路，优先使用当前图片远程 URL/OSS key，临时 data/blob 会先上传为 OSS URL 再提交，避免生成式 edit 模型把放大任务重绘成另一张图（`frontend/src/components/canvas/ImageContainer.tsx`）。
 - Membership Backend 调整到期口径：订阅积分优先消耗，会员到期时重置订阅积分；免费用户继续�?30 天周期发�?`freeUserMonthlyQuotaCredits`（默�?`500`）�?
 
 ### Fixed

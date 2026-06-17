@@ -21,6 +21,7 @@
   - `toRenderableImageSrc`：把 key/proxy/remote/path 转成可渲染的 src（默认会按需走 proxy 降低 CORS；如需禁用 proxy：`VITE_PROXY_ASSETS=false` + `VITE_ASSET_PUBLIC_BASE_URL`）。
   - `isPersistableImageRef` / `normalizePersistableImageRef`：保存前判定与规范化（避免把 proxy/data/blob 写进设计 JSON）。
   - `resolveImageToBlob` / `resolveImageToDataUrl`：上传/AI/edit 等需要 blob/dataURL 的场景。
+- 自定义 CDN 域名只要 URL 路径是托管 key（`projects/`、`uploads/`、`templates/`、`videos/`、`ai/`），前端按一方资源处理；需要读取二进制时先走 `/api/assets/proxy`，避免本地开发直连 CDN 触发 CORS。
 - 选中图片同步到 AI 对话框时，优先使用 `remoteUrl`；缺失时再用 `toRenderableImageSrc` 将 key 转为可访问 URL。
   - UI 渲染：`frontend/src/components/ui/SmartImage.tsx`、`frontend/src/hooks/useNonBase64ImageSrc.ts`（把 base64/dataURL 转成 `blob:` 渲染）。
 - **Paper.js Raster 约定**：
@@ -66,6 +67,11 @@
 - 画布图片扩图不必依赖专用 `/api/ai/expand-image` 工作流；`ImageContainer` 已支持把“目标扩图框”前端合成为一张整图 PNG：整张画布先填充红色 `#ff0000`，再按偏移绘制原图。
 - 提交时复用 `editImageViaAPI`，固定提示词为“智能填充红色蒙版区域并与原图融合”，输出 `png`；生成结果作为新图片通过 `triggerQuickImageUpload` 插回画布，而不是覆盖原图。
 - `ExpandImageSelector` 的预览底色与实际提交蒙版保持一致（红色），且只有当目标框至少一边超出原图时才允许发送。
+
+## 高清放大
+- 画布图片工具栏的“高清放大”走 `frontend/src/services/hdUpscaleService.ts` 的 RealESRGAN x4 工作流，不走 `editImageViaAPI`/提示词型图片编辑，避免模型重绘内容。
+- `ImageContainer` 优先把当前图片的 `remoteUrl/url/key/src` 解析为可公网访问的图片 URL；若只有临时 `data:`/`blob:`，会先上传到 OSS 后再提交超分服务。
+- 放大结果仍通过 `triggerQuickImageUpload` 插回画布并走统一上传/历史记录链路。
 
 ## 图片调色板条
 - `ImageContainer` 的图片操作菜单新增 `提取调色板`（位于“更多”菜单候选项内）。
