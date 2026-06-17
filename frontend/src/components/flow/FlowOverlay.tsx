@@ -18003,27 +18003,44 @@ function FlowInner() {
         const promptEdge = currentEdges.find(
           (e) => e.target === nodeId && e.targetHandle === "prompt"
         );
-        let promptText = "";
+        let rawPromptText = "";
         if (promptEdge) {
           const promptNode = rf.getNode(promptEdge.source);
           if (promptNode) {
             const resolved = resolveTextFromSourceNode(promptNode, promptEdge.sourceHandle);
-            promptText = resolved?.trim() || "";
+            rawPromptText = resolved?.trim() || "";
           }
         }
+        const imageMentionItems = collectTargetNodeImageMentionItems(
+          nodeId,
+          currentEdges,
+          (id) => rf.getNode(id)
+        );
+        const promptMentionImageUrls = rawPromptText
+          ? resolveImageMentionUrls(rawPromptText, imageMentionItems)
+          : [];
+        const promptText = rawPromptText
+          ? stripImageMentionTokens(rawPromptText)
+          : "";
 
         // 获取输入图片（最多5张）
-        const imgEdges = currentEdges
-          .filter((e) => e.target === nodeId && e.targetHandle === "img")
-          .slice(0, 5);
-        const imageDatas = await resolveEdgesAsDataUrls(imgEdges);
-
-        // 提示超过5张图片
         const totalImgEdges = currentEdges.filter(
           (e) => e.target === nodeId && e.targetHandle === "img"
         );
-        if (totalImgEdges.length > 5) {
-          console.warn(`Seedream5: 最多支持5张参考图，当前连接了${totalImgEdges.length}张，只使用前5张`);
+        const connectedImageDatas = await resolveEdgesAsDataUrls(
+          totalImgEdges.slice(0, 5)
+        );
+        const imageDatas = Array.from(
+          new Set([...connectedImageDatas, ...promptMentionImageUrls])
+        ).slice(0, 5);
+
+        // 提示超过5张图片
+        const totalReferenceCount =
+          totalImgEdges.length + promptMentionImageUrls.length;
+        if (totalReferenceCount > 5) {
+          console.warn(
+            `Seedream5: 最多支持5张参考图，当前输入了${totalReferenceCount}张，只使用前5张`
+          );
         }
 
         // 验证：至少需要提示词或图片之一

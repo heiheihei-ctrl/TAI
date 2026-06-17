@@ -642,16 +642,35 @@ const AIChatDialog: React.FC = () => {
   }, [currentProjectId]);
 
   const projectImageMentionItems = useMemo<ImageMentionItem[]>(() => {
+    const isLikelyVideoRef = (value?: unknown): boolean => {
+      if (typeof value !== "string") return false;
+      const trimmed = value.trim();
+      if (!trimmed) return false;
+      if (/^videos\//i.test(trimmed.replace(/^\/+/, ""))) return true;
+      try {
+        const parsed = new URL(
+          trimmed,
+          typeof window !== "undefined" && window.location?.origin
+            ? window.location.origin
+            : "http://localhost"
+        );
+        return /\.(mp4|webm|mov|m4v|avi|mkv)(?:$|[?#])/i.test(parsed.pathname);
+      } catch {
+        return /\.(mp4|webm|mov|m4v|avi|mkv)(?:$|[?#])/i.test(trimmed);
+      }
+    };
+
     const normalizeRef = (value?: unknown): string | null => {
       if (typeof value !== "string") return null;
       const trimmed = value.trim();
       if (!trimmed) return null;
+      if (isLikelyVideoRef(trimmed)) return null;
       if (/^(data:|blob:)/i.test(trimmed)) return null;
       if (/^[A-Za-z0-9+/=\r\n]+$/.test(trimmed) && trimmed.length > 256) {
         return null;
       }
       const withoutLeading = trimmed.replace(/^\/+/, "");
-      if (/^(projects|uploads|templates|videos)\//i.test(withoutLeading)) {
+      if (/^(projects|uploads|templates)\//i.test(withoutLeading)) {
         return resolvePublicAssetUrlFromKey(withoutLeading) || withoutLeading;
       }
       return trimmed;
@@ -659,6 +678,13 @@ const AIChatDialog: React.FC = () => {
 
     const historyItems = projectImageHistory
       .map((item) => {
+        if (item.mediaType === "video") return null;
+        if (
+          isLikelyVideoRef(item.mediaUrl) ||
+          isLikelyVideoRef(item.imageUrl)
+        ) {
+          return null;
+        }
         const url =
           normalizeRef(item.mediaUrl) ||
           normalizeRef(item.imageUrl) ||

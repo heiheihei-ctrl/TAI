@@ -41,13 +41,14 @@ import {
 import { generateOssKey, uploadToOSS } from "@/services/ossUploadService";
 import { useProjectContentStore } from "@/stores/projectContentStore";
 import type { Model3DData } from "@/services/model3DUploadService";
-// optimizeHdImage 已弃用，高清放大走后端异步 edit-image 任务链路
 import ExpandImageSelector from "./ExpandImageSelector";
 import { useToolStore } from "@/stores";
 import aiImageService from "@/services/aiImageService";
 import { globalImageHistoryApi, type GlobalImageHistoryItem } from "@/services/globalImageHistoryApi";
 import { loadImageElement } from "@/utils/imageHelper";
 import { imageUrlCache } from "@/services/imageUrlCache";
+import { imageUploadService } from "@/services/imageUploadService";
+import { optimizeHdImage } from "@/services/hdUpscaleService";
 import { isGroup, isRaster } from "@/utils/paperCoords";
 import { editImageViaAPI } from "@/services/aiBackendAPI";
 import { useAIChatStore, getImageModelForProvider } from "@/stores/aiChatStore";
@@ -67,10 +68,6 @@ const EXPAND_PRESET_PROMPT =
 const EXPAND_MASK_FILL_COLOR = "#ff0000";
 const TEXT_RECOGNITION_PROMPT =
   '请识别图片中所有可见文字，并仅返回 JSON 数组，例如：["文字1","文字2"]。不要返回其他解释。';
-const HD_UPSCALE_MODEL = "gemini-3-pro-image-preview";
-const HD_UPSCALE_PROVIDER = "banana";
-const HD_UPSCALE_PROMPT =
-  "请将这张图片进行高清放大处理，提升分辨率到4K级别，保持原图的所有细节、颜色、构图和风格完全不变，只增强清晰度和分辨率，不要添加或修改任何内容。必须保持原始宽高比，禁止裁切、补边、拉伸、透视变化或改动构图。";
 
 type TextReplacementItem = {
   id: string;
@@ -413,48 +410,6 @@ const buildTextEditPrompt = (
   );
 
   return lines.join("\n");
-};
-
-const HD_UPSCALE_ASPECT_RATIOS = [
-  "1:1",
-  "2:3",
-  "3:2",
-  "3:4",
-  "4:3",
-  "4:5",
-  "5:4",
-  "9:16",
-  "16:9",
-  "21:9",
-] as const;
-
-type HdUpscaleAspectRatio = (typeof HD_UPSCALE_ASPECT_RATIOS)[number];
-
-const getClosestHdUpscaleAspectRatio = (
-  width: number,
-  height: number
-): HdUpscaleAspectRatio | undefined => {
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-    return undefined;
-  }
-
-  const targetRatio = width / height;
-  let bestMatch: HdUpscaleAspectRatio | undefined;
-  let smallestDiff = Number.POSITIVE_INFINITY;
-
-  for (const ratio of HD_UPSCALE_ASPECT_RATIOS) {
-    const [w, h] = ratio.split(":").map(Number);
-    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
-      continue;
-    }
-    const diff = Math.abs(targetRatio - w / h);
-    if (diff < smallestDiff) {
-      smallestDiff = diff;
-      bestMatch = ratio;
-    }
-  }
-
-  return bestMatch;
 };
 
 const _composeExpandedImage = async (
@@ -1482,6 +1437,54 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
       imageData.url,
       projectId,
       resolveRenderedImageDataUrl,
+    ]
+  );
+
+  const resolveHdUpscaleSourceImageUrl = useCallback(
+    async (): Promise<string | null> => {
+      const candidates = [
+        imageData.remoteUrl || null,
+        imageData.url || null,
+        imageData.key || null,
+        imageData.src || null,
+        getImageDataForEditing?.(imageData.id) || null,
+        imageData.pendingUpload ? imageData.localDataUrl || null : null,
+      ];
+
+      for (const source of candidates) {
+        if (typeof source !== "string") continue;
+        const normalized = normalizePersistableImageRef(source);
+        const renderable = toRenderableImageSrc(normalized || source);
+        if (renderable && isRemoteUrl(renderable)) {
+          return renderable;
+        }
+        if (normalized && isRemoteUrl(normalized)) {
+          return normalized;
+        }
+      }
+
+      const fallbackSource = await resolveHdUpscaleSourceImageDataUrl();
+      if (!fallbackSource) return null;
+
+      const upload = await imageUploadService.uploadImageSource(fallbackSource, {
+        projectId: projectId ?? undefined,
+        dir: "uploads/hd-upscale-sources/",
+        fileName: `hd-upscale-source-${Date.now()}.png`,
+        contentType: "image/png",
+      });
+      return upload.success && upload.asset?.url ? upload.asset.url : null;
+    },
+    [
+      getImageDataForEditing,
+      imageData.id,
+      imageData.key,
+      imageData.localDataUrl,
+      imageData.pendingUpload,
+      imageData.remoteUrl,
+      imageData.src,
+      imageData.url,
+      projectId,
+      resolveHdUpscaleSourceImageDataUrl,
     ]
   );
 
@@ -3256,24 +3259,28 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
           );
           hdProgressValue = 8;
 
-          const baseImage = await resolveHdUpscaleSourceImageDataUrl();
-          if (!baseImage) {
-            throw new Error("无法获取原图");
+          const sourceImageUrl = await resolveHdUpscaleSourceImageUrl();
+          if (!sourceImageUrl) {
+            throw new Error("无法获取可放大的原图，请等待图片上传完成后重试");
           }
 
           updateHdProgress(18);
 
-          const baseImageElement = await loadImageElement(baseImage);
-          const sourceWidth = Math.max(
-            1,
-            baseImageElement.naturalWidth || baseImageElement.width || 1
-          );
-          const sourceHeight = Math.max(
-            1,
-            baseImageElement.naturalHeight || baseImageElement.height || 1
-          );
-          const aspectRatio =
-            getClosestHdUpscaleAspectRatio(sourceWidth, sourceHeight);
+          let sourceWidth: number | null = null;
+          let sourceHeight: number | null = null;
+          try {
+            const baseImageElement = await loadImageElement(sourceImageUrl);
+            sourceWidth = Math.max(
+              1,
+              baseImageElement.naturalWidth || baseImageElement.width || 1
+            );
+            sourceHeight = Math.max(
+              1,
+              baseImageElement.naturalHeight || baseImageElement.height || 1
+            );
+          } catch (error) {
+            logger.warn("高清放大源图尺寸读取失败，继续提交超分任务", error);
+          }
 
           window.dispatchEvent(
             new CustomEvent("toast", {
@@ -3284,11 +3291,8 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
             })
           );
 
-          logger.info("📷 高清放大 - 使用 Banana editImage (4K)", {
-            aiProvider: HD_UPSCALE_PROVIDER,
-            model: HD_UPSCALE_MODEL,
-            imageSize: "4K",
-            aspectRatio,
+          logger.info("📷 高清放大 - 使用 RealESRGAN x4", {
+            imageUrl: sourceImageUrl,
             sourceWidth,
             sourceHeight,
           });
@@ -3296,23 +3300,16 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
           updateHdProgress(32);
           startHdProgressTimer(36);
 
-          const editResult = await editImageViaAPI({
-            prompt: HD_UPSCALE_PROMPT,
-            sourceImage: baseImage,
-            model: HD_UPSCALE_MODEL,
-            aiProvider: HD_UPSCALE_PROVIDER,
-            outputFormat: "png",
-            aspectRatio,
-            imageSize: "4K",
-            imageOnly: true,
+          const upscaleResult = await optimizeHdImage({
+            imageUrl: sourceImageUrl,
+            resolution: "4k",
+            filenamePrefix: `hd-4k-${imageData.id}`,
           });
 
           stopHdProgressTimer();
-          const resultImageSource =
-            editResult.data?.imageData || editResult.data?.imageUrl;
 
-          if (!editResult.success || !resultImageSource) {
-            throw new Error(editResult.error?.message || "高清放大失败");
+          if (!upscaleResult.success || !upscaleResult.imageUrl) {
+            throw new Error(upscaleResult.error || "高清放大失败");
           }
 
           updateHdProgress(96);
@@ -3320,7 +3317,7 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
           window.dispatchEvent(
             new CustomEvent("triggerQuickImageUpload", {
               detail: {
-                imageData: resultImageSource,
+                imageData: upscaleResult.imageUrl,
                 fileName: `hd-4k-${Date.now()}.png`,
                 selectedImageBounds: realTimeBounds,
                 smartPosition: placeholderCenter,
@@ -3374,7 +3371,7 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
       imageData.id,
       isOptimizingHd,
       realTimeBounds,
-      resolveHdUpscaleSourceImageDataUrl,
+      resolveHdUpscaleSourceImageUrl,
     ]
   );
 
