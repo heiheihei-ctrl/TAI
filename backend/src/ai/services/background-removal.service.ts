@@ -139,7 +139,8 @@ export class BackgroundRemovalService {
    * 使用本地 ONNX 模块移除背景
    */
   private async removeBackgroundLocal(imageBuffer: Buffer, mimeType: string): Promise<string> {
-    if (this.isWindows) {
+    // 优先走隔离 worker，避免在主进程加载 ONNX（Linux 生产环境更稳定）
+    if (this.canAttemptLocalRemoval()) {
       return this.removeBackgroundLocalIsolated(imageBuffer, mimeType);
     }
 
@@ -196,9 +197,9 @@ export class BackgroundRemovalService {
       }
     }
 
-    if (!hasRemoveBgKey && this.isWindows && !this.canAttemptLocalRemoval()) {
+    if (!hasRemoveBgKey && !this.canAttemptLocalRemoval()) {
       throw new BadRequestException(
-        'Background removal is unavailable: Windows local worker/resources are missing, and REMOVE_BG_API_KEY is not configured.'
+        'Background removal is unavailable: local worker/resources are missing, and REMOVE_BG_API_KEY is not configured.'
       );
     }
 
@@ -503,11 +504,10 @@ export class BackgroundRemovalService {
       return true;
     }
 
-    if (this.isWindows) {
-      return this.canAttemptLocalRemoval();
+    if (this.canAttemptLocalRemoval()) {
+      return true;
     }
 
-    // 否则检查本地模块
     try {
       await this.getRemovalModule();
       return true;
@@ -546,24 +546,19 @@ export class BackgroundRemovalService {
       };
     }
 
-    // 检查本地模块
-    if (this.isWindows) {
-      const available = this.canAttemptLocalRemoval();
+    if (this.canAttemptLocalRemoval()) {
       return {
-        available,
-        version: available ? 'isolated-worker' : undefined,
-        provider: available ? 'local-onnx-worker' : 'none',
+        available: true,
+        version: 'isolated-worker',
+        provider: 'local-onnx-worker',
         platform: process.platform,
-        reason: available
-          ? 'Windows 环境将通过隔离子进程尝试本地 ONNX 抠图；若子进程崩溃，主服务不会断开。'
-          : 'Windows 本地抠图 worker 或模型资源缺失，且未配置 REMOVE_BG_API_KEY。',
-        features: available
-          ? [
-              'Remove background with transparency',
-              'Support PNG, JPEG, GIF, WebP',
-              'Isolated worker fallback on Windows',
-            ]
-          : [],
+        reason:
+          '将通过隔离子进程尝试本地 ONNX 抠图；若子进程崩溃，主服务不会断开。',
+        features: [
+          'Remove background with transparency',
+          'Support PNG, JPEG, GIF, WebP',
+          'Isolated worker processing',
+        ],
       };
     }
 

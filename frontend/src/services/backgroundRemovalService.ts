@@ -27,13 +27,6 @@ class BackgroundRemovalService {
   private isFrontendAvailable = false;
 
   /**
-   * 检查WebGPU支持(用于性能优化)
-   */
-  private isWebGPUSupported(): boolean {
-    return "gpu" in navigator;
-  }
-
-  /**
    * 检查前端库是否可用
    * 这是可选的,库不存在时后端会接管所有请求
    */
@@ -66,30 +59,93 @@ class BackgroundRemovalService {
    */
   private async testFrontendLoad(): Promise<boolean> {
     try {
-      // 这里使用字符串拼接来避免Vite在编译时解析
-      const importStr = "@imgly/background-removal";
-      // 实际不会执行,但这样写Vite不会报错
-      logger.debug(`Would load: ${importStr}`);
-      return false;
+      await import("@imgly/background-removal");
+      return true;
     } catch {
       return false;
     }
   }
 
+  /** 浏览器端兜底：限制体积，避免大图画布 OOM */
+  private canUseFrontendFallback(imageData: string): boolean {
+    const sizeKB = imageData.length / 1024;
+    return sizeKB <= 15 * 1024;
+  }
+
+  private formatUserError(error?: string): string {
+    if (!error) return "抠图失败，请稍后重试";
+    const lower = error.toLowerCase();
+    if (
+      lower.includes("not available") ||
+      lower.includes("remove_bg_api_key") ||
+      lower.includes("background removal failed")
+    ) {
+      return "抠图服务暂不可用，请稍后重试或联系管理员";
+    }
+    return error;
+  }
+
   /**
-   * 检查是否应该尝试前端处理
-   * 只在小图片和WebGPU支持时使用
+   * 浏览器端移除背景（后端不可用时的兜底）
    */
-  private shouldTryFrontend(imageSizeKB: number): boolean {
-    if (!this.isFrontendAvailable) return false;
+  private async removeBackgroundFrontend(
+    imageData: string,
+    mimeType: string = "image/png"
+  ): Promise<BackgroundRemovalResult> {
+    const startTime = performance.now();
+    try {
+      const available = await this.checkFrontendAvailable();
+      if (!available) {
+        return {
+          success: false,
+          error: "浏览器抠图模块不可用",
+          method: "frontend",
+        };
+      }
 
-    // 只有小于2MB的图片才用前端处理
-    if (imageSizeKB > 2048) return false;
+      logger.info("🖥️ Using browser fallback for background removal...");
+      const { removeBackground } = await import("@imgly/background-removal");
 
-    // 如果没有WebGPU支持,用后端
-    if (!this.isWebGPUSupported()) return false;
+      const dataUrl = imageData.startsWith("data:")
+        ? imageData
+        : `data:${mimeType};base64,${imageData}`;
 
-    return true;
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+
+      const resultBlob = await removeBackground(blob, {
+        output: { format: "image/png", quality: 0.8 },
+      });
+
+      const resultDataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () =>
+          reject(reader.error ?? new Error("Failed to read result blob"));
+        reader.readAsDataURL(resultBlob);
+      });
+
+      const processingTime = Math.round(performance.now() - startTime);
+      logger.info(
+        `✅ Browser background removal completed in ${processingTime}ms`
+      );
+
+      return {
+        success: true,
+        imageData: resultDataUrl,
+        processingTime,
+        method: "frontend",
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Browser processing failed";
+      logger.error("❌ Browser background removal failed:", message);
+      return {
+        success: false,
+        error: message,
+        method: "frontend",
+      };
+    }
   }
 
   /**
@@ -157,7 +213,7 @@ class BackgroundRemovalService {
 
   /**
    * 主方法: 移除背景
-   * 当前按约定始终走后端公开 API，让 provider 选择在服务端统一处理。
+   * 优先后端；后端不可用时自动降级到浏览器 @imgly/background-removal。
    */
   async removeBackground(
     imageData: string,
@@ -165,30 +221,53 @@ class BackgroundRemovalService {
     preferFrontend: boolean = true
   ): Promise<BackgroundRemovalResult> {
     try {
-      // 估算图片大小
       const imageSizeKB = imageData.length / 1024;
+      logger.info(
+        `📊 Image size: ${imageSizeKB.toFixed(2)}KB, trying backend API first`
+      );
 
-      // 提示用户使用的方式
-      if (imageSizeKB > 2048) {
-        logger.info(
-          `📊 Image size: ${imageSizeKB.toFixed(2)}KB > 2MB, using backend API`
-        );
-      } else {
-        logger.info(
-          `📊 Image size: ${imageSizeKB.toFixed(
-            2
-          )}KB, using backend API (reliable and always available)`
-        );
+      const backendResult = await this.removeBackgroundBackend(
+        imageData,
+        mimeType
+      );
+      if (backendResult.success) {
+        return backendResult;
       }
 
-      // 目前始终使用后端 - 这是最可靠的方式
-      return await this.removeBackgroundBackend(imageData, mimeType);
+      if (
+        preferFrontend &&
+        this.canUseFrontendFallback(imageData)
+      ) {
+        logger.warn(
+          "⚠️ Backend background removal failed, trying browser fallback...",
+          backendResult.error
+        );
+        const frontendResult = await this.removeBackgroundFrontend(
+          imageData,
+          mimeType
+        );
+        if (frontendResult.success) {
+          return frontendResult;
+        }
+        return {
+          success: false,
+          error: this.formatUserError(
+            frontendResult.error || backendResult.error
+          ),
+        };
+      }
+
+      return {
+        success: false,
+        error: this.formatUserError(backendResult.error),
+        method: "backend",
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       logger.error("❌ Background removal failed:", message);
       return {
         success: false,
-        error: message,
+        error: this.formatUserError(message),
       };
     }
   }
