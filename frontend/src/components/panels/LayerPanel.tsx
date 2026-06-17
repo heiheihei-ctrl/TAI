@@ -121,6 +121,11 @@ const LayerPanel: React.FC = () => {
     const thumbGenerationQueue = useRef<Set<string>>(new Set());
     const isGeneratingThumb = useRef(false);
     const isScanningLayerItemsRef = useRef(false);
+    const syncSelectionInProgressRef = useRef(false);
+    const allLayerItemsRef = useRef(allLayerItems);
+    const activeLayerIdRef = useRef(activeLayerId);
+    allLayerItemsRef.current = allLayerItems;
+    activeLayerIdRef.current = activeLayerId;
 
     const areLayerItemsEqual = (
         prev: Record<string, LayerItemData[]>,
@@ -387,10 +392,11 @@ const LayerPanel: React.FC = () => {
     }, [showLayerPanel, layers]);
 
     // 反向同步：画板里选中图片/图元时，图层面板高亮对应项
-    useEffect(() => {
-        if (!showLayerPanel) return;
+    const syncCanvasSelectionToLayerPanel = React.useCallback(() => {
+        if (!showLayerPanel || syncSelectionInProgressRef.current) return;
 
-        const syncCanvasSelectionToLayerPanel = () => {
+        syncSelectionInProgressRef.current = true;
+        try {
             const imageInstances = Array.isArray((window as any).tanvaImageInstances)
                 ? (window as any).tanvaImageInstances
                 : [];
@@ -424,10 +430,11 @@ const LayerPanel: React.FC = () => {
                     .filter(Boolean)
             );
 
+            const currentLayerItems = allLayerItemsRef.current;
             let selectedItem: LayerItemData | undefined;
 
             for (const imageId of selectedImageIdSet) {
-                selectedItem = allLayerItems.find((item) => {
+                selectedItem = currentLayerItems.find((item) => {
                     if (item.type !== 'image') return false;
                     return getCanvasImageIdFromItem(item) === imageId;
                 });
@@ -436,7 +443,7 @@ const LayerPanel: React.FC = () => {
 
             if (!selectedItem) {
                 for (const modelId of selectedModelIdSet) {
-                    selectedItem = allLayerItems.find((item) => {
+                    selectedItem = currentLayerItems.find((item) => {
                         if (item.type !== 'model3d') return false;
                         return getCanvasModelIdFromItem(item) === modelId;
                     });
@@ -445,14 +452,14 @@ const LayerPanel: React.FC = () => {
             }
 
             if (!selectedItem && selectedPathItemIdSet.size > 0) {
-                selectedItem = allLayerItems.find((item) => {
+                selectedItem = currentLayerItems.find((item) => {
                     const paperItemId = getPaperItemIdFromItem(item);
                     return Boolean(paperItemId && selectedPathItemIdSet.has(paperItemId));
                 });
             }
 
             if (!selectedItem) {
-                selectedItem = allLayerItems.find((item) => item.selected === true);
+                selectedItem = currentLayerItems.find((item) => item.selected === true);
             }
 
             const nextSelectedItemId = selectedItem?.id ?? null;
@@ -472,10 +479,16 @@ const LayerPanel: React.FC = () => {
                 return next;
             });
 
-            if (activeLayerId !== nextLayerId) {
+            if (activeLayerIdRef.current !== nextLayerId) {
                 activateLayer(nextLayerId);
             }
-        };
+        } finally {
+            syncSelectionInProgressRef.current = false;
+        }
+    }, [showLayerPanel, activateLayer]);
+
+    useEffect(() => {
+        if (!showLayerPanel) return;
 
         syncCanvasSelectionToLayerPanel();
         window.addEventListener('tanva-image-instances-updated', syncCanvasSelectionToLayerPanel as EventListener);
@@ -487,7 +500,15 @@ const LayerPanel: React.FC = () => {
             window.removeEventListener('tanva-canvas-selection-updated', syncCanvasSelectionToLayerPanel as EventListener);
             window.removeEventListener('paper-project-changed', syncCanvasSelectionToLayerPanel as EventListener);
         };
-    }, [showLayerPanel, allLayerItems, activeLayerId, activateLayer]);
+    }, [showLayerPanel, syncCanvasSelectionToLayerPanel]);
+
+    useEffect(() => {
+        if (!showLayerPanel) return;
+        const timer = window.setTimeout(() => {
+            syncCanvasSelectionToLayerPanel();
+        }, 0);
+        return () => window.clearTimeout(timer);
+    }, [showLayerPanel, allLayerItems, syncCanvasSelectionToLayerPanel]);
 
     const generateLayerThumb = async (id: string): Promise<{ src: string; revoke?: () => void } | null> => {
         try {

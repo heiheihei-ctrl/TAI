@@ -95,10 +95,66 @@ export const useProjectContentStore = create<ProjectContentState>((set) => ({
       }
 
       if (!markDirty) {
+        if (partial.layers || partial.activeLayerId !== undefined) {
+          const currentLayers = baseContent.layers ?? [];
+          const nextLayers = nextContent.layers ?? [];
+          const layersUnchanged =
+            currentLayers.length === nextLayers.length &&
+            currentLayers.every((layer, index) => {
+              const next = nextLayers[index];
+              return (
+                next &&
+                layer.id === next.id &&
+                layer.name === next.name &&
+                layer.visible === next.visible &&
+                layer.locked === next.locked
+              );
+            });
+          if (
+            layersUnchanged &&
+            baseContent.activeLayerId === nextContent.activeLayerId
+          ) {
+            return state;
+          }
+        }
+        if (partial.canvas) {
+          const currentCanvas = baseContent.canvas;
+          const nextCanvas = nextContent.canvas;
+          if (
+            currentCanvas.zoom === nextCanvas.zoom &&
+            currentCanvas.panX === nextCanvas.panX &&
+            currentCanvas.panY === nextCanvas.panY
+          ) {
+            return state;
+          }
+        }
         return {
           ...state,
           content: nextContent,
         };
+      }
+
+      if (partial.layers || partial.activeLayerId !== undefined) {
+        const currentLayers = baseContent.layers ?? [];
+        const nextLayers = nextContent.layers ?? [];
+        const layersUnchanged =
+            currentLayers.length === nextLayers.length &&
+            currentLayers.every((layer, index) => {
+                const next = nextLayers[index];
+                return (
+                    next &&
+                    layer.id === next.id &&
+                    layer.name === next.name &&
+                    layer.visible === next.visible &&
+                    layer.locked === next.locked
+                );
+            });
+        if (
+            layersUnchanged &&
+            baseContent.activeLayerId === nextContent.activeLayerId
+        ) {
+            return state;
+        }
       }
 
       const now = Date.now();

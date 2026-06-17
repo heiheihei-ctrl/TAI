@@ -69,6 +69,23 @@ export const useLayerStore = create<LayerState>()(subscribeWithSelector((set, ge
     activeLayerId: null,
 
     hydrateFromContent: (layers, activeLayerId) => {
+        const state = get();
+        const layersUnchanged =
+            state.layers.length === layers.length &&
+            state.layers.every((layer, index) => {
+                const next = layers[index];
+                return (
+                    next &&
+                    layer.id === next.id &&
+                    layer.name === next.name &&
+                    layer.visible === next.visible &&
+                    layer.locked === next.locked
+                );
+            });
+        if (layersUnchanged && state.activeLayerId === activeLayerId) {
+            return;
+        }
+
         // 仅同步 store，不主动创建/删除 Paper 图层；由反序列化负责
         set({ layers, activeLayerId });
         // 尝试激活对应 Paper 图层
@@ -186,10 +203,6 @@ export const useLayerStore = create<LayerState>()(subscribeWithSelector((set, ge
 
     activateLayer: (id) => {
         if (get().activeLayerId === id) {
-            const paperLayer = findLayerByStoreId(id);
-            if (paperLayer) {
-                paperLayer.activate();
-            }
             return;
         }
 
