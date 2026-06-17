@@ -449,7 +449,9 @@ export class AuthService {
     const appSecret = (this.config.get<string>("WECHAT_OFFICIAL_APP_SECRET") || "").trim();
     const token = (this.config.get<string>("WECHAT_OFFICIAL_TOKEN") || "").trim();
     const encodingAesKey = (
-      this.config.get<string>("WECHAT_OFFICIAL_ENCODING_AES_KEY") || ""
+      this.config.get<string>("WECHAT_OFFICIAL_ENCODING_AES_KEY") ||
+      this.config.get<string>("EncodingAESKey") ||
+      ""
     ).trim();
 
     if (requireCredentials) {
@@ -1305,7 +1307,7 @@ export class AuthService {
   }
 
   async handleWechatOfficialCallback(rawXml: string) {
-    await this.openObserveTelemetryService.ingestBackendEvent({
+    void this.openObserveTelemetryService.ingestBackendEvent({
       traceId: null,
       category: "wechat_official",
       action: "callback_received",
@@ -1314,6 +1316,12 @@ export class AuthService {
         rawXml,
       },
       receivedAt: new Date().toISOString(),
+    }).catch((error) => {
+      this.logger.warn(
+        `[wechat-official][telemetry] callback_received ingest failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     });
 
     const message = this.parseWechatOfficialXml(rawXml);
@@ -1411,7 +1419,7 @@ export class AuthService {
       select: { id: true },
     });
 
-    await this.openObserveTelemetryService.ingestBackendEvent({
+    void this.openObserveTelemetryService.ingestBackendEvent({
       traceId: null,
       category: "wechat_official",
       action: "callback_authorized",
@@ -1424,6 +1432,12 @@ export class AuthService {
         rawXml,
       },
       receivedAt: new Date().toISOString(),
+    }).catch((error) => {
+      this.logger.warn(
+        `[wechat-official][telemetry] callback_authorized ingest failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     });
 
     return this.buildWechatOfficialTextResponse(
