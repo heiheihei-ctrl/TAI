@@ -8198,10 +8198,16 @@ export const useAIChatStore = create<AIChatState>()(
         setVideoDurationSeconds: (seconds) =>
           set({ videoDurationSeconds: seconds }),
         setManualAIMode: (mode) =>
-          set({ manualAIMode: mode, autoSelectedTool: null }),
+          set((state) =>
+            state.manualAIMode === mode && state.autoSelectedTool === null
+              ? state
+              : { manualAIMode: mode, autoSelectedTool: null }
+          ),
         setAIProvider: (provider, options) => {
+          const currentProvider = get().aiProvider;
+          if (currentProvider === provider) return;
           console.log("🔄 [AI Provider] 切换模式:", {
-            from: get().aiProvider,
+            from: currentProvider,
             to: provider,
             label:
               provider === "banana-2.5"

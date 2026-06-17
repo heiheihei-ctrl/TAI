@@ -104,6 +104,8 @@ const BASE_MANUAL_MODE_OPTIONS: ManualModeOption[] = [
   { value: "vector", label: "Vector", description: "矢量图形模式" },
 ];
 
+const EMPTY_PROJECT_CONTENT_IMAGES: any[] = [];
+
 // 长按提示词扩写按钮触发面板的最小时长（毫秒）
 const LONG_PRESS_DURATION = 550;
 
@@ -341,7 +343,7 @@ const AIChatDialog: React.FC = () => {
   const showLibraryPanel = useUIStore((state) => state.showLibraryPanel);
   const currentProjectId = useProjectStore((state) => state.currentProjectId);
   const projectContentImages = useProjectContentStore(
-    (state) => state.content?.assets?.images ?? []
+    (state) => state.content?.assets?.images ?? EMPTY_PROJECT_CONTENT_IMAGES
   );
   const isBlackTheme = chatTheme === "black";
   const chatLogoSrc = "/logo.png";
