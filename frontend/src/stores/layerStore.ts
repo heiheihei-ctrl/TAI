@@ -69,8 +69,22 @@ export const useLayerStore = create<LayerState>()(subscribeWithSelector((set, ge
     activeLayerId: null,
 
     hydrateFromContent: (layers, activeLayerId) => {
-        // 仅同步 store，不主动创建/删除 Paper 图层；由反序列化负责
-        set({ layers, activeLayerId });
+        set((state) => {
+            if (
+                state.activeLayerId === activeLayerId &&
+                state.layers.length === layers.length &&
+                state.layers.every(
+                    (layer, index) =>
+                        layer.id === layers[index]?.id &&
+                        layer.name === layers[index]?.name &&
+                        layer.visible === layers[index]?.visible &&
+                        layer.locked === layers[index]?.locked,
+                )
+            ) {
+                return state;
+            }
+            return { layers, activeLayerId };
+        });
         // 尝试激活对应 Paper 图层
         try {
             if (activeLayerId) {

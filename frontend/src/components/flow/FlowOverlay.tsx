@@ -6604,12 +6604,14 @@ function FlowInner() {
 
   // 擦除模式退出时清除高亮
   React.useEffect(() => {
-    // 节点橡皮已禁用，确保无高亮残留
-    setNodes((ns) =>
-      ns.map((n) =>
+    setNodes((ns) => {
+      if (!ns.some((node) => node.className === "eraser-hover")) {
+        return ns;
+      }
+      return ns.map((n) =>
         n.className === "eraser-hover" ? { ...n, className: undefined } : n
-      )
-    );
+      );
+    });
   }, []);
 
   // 双击空白处弹出添加面板
@@ -6645,7 +6647,10 @@ function FlowInner() {
     [clampAddTab, allowedAddTabs]
   );
   React.useEffect(() => {
-    setAddTab((prev) => clampAddTab(prev, allowedAddTabs));
+    setAddTab((prev) => {
+      const next = clampAddTab(prev, allowedAddTabs);
+      return next === prev ? prev : next;
+    });
   }, [allowedAddTabs, clampAddTab]);
 
   // 仅同步展示：打开「节点」页签时拉取后台节点管理中的最新配置（不在画板内编辑）
@@ -6770,7 +6775,11 @@ function FlowInner() {
       opts?: AddPanelOpenOptions
     ) => {
       const allowed = sanitizeAllowedAddTabs(opts?.allowedTabs);
-      setAllowedAddTabs(allowed);
+      setAllowedAddTabs((prev) =>
+        prev.length === allowed.length && prev.every((tab, index) => tab === allowed[index])
+          ? prev
+          : allowed,
+      );
       const targetTab = clampAddTab(opts?.tab ?? addTab, allowed);
       setAddTabWithMemory(targetTab, allowed);
       if (opts?.scope) setTemplateScope(opts.scope);
@@ -7316,7 +7325,7 @@ function FlowInner() {
   const importInputRef = React.useRef<HTMLInputElement | null>(null);
   const handleImportClick = React.useCallback(() => {
     // 点击导入后立即关闭面板
-    setAddPanel((v) => ({ ...v, visible: false }));
+    setAddPanel((v) => (v.visible ? { ...v, visible: false } : v));
     importInputRef.current?.click();
   }, []);
 
@@ -7425,7 +7434,7 @@ function FlowInner() {
           console.error("导入失败：JSON 解析错误", err);
         } finally {
           // 确保面板关闭；重置 input 值，允许重复导入同一文件
-          setAddPanel((v) => ({ ...v, visible: false }));
+          setAddPanel((v) => (v.visible ? { ...v, visible: false } : v));
           try {
             if (importInputRef.current) importInputRef.current.value = "";
           } catch {}
@@ -7482,7 +7491,7 @@ function FlowInner() {
       } catch (err) {
         console.error("导入失败：JSON 解析错误", err);
       } finally {
-        setAddPanel((v) => ({ ...v, visible: false }));
+        setAddPanel((v) => (v.visible ? { ...v, visible: false } : v));
       }
     };
     window.addEventListener(
@@ -7937,13 +7946,13 @@ function FlowInner() {
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setAddPanel((v) => ({ ...v, visible: false }));
+      if (e.key === "Escape") setAddPanel((v) => (v.visible ? { ...v, visible: false } : v));
     };
     const onDown = (e: MouseEvent) => {
       if (!addPanel.visible) return;
       const el = addPanelRef.current;
       if (el && !el.contains(e.target as HTMLElement))
-        setAddPanel((v) => ({ ...v, visible: false }));
+        setAddPanel((v) => (v.visible ? { ...v, visible: false } : v));
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("mousedown", onDown);
@@ -8766,7 +8775,7 @@ function FlowInner() {
       const nextNodes = (nodesRef.current as RFNode[]).concat([newNode]);
       setNodes(nextNodes);
       commitFlowSnapshotImmediately("flow-add-node", nextNodes);
-      setAddPanel((v) => ({ ...v, visible: false }));
+      setAddPanel((v) => (v.visible ? { ...v, visible: false } : v));
       return id;
     },
     [aiProvider, setNodes, commitFlowSnapshotImmediately]
@@ -21787,7 +21796,7 @@ function FlowInner() {
       })) as any[];
       setNodes((ns) => ns.concat(newNodes));
       setEdges((es) => es.concat(newEdges));
-      setAddPanel((v) => ({ ...v, visible: false }));
+      setAddPanel((v) => (v.visible ? { ...v, visible: false } : v));
     },
     [setNodes, setEdges]
   );
