@@ -350,14 +350,11 @@ export const useDrawingTools = ({
     }
 
     if (brushStrokeRef.current) {
-      brushStrokeRef.current.stamp(
+      brushStrokeRef.current.queuePoint(
         point,
         options?.pressure ?? 0.5,
         ensureDrawingLayer(),
       );
-      if (paper.project && (paper.project as any).emit) {
-        (paper.project as any).emit('change');
-      }
       return;
     }
 
@@ -905,6 +902,7 @@ export const useDrawingTools = ({
         }
       } else if (brushStrokeRef.current && drawMode === 'free' && !isEraser) {
         const layer = ensureDrawingLayer();
+        brushStrokeRef.current.flushPendingPaint(layer);
         const completedRaster = brushStrokeRef.current.finalize(layer);
         brushStrokeRef.current = null;
         pathRef.current = null;

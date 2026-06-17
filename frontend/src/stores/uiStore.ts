@@ -153,7 +153,9 @@ export const useUIStore = create<UIState>()(
       setShowBounds: (show) => set({ showBounds: show }),
       setShowFlowPanel: (show) => set({ showFlowPanel: show }),
       setShowSandboxPanel: (show) => set({ showSandboxPanel: show }),
-      setShowTemplatePanel: (show) => set({ showTemplatePanel: show }),
+      setShowTemplatePanel: (show) => set((state) => (
+        state.showTemplatePanel === show ? state : { showTemplatePanel: show }
+      )),
       setShowDebugPanel: (show) => set({ showDebugPanel: show }),
       setSmartPlacementOffsetHorizontal: () => set(() => ({ smartPlacementOffsetHorizontal: SMART_PLACEMENT_OFFSET_HORIZONTAL })),
       setSmartPlacementOffsetVertical: () => set(() => ({ smartPlacementOffsetVertical: SMART_PLACEMENT_OFFSET_VERTICAL })),

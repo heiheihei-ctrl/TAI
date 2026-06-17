@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { logger } from '@/utils/logger';
 import { createSafeStorage } from './storageUtils';
+import { isBitmapBrushSupported } from '@/utils/abrBrushSupport';
 
 // 工具类型定义
 export type DrawMode = 'select' | 'marquee' | 'pointer' | 'free' | 'line' | 'rect' | 'circle' | 'polyline' | 'text' | 'image' | 'quick-image' | '3d-model' | 'screenshot';
@@ -120,6 +121,10 @@ export const useToolStore = create<ToolState>()(
         },
 
         setAbrBrushId: (brushId) => {
+          if (brushId && !isBitmapBrushSupported()) {
+            set({ abrBrushId: null });
+            return;
+          }
           set({ abrBrushId: brushId });
         },
 
@@ -172,7 +177,9 @@ export const useToolStore = create<ToolState>()(
             lineStyle: isLineStyle(state.lineStyle) ? state.lineStyle : 'solid',
             hasFill: typeof state.hasFill === 'boolean' ? state.hasFill : false,
             abrBrushId:
-              typeof state.abrBrushId === 'string' ? state.abrBrushId : null,
+              typeof state.abrBrushId === 'string' && isBitmapBrushSupported()
+                ? state.abrBrushId
+                : null,
           };
         },
         // 持久化工具设置，但不包括橡皮擦状态（通常是临时的）

@@ -5,6 +5,7 @@ import { loadAbrBrushes } from '@/services/abrBrushService';
 import type { AbrBrushPreset } from '@/types/abrBrush';
 import { useLocaleText } from '@/utils/localeText';
 import { getBrushDisplayName } from '@/utils/abrBrushLabels';
+import { isBitmapBrushSupported } from '@/utils/abrBrushSupport';
 import AbrBrushLibraryModal from './AbrBrushLibraryModal';
 
 const QUICK_BRUSH_COUNT = 10;
@@ -21,6 +22,7 @@ const AbrBrushPicker: React.FC<AbrBrushPickerProps> = ({
   onSelectBrush,
 }) => {
   const { lt, language } = useLocaleText();
+  const bitmapBrushSupported = isBitmapBrushSupported();
   const [isOpen, setIsOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [brushes, setBrushes] = useState<AbrBrushPreset[]>([]);
@@ -32,15 +34,16 @@ const AbrBrushPicker: React.FC<AbrBrushPickerProps> = ({
   const loadStartedRef = useRef(false);
 
   useEffect(() => {
+    if (!bitmapBrushSupported) return;
     loadAbrBrushes()
       .then((presets) => {
         setBrushes(presets);
       })
       .catch(() => {});
-  }, []);
+  }, [bitmapBrushSupported]);
 
   useEffect(() => {
-    if (!isOpen || brushes.length > 0 || loadStartedRef.current) return;
+    if (!bitmapBrushSupported || !isOpen || brushes.length > 0 || loadStartedRef.current) return;
 
     loadStartedRef.current = true;
     let cancelled = false;
@@ -67,7 +70,7 @@ const AbrBrushPicker: React.FC<AbrBrushPickerProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, brushes.length, lt]);
+  }, [bitmapBrushSupported, isOpen, brushes.length, lt]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -188,9 +191,18 @@ const AbrBrushPicker: React.FC<AbrBrushPickerProps> = ({
                 <span className='truncate'>{lt('矢量笔', 'Vector')}</span>
               </button>
 
-              {quickBrushes.map(renderBrushButton)}
+              {!bitmapBrushSupported && (
+                <div className='px-2 py-2 text-[11px] leading-relaxed text-amber-700'>
+                  {lt(
+                    '当前设备不支持位图笔刷，已自动使用矢量笔。',
+                    'Bitmap brushes are unavailable on this device; vector pen is used instead.',
+                  )}
+                </div>
+              )}
 
-              {hasMoreBrushes && (
+              {bitmapBrushSupported && quickBrushes.map(renderBrushButton)}
+
+              {bitmapBrushSupported && hasMoreBrushes && (
                 <button
                   type='button'
                   className='mt-1 flex h-9 w-full items-center justify-center rounded-lg border border-dashed border-gray-300 bg-white/80 px-2 text-xs font-medium text-gray-600 transition-colors hover:border-gray-400 hover:bg-gray-50 hover:text-gray-900'

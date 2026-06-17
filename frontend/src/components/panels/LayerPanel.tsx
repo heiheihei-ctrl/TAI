@@ -120,6 +120,39 @@ const LayerPanel: React.FC = () => {
     // 异步缩略图生成队列
     const thumbGenerationQueue = useRef<Set<string>>(new Set());
     const isGeneratingThumb = useRef(false);
+    const isScanningLayerItemsRef = useRef(false);
+
+    const areLayerItemsEqual = (
+        prev: Record<string, LayerItemData[]>,
+        next: Record<string, LayerItemData[]>,
+    ): boolean => {
+        const prevKeys = Object.keys(prev);
+        const nextKeys = Object.keys(next);
+        if (prevKeys.length !== nextKeys.length) return false;
+
+        for (const key of prevKeys) {
+            const prevItems = prev[key];
+            const nextItems = next[key];
+            if (!nextItems || prevItems.length !== nextItems.length) return false;
+
+            for (let i = 0; i < prevItems.length; i++) {
+                const a = prevItems[i];
+                const b = nextItems[i];
+                if (
+                    a.id !== b.id ||
+                    a.name !== b.name ||
+                    a.visible !== b.visible ||
+                    a.locked !== b.locked ||
+                    a.selected !== b.selected ||
+                    a.type !== b.type
+                ) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    };
 
     // 预测图元重排序后的实际位置，用于指示线显示
     const predictItemInsertPosition = (sourceItemId: string, targetItemId: string, placeAbove: boolean) => {
@@ -191,7 +224,8 @@ const LayerPanel: React.FC = () => {
             const isScalebar = item.data?.type === 'scalebar';
             const isImageGroupBlock = item.data?.type === 'image-group';
             const isImageGroupTitle = item.data?.type === 'image-group-title';
-            const shouldFilter = isHelper === true || isGrid || isScalebar || isImageGroupBlock || isImageGroupTitle;
+            const isAbrBrushPreview = item.data?.type === 'abr-brush-preview';
+            const shouldFilter = isHelper === true || isGrid || isScalebar || isImageGroupBlock || isImageGroupTitle || isAbrBrushPreview;
             return !shouldFilter;
         }).reverse();
 
@@ -251,8 +285,10 @@ const LayerPanel: React.FC = () => {
                 }
             }
 
-            // 优先使用已有的自定义名称
-            if (item.data?.customName) {
+            // 优先使用已有的自定义名称；ABR 笔刷笔画用 brushName，避免扫描时反复写 data 触发 change 循环
+            if (item.data?.type === 'abr-brush-stroke' || item.data?.isAbrBrushRaster) {
+                name = item.data?.customName || item.data?.brushName || lt('笔刷', 'Brush');
+            } else if (item.data?.customName) {
                 name = item.data.customName;
             } else {
                 const baseName = typeNames[type] || lt('图元', 'Item');
@@ -284,13 +320,23 @@ const LayerPanel: React.FC = () => {
 
     // 更新所有图层的图元
     const updateAllLayerItems = () => {
-        const newLayerItems: Record<string, LayerItemData[]> = {};
+        if (isScanningLayerItemsRef.current) return;
 
-        layers.forEach(layer => {
-            const items = scanLayerItems(layer.id);
-            newLayerItems[layer.id] = items;
-        });
-        setLayerItems(newLayerItems);
+        isScanningLayerItemsRef.current = true;
+        try {
+            const newLayerItems: Record<string, LayerItemData[]> = {};
+
+            layers.forEach(layer => {
+                const items = scanLayerItems(layer.id);
+                newLayerItems[layer.id] = items;
+            });
+
+            setLayerItems((prev) => (
+                areLayerItemsEqual(prev, newLayerItems) ? prev : newLayerItems
+            ));
+        } finally {
+            isScanningLayerItemsRef.current = false;
+        }
     };
 
     // 监听 Paper.js 的变化
@@ -305,6 +351,8 @@ const LayerPanel: React.FC = () => {
         let pendingUpdate = false;
 
         const handleChange = () => {
+            if (isScanningLayerItemsRef.current) return;
+
             const now = Date.now();
             if (now - lastUpdateTime > throttleDelay) {
                 updateAllLayerItems();

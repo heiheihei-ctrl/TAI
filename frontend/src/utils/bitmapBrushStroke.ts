@@ -66,6 +66,11 @@ export class BitmapBrushStroke {
   private distanceSinceLastStamp = 0;
   private previewRaster: paper.Raster | null = null;
   private stampCanvas: HTMLCanvasElement;
+  private previewLayer: paper.Layer | null = null;
+  private pendingPoint: paper.Point | null = null;
+  private pendingPressure = 0.5;
+  private needsPaint = false;
+  private paintRafId: number | null = null;
 
   constructor(
     private readonly preset: AbrBrushPreset,
@@ -205,11 +210,15 @@ export class BitmapBrushStroke {
     this.previewRaster.position = center;
   }
 
-  stamp(point: paper.Point, pressure = 0.5, layer?: paper.Layer) {
+  private stampSegment(point: paper.Point, pressure = 0.5, layer?: paper.Layer) {
     if (!this.lastPoint) {
       this.paintStamp(point, pressure);
       this.lastPoint = point.clone();
-      if (layer) this.updatePreviewRaster(layer);
+      const targetLayer = layer ?? this.previewLayer;
+      if (targetLayer) {
+        this.previewLayer = targetLayer;
+        this.updatePreviewRaster(targetLayer);
+      }
       return;
     }
 
@@ -232,12 +241,68 @@ export class BitmapBrushStroke {
     this.distanceSinceLastStamp = traveled - segmentLength;
     this.lastPoint = point.clone();
 
-    if (layer) {
-      this.updatePreviewRaster(layer);
+    const targetLayer = layer ?? this.previewLayer;
+    if (targetLayer) {
+      this.previewLayer = targetLayer;
+      this.updatePreviewRaster(targetLayer);
     }
   }
 
+  private schedulePaintFlush() {
+    if (this.paintRafId !== null) return;
+    this.paintRafId = requestAnimationFrame(() => {
+      this.paintRafId = null;
+      this.flushQueuedPaint();
+    });
+  }
+
+  private flushQueuedPaint() {
+    if (!this.needsPaint || !this.pendingPoint) return;
+
+    const point = this.pendingPoint;
+    const pressure = this.pendingPressure;
+    const layer = this.previewLayer ?? undefined;
+
+    this.needsPaint = false;
+    this.pendingPoint = null;
+
+    this.stampSegment(point, pressure, layer);
+  }
+
+  flushPendingPaint(layer?: paper.Layer) {
+    if (this.paintRafId !== null) {
+      cancelAnimationFrame(this.paintRafId);
+      this.paintRafId = null;
+    }
+    if (layer) {
+      this.previewLayer = layer;
+    }
+    if (this.pendingPoint) {
+      this.needsPaint = true;
+    }
+    this.flushQueuedPaint();
+  }
+
+  /** pointerdown：立即落笔 */
+  stamp(point: paper.Point, pressure = 0.5, layer?: paper.Layer) {
+    this.flushPendingPaint(layer);
+    this.stampSegment(point, pressure, layer);
+  }
+
+  /** pointermove：合并到 rAF，避免每帧多次更新 Paper.js */
+  queuePoint(point: paper.Point, pressure = 0.5, layer?: paper.Layer) {
+    this.pendingPoint = point.clone();
+    this.pendingPressure = pressure;
+    if (layer) {
+      this.previewLayer = layer;
+    }
+    this.needsPaint = true;
+    this.schedulePaintFlush();
+  }
+
   finalize(layer: paper.Layer): paper.Raster {
+    this.flushPendingPaint(layer);
+
     if (this.previewRaster) {
       this.syncRasterBinding(this.previewRaster);
       this.previewRaster.data = {
@@ -278,6 +343,12 @@ export class BitmapBrushStroke {
   }
 
   cancel() {
+    if (this.paintRafId !== null) {
+      cancelAnimationFrame(this.paintRafId);
+      this.paintRafId = null;
+    }
+    this.pendingPoint = null;
+    this.needsPaint = false;
     try {
       this.previewRaster?.remove();
     } catch {}

@@ -57,6 +57,7 @@ import { useVideoTool } from "./hooks/useVideoTool";
 import { useDrawingTools } from "./hooks/useDrawingTools";
 import { getDryMediaBrushById } from "@/services/abrBrushService";
 import type { AbrBrushPreset } from "@/types/abrBrush";
+import { isBitmapBrushSupported } from "@/utils/abrBrushSupport";
 import { useSelectionTool } from "./hooks/useSelectionTool";
 import { usePathEditor } from "./hooks/usePathEditor";
 import { useEraserTool } from "./hooks/useEraserTool";
@@ -549,7 +550,7 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
 
   useEffect(() => {
     let cancelled = false;
-    if (!abrBrushId || isEraser) {
+    if (!abrBrushId || isEraser || !isBitmapBrushSupported()) {
       setAbrBrushPreset(null);
       return () => {
         cancelled = true;
