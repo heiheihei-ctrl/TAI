@@ -1,11 +1,11 @@
-import { useState, useEffect, useMemo /* , useRef */ } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { useAuthStore } from "@/stores/authStore";
-import { Loader2, Eye, EyeOff, Check /* , RefreshCw */ } from "lucide-react";
-import { authApi /* , type WechatOfficialSessionDetail */ } from "@/services/authApi";
+import { Loader2, Eye, EyeOff, Check, RefreshCw } from "lucide-react";
+import { authApi, type WechatOfficialSessionDetail } from "@/services/authApi";
 import ForgotPasswordModal from "@/components/auth/ForgotPasswordModal";
 import AgreementConsentModal from "@/components/auth/AgreementConsentModal";
 import { useTranslation } from "react-i18next";
@@ -15,8 +15,8 @@ export default function LoginPage() {
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
-  const wechatLoginEnabled = false; // 微信登录暂时关闭
-  const [tab, setTab] = useState<"wechat" | "password" | "sms">("password");
+  const wechatLoginEnabled = true;
+  const [tab, setTab] = useState<"wechat" | "password" | "sms">("wechat");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [phone, setPhone] = useState("");
@@ -27,7 +27,6 @@ export default function LoginPage() {
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [sendCooldown, setSendCooldown] = useState(0);
   const [hasSentCode, setHasSentCode] = useState(false);
-  /* 微信登录暂时关闭
   const [wechatSession, setWechatSession] = useState<WechatOfficialSessionDetail | null>(null);
   const [wechatLoading, setWechatLoading] = useState(false);
   const [wechatRefreshing, setWechatRefreshing] = useState(false);
@@ -38,8 +37,7 @@ export default function LoginPage() {
   const [wechatBindSubmitting, setWechatBindSubmitting] = useState(false);
   const consumingRef = useRef(false);
   const consumedSessionIdRef = useRef<string | null>(null);
-  */
-  const { login, loginWithSms, error, user /* , setAuthenticatedUser */ } = useAuthStore();
+  const { login, loginWithSms, error, user, setAuthenticatedUser } = useAuthStore();
 
   const returnTo = useMemo(() => {
     const fromState = typeof location.state?.from === "string" ? location.state.from : "";
@@ -57,7 +55,6 @@ export default function LoginPage() {
     }
   }, [user, navigate, returnTo]);
 
-  /* 微信登录暂时关闭
   const finalizeWechatLogin = (nextUser: any, nextReturnTo?: string) => {
     setAuthenticatedUser(nextUser, "server");
     navigate(nextReturnTo || returnTo, { replace: true });
@@ -138,7 +135,6 @@ export default function LoginPage() {
 
     return () => window.clearTimeout(timer);
   }, [wechatLoginEnabled, tab, wechatSession, t]);
-  */
 
   const performLogin = async () => {
     setIsSubmitting(true);
@@ -223,7 +219,6 @@ export default function LoginPage() {
     return () => clearInterval(timer);
   }, [sendCooldown]);
 
-  /* 微信登录暂时关闭
   const handleWechatBindSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!wechatSession?.id) return;
@@ -254,7 +249,6 @@ export default function LoginPage() {
     if (!canRefreshWechatQr) return;
     void createWechatSession("refresh");
   };
-  */
 
   const agreementSection = (
     <div className='flex items-center gap-2'>
@@ -310,7 +304,6 @@ export default function LoginPage() {
             <div className='flex min-h-0 w-full max-w-xl flex-col'>
               {/* Tab 切换 */}
               <div className='mb-6 flex shrink-0 items-center justify-center gap-12 sm:mb-8 sm:gap-16'>
-                {/* 微信登录暂时关闭
                 {wechatLoginEnabled && (
                   <button
                     className='flex flex-col items-center'
@@ -325,7 +318,6 @@ export default function LoginPage() {
                     <span className={tab === "wechat" ? "mt-2 block h-0.5 w-full bg-blue-400 rounded-full" : "mt-2 block h-0.5 w-0"} />
                   </button>
                 )}
-                */}
                 <button
                   className='flex flex-col items-center'
                   onClick={() => setTab("password")}
@@ -347,12 +339,137 @@ export default function LoginPage() {
               </div>
 
               <div className='min-h-0 flex-1 overflow-y-auto px-1 pb-1'>
-                {/* 微信登录暂时关闭
                 {wechatLoginEnabled && tab === "wechat" ? (
                 <div className='w-full space-y-5 sm:space-y-6'>
-                  ...
+                  <div className='flex flex-col items-center gap-4 text-white'>
+                    <button
+                      type='button'
+                      onClick={handleWechatQrRefresh}
+                      disabled={!canRefreshWechatQr}
+                      className={`group relative flex items-center justify-center overflow-hidden rounded-2xl bg-white/95 p-2.5 shadow-lg transition-transform duration-200 ${
+                        canRefreshWechatQr ? "cursor-pointer hover:scale-[1.01]" : "cursor-default"
+                      } ${wechatRefreshing ? "cursor-wait" : ""}`}
+                      aria-label={t("auth.login.wechatRefresh")}
+                    >
+                      {wechatLoading ? (
+                        <div className='flex h-40 w-40 flex-col items-center justify-center gap-3 text-slate-600'>
+                          <Loader2 className='h-8 w-8 animate-spin' />
+                          <span className='text-sm'>{t("auth.login.wechatLoading")}</span>
+                        </div>
+                      ) : wechatSession?.qrCodeUrl ? (
+                        <div className='relative h-40 w-40'>
+                          <img
+                            src={wechatSession.qrCodeUrl}
+                            alt={t("auth.login.wechatScanAlt")}
+                            className='h-full w-full rounded-xl object-contain'
+                          />
+                          {isWechatQrExpired && (
+                            <span className='pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-slate-600/0 opacity-0 transition-all duration-200 group-hover:bg-slate-600/60 group-hover:opacity-100 group-hover:backdrop-grayscale'>
+                              <RefreshCw className={`h-6 w-6 text-white drop-shadow-md ${wechatRefreshing ? "animate-spin" : ""}`} strokeWidth={2.5} />
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className='flex h-40 w-40 items-center justify-center text-center text-sm text-slate-500'>
+                          {t("auth.login.wechatUnavailable")}
+                        </div>
+                      )}
+                    </button>
+
+                    <div className='space-y-1 text-center'>
+                      <p className='text-sm text-white'>{t("auth.login.wechatHint")}</p>
+                    </div>
+
+                    {wechatSession?.status === "authorized" && (
+                      <div className='text-sm text-blue-300'>{t("auth.login.wechatAuthorizing")}</div>
+                    )}
+
+                    {wechatSession?.status === "expired" && (
+                      <div className='text-sm text-amber-300'>{t("auth.login.wechatExpired")}</div>
+                    )}
+
+                    {wechatSession?.needsPhoneBind && (
+                      <div className='w-full rounded-xl border border-blue-400/20 bg-black/20 p-4'>
+                        <div className='mb-4 flex items-center gap-3'>
+                          {wechatSession.avatarUrl ? (
+                            <img
+                              src={wechatSession.avatarUrl}
+                              alt={wechatSession.displayName || wechatSession.nickname || "wechat"}
+                              className='h-11 w-11 rounded-full object-cover'
+                            />
+                          ) : (
+                            <div className='flex h-11 w-11 items-center justify-center rounded-full bg-blue-500/30 text-sm font-semibold text-blue-200'>
+                              {(wechatSession.displayName || wechatSession.nickname || "微").slice(0, 1)}
+                            </div>
+                          )}
+                          <p className='text-sm text-white/90'>
+                            {wechatSession.displayName
+                              ? t("auth.login.wechatBindHintWithName", { name: wechatSession.displayName })
+                              : t("auth.login.wechatBindHint")}
+                          </p>
+                        </div>
+
+                        <form onSubmit={handleWechatBindSubmit} className='space-y-3'>
+                          <Input
+                            placeholder={t("auth.login.phonePlaceholder")}
+                            value={wechatBindPhone}
+                            onChange={(e) => setWechatBindPhone(e.target.value)}
+                            className='bg-[#0d2847] border-transparent text-gray-300 placeholder:text-gray-400 focus:bg-[#144272] focus:border-transparent transition-all duration-200 rounded-xl h-12'
+                          />
+                          <div className='relative flex items-center rounded-xl h-12 bg-[#0d2847] border-transparent focus-within:bg-[#144272] transition-all duration-200'>
+                            <Input
+                              placeholder={t("auth.login.codePlaceholder")}
+                              value={wechatBindCode}
+                              onChange={(e) => setWechatBindCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                              maxLength={6}
+                              className='flex-1 bg-transparent border-0 text-gray-300 placeholder:text-gray-400 focus:bg-transparent focus:border-0 focus:ring-0 focus-visible:ring-0 h-full pr-2 shadow-none'
+                            />
+                            <div className='h-5 w-px bg-white/20 shrink-0' />
+                            <button
+                              type='button'
+                              onClick={() => void sendSmsCode(wechatBindPhone)}
+                              disabled={sendCooldown > 0 || !wechatBindPhone.trim()}
+                              className='px-4 text-sm text-blue-400 hover:text-blue-300 transition-colors disabled:text-blue-400/50 disabled:cursor-not-allowed whitespace-nowrap shrink-0 h-full'
+                            >
+                              {sendCooldown > 0
+                                ? `${sendCooldown}秒后重新获取`
+                                : hasSentCode
+                                  ? "重新发送"
+                                  : "发送"}
+                            </button>
+                          </div>
+                          <Input
+                            placeholder={t("auth.register.invitePlaceholder")}
+                            value={wechatInviteCode}
+                            onChange={(e) => setWechatInviteCode(e.target.value)}
+                            className='bg-[#0d2847] border-transparent text-gray-300 placeholder:text-gray-400 focus:bg-[#144272] focus:border-transparent transition-all duration-200 rounded-xl h-12'
+                          />
+                          <Button
+                            type='submit'
+                            className='w-full bg-blue-500 hover:bg-blue-600 text-white border-transparent rounded-xl h-12 font-medium backdrop-blur-sm transition-all duration-200 disabled:opacity-70 hover:shadow-lg'
+                            disabled={wechatBindSubmitting}
+                          >
+                            {wechatBindSubmitting ? (
+                              <>
+                                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                                {t("auth.login.wechatBindSubmitLoading")}
+                              </>
+                            ) : (
+                              t("auth.login.wechatBindSubmit")
+                            )}
+                          </Button>
+                        </form>
+                      </div>
+                    )}
+
+                    {(wechatError || (tab === "wechat" && error)) && (
+                      <div className='w-full text-center text-sm text-red-300'>
+                        {wechatError || error}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              ) : */ tab === "password" ? (
+              ) : tab === "password" ? (
                 <form onSubmit={onSubmit} className='space-y-5 sm:space-y-6 max-w-md mx-auto'>
                   <div className="relative">
                     <img src="/register1.png" alt="" className="absolute left-6 top-1/2 -translate-y-1/2 h-5 w-auto z-10 pointer-events-none" />
