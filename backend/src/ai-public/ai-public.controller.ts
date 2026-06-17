@@ -203,9 +203,13 @@ export class AiPublicController {
   })
   async testBackgroundRemoval() {
     this.logger.log('🧪 [PUBLIC] Testing background removal service...');
+    const info = await this.backgroundRemoval.getInfo();
     return {
-      message: 'Background removal service is accessible',
+      message: info.available
+        ? 'Background removal service is ready'
+        : 'Background removal service is not ready',
       timestamp: new Date().toISOString(),
+      ...info,
     };
   }
 

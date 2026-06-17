@@ -14,17 +14,8 @@ import { ConfigService } from '@nestjs/config';
 export class BackgroundRemovalService {
   private readonly logger = new Logger(BackgroundRemovalService.name);
   private removalModule: any = null;
-  private localModuleAvailable: boolean | null = null; // null = 未测试, true = 可用, false = 不可用
-  private readonly isWindows = process.platform === 'win32';
 
-  constructor(private readonly configService: ConfigService) {
-    if (this.isWindows) {
-      this.logger.warn(
-        '⚠️ Windows detected. Local background removal will run in isolated best-effort mode. ' +
-        'If local ONNX fails, configure REMOVE_BG_API_KEY for remove.bg fallback.'
-      );
-    }
-  }
+  constructor(private readonly configService: ConfigService) {}
 
   private getRemoveBgApiKey(): string {
     return (this.configService.get<string>('REMOVE_BG_API_KEY') || process.env.REMOVE_BG_API_KEY || '').trim();
@@ -47,11 +38,39 @@ export class BackgroundRemovalService {
     return String(error);
   }
 
-  private resolveRemovalModuleEntry(): string {
-    const packageSpec = '@imgly/background-removal-node';
-    const lookupPaths = [__dirname, process.cwd()];
+  /** 解析 backend 根目录（含 package.json / node_modules） */
+  private resolveBackendRoot(): string {
+    const candidates = [
+      path.resolve(__dirname, '../../..'),
+      process.cwd(),
+      path.resolve(process.cwd(), 'backend'),
+    ];
 
-    for (const basePath of lookupPaths) {
+    for (const dir of candidates) {
+      const pkgPath = path.join(dir, 'package.json');
+      if (!fs.existsSync(pkgPath)) continue;
+      try {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { name?: string };
+        if (pkg.name === 'tanva-server') {
+          return dir;
+        }
+      } catch {
+        // ignore invalid package.json
+      }
+    }
+
+    return process.cwd();
+  }
+
+  private getModuleLookupPaths(): string[] {
+    const root = this.resolveBackendRoot();
+    return Array.from(new Set([__dirname, root, process.cwd(), path.resolve(root, '..')]));
+  }
+
+  private tryResolveRemovalModuleEntry(): string | null {
+    const packageSpec = '@imgly/background-removal-node';
+
+    for (const basePath of this.getModuleLookupPaths()) {
       try {
         return require.resolve(packageSpec, { paths: [basePath] });
       } catch {
@@ -59,13 +78,19 @@ export class BackgroundRemovalService {
       }
     }
 
-    return require.resolve(packageSpec);
+    return null;
+  }
+
+  private resolveRemovalModuleEntry(): string {
+    const entry = this.tryResolveRemovalModuleEntry();
+    if (entry) {
+      return entry;
+    }
+    return require.resolve('@imgly/background-removal-node');
   }
 
   /**
    * 使用 remove.bg API 移除背景
-   * @param imageBuffer 图像 Buffer
-   * @returns 透明PNG的base64数据
    */
   private async removeBackgroundViaRemoveBg(imageBuffer: Buffer): Promise<string> {
     const apiKey = this.getRemoveBgApiKey();
@@ -101,58 +126,104 @@ export class BackgroundRemovalService {
   }
 
   /**
-   * 延迟加载本地背景移除模块
-   * @imgly/background-removal-node 模块较大,只在需要时加载
+   * 延迟加载本地背景移除模块（失败不缓存，便于部署修复后自动恢复）
    */
   private async getRemovalModule() {
     if (this.removalModule) {
       return this.removalModule;
     }
 
-    // 如果已知本地模块不可用，直接抛出错误
-    if (this.localModuleAvailable === false) {
-      throw new Error('Local background removal module is not available on this system');
-    }
-
     try {
       this.logger.log('📦 Loading @imgly/background-removal-node module...');
       const entryPath = this.resolveRemovalModuleEntry();
       this.logger.log(`📦 Resolved @imgly/background-removal-node entry: ${entryPath}`);
-      // 使用 Node 的真实解析结果加载，兼容 pnpm/软链接布局。
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const mod = require(entryPath);
       this.removalModule = mod;
-      this.localModuleAvailable = true;
       this.logger.log('✅ @imgly/background-removal-node loaded successfully');
       return mod;
     } catch (error) {
-      this.localModuleAvailable = false;
       const detail = this.summarizeLoaderError(error);
       this.logger.error(`❌ Failed to load @imgly/background-removal-node: ${detail}`);
-      throw new Error(
-        `Background removal module is not available. ${detail}`
-      );
+      throw new Error(`Background removal module is not available. ${detail}`);
     }
   }
 
-  /**
-   * 使用本地 ONNX 模块移除背景
-   */
-  private async removeBackgroundLocal(imageBuffer: Buffer, mimeType: string): Promise<string> {
-    // 优先走隔离 worker，避免在主进程加载 ONNX（Linux 生产环境更稳定）
-    if (this.canAttemptLocalRemoval()) {
-      return this.removeBackgroundLocalIsolated(imageBuffer, mimeType);
+  private resolveLocalWorkerPath(): string | null {
+    const workerExt = __filename.endsWith('.ts') ? 'ts' : 'js';
+    const root = this.resolveBackendRoot();
+    const candidates = [
+      path.resolve(__dirname, `../workers/background-removal.worker.${workerExt}`),
+      path.resolve(root, 'dist/ai/workers/background-removal.worker.js'),
+      path.resolve(root, 'src/ai/workers/background-removal.worker.ts'),
+    ];
+
+    return candidates.find((candidate) => fs.existsSync(candidate)) ?? null;
+  }
+
+  private tryResolveLocalModelDistDir(): string | null {
+    const packageSpec = '@imgly/background-removal-node/package.json';
+
+    for (const basePath of this.getModuleLookupPaths()) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const packageJsonPath = require.resolve(packageSpec, { paths: [basePath] });
+        const packageDir = path.dirname(packageJsonPath);
+        const distDir = path.join(packageDir, 'dist');
+        const resourcesPath = path.join(distDir, 'resources.json');
+        if (fs.existsSync(resourcesPath)) {
+          return distDir;
+        }
+      } catch {
+        // ignore and continue fallback candidates
+      }
     }
 
-    // 将Buffer转换为Blob并指定正确的MIME type
-    const blob = new Blob([imageBuffer], { type: mimeType || 'image/png' });
+    const root = this.resolveBackendRoot();
+    const fallbackDirs = [
+      path.join(root, 'node_modules/@imgly/background-removal-node/dist'),
+      path.join(process.cwd(), 'node_modules/@imgly/background-removal-node/dist'),
+    ];
 
-    // 调用背景移除函数
+    for (const dir of fallbackDirs) {
+      if (fs.existsSync(path.join(dir, 'resources.json'))) {
+        return dir;
+      }
+    }
+
+    return null;
+  }
+
+  private hasLocalResources(): boolean {
+    return this.tryResolveLocalModelDistDir() !== null;
+  }
+
+  private canAttemptAnyLocalRemoval(): boolean {
+    return Boolean(this.resolveLocalWorkerPath()) || this.tryResolveRemovalModuleEntry() !== null;
+  }
+
+  /**
+   * 使用本地 ONNX 模块移除背景：worker 优先，失败再回退主进程
+   */
+  private async removeBackgroundLocal(imageBuffer: Buffer, mimeType: string): Promise<string> {
+    const workerPath = this.resolveLocalWorkerPath();
+    if (workerPath) {
+      try {
+        return await this.removeBackgroundLocalIsolated(imageBuffer, mimeType, workerPath);
+      } catch (workerError) {
+        const workerMessage =
+          workerError instanceof Error ? workerError.message : String(workerError);
+        this.logger.warn(
+          `⚠️ Isolated worker failed (${workerMessage}), trying in-process ONNX...`
+        );
+      }
+    }
+
+    const blob = new Blob([imageBuffer], { type: mimeType || 'image/png' });
     const mod = await this.getRemovalModule();
     const publicPath = this.resolveLocalModelPublicPath();
 
-    // 添加超时保护，防止 ONNX 处理卡死
-    const timeoutMs = 120000; // 2分钟超时
+    const timeoutMs = 120000;
     const resultPromise = mod.removeBackground(blob, {
       publicPath,
       output: {
@@ -165,21 +236,37 @@ export class BackgroundRemovalService {
       setTimeout(() => reject(new Error('Background removal timed out')), timeoutMs);
     });
 
-    const result = await Promise.race([resultPromise, timeoutPromise]) as Blob;
-
-    // 结果是Blob，转换为Buffer
+    const result = (await Promise.race([resultPromise, timeoutPromise])) as Blob;
     const arrayBuffer = await result.arrayBuffer();
     const resultBuffer = Buffer.from(arrayBuffer);
-
-    // 转换为base64
     const resultBase64 = resultBuffer.toString('base64');
 
     this.logger.log(
       `✅ Local background removal completed. Output: ${(resultBuffer.length / 1024).toFixed(2)}KB`
     );
 
-    // 返回带data URI前缀的base64 (PNG格式)
     return `data:image/png;base64,${resultBase64}`;
+  }
+
+  private buildUnavailableMessage(): string {
+    const diagnostics = this.getDiagnostics();
+    const hints: string[] = [];
+
+    if (!diagnostics.hasRemoveBgKey) {
+      hints.push('在 backend/.env 配置 REMOVE_BG_API_KEY');
+    }
+    if (!diagnostics.moduleInstalled) {
+      hints.push('在后端目录执行 npm install（需安装 @imgly/background-removal-node）');
+    }
+    if (!diagnostics.workerPath) {
+      hints.push('在后端目录执行 npm run build（需生成 dist/ai/workers/background-removal.worker.js）');
+    }
+    if (!diagnostics.resourcesFound) {
+      hints.push('确认 node_modules/@imgly/background-removal-node/dist/resources.json 存在');
+    }
+
+    const hintText = hints.length > 0 ? hints.join('；') : '请检查后端部署';
+    return `Background removal is unavailable: local ONNX failed and REMOVE_BG_API_KEY is not configured. ${hintText}`;
   }
 
   private async removeBackgroundWithProviderFallback(
@@ -197,10 +284,8 @@ export class BackgroundRemovalService {
       }
     }
 
-    if (!hasRemoveBgKey && !this.canAttemptLocalRemoval()) {
-      throw new BadRequestException(
-        'Background removal is unavailable: local worker/resources are missing, and REMOVE_BG_API_KEY is not configured.'
-      );
+    if (!hasRemoveBgKey && !this.canAttemptAnyLocalRemoval()) {
+      throw new BadRequestException(this.buildUnavailableMessage());
     }
 
     try {
@@ -221,46 +306,19 @@ export class BackgroundRemovalService {
     }
   }
 
-  private getLocalWorkerPath(): string {
-    const workerExt = __filename.endsWith('.ts') ? 'ts' : 'js';
-    return path.resolve(__dirname, `../workers/background-removal.worker.${workerExt}`);
-  }
-
-  private hasLocalWorker(): boolean {
-    return fs.existsSync(this.getLocalWorkerPath());
-  }
-
-  private hasLocalResources(): boolean {
-    try {
-      this.resolveLocalModelPublicPath();
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  private canAttemptLocalRemoval(): boolean {
-    return this.hasLocalWorker() && this.hasLocalResources();
-  }
-
   private async removeBackgroundLocalIsolated(
     imageBuffer: Buffer,
     mimeType: string,
+    workerPath: string,
   ): Promise<string> {
-    const workerPath = this.getLocalWorkerPath();
-    if (!fs.existsSync(workerPath)) {
-      this.localModuleAvailable = false;
-      throw new Error(`Background removal worker not found: ${workerPath}`);
-    }
-
-    const args = __filename.endsWith('.ts')
+    const args = workerPath.endsWith('.ts')
       ? ['-r', 'ts-node/register/transpile-only', workerPath]
       : [workerPath];
 
-    this.logger.log('🧩 Running local background removal in isolated worker process');
+    this.logger.log(`🧩 Running local background removal in isolated worker: ${workerPath}`);
 
     const child = spawn(process.execPath, args, {
-      cwd: path.resolve(__dirname, '../../..'),
+      cwd: this.resolveBackendRoot(),
       env: process.env,
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
@@ -275,7 +333,6 @@ export class BackgroundRemovalService {
 
       const timer = setTimeout(() => {
         child.kill('SIGKILL');
-        this.localModuleAvailable = false;
         if (!settled) {
           settled = true;
           reject(new Error('Background removal worker timed out'));
@@ -299,7 +356,6 @@ export class BackgroundRemovalService {
       });
 
       child.on('error', (error) => {
-        this.localModuleAvailable = false;
         finish(() => reject(error));
       });
 
@@ -316,13 +372,10 @@ export class BackgroundRemovalService {
             };
 
             if (parsed.ok && typeof parsed.imageData === 'string' && parsed.imageData.length > 0) {
-              this.localModuleAvailable = true;
-              const imageData = parsed.imageData;
-              finish(() => resolve(imageData));
+              finish(() => resolve(parsed.imageData as string));
               return;
             }
 
-            this.localModuleAvailable = false;
             finish(() =>
               reject(
                 new Error(
@@ -337,7 +390,6 @@ export class BackgroundRemovalService {
           }
         }
 
-        this.localModuleAvailable = false;
         const crashDetail = trimmedStderr || `exit=${code ?? 'null'} signal=${signal ?? 'null'}`;
         finish(() =>
           reject(
@@ -356,76 +408,48 @@ export class BackgroundRemovalService {
     });
   }
 
-  /**
-   * 解析本地 ONNX 资源路径。
-   * 显式传入 publicPath，避免运行目录(cwd)变化导致资源查找失败。
-   */
   private resolveLocalModelPublicPath(): string {
-    const resolveFromInstalledPackage = (): string | null => {
-      const packageSpec = '@imgly/background-removal-node/package.json';
-      const lookupPaths = [__dirname, process.cwd()];
-
-      for (const basePath of lookupPaths) {
-        try {
-          // 通过 Node 真实模块解析拿到包目录，兼容 pnpm/软链接布局。
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
-          const packageJsonPath = require.resolve(packageSpec, { paths: [basePath] });
-          const packageDir = path.dirname(packageJsonPath);
-          const distDir = path.join(packageDir, 'dist');
-          const resourcesPath = path.join(distDir, 'resources.json');
-          if (fs.existsSync(resourcesPath)) {
-            return distDir;
-          }
-        } catch {
-          // ignore and continue fallback candidates
-        }
-      }
-
-      return null;
-    };
-
-    const candidateDirs = [
-      resolveFromInstalledPackage(),
-      path.resolve(__dirname, '../../../node_modules/@imgly/background-removal-node/dist'),
-      path.resolve(process.cwd(), 'node_modules/@imgly/background-removal-node/dist'),
-    ].filter((value): value is string => typeof value === 'string' && value.length > 0);
-
-    for (const dir of candidateDirs) {
-      const resourcesPath = path.join(dir, 'resources.json');
-      if (fs.existsSync(resourcesPath)) {
-        const fileUrl = pathToFileURL(dir).href;
-        return fileUrl.endsWith('/') ? fileUrl : `${fileUrl}/`;
-      }
+    const distDir = this.tryResolveLocalModelDistDir();
+    if (!distDir) {
+      throw new Error(
+        'Local background removal resources not found. Missing @imgly/background-removal-node/dist/resources.json'
+      );
     }
 
-    throw new Error(
-      'Local background removal resources not found. Missing @imgly/background-removal-node/dist/resources.json'
-    );
+    const fileUrl = pathToFileURL(distDir).href;
+    return fileUrl.endsWith('/') ? fileUrl : `${fileUrl}/`;
   }
 
-  /**
-   * 从base64数据移除背景
-   * @param imageData base64编码的图像数据
-   * @param mimeType 图像MIME类型 (image/png, image/jpeg等)
-   * @returns 透明PNG的base64数据
-   */
+  getDiagnostics(): {
+    backendRoot: string;
+    workerPath: string | null;
+    moduleEntry: string | null;
+    resourcesFound: boolean;
+    moduleInstalled: boolean;
+    hasRemoveBgKey: boolean;
+  } {
+    const moduleEntry = this.tryResolveRemovalModuleEntry();
+    return {
+      backendRoot: this.resolveBackendRoot(),
+      workerPath: this.resolveLocalWorkerPath(),
+      moduleEntry,
+      resourcesFound: this.hasLocalResources(),
+      moduleInstalled: moduleEntry !== null,
+      hasRemoveBgKey: this.hasRemoveBgKey(),
+    };
+  }
+
   async removeBackgroundFromBase64(
     imageData: string,
     mimeType: string = 'image/png'
   ): Promise<string> {
     this.logger.log('🎯 Starting background removal from base64 data');
 
-    // 验证输入
     if (!imageData || typeof imageData !== 'string') {
       throw new BadRequestException('Invalid image data provided');
     }
 
-    // 移除data URI前缀(如果存在)
-    const base64Data = imageData.includes(',')
-      ? imageData.split(',')[1]
-      : imageData;
-
-    // 转换为Buffer
+    const base64Data = imageData.includes(',') ? imageData.split(',')[1] : imageData;
     const buffer = Buffer.from(base64Data, 'base64');
 
     this.logger.log(`📊 Input image: ${(buffer.length / 1024).toFixed(2)}KB, MIME type: ${mimeType}`);
@@ -433,52 +457,35 @@ export class BackgroundRemovalService {
     return this.removeBackgroundWithProviderFallback(buffer, mimeType, 'base64');
   }
 
-  /**
-   * 从URL移除背景
-   * @param imageUrl 图像URL
-   * @returns 透明PNG的base64数据
-   */
   async removeBackgroundFromUrl(imageUrl: string): Promise<string> {
     this.logger.log(`🌐 Fetching image from URL: ${imageUrl}`);
 
-    // 验证URL
     const url = new URL(imageUrl);
     if (!['http:', 'https:'].includes(url.protocol)) {
       throw new BadRequestException('Invalid URL protocol');
     }
 
-    // 获取图像
     const response = await fetch(imageUrl);
     if (!response.ok) {
       throw new BadRequestException(`Failed to fetch image: HTTP ${response.status}`);
     }
 
     const mimeType = response.headers.get('content-type') || 'image/png';
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const buffer = Buffer.from(await response.arrayBuffer());
 
     this.logger.log(`📊 Fetched image: ${(buffer.length / 1024).toFixed(2)}KB, MIME type: ${mimeType}`);
 
     return this.removeBackgroundWithProviderFallback(buffer, mimeType, 'url');
   }
 
-  /**
-   * 从本地文件移除背景
-   * @param filePath 本地文件路径
-   * @returns 透明PNG的base64数据
-   */
   async removeBackgroundFromFile(filePath: string): Promise<string> {
     this.logger.log(`📁 Reading image from file: ${filePath}`);
 
-    // 验证文件存在
     if (!fs.existsSync(filePath)) {
       throw new BadRequestException(`File not found: ${filePath}`);
     }
 
-    // 读取文件
     const fileBuffer = fs.readFileSync(filePath);
-
-    // 确定MIME类型
     const ext = path.extname(filePath).toLowerCase();
     const mimeTypeMap: Record<string, string> = {
       '.png': 'image/png',
@@ -494,32 +501,13 @@ export class BackgroundRemovalService {
     return this.removeBackgroundWithProviderFallback(fileBuffer, mimeType, 'file');
   }
 
-  /**
-   * 检查服务是否可用
-   * @returns 是否可用
-   */
   async isAvailable(): Promise<boolean> {
-    // 如果配置了 remove.bg API Key，服务就是可用的
     if (this.hasRemoveBgKey()) {
       return true;
     }
-
-    if (this.canAttemptLocalRemoval()) {
-      return true;
-    }
-
-    try {
-      await this.getRemovalModule();
-      return true;
-    } catch {
-      return false;
-    }
+    return this.canAttemptAnyLocalRemoval();
   }
 
-  /**
-   * 获取模块信息
-   * @returns 模块版本和特性信息
-   */
   async getInfo(): Promise<{
     available: boolean;
     version?: string;
@@ -527,16 +515,17 @@ export class BackgroundRemovalService {
     provider?: string;
     platform?: string;
     reason?: string;
+    diagnostics?: ReturnType<BackgroundRemovalService['getDiagnostics']>;
   }> {
-    const hasRemoveBgKey = this.hasRemoveBgKey();
+    const diagnostics = this.getDiagnostics();
 
-    // 如果有 remove.bg API Key，优先报告该服务
-    if (hasRemoveBgKey) {
+    if (diagnostics.hasRemoveBgKey) {
       return {
         available: true,
         version: 'remove.bg API',
         provider: 'remove.bg',
         platform: process.platform,
+        diagnostics,
         features: [
           'Remove background with transparency',
           'Support PNG, JPEG, GIF, WebP',
@@ -546,14 +535,16 @@ export class BackgroundRemovalService {
       };
     }
 
-    if (this.canAttemptLocalRemoval()) {
+    if (diagnostics.workerPath || diagnostics.moduleInstalled) {
       return {
         available: true,
-        version: 'isolated-worker',
-        provider: 'local-onnx-worker',
+        version: diagnostics.workerPath ? 'isolated-worker' : 'local-onnx',
+        provider: diagnostics.workerPath ? 'local-onnx-worker' : 'local-onnx',
         platform: process.platform,
-        reason:
-          '将通过隔离子进程尝试本地 ONNX 抠图；若子进程崩溃，主服务不会断开。',
+        diagnostics,
+        reason: diagnostics.workerPath
+          ? '将通过隔离子进程尝试本地 ONNX 抠图；若失败可配置 REMOVE_BG_API_KEY。'
+          : '将尝试主进程本地 ONNX 抠图；若失败可配置 REMOVE_BG_API_KEY。',
         features: [
           'Remove background with transparency',
           'Support PNG, JPEG, GIF, WebP',
@@ -562,30 +553,14 @@ export class BackgroundRemovalService {
       };
     }
 
-    try {
-      const mod = await this.getRemovalModule();
-      return {
-        available: true,
-        version: mod.version || 'unknown',
-        provider: 'local-onnx',
-        platform: process.platform,
-        features: [
-          'Remove background with transparency',
-          'Support PNG, JPEG, GIF, WebP',
-          'Preview mode available',
-          'ONNX model powered',
-        ],
-      };
-    } catch {
-      return {
-        available: false,
-        provider: 'none',
-        platform: process.platform,
-        reason: this.isWindows
-          ? 'Windows 环境下本地 ONNX 抠图为 best-effort；当前本地模块不可用，建议配置 REMOVE_BG_API_KEY 使用 remove.bg 云服务。'
-          : '本地抠图模块不可用，请检查 @imgly/background-removal-node 安装与运行时依赖。',
-        features: [],
-      };
-    }
+    return {
+      available: false,
+      provider: 'none',
+      platform: process.platform,
+      diagnostics,
+      reason:
+        '本地抠图依赖未就绪：请在后端执行 npm install && npm run build，或在 backend/.env 配置 REMOVE_BG_API_KEY。',
+      features: [],
+    };
   }
 }
