@@ -95,6 +95,14 @@ export const useProjectContentStore = create<ProjectContentState>((set) => ({
       }
 
       if (!markDirty) {
+        if (
+          partial.canvas &&
+          baseContent.canvas.zoom === nextContent.canvas.zoom &&
+          baseContent.canvas.panX === nextContent.canvas.panX &&
+          baseContent.canvas.panY === nextContent.canvas.panY
+        ) {
+          return state;
+        }
         return {
           ...state,
           content: nextContent,

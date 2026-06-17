@@ -6866,12 +6866,18 @@ function FlowInner() {
 
   // 把面板可见性和当前页签通知给外部（例如工具栏按钮同步状态）
   const lastPanelBroadcastRef = React.useRef("");
+  const skipInitialPanelBroadcastRef = React.useRef(true);
   React.useEffect(() => {
     const payload = JSON.stringify({
       visible: addPanel.visible,
       tab: addTab,
       allowedTabs: allowedAddTabs,
     });
+    if (skipInitialPanelBroadcastRef.current) {
+      skipInitialPanelBroadcastRef.current = false;
+      lastPanelBroadcastRef.current = payload;
+      return;
+    }
     if (lastPanelBroadcastRef.current === payload) return;
     lastPanelBroadcastRef.current = payload;
     try {
