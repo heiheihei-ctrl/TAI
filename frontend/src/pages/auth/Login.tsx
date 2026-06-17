@@ -244,6 +244,7 @@ export default function LoginPage() {
 
   const isWechatQrExpired = wechatSession?.status === "expired";
   const canRefreshWechatQr = isWechatQrExpired && !wechatRefreshing && !wechatLoading;
+  const needsWechatPhoneBind = Boolean(wechatSession?.needsPhoneBind);
 
   const handleWechatQrRefresh = () => {
     if (!canRefreshWechatQr) return;
@@ -342,56 +343,10 @@ export default function LoginPage() {
                 {wechatLoginEnabled && tab === "wechat" ? (
                 <div className='w-full space-y-5 sm:space-y-6'>
                   <div className='flex flex-col items-center gap-4 text-white'>
-                    <button
-                      type='button'
-                      onClick={handleWechatQrRefresh}
-                      disabled={!canRefreshWechatQr}
-                      className={`group relative flex items-center justify-center overflow-hidden rounded-2xl bg-white/95 p-2.5 shadow-lg transition-transform duration-200 ${
-                        canRefreshWechatQr ? "cursor-pointer hover:scale-[1.01]" : "cursor-default"
-                      } ${wechatRefreshing ? "cursor-wait" : ""}`}
-                      aria-label={t("auth.login.wechatRefresh")}
-                    >
-                      {wechatLoading ? (
-                        <div className='flex h-40 w-40 flex-col items-center justify-center gap-3 text-slate-600'>
-                          <Loader2 className='h-8 w-8 animate-spin' />
-                          <span className='text-sm'>{t("auth.login.wechatLoading")}</span>
-                        </div>
-                      ) : wechatSession?.qrCodeUrl ? (
-                        <div className='relative h-40 w-40'>
-                          <img
-                            src={wechatSession.qrCodeUrl}
-                            alt={t("auth.login.wechatScanAlt")}
-                            className='h-full w-full rounded-xl object-contain'
-                          />
-                          {isWechatQrExpired && (
-                            <span className='pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-slate-600/0 opacity-0 transition-all duration-200 group-hover:bg-slate-600/60 group-hover:opacity-100 group-hover:backdrop-grayscale'>
-                              <RefreshCw className={`h-6 w-6 text-white drop-shadow-md ${wechatRefreshing ? "animate-spin" : ""}`} strokeWidth={2.5} />
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <div className='flex h-40 w-40 items-center justify-center text-center text-sm text-slate-500'>
-                          {t("auth.login.wechatUnavailable")}
-                        </div>
-                      )}
-                    </button>
-
-                    <div className='space-y-1 text-center'>
-                      <p className='text-sm text-white'>{t("auth.login.wechatHint")}</p>
-                    </div>
-
-                    {wechatSession?.status === "authorized" && (
-                      <div className='text-sm text-blue-300'>{t("auth.login.wechatAuthorizing")}</div>
-                    )}
-
-                    {wechatSession?.status === "expired" && (
-                      <div className='text-sm text-amber-300'>{t("auth.login.wechatExpired")}</div>
-                    )}
-
-                    {wechatSession?.needsPhoneBind && (
-                      <div className='w-full rounded-xl border border-blue-400/20 bg-black/20 p-4'>
-                        <div className='mb-4 flex items-center gap-3'>
-                          {wechatSession.avatarUrl ? (
+                    {needsWechatPhoneBind ? (
+                      <div className='w-full max-w-md'>
+                        <div className='mb-5 flex items-center gap-3'>
+                          {wechatSession?.avatarUrl ? (
                             <img
                               src={wechatSession.avatarUrl}
                               alt={wechatSession.displayName || wechatSession.nickname || "wechat"}
@@ -399,11 +354,11 @@ export default function LoginPage() {
                             />
                           ) : (
                             <div className='flex h-11 w-11 items-center justify-center rounded-full bg-blue-500/30 text-sm font-semibold text-blue-200'>
-                              {(wechatSession.displayName || wechatSession.nickname || "微").slice(0, 1)}
+                              {(wechatSession?.displayName || wechatSession?.nickname || "微").slice(0, 1)}
                             </div>
                           )}
                           <p className='text-sm text-white/90'>
-                            {wechatSession.displayName
+                            {wechatSession?.displayName
                               ? t("auth.login.wechatBindHintWithName", { name: wechatSession.displayName })
                               : t("auth.login.wechatBindHint")}
                           </p>
@@ -460,6 +415,54 @@ export default function LoginPage() {
                           </Button>
                         </form>
                       </div>
+                    ) : (
+                      <>
+                        <button
+                          type='button'
+                          onClick={handleWechatQrRefresh}
+                          disabled={!canRefreshWechatQr}
+                          className={`group relative flex items-center justify-center overflow-hidden rounded-2xl bg-white/95 p-2.5 shadow-lg transition-transform duration-200 ${
+                            canRefreshWechatQr ? "cursor-pointer hover:scale-[1.01]" : "cursor-default"
+                          } ${wechatRefreshing ? "cursor-wait" : ""}`}
+                          aria-label={t("auth.login.wechatRefresh")}
+                        >
+                          {wechatLoading ? (
+                            <div className='flex h-40 w-40 flex-col items-center justify-center gap-3 text-slate-600'>
+                              <Loader2 className='h-8 w-8 animate-spin' />
+                              <span className='text-sm'>{t("auth.login.wechatLoading")}</span>
+                            </div>
+                          ) : wechatSession?.qrCodeUrl ? (
+                            <div className='relative h-40 w-40'>
+                              <img
+                                src={wechatSession.qrCodeUrl}
+                                alt={t("auth.login.wechatScanAlt")}
+                                className='h-full w-full rounded-xl object-contain'
+                              />
+                              {isWechatQrExpired && (
+                                <span className='pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-slate-600/0 opacity-0 transition-all duration-200 group-hover:bg-slate-600/60 group-hover:opacity-100 group-hover:backdrop-grayscale'>
+                                  <RefreshCw className={`h-6 w-6 text-white drop-shadow-md ${wechatRefreshing ? "animate-spin" : ""}`} strokeWidth={2.5} />
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className='flex h-40 w-40 items-center justify-center text-center text-sm text-slate-500'>
+                              {t("auth.login.wechatUnavailable")}
+                            </div>
+                          )}
+                        </button>
+
+                        <div className='space-y-1 text-center'>
+                          <p className='text-sm text-white'>{t("auth.login.wechatHint")}</p>
+                        </div>
+
+                        {wechatSession?.status === "authorized" && (
+                          <div className='text-sm text-blue-300'>{t("auth.login.wechatAuthorizing")}</div>
+                        )}
+
+                        {wechatSession?.status === "expired" && (
+                          <div className='text-sm text-amber-300'>{t("auth.login.wechatExpired")}</div>
+                        )}
+                      </>
                     )}
 
                     {(wechatError || (tab === "wechat" && error)) && (
