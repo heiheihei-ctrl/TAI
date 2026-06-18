@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "start": "node -r ./dist/tracing.bootstrap.js dist/main.js",
-    "build": "tsc -p tsconfig.build.json && node -e \"const fs=require('fs');const p='dist/ai/workers/background-removal.worker.js';if(!fs.existsSync(p)){console.error('Missing worker:',p);process.exit(1)}console.log('background-removal worker ok')\"",
+    "prisma:generate": "node scripts/ensure-prisma-client.js",
+    "build": "npm run prisma:generate && tsc -p tsconfig.build.json && node -e \"const fs=require('fs');const p='dist/ai/workers/background-removal.worker.js';if(!fs.existsSync(p)){console.error('Missing worker:',p);process.exit(1)}console.log('background-removal worker ok')\"",
     "postinstall": "node scripts/postinstall-native-deps.js",
     "diagnose:sharp": "node scripts/diagnose-sharp.js",
     "fix:sharp": "node scripts/fix-sharp-install.js",
