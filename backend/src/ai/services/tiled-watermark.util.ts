@@ -1,5 +1,5 @@
 import { loadSharp, isSharpAvailable, getSharpLoadError } from '../../utils/sharp-loader';
-import type { Sharp } from 'sharp';
+import type sharp from 'sharp';
 
 const DEFAULT_WATERMARK_ANGLE = -45;
 const DEFAULT_WATERMARK_OPACITY = 0.22;
@@ -48,12 +48,12 @@ function resolveTiledWatermarkConfig(options?: TiledWatermarkOptions) {
   };
 }
 
-function getSharp(): Sharp {
-  const sharp = loadSharp();
-  if (!sharp) {
+function getSharp(): typeof sharp {
+  const sharpModule = loadSharp();
+  if (!sharpModule) {
     throw new Error(getSharpLoadError() ?? 'sharp 不可用');
   }
-  return sharp as unknown as Sharp;
+  return sharpModule as typeof sharp;
 }
 
 async function applyOpacityToPng(buffer: Buffer, opacity: number): Promise<Buffer> {

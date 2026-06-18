@@ -56,6 +56,40 @@ export class Nano2Service {
     return fallback;
   }
 
+  private mapApimartNetworkError(error: unknown, context: string): Error {
+    const err =
+      error instanceof Error ? error : new Error(typeof error === 'string' ? error : 'Unknown error');
+    const causeCode =
+      typeof (err as any)?.cause?.code === 'string'
+        ? String((err as any).cause.code)
+        : typeof (err as any)?.code === 'string'
+        ? String((err as any).code)
+        : '';
+    const message = String(err.message || '');
+
+    if (causeCode === 'ENOTFOUND') {
+      return new ServiceUnavailableException(
+        `APIMart 域名解析失败（api.apimart.ai），请检查服务器 DNS 或代理网络。${context}`,
+      ) as unknown as Error;
+    }
+    if (causeCode === 'ETIMEDOUT' || err.name === 'AbortError') {
+      return new ServiceUnavailableException(
+        `APIMart 网络连接超时，请检查服务器到 api.apimart.ai 的网络链路或代理配置。${context}`,
+      ) as unknown as Error;
+    }
+    if (
+      causeCode === 'ECONNRESET' ||
+      causeCode === 'ECONNREFUSED' ||
+      causeCode === 'EAI_AGAIN' ||
+      message.toLowerCase().includes('fetch failed')
+    ) {
+      return new ServiceUnavailableException(
+        `APIMart 网络请求失败，请检查服务器外网出口、代理或防火墙配置。${context} ${message}`.trim(),
+      ) as unknown as Error;
+    }
+    return err;
+  }
+
   private async extractErrorDetails(response: Response): Promise<{
     message: string;
     rawBody: string;
@@ -209,7 +243,7 @@ export class Nano2Service {
           await this.sleep(this.submitRetryDelayMs);
           continue;
         }
-        throw lastError;
+        throw this.mapApimartNetworkError(lastError, 'Nano2 提交任务失败');
       } finally {
         clearTimeout(timeoutId);
       }
@@ -263,9 +297,9 @@ export class Nano2Service {
       };
     } catch (error: any) {
       if (error instanceof Error && error.name === 'AbortError') {
-        throw new ServiceUnavailableException(`Nano2 query task timeout after ${this.timeoutMs}ms`);
+        throw new ServiceUnavailableException(`APIMart 查询任务超时（${this.timeoutMs}ms）`);
       }
-      throw error;
+      throw this.mapApimartNetworkError(error, 'Nano2 查询任务失败');
     } finally {
       clearTimeout(timeoutId);
     }
