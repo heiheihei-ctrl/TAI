@@ -28,6 +28,7 @@ const zhCN = {
     wechat: {
       followOfficial: "关注公众号",
       joinGroup: "加入交流群",
+      taiLearningGroup: "TAI学习交流群",
       noImage: "暂无图片",
     },
     header: {

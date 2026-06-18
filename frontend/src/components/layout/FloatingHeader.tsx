@@ -2398,7 +2398,7 @@ const FloatingHeader: React.FC = () => {
                       <div className='w-28 h-28 bg-white rounded-lg p-2 mb-2'>
                         <img
                           src={Qrcode}
-                          alt={t("home.wechat.joinGroup")}
+                          alt={t("home.wechat.taiLearningGroup")}
                           className='w-full h-full object-contain'
                           onError={(event) => {
                             (event.target as HTMLImageElement).src = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%23f0f0f0" width="100" height="100"/><text x="50" y="55" text-anchor="middle" fill="%23999" font-size="12">${encodeURIComponent(t("home.wechat.noImage"))}</text></svg>`;
@@ -2406,7 +2406,7 @@ const FloatingHeader: React.FC = () => {
                         />
                       </div>
                       <span className='text-xs text-white/80 whitespace-nowrap'>
-                        {t("home.wechat.joinGroup")}
+                        {t("home.wechat.taiLearningGroup")}
                       </span>
                     </div>
                   </div>
