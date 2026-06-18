@@ -86,6 +86,7 @@ import {
   type UserCreditsInfo,
 } from "@/services/adminApi";
 import { uploadToOSS } from "@/services/ossUploadService";
+import Qrcode from "@/assets/group-erweima.jpg";
 
 // Nano Banana 闂傚倸鍊搁崐鎼佸磹妞嬪孩顐介柨鐔哄Т绾惧鏌涘☉鍗炲箻闁哄棗妫濋弻娑樷槈濮楀牆濮涘銈傛櫆閻擄繝寮诲☉銏犵婵＄偠顕ф禍楣冩⒑缁嬫鍎愰柟鎼佺畺楠炲骞橀鑲╊槹濡炪倖鎸炬慨纾嬨亹鎼淬劍鈷掑ù锝堟鐢稓绱掗鎯р枅鐎规洖缍婇獮搴ㄦ寠婢跺鈧剙顪冮妶鍡樼５闁稿鎸婚〃銉╂倷鐎电顫ч梺鐟板槻閹虫ê鐣烽妸锔剧瘈閹煎瓨绻勯弫?
 type BananaPricingTier = "fast" | "pro" | "ultra";
@@ -342,7 +343,7 @@ const FloatingHeader: React.FC = () => {
     wechatGroup: string;
   }>({
     officialAccount: "/qrcode-official.png",
-    wechatGroup: "/qrcode-group.png",
+    wechatGroup: "/group-erweima.jpg",
   });
 
   useEffect(() => {
@@ -1146,7 +1147,6 @@ const FloatingHeader: React.FC = () => {
               </div>
             </div>
 
-            {/* 缂傚倸鍊搁崐鎼佸磹妞嬪海鐭嗗〒姘ｅ亾閽樻繂霉閻樺樊鍎忛柛銊ュ€搁湁闁稿繐鍚嬬紞鎴︽煕閵娿儱鈧潡鐛弽顬ュ酣顢楅埀顒勬倶椤曗偓閺屽秹鎮烽幍顔а囨煛鐏炵晫效闁糕斁鍓濋幏鍛村川婵犲喚鍚欑紓鍌氬€峰ù鍥ㄣ仈閹间焦鍋嬮柣妯款嚙閽冪喐绻涢幋鐑嗙劯闁哄啫鍊甸崑鎾绘晲鎼粹€愁潾闂佹寧绋撻崰鎰崲?*/}
             <div className='p-6 rounded-2xl bg-slate-50'>
               <div className='flex items-center justify-between mb-6'>
                 <div className='flex items-center gap-3'>
@@ -2397,7 +2397,7 @@ const FloatingHeader: React.FC = () => {
                     <div className='flex flex-col items-center'>
                       <div className='w-28 h-28 bg-white rounded-lg p-2 mb-2'>
                         <img
-                          src={wechatQrCodes.wechatGroup}
+                          src={Qrcode}
                           alt={t("home.wechat.joinGroup")}
                           className='w-full h-full object-contain'
                           onError={(event) => {
