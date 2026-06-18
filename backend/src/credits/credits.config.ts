@@ -287,6 +287,12 @@ export const CREDIT_PRICING_CONFIG = {
     creditsPerCall: 600,
     description: '使用可灵 Kling O3 (Omni Video) 生成视频',
   },
+  'omni-flash-ext-video': {
+    serviceName: 'Omni Flash Ext 视频',
+    provider: 'omni-flash-ext',
+    creditsPerCall: 600,
+    description: '使用 APIMart Omni Flash Ext 生成视频',
+  },
   'vidu-video': {
     serviceName: 'Vidu 视频',
     provider: 'vidu',

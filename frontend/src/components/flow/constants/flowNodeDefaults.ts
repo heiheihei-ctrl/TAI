@@ -31,6 +31,7 @@ export const FLOW_NODE_DEFAULT_SIZE = {
   viduQ3: { w: 280, h: 260 },
   doubaoVideo: { w: 280, h: 260 },
   seedance20Video: { w: 280, h: 260 },
+  omniFlashExtVideo: { w: 300, h: 340 },
   storyboardSplit: { w: 320, h: 400 },
   midjourney: { w: 280, h: 320 },
   midjourneyV7: { w: 300, h: 400 },

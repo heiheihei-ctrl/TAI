@@ -1,5 +1,10 @@
 # 后端模块：积分系统（backend-credits）
 
+## 2026-06-17 Update
+- Added independent credit recognition for Omni Flash Ext video as service type `omni-flash-ext-video`.
+- Model-management defaults include `modelKey = "omni-flash-ext"`, model name `Omni Flash Ext`, default vendor `new_api`, and dedicated pricing instead of reusing Kling pricing.
+- `generate-video-provider` credit preview/pre-deduct request enrichment recognizes `managedModelKey: "omni-flash-ext"` and records Omni routing metadata so usage records, polling, billing, and troubleshooting stay aligned.
+
 ## 2026-04-15 Update
 - Image analysis deduction mapping is fixed to: Fast (gemini-2.5-image-analyze) = 10, Pro (gemini-image-analyze) = 30, Ultra (gemini-3.1-image-analyze) = 20.
 - POST /api/ai/analyze-image serviceType routing now follows provider tier (banana-2.5 / banana / banana-3.1|nano2) for consistent billing.

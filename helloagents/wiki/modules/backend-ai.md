@@ -1,5 +1,12 @@
 # 后端模块：AI（backend-ai�?
 
+## 2026-06-17 Update
+- Added independent Omni Flash Ext video routing for `managedModelKey = "omni-flash-ext"`. The backend resolves it as `omni-flash-ext` and does not let it fall through to Kling/Vidu/Seedance fallback branches.
+- `VideoProviderService` now builds a dedicated new_api-style request for Omni Flash Ext, preserving internal model `omni-flash-ext`, reference images, at most one reference video, `metadata.generation_type`, and `provider_options.videoMode`.
+- The APIMart adaptor branch maps the upstream `model` to the case-sensitive value `Omni-Flash-Ext`, strips internal routing/billing fields, enforces prompt/media limits, forces reference generation for reference videos and 2+ image inputs, and omits `duration` when a reference video is present.
+- Omni Flash Ext task polling normalizes APIMart object/array `data` payloads and extracts media from both `result.videos` and `task_result.videos`; task queries include cache-busting and no-cache headers so completed tasks are not left in a stale `processing` state.
+- Omni Flash Ext media validation rejects temporary `blob:` / `data:` / bare base64 references before downstream video submission; callers must provide remote URLs or backend-managed asset references.
+
 ## 作用
 - 提供图像生成/编辑/融合/分析、文本对话、背景移除�?D�?D、图片扩展、视频生成、Paper.js/向量化等能力�?
 

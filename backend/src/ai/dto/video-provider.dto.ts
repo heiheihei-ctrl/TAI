@@ -11,8 +11,8 @@ export type ReferenceImageItem =
 
 export class VideoProviderRequestDto {
   @ApiProperty({ description: 'Provider' })
-  @IsEnum(['kling', 'kling-2.6', 'kling-o3', 'vidu', 'viduq3-pro', 'doubao'])
-  provider!: 'kling' | 'kling-2.6' | 'kling-o3' | 'vidu' | 'viduq3-pro' | 'doubao';
+  @IsEnum(['kling', 'kling-2.6', 'kling-o3', 'vidu', 'viduq3-pro', 'doubao', 'omni-flash-ext'])
+  provider!: 'kling' | 'kling-2.6' | 'kling-o3' | 'vidu' | 'viduq3-pro' | 'doubao' | 'omni-flash-ext';
 
   @ApiProperty({
     description:
