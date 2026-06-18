@@ -76,6 +76,7 @@ import ViduVideoNode from "./nodes/ViduVideoNode";
 import ViduQ3ProVideoNode from "./nodes/ViduQ3ProVideoNode";
 import DoubaoVideoNode from "./nodes/DoubaoVideoNode";
 import Seedance20VideoNode from "./nodes/Seedance20VideoNode";
+import OmniFlashExtVideoNode from "./nodes/OmniFlashExtVideoNode";
 import VideoNode from "./nodes/VideoNode";
 import AudioNode from "./nodes/AudioNode";
 import VideoAnalyzeNode from "./nodes/VideoAnalyzeNode";
@@ -254,6 +255,7 @@ const VIDEO_LIBRARY_SOURCE_LABELS: Record<string, string> = {
   viduQ3: "Vidu Q3 视频",
   doubaoVideo: "豆包视频",
   seedance20Video: "Seedance 2.0 视频",
+  omniFlashExtVideo: "Omni Flash Ext 视频",
   sora2Video: "Sora 2 视频",
   wan26: "Wan 2.6 视频",
   wan27Video: "Wan 2.7 视频",
@@ -272,6 +274,7 @@ const VIDEO_LIBRARY_NODE_TYPES = new Set([
   "viduQ3",
   "doubaoVideo",
   "seedance20Video",
+  "omniFlashExtVideo",
   "sora2Video",
   "wan26",
   "wan27Video",
@@ -922,6 +925,7 @@ const rawNodeTypes = {
   viduQ3: ViduQ3ProVideoNode,
   doubaoVideo: DoubaoVideoNode,
   seedance20Video: Seedance20VideoNode,
+  omniFlashExtVideo: OmniFlashExtVideoNode,
   storyboardSplit: StoryboardSplitNode,
   midjourney: MidjourneyNode,
   midjourneyV7: MidjourneyNode,
@@ -1081,6 +1085,7 @@ const FLOW_GROUP_RUNNABLE_TYPES = new Set([
   "viduQ3",
   "doubaoVideo",
   "seedance20Video",
+  "omniFlashExtVideo",
   "minimaxSpeech",
   "tencentSpeech",
   "minimaxMusic",
@@ -1096,6 +1101,8 @@ const SORA2_MAX_REFERENCE_IMAGES = 1;
 const VIDU_MAX_REFERENCE_IMAGES = 2; // Vidu 当前统一限制最多 2 张参考图（图1/图2）
 const VIDUQ3_MAX_REFERENCE_IMAGES = 2; // Vidu Q3 支持最多 2 张参考图
 const KLING_MAX_REFERENCE_IMAGES = 2; // Kling 2.1 / 2.6 统一限制最多 2 张参考图
+const OMNI_FLASH_EXT_MAX_REFERENCE_IMAGES = 3;
+const VIDEO_TASK_POLL_MAX_ATTEMPTS = 180; // 180 * 5s = 15 minutes
 const KLING_MAX_AUDIO_INPUTS = 2;
 const SEEDANCE20_REFERENCE_IMAGE_MAX = 9;
 const SEEDANCE20_REFERENCE_VIDEO_MAX = 3;
@@ -1114,6 +1121,7 @@ const SEEDANCE15_MODE_VALUES: Seedance15Mode[] = ["text", "image", "start_end"];
 const VIDEO_SOURCE_NODE_TYPES = [
   "video",
   "sora2Video",
+  "sora2Character",
   "wan26",
   "wan2R2V",
   "happyhorseR2V",
@@ -1126,6 +1134,7 @@ const VIDEO_SOURCE_NODE_TYPES = [
   "viduQ3",
   "doubaoVideo",
   "seedance20Video",
+  "omniFlashExtVideo",
 ];
 
 const normalizeSeedanceModelValue = (
@@ -1299,6 +1308,7 @@ const QUICK_CONNECT_PRESETS: Record<
     { nodeType: "promptOptimize", targetHandle: "text" },
     { nodeType: "textChat", targetHandle: "text" },
     { nodeType: "analysis", targetHandle: "text" },
+    { nodeType: "omniFlashExtVideo", targetHandle: "text" },
   ],
   image: [
     { nodeType: "image", targetHandle: "img" },
@@ -1315,6 +1325,7 @@ const QUICK_CONNECT_PRESETS: Record<
     { nodeType: "imageSplit", targetHandle: "img" },
     { nodeType: "imageCompress", targetHandle: "img" },
     { nodeType: "happyhorseR2V", targetHandle: "image-1" },
+    { nodeType: "omniFlashExtVideo", targetHandle: "image" },
   ],
   video: [
     { nodeType: "videoAnalyze", targetHandle: "video" },
@@ -1322,6 +1333,7 @@ const QUICK_CONNECT_PRESETS: Record<
     { nodeType: "videoToGif", targetHandle: "video" },
     { nodeType: "wan2R2V", targetHandle: "video-1" },
     { nodeType: "wan27Video", targetHandle: "video" },
+    { nodeType: "omniFlashExtVideo", targetHandle: "video" },
     { nodeType: "klingO1Video", targetHandle: "video" },
     { nodeType: "sora2Video", targetHandle: "character" },
     { nodeType: "sora2Character", targetHandle: "video" },
@@ -1371,6 +1383,7 @@ const QUICK_CONNECT_PRESETS: Record<
     { nodeType: "wan2R2V", sourceHandle: "video" },
     { nodeType: "happyhorseR2V", sourceHandle: "video" },
     { nodeType: "wan27Video", sourceHandle: "video" },
+    { nodeType: "omniFlashExtVideo", sourceHandle: "video" },
     { nodeType: "klingO1Video", sourceHandle: "video-out" },
     { nodeType: "videoFrameExtract", sourceHandle: "video" },
   ],
@@ -1394,6 +1407,7 @@ const QUICK_CONNECT_PRESETS: Record<
     { nodeType: "viduVideo", sourceHandle: "video" },
     { nodeType: "viduQ3", sourceHandle: "video" },
     { nodeType: "doubaoVideo", sourceHandle: "video" },
+    { nodeType: "omniFlashExtVideo", sourceHandle: "video" },
     { nodeType: "sora2Character", sourceHandle: "character" },
   ],
   unknown: [
@@ -1460,6 +1474,7 @@ const NODE_CREDITS_MAP: Record<string, number | string> = {
   viduQ3: 600, // Vidu Q3 Pro视频生成
   doubaoVideo: 600, // Seedance 1.5 Pro包视频生成
   seedance20Video: 600, // Seedance 2.0 视频生成
+  omniFlashExtVideo: 600, // Omni Flash Ext 视频生成
   videoToGif: 30, // 视频转GIF
   minimaxSpeech: 10, // MiniMax 语音合成
   tencentSpeech: 10, // 腾讯语音合成
@@ -1508,6 +1523,7 @@ const NODE_PALETTE_ITEMS = [
   { key: "klingVideo", zh: "Kling", en: "Kling", category: "video" },
   // { key: "kling26Video", zh: "Kling 2.6视频生成", en: "Kling 2.6", category: "video" },
   { key: "viduVideo", zh: "Vidu", en: "Vidu", category: "video" },
+  { key: "omniFlashExtVideo", zh: "Omni Flash Ext", en: "Omni Flash Ext", category: "video" },
   {
     key: "doubaoVideo",
     zh: "Seedance 1.5 Pro",
@@ -1628,6 +1644,7 @@ const NODE_PANEL_GROUP_BY_TYPE: Record<string, NodePanelGroupKey> = {
   viduQ3: "video",
   doubaoVideo: "video",
   seedance20Video: "video",
+  omniFlashExtVideo: "video",
   videoAnalyze: "video",
   videoFrameExtract: "video",
   videoToGif: "video",
@@ -1690,6 +1707,10 @@ const FLOW_NODE_KEY_ALIASES: Record<string, FlowNodeType> = {
   seedance20video: "doubaoVideo",
   "seedance-2.0": "doubaoVideo",
   "seedance-2.0-video": "doubaoVideo",
+  omniflashext: "omniFlashExtVideo",
+  omniflashextvideo: "omniFlashExtVideo",
+  "omni-flash-ext": "omniFlashExtVideo",
+  "omni-flash-ext-video": "omniFlashExtVideo",
   wan27: "wan27Video",
   "wan-27": "wan27Video",
   "wan2.7": "wan27Video",
@@ -2051,6 +2072,7 @@ const VIDEO_DYNAMIC_CREDIT_NODE_TYPES = new Set([
   "viduQ3",
   "doubaoVideo",
   "seedance20Video",
+  "omniFlashExtVideo",
 ]);
 
 const KLING_DYNAMIC_CREDIT_MATRIX = {
@@ -2103,9 +2125,10 @@ const resolveVideoDefaultDuration = (
     nodeType === "viduVideo" ||
     nodeType === "viduQ3" ||
     nodeType === "doubaoVideo" ||
-    nodeType === "seedance20Video"
+    nodeType === "seedance20Video" ||
+    nodeType === "omniFlashExtVideo"
   ) {
-    return 5;
+    return nodeType === "omniFlashExtVideo" ? 6 : 5;
   }
   return undefined;
 };
@@ -2125,7 +2148,8 @@ const resolveVideoDefaultResolution = (
     nodeType === "viduVideo" ||
     nodeType === "viduQ3" ||
     nodeType === "doubaoVideo" ||
-    nodeType === "seedance20Video"
+    nodeType === "seedance20Video" ||
+    nodeType === "omniFlashExtVideo"
   ) {
     return "720P";
   }
@@ -2139,7 +2163,7 @@ const resolveVideoDefaultAspectRatio = (
   if (typeof nodeData?.aspectRatio === "string" && nodeData.aspectRatio.trim()) {
     return nodeData.aspectRatio.trim();
   }
-  if (nodeType === "viduVideo" || nodeType === "viduQ3") {
+  if (nodeType === "viduVideo" || nodeType === "viduQ3" || nodeType === "omniFlashExtVideo") {
     return "16:9";
   }
   return undefined;
@@ -2259,6 +2283,13 @@ const buildVideoPricingContext = (
   }
   if (typeof nodeData?.watermark === "boolean") {
     context.watermark = nodeData.watermark;
+  }
+
+  if (nodeType === "omniFlashExtVideo") {
+    const mode = nodeData?.videoMode === "reference" ? "reference" : "frame";
+    context.videoMode = mode;
+    context.generationMode = mode;
+    context.managedModelKey = "omni-flash-ext";
   }
 
   if (typeof nodeData?.viduModel === "string" && nodeData.viduModel.trim()) {
@@ -8667,7 +8698,8 @@ function FlowInner() {
             type === "viduVideo" ||
             type === "viduQ3" ||
             type === "doubaoVideo" ||
-            type === "seedance20Video"
+            type === "seedance20Video" ||
+            type === "omniFlashExtVideo"
           ? {
               status: "idle" as const,
               videoUrl: undefined,
@@ -8677,12 +8709,16 @@ function FlowInner() {
               clipDuration:
                 type === "doubaoVideo" || type === "seedance20Video"
                   ? 5
+                  : type === "omniFlashExtVideo"
+                  ? 6
                   : type === "klingVideo" || type === "kling26Video" || type === "kling30Video"
                   ? 5
                   : undefined,
-              aspectRatio: undefined,
+              aspectRatio: type === "omniFlashExtVideo" ? ("16:9" as const) : undefined,
               provider:
-                type === "viduVideo"
+                type === "omniFlashExtVideo"
+                  ? "omni-flash-ext"
+                  : type === "viduVideo"
                   ? "vidu"
                   : type === "viduQ3"
                   ? "viduq3-pro"
@@ -8720,7 +8756,9 @@ function FlowInner() {
                   : undefined,
               generateAudio: type === "seedance20Video" ? true : undefined,
               resolution:
-                type === "viduVideo" || type === "viduQ3"
+                type === "omniFlashExtVideo"
+                  ? ("720P" as const)
+                  : type === "viduVideo" || type === "viduQ3"
                   ? ("720p" as const)
                   : type === "seedance20Video" || type === "doubaoVideo"
                   ? ("720P" as const)
@@ -8730,6 +8768,10 @@ function FlowInner() {
               // Seedance 1.5 Pro专用参数
               camerafixed: type === "doubaoVideo" || type === "seedance20Video" ? false : undefined,
               watermark: type === "doubaoVideo" || type === "seedance20Video" ? false : undefined,
+              videoMode: type === "omniFlashExtVideo" ? ("frame" as const) : undefined,
+              managedModelKey: type === "omniFlashExtVideo" ? "omni-flash-ext" : undefined,
+              vendorKey: type === "omniFlashExtVideo" ? "new_api" : undefined,
+              platformKey: type === "omniFlashExtVideo" ? "new_api" : undefined,
               boxW: size.w,
               boxH: size.h,
             }
@@ -8826,6 +8868,7 @@ function FlowInner() {
       "klingO1Video",
       "viduVideo",
       "seedance20Video",
+      "omniFlashExtVideo",
       "doubaoVideo",
       "videoFrameExtract",
     ],
@@ -9378,12 +9421,16 @@ function FlowInner() {
       const sourceNode = rf.getNode(source);
       const targetNode = rf.getNode(target);
       if (!sourceNode || !targetNode) return false;
+      const normalizedSourceType =
+        normalizeFlowNodeType(sourceNode.type || "") || sourceNode.type || "";
+      const normalizedTargetType =
+        normalizeFlowNodeType(targetNode.type || "") || targetNode.type || "";
 
       const canSourceProvideText = (
         node: typeof sourceNode,
         handle?: string | null
       ) =>
-        textSourceTypes.includes(node.type || "") &&
+        textSourceTypes.includes(normalizedSourceType) &&
         isTextSourceHandle(handle);
 
       // 检查是否为有效的图片源节点
@@ -9414,15 +9461,15 @@ function FlowInner() {
           "gptImage2",
           "seedream5",
         ];
-        if (imageNodeTypes.includes(node.type || "")) return true;
+        if (imageNodeTypes.includes(normalizedSourceType)) return true;
         // videoFrameExtract 的 image 句柄输出单张图片
-        if (node.type === "videoFrameExtract" && handle === "image")
+        if (normalizedSourceType === "videoFrameExtract" && handle === "image")
           return true;
         return false;
       };
 
       // 允许连接到 Generate / Generate4 / GenerateRef / Image / PromptOptimizer
-      if (targetNode.type === "generateRef") {
+      if (normalizedTargetType === "generateRef") {
         if (targetHandle === "text")
           return canSourceProvideText(sourceNode, sourceHandle);
         if (targetHandle === "image1" || targetHandle === "refer")
@@ -9432,10 +9479,10 @@ function FlowInner() {
         return false;
       }
       if (
-        targetNode.type === "generate" ||
-        targetNode.type === "generate4" ||
-        targetNode.type === "generatePro" ||
-        targetNode.type === "generatePro4"
+        normalizedTargetType === "generate" ||
+        normalizedTargetType === "generate4" ||
+        normalizedTargetType === "generatePro" ||
+        normalizedTargetType === "generatePro4"
       ) {
         if (targetHandle === "text")
           return canSourceProvideText(sourceNode, sourceHandle);
@@ -9443,12 +9490,12 @@ function FlowInner() {
           return isImageSource(sourceNode, sourceHandle);
         return false;
       }
-      if (targetNode.type === "viewAngle") {
+      if (normalizedTargetType === "viewAngle") {
         if (targetHandle === "img")
           return isImageSource(sourceNode, sourceHandle);
         return false;
       }
-      if (targetNode.type === "sora2Video") {
+      if (normalizedTargetType === "sora2Video") {
         const sora2GenerationType = getSora2GenerationType(targetNode.data);
 
         if (sora2GenerationType === "sora2-create-character") {
@@ -9618,7 +9665,7 @@ function FlowInner() {
         return false;
       }
 
-      if (targetNode.type === "happyhorseR2V") {
+      if (normalizedTargetType === "happyhorseR2V") {
         if (targetHandle === "text") {
           return canSourceProvideText(sourceNode, sourceHandle);
         }
@@ -9632,6 +9679,29 @@ function FlowInner() {
           // video-edit 模式下接受视频源
           if (sourceHandle !== "video" && sourceHandle !== "video-out") return false;
           return VIDEO_SOURCE_NODE_TYPES.includes(sourceNode.type || "");
+        }
+        return false;
+      }
+
+      if (normalizedTargetType === "omniFlashExtVideo") {
+        if (targetHandle === "text") {
+          return canSourceProvideText(sourceNode, sourceHandle);
+        }
+        if (targetHandle === "image") {
+          return isImageSource(sourceNode, sourceHandle);
+        }
+        if (targetHandle === "video") {
+          const normalizedSourceHandle =
+            typeof sourceHandle === "string" ? sourceHandle.trim().toLowerCase() : "";
+          if (
+            normalizedSourceHandle &&
+            normalizedSourceHandle !== "video" &&
+            normalizedSourceHandle !== "video-out" &&
+            normalizedSourceHandle !== "character"
+          ) {
+            return false;
+          }
+          return VIDEO_SOURCE_NODE_TYPES.includes(normalizedSourceType);
         }
         return false;
       }
@@ -9671,12 +9741,12 @@ function FlowInner() {
 
       if (
         ["klingVideo", "kling26Video", "kling30Video", "viduVideo", "viduQ3", "doubaoVideo"].includes(
-          targetNode.type || ""
+          normalizedTargetType
         )
       ) {
         if (targetHandle === "image-2") {
           // Vidu 固定用 image/image-2 表达图1/图2；Kling 仅 2.6/3.0 pro 可用 image-2
-          if (targetNode.type === "viduVideo" || targetNode.type === "viduQ3") {
+          if (normalizedTargetType === "viduVideo" || normalizedTargetType === "viduQ3") {
             return isImageSource(sourceNode, sourceHandle);
           }
           if (!canKlingNodeUseImage2Input(targetNode)) return false;
@@ -10031,6 +10101,17 @@ function FlowInner() {
         if (params.targetHandle.startsWith("image-")) return true; // 每个 image-N 句柄最多一个
         if (params.targetHandle === "video") return true; // video-edit 模式：唯一一个 video 输入
       }
+      if (targetNode?.type === "omniFlashExtVideo") {
+        if (params.targetHandle === "text") return true;
+        if (params.targetHandle === "image") {
+          return (
+            currentEdges.filter(
+              (edge) => edge.target === params.target && edge.targetHandle === "image"
+            ).length < OMNI_FLASH_EXT_MAX_REFERENCE_IMAGES
+          );
+        }
+        if (params.targetHandle === "video") return true;
+      }
       // Vidu 视频节点：图1/图2双句柄，每个句柄最多 1 条，总数受模型上限控制
       if (targetNode?.type === "viduVideo") {
         const targetData = ((targetNode.data || {}) as Record<string, any>);
@@ -10312,6 +10393,7 @@ function FlowInner() {
           "viduVideo",
           "doubaoVideo",
           "seedance20Video",
+          "omniFlashExtVideo",
           "minimaxSpeech",
           "tencentSpeech",
           "minimaxMusic",
@@ -10665,6 +10747,11 @@ function FlowInner() {
                 e.target === params.target &&
                 e.targetHandle === params.targetHandle
               )
+          );
+        }
+        if (tgt?.type === "omniFlashExtVideo" && params.targetHandle === "video") {
+          next = next.filter(
+            (e) => !(e.target === params.target && e.targetHandle === "video")
           );
         }
         if (tgt?.type === "generateRef") {
@@ -12146,6 +12233,116 @@ function FlowInner() {
       });
     });
   }, [nodes, pollHappyhorseTask]);
+
+  const resumePollingRef = React.useRef<Set<string>>(new Set());
+
+  const resumeVideoPolling = React.useCallback(
+    async (nodeId: string, provider: string, taskId: string, apiUsageId: string, startMs: number) => {
+      if (resumePollingRef.current.has(nodeId)) return;
+      resumePollingRef.current.add(nodeId);
+
+      const maxAttempts = VIDEO_TASK_POLL_MAX_ATTEMPTS;
+      const pollInterval = 5000;
+      let attempts = 0;
+      let settled = false;
+
+      const pollTask = async () => {
+        if (settled) return;
+        attempts++;
+        if (attempts > maxAttempts) {
+          settled = true;
+          resumePollingRef.current.delete(nodeId);
+          if (apiUsageId) {
+            try { await refundVideoTask(apiUsageId); } catch {}
+          }
+          setNodes((ns) =>
+            ns.map((n) =>
+              n.id === nodeId ? { ...n, data: { ...n.data, status: "failed", error: "任务查询超时", pendingTaskId: undefined, pendingApiUsageId: undefined, pendingProvider: undefined, pendingStartMs: undefined } } : n
+            )
+          );
+          return;
+        }
+
+        try {
+          const queryResult = await queryVideoTask(provider as VideoProvider, taskId);
+          if (queryResult.status === "succeeded") {
+            settled = true;
+            resumePollingRef.current.delete(nodeId);
+            if (apiUsageId) {
+              const processingTime = Math.max(0, Date.now() - startMs);
+              void markVideoTaskSuccess(apiUsageId, processingTime).catch(() => {});
+            }
+            const elapsedSeconds = Math.max(1, Math.round((Date.now() - startMs) / 1000));
+            const historyEntry = {
+              id: `video-history-${Date.now()}`,
+              videoUrl: queryResult.videoUrl,
+              thumbnail: queryResult.thumbnailUrl,
+              createdAt: new Date().toISOString(),
+              elapsedSeconds,
+            };
+            setNodes((ns) =>
+              ns.map((n) => {
+                if (n.id !== nodeId) return n;
+                const prev = (n.data as any) || {};
+                return {
+                  ...n,
+                  data: {
+                    ...prev,
+                    status: "succeeded",
+                    videoUrl: queryResult.videoUrl,
+                    thumbnail: queryResult.thumbnailUrl,
+                    error: undefined,
+                    videoVersion: Number(prev.videoVersion || 0) + 1,
+                    history: appendVideoHistory(prev.history as Array<Record<string, any>> | undefined, historyEntry),
+                    pendingTaskId: undefined,
+                    pendingApiUsageId: undefined,
+                    pendingProvider: undefined,
+                    pendingStartMs: undefined,
+                  },
+                };
+              })
+            );
+            return;
+          } else if (queryResult.status === "failed") {
+            settled = true;
+            resumePollingRef.current.delete(nodeId);
+            if (apiUsageId) {
+              try { await refundVideoTask(apiUsageId); } catch {}
+            }
+            setNodes((ns) =>
+              ns.map((n) =>
+                n.id === nodeId ? { ...n, data: { ...n.data, status: "failed", error: (queryResult as any).error || "任务生成失败", pendingTaskId: undefined, pendingApiUsageId: undefined, pendingProvider: undefined, pendingStartMs: undefined } } : n
+              )
+            );
+            return;
+          }
+        } catch {
+          // 查询偶发失败，继续轮询
+        }
+
+        if (!settled) {
+          setTimeout(() => void pollTask(), pollInterval);
+        }
+      };
+
+      void pollTask();
+    },
+    [queryVideoTask, refundVideoTask, markVideoTaskSuccess, appendVideoHistory, setNodes],
+  );
+
+  React.useEffect(() => {
+    nodes.forEach((node) => {
+      if (node.type !== "omniFlashExtVideo" && node.type !== "klingVideo" && node.type !== "kling26Video" && node.type !== "kling30Video" && node.type !== "klingO1Video" && node.type !== "viduVideo" && node.type !== "viduQ3" && node.type !== "doubaoVideo" && node.type !== "seedance20Video") return;
+      const data = (node.data as any) || {};
+      if (data.status !== "running") return;
+      const pendingTaskId = typeof data.pendingTaskId === "string" ? data.pendingTaskId.trim() : "";
+      const pendingProvider = typeof data.pendingProvider === "string" ? data.pendingProvider.trim() : "";
+      const pendingApiUsageId = typeof data.pendingApiUsageId === "string" ? data.pendingApiUsageId.trim() : "";
+      const pendingStartMs = typeof data.pendingStartMs === "number" ? data.pendingStartMs : Date.now();
+      if (!pendingTaskId || !pendingProvider) return;
+      void resumeVideoPolling(node.id, pendingProvider, pendingTaskId, pendingApiUsageId, pendingStartMs);
+    });
+  }, [nodes, resumeVideoPolling]);
 
   // 运行：根据输入自动选择 生图/编辑/融合（支持 generate / generate4 / generateRef）
   const runNode = React.useCallback(
@@ -15018,6 +15215,7 @@ function FlowInner() {
         "viduQ3",
         "doubaoVideo",
         "seedance20Video",
+        "omniFlashExtVideo",
       ];
       if (newVideoNodeTypes.includes(normalizedVideoNodeType)) {
         const projectId = useProjectContentStore.getState().projectId;
@@ -15041,7 +15239,9 @@ function FlowInner() {
             : isLegacyKling26Node || rawNodeData.provider === "kling-2.6"
             ? "kling-v2-6"
             : "kling-v2-6");
-        if (normalizedVideoNodeType === "klingO1Video") {
+        if (normalizedVideoNodeType === "omniFlashExtVideo") {
+          provider = "omni-flash-ext";
+        } else if (normalizedVideoNodeType === "klingO1Video") {
           provider = "kling-o3";
         } else if (normalizedVideoNodeType === "klingVideo" || normalizedVideoNodeType === "kling26Video") {
           provider = klingModel === "kling-v3-0" ? "kling-o3" : "kling-2.6";
@@ -15056,6 +15256,7 @@ function FlowInner() {
           provider = rawNodeData.provider || "kling";
         }
         const isSeedanceNode = provider === "doubao";
+        const isOmniFlashExtNode = normalizedVideoNodeType === "omniFlashExtVideo";
         const seedanceModelForRequest = normalizeSeedanceModelValue(
           rawNodeData.seedanceModel ||
             (normalizedVideoNodeType === "seedance20Video"
@@ -15068,7 +15269,9 @@ function FlowInner() {
 
         // 先获取图片数量，判断是否需要 prompt
         const maxImages =
-          isSeedanceNode && seedanceModeSpec
+          isOmniFlashExtNode
+            ? OMNI_FLASH_EXT_MAX_REFERENCE_IMAGES
+            : isSeedanceNode && seedanceModeSpec
             ? seedanceModeSpec.imageHandleMax + seedanceModeSpec.image2HandleMax
             : provider === "vidu" || provider === "viduq3-pro"
             ? getEffectiveViduMaxReferenceImages(viduNodeDataForProvider)
@@ -15088,9 +15291,12 @@ function FlowInner() {
           return 99;
         };
 
-        const imageEdges = currentEdges
+        const collectedImageEdges = currentEdges
           .filter((e) => {
             if (e.target !== nodeId) return false;
+            if (isOmniFlashExtNode) {
+              return e.targetHandle === "image";
+            }
             // 有视频输入时，只收集 image / image-2，排除 elementImg
             if (hasVideoInput) {
               return e.targetHandle === "image" || e.targetHandle === "image-2";
@@ -15108,13 +15314,15 @@ function FlowInner() {
               imageHandlePriority(b.targetHandle);
             if (handleDelta !== 0) return handleDelta;
             return String(a.id || "").localeCompare(String(b.id || ""));
-          })
-          .slice(0, maxImages);
+          });
+        const imageEdges = isOmniFlashExtNode
+          ? collectedImageEdges
+          : collectedImageEdges.slice(0, maxImages);
         const imageCount = imageEdges.length;
         const hasImage2Edge = imageEdges.some((edge) => edge.targetHandle === "image-2");
 
         // 获取 prompt
-        const { text: promptText, hasEdge: hasText } =
+        const { text: promptText, hasEdge: hasText, imageMentionUrls } =
           getTextPromptForNode(nodeId);
 
         // Vidu 智能模式判断逻辑：
@@ -15137,7 +15345,23 @@ function FlowInner() {
           );
         };
 
-        if (isSeedanceNode && seedanceMode && seedanceModeSpec) {
+        if (isOmniFlashExtNode) {
+          if (!hasText || !promptText) {
+            failCurrentVideoNode("Omni Flash Ext 需要连接非空提示词");
+            return;
+          }
+          const referenceVideoEdgeCount = currentEdges.filter(
+            (e) => e.target === nodeId && e.targetHandle === "video"
+          ).length;
+          if (referenceVideoEdgeCount > 1) {
+            failCurrentVideoNode("Omni Flash Ext 最多支持 1 条参考视频");
+            return;
+          }
+          if (imageCount > OMNI_FLASH_EXT_MAX_REFERENCE_IMAGES) {
+            failCurrentVideoNode("Omni Flash Ext 图片最多 3 张");
+            return;
+          }
+        } else if (isSeedanceNode && seedanceMode && seedanceModeSpec) {
           const seedanceImageCount = currentEdges.filter(
             (e) => e.target === nodeId && e.targetHandle === "image"
           ).length;
@@ -15641,10 +15865,14 @@ function FlowInner() {
 
         let referenceVideoUrl: string | undefined = undefined;
         let referenceVideoUrls: string[] = [];
-        if (provider === "kling-o3" || (isSeedanceNode && isSeedance20Request)) {
+        if (provider === "kling-o3" || (isSeedanceNode && isSeedance20Request) || isOmniFlashExtNode) {
           const videoEdges = currentEdges.filter(
             (e) => e.target === nodeId && e.targetHandle === "video"
           );
+          if (isOmniFlashExtNode && videoEdges.length > 1) {
+            failCurrentVideoNode("Omni Flash Ext 最多支持 1 条参考视频");
+            return;
+          }
           const resolvedVideoUrls: string[] = [];
 
           for (const videoEdge of videoEdges) {
@@ -15658,7 +15886,23 @@ function FlowInner() {
 
             const normalizedVideoUrl = videoUrl.trim();
             if (!normalizedVideoUrl) continue;
-            resolvedVideoUrls.push(normalizedVideoUrl);
+            if (isOmniFlashExtNode) {
+              const isStableVideoRef =
+                /^https?:\/\//i.test(normalizedVideoUrl) ||
+                /^(projects|uploads|templates|videos|ai)\//i.test(normalizedVideoUrl);
+              if (isStableVideoRef) {
+                resolvedVideoUrls.push(normalizeStableRemoteUrl(normalizedVideoUrl));
+              } else {
+                const uploadedVideoUrl = await uploadVideoToOSS(normalizedVideoUrl, projectId);
+                if (!uploadedVideoUrl) {
+                  failCurrentVideoNode("参考视频上传失败");
+                  return;
+                }
+                resolvedVideoUrls.push(uploadedVideoUrl);
+              }
+            } else {
+              resolvedVideoUrls.push(normalizedVideoUrl);
+            }
 
             // 验证视频时长（需要从源节点获取）
             const videoDuration = (sourceNode.data as any)?.duration;
@@ -15710,6 +15954,36 @@ function FlowInner() {
         }
         const referenceImages = resolvedEdgePairs.map((p) => p.dataUrl);
         const referenceImageSourceEdges = resolvedEdgePairs.map((p) => p.edge);
+        if (isOmniFlashExtNode && Array.isArray(imageMentionUrls)) {
+          for (const mentionUrl of imageMentionUrls) {
+            const trimmed = typeof mentionUrl === "string" ? mentionUrl.trim() : "";
+            if (!trimmed) continue;
+            if (!referenceImages.includes(trimmed)) {
+              referenceImages.push(trimmed);
+            }
+          }
+        }
+
+        if (isOmniFlashExtNode) {
+          if (referenceImages.length > OMNI_FLASH_EXT_MAX_REFERENCE_IMAGES) {
+            failCurrentVideoNode("Omni Flash Ext 图片最多 3 张");
+            return;
+          }
+          const effectiveOmniVideoMode =
+            referenceVideoUrls.length > 0
+              ? "reference"
+              : rawNodeData.videoMode === "reference"
+              ? "reference"
+              : "frame";
+          if (effectiveOmniVideoMode === "frame" && referenceImages.length > 1) {
+            failCurrentVideoNode("Omni Flash Ext 单图模式只接 1 张图");
+            return;
+          }
+          if (effectiveOmniVideoMode === "reference" && referenceImages.length === 0) {
+            failCurrentVideoNode("Omni Flash Ext 参考模式至少接 1 张图");
+            return;
+          }
+        }
 
         console.log(`🎬 [VideoProvider] 解析后参考图数量: ${referenceImages.length}`);
         referenceImages.forEach((img, i) => {
@@ -15749,11 +16023,13 @@ function FlowInner() {
                 provider === "doubao" ||
                 provider === "kling" ||
                 provider === "kling-2.6" ||
-                provider === "kling-o3"
+                provider === "kling-o3" ||
+                isOmniFlashExtNode
               ) {
                 // 腾讯 VOD 链路需要可访问的 URL，必须上传到 OSS
-                if (isRemoteUrl(trimmed)) {
-                  referenceImageUrls.push(normalizeStableRemoteUrl(trimmed));
+                if (isRemoteUrl(trimmed) || isPersistableImageRef(trimmed)) {
+                  const normalizedRef = normalizePersistableImageRef(trimmed);
+                  referenceImageUrls.push(normalizeStableRemoteUrl(normalizedRef || trimmed));
                 } else {
                   const dataUrl = ensureDataUrl(trimmed);
                   if (isSeedanceNode) {
@@ -15830,7 +16106,9 @@ function FlowInner() {
 
         // 根据供应商调整参数
         const aspectRatioForAPI =
-          isSeedanceNode
+          isOmniFlashExtNode
+            ? aspectSetting || "16:9"
+            : isSeedanceNode
             ? aspectSetting || undefined
             : provider === "vidu" || provider === "viduq3-pro"
             ? aspectSetting || "16:9"
@@ -15874,6 +16152,11 @@ function FlowInner() {
           ) {
             durationForAPI = clipDuration;
           } else if (
+            isOmniFlashExtNode &&
+            (clipDuration === 4 || clipDuration === 6 || clipDuration === 8 || clipDuration === 10)
+          ) {
+            durationForAPI = clipDuration;
+          } else if (
             isSeedanceNode &&
             isSeedance20Request &&
             clipDuration >= 4 &&
@@ -15890,7 +16173,9 @@ function FlowInner() {
           }
           if (durationForAPI === undefined) {
             const fallbackDurationOptions =
-              isSeedanceNode
+              isOmniFlashExtNode
+                ? [4, 6, 8, 10]
+                : isSeedanceNode
                 ? isSeedance20Request
                   ? SEEDANCE20_DURATIONS
                   : SEEDANCE15_DURATIONS
@@ -16134,7 +16419,29 @@ function FlowInner() {
               : undefined;
 
           const requestPayload =
-            provider === "doubao"
+            isOmniFlashExtNode
+              ? {
+                  managedModelKey: "omni-flash-ext",
+                  vendorKey: managedRoutePayload.vendorKey || "new_api",
+                  platformKey: managedRoutePayload.platformKey || "new_api",
+                  prompt: finalPrompt,
+                  referenceImages:
+                    referenceImageUrls.length > 0
+                      ? referenceImageUrls.slice(0, OMNI_FLASH_EXT_MAX_REFERENCE_IMAGES)
+                      : undefined,
+                  referenceVideos:
+                    referenceVideoUrls.length > 0 ? referenceVideoUrls.slice(0, 1) : undefined,
+                  ...(referenceVideoUrls.length > 0 ? {} : { duration: durationForAPI || 6 }),
+                  aspectRatio: aspectRatioForAPI,
+                  resolution: rawNodeData.resolution || "720P",
+                  provider: "omni-flash-ext" as VideoProvider,
+                  videoMode: referenceVideoUrls.length > 0
+                    ? "reference"
+                    : rawNodeData.videoMode === "reference"
+                    ? "reference"
+                    : "frame",
+                }
+              : provider === "doubao"
               ? {
                   ...managedRoutePayload,
                   prompt: finalPrompt || undefined,
@@ -16229,9 +16536,29 @@ function FlowInner() {
             taskId: createResult.taskId,
           });
 
+          // 把任务信息写入节点 data，用于页面刷新后恢复轮询
+          setNodes((ns) =>
+            ns.map((n) =>
+              n.id === nodeId
+                ? {
+                    ...n,
+                    data: {
+                      ...n.data,
+                      pendingTaskId: createResult.taskId,
+                      pendingApiUsageId: createResult.apiUsageId,
+                      pendingProvider: provider,
+                      pendingStartMs: Date.now(),
+                    },
+                  }
+                : n
+            )
+          );
+
+          const generationStartMs = Date.now();
+
           // 开始轮询查询任务状态
           const pollInterval = 5000; // 5秒
-          const maxAttempts = 180; // 最多180次（15分钟）
+          const maxAttempts = VIDEO_TASK_POLL_MAX_ATTEMPTS;
           const maxConsecutiveQueryErrors = 6; // 连续查询失败 6 次后直接失败返回
           let attempts = 0;
           let consecutiveQueryErrors = 0;
@@ -16288,6 +16615,10 @@ function FlowInner() {
                             ...n.data,
                             status: "failed",
                             error: "任务查询超时",
+                            pendingTaskId: undefined,
+                            pendingApiUsageId: undefined,
+                            pendingProvider: undefined,
+                            pendingStartMs: undefined,
                           },
                         }
                       : n
@@ -16350,6 +16681,10 @@ function FlowInner() {
                           previousData.history as Array<Record<string, any>> | undefined,
                           historyEntry
                         ),
+                        pendingTaskId: undefined,
+                        pendingApiUsageId: undefined,
+                        pendingProvider: undefined,
+                        pendingStartMs: undefined,
                       },
                     };
                   })
@@ -16384,6 +16719,10 @@ function FlowInner() {
                             ...n.data,
                             status: "failed",
                             error: (queryResult as any).error || "任务生成失败",
+                            pendingTaskId: undefined,
+                            pendingApiUsageId: undefined,
+                            pendingProvider: undefined,
+                            pendingStartMs: undefined,
                           },
                       }
                     : n
@@ -20662,7 +21001,8 @@ function FlowInner() {
           n.type === "viduVideo" ||
           n.type === "viduQ3" ||
           n.type === "doubaoVideo" ||
-          n.type === "seedance20Video"
+          n.type === "seedance20Video" ||
+          n.type === "omniFlashExtVideo"
         ) {
           enhancedNode = {
             ...n,
@@ -20670,8 +21010,9 @@ function FlowInner() {
               ...runtimeNodeData,
               onRun: runNode,
               creditsPerCall,
-              seedance2AccessEnabled,
-              seedance2AccessResolved,
+              ...(n.type === "seedance20Video"
+                ? { seedance2AccessEnabled, seedance2AccessResolved }
+                : {}),
             },
           } as RFNode;
         } else {

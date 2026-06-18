@@ -163,6 +163,44 @@ function getDefaultConfigs(): NodeConfig[] {
 
     // 视频节点
     { nodeKey: "wan27Video", nameZh: "Wan2.7视频生成", nameEn: "Wan2.7 I2V", category: "video", status: "normal", sortOrder: 35, creditsPerCall: 0, serviceType: "wan27-video", priceYuan: 6 },
+    {
+      nodeKey: "omniFlashExtVideo",
+      nameZh: "Omni Flash Ext",
+      nameEn: "Omni Flash Ext",
+      category: "video",
+      status: "normal",
+      sortOrder: 36,
+      creditsPerCall: 600,
+      serviceType: "omni-flash-ext-video",
+      priceYuan: 6,
+      metadata: {
+        managedModelKey: "omni-flash-ext",
+        managedRoutes: {
+          modelKey: "omni-flash-ext",
+          defaultVendor: "new_api",
+          vendors: [
+            {
+              vendorKey: "new_api",
+              platformKey: "new_api",
+              label: "new-api / APIMart",
+              provider: "omni-flash-ext",
+              creditsPerCall: 600,
+            },
+          ],
+        },
+        defaultData: {
+          managedModelKey: "omni-flash-ext",
+          vendorKey: "new_api",
+          platformKey: "new_api",
+          videoMode: "frame",
+          duration: 6,
+          clipDuration: 6,
+          resolution: "720P",
+          aspectRatio: "16:9",
+          provider: "omni-flash-ext",
+        },
+      },
+    },
 
     // 其他节点
     { nodeKey: "videoAnalyze", nameZh: "视频分析节点", nameEn: "Video Analysis", category: "other", status: "normal", sortOrder: 31, creditsPerCall: 30 },

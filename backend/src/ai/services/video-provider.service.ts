@@ -15,6 +15,13 @@ import {
   type ResolvedManagedModelRoute,
 } from "./model-routing.service";
 import type { TencentVodAigcCreateVideoTaskRequest } from "./tencent-vod-aigc.service";
+import {
+  buildOmniFlashExtApimartPayload,
+  buildOmniFlashExtNewApiPayload,
+  isOmniFlashExtModelKey,
+  OMNI_FLASH_EXT_MODEL_KEY,
+  parseOmniFlashExtTaskResponse,
+} from "./omni-flash-ext.adapter";
 
 // 默认请求超时时间（毫秒）
 const DEFAULT_FETCH_TIMEOUT = 180000; // 3分钟
@@ -145,7 +152,7 @@ export interface VideoGenerationResult {
     modelKey?: string;
     vendorKey?: string;
     platformKey?: string;
-    route?: "legacy" | "tencent_vod";
+    route?: "legacy" | "tencent_vod" | "new_api";
     providerChannel?: string;
     routedProvider?: string;
     fallbackUsed?: boolean;
@@ -673,6 +680,7 @@ export class VideoProviderService {
     "viduq3-pro": process.env.VIDU_API_KEY || "sk-vidu-xxx",
     doubao:
       process.env.DOUBAO_API_KEY || "0ac5fae84-f299-4db4-8d7e-3f7fc355c6ac",
+    "omni-flash-ext": process.env.NANO2_API_KEY || process.env.APIMART_API_KEY || "",
   };
 
   /**
@@ -682,6 +690,10 @@ export class VideoProviderService {
     options: VideoProviderRequestDto
   ): Promise<VideoGenerationResult> {
     const { provider } = options;
+
+    if (isOmniFlashExtModelKey(options.managedModelKey) || provider === "omni-flash-ext") {
+      return this.generateManagedOmniFlashExt(options);
+    }
 
     if (provider === "kling-o3") {
       return this.generateManagedKlingO3(options);
@@ -736,9 +748,13 @@ export class VideoProviderService {
    * 查询任务状态
    */
   async queryTask(
-    provider: "kling" | "kling-2.6" | "kling-o3" | "vidu" | "viduq3-pro" | "doubao",
+    provider: "kling" | "kling-2.6" | "kling-o3" | "vidu" | "viduq3-pro" | "doubao" | "omni-flash-ext",
     taskId: string
   ): Promise<{ status: string; videoUrl?: string; thumbnailUrl?: string }> {
+    if (provider === "omni-flash-ext" || taskId.startsWith("omni-flash-ext:")) {
+      return this.queryOmniFlashExtTask(taskId);
+    }
+
     if (taskId.startsWith(this.managedV2TaskPrefix)) {
       return this.queryManagedV2Task(taskId);
     }
@@ -798,6 +814,209 @@ export class VideoProviderService {
       default:
         throw new Error(`不支持的供应商: ${provider}`);
     }
+  }
+
+  private async generateManagedOmniFlashExt(
+    options: VideoProviderRequestDto
+  ): Promise<VideoGenerationResult> {
+    const managedResult = await this.executeManagedRouteWithFallback(
+      OMNI_FLASH_EXT_MODEL_KEY,
+      options.vendorKey,
+      async (route) => {
+        if (route.route !== "new_api") {
+          throw new ServiceUnavailableException("Omni Flash Ext 仅支持 new_api/APIMart 路由");
+        }
+        return this.generateOmniFlashExtViaApimart(options, route);
+      },
+    );
+    if (managedResult) return managedResult;
+
+    return this.generateOmniFlashExtViaApimart(options, {
+      model: {
+        modelKey: OMNI_FLASH_EXT_MODEL_KEY,
+        modelName: "Omni Flash Ext",
+        taskType: "video",
+        enabled: true,
+        defaultVendor: "new_api",
+      },
+      vendor: {
+        vendorKey: "new_api",
+        platformKey: "new_api",
+        label: "new-api / APIMart",
+        enabled: true,
+        route: "new_api",
+        provider: "omni-flash-ext",
+      },
+      route: "new_api",
+    });
+  }
+
+  private async generateOmniFlashExtViaApimart(
+    options: VideoProviderRequestDto,
+    route: ResolvedManagedModelRoute,
+  ): Promise<VideoGenerationResult> {
+    const newApiPayload = buildOmniFlashExtNewApiPayload({
+      ...options,
+      managedModelKey: OMNI_FLASH_EXT_MODEL_KEY,
+    });
+    const apimartPayload = buildOmniFlashExtApimartPayload(newApiPayload);
+    const apiKey = this.apiKeys["omni-flash-ext"];
+    if (!apiKey || apiKey.includes("xxx")) {
+      throw new ServiceUnavailableException("APIMart API Key 未配置");
+    }
+
+    this.logProviderPayload("omni-flash-ext/new-api", newApiPayload);
+    this.logProviderPayload("omni-flash-ext/apimart", apimartPayload);
+
+    const response = await fetchWithTimeout("https://api.apimart.ai/v1/videos/generations", {
+      method: "POST",
+      timeout: DEFAULT_FETCH_TIMEOUT,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(apimartPayload),
+    });
+
+    const textBody = await response.text().catch(() => "");
+    let data: any = {};
+    if (textBody) {
+      try {
+        data = JSON.parse(textBody);
+      } catch {
+        data = { raw: textBody };
+      }
+    }
+    this.logger.debug?.(`APIMart Omni Flash Ext 原始响应: ${textBody.slice(0, 500)}`);
+
+    if (!response.ok) {
+      const message =
+        data?.error?.message ||
+        data?.message ||
+        textBody ||
+        `HTTP ${response.status}`;
+      throw new BadRequestException(`APIMart Omni Flash Ext 创建任务失败: ${message}`);
+    }
+
+    const taskId =
+      data?.id ||
+      data?.task_id ||
+      data?.taskId ||
+      data?.data?.id ||
+      data?.data?.task_id ||
+      data?.data?.taskId ||
+      data?.data?.[0]?.task_id ||
+      data?.data?.[0]?.taskId ||
+      data?.data?.[0]?.id;
+    const videoUrl =
+      data?.videoUrl ||
+      data?.video_url ||
+      data?.url ||
+      data?.data?.videoUrl ||
+      data?.data?.video_url ||
+      data?.data?.url ||
+      data?.data?.[0]?.video_url ||
+      data?.data?.[0]?.videoUrl ||
+      data?.data?.[0]?.url;
+
+    if (!taskId && !videoUrl) {
+      throw new ServiceUnavailableException("APIMart Omni Flash Ext 未返回 taskId 或视频地址");
+    }
+
+    return {
+      taskId: taskId ? `omni-flash-ext:${String(taskId)}` : `omni-flash-ext:${Date.now()}`,
+      status: videoUrl ? "succeeded" : "queued",
+      ...(videoUrl ? { videoUrl } : {}),
+      execution: {
+        modelKey: OMNI_FLASH_EXT_MODEL_KEY,
+        vendorKey: route.vendor.vendorKey,
+        platformKey: route.vendor.platformKey || route.vendor.vendorKey,
+        route: "new_api",
+        providerChannel: "apimart",
+        routedProvider: "omni-flash-ext",
+        fallbackUsed: false,
+      },
+    };
+  }
+
+  private async queryOmniFlashExtTask(
+    taskId: string,
+  ): Promise<{ status: string; videoUrl?: string; thumbnailUrl?: string }> {
+    const rawTaskId = taskId.startsWith("omni-flash-ext:")
+      ? taskId.slice("omni-flash-ext:".length)
+      : taskId;
+    if (!rawTaskId) return { status: "processing" };
+    const apiKey = this.apiKeys["omni-flash-ext"];
+    if (!apiKey || apiKey.includes("xxx")) {
+      throw new ServiceUnavailableException("APIMart API Key 未配置");
+    }
+
+    const cacheBuster = Date.now();
+    const endpoints = [
+      `https://api.apimart.ai/v1/tasks/${encodeURIComponent(rawTaskId)}?language=zh&t=${cacheBuster}`,
+      `https://api.apimart.ai/v1/videos/${encodeURIComponent(rawTaskId)}?t=${cacheBuster}`,
+    ];
+    let lastStatus = 0;
+    let lastBody = "";
+
+    for (const endpoint of endpoints) {
+      const response = await fetchWithTimeout(endpoint, {
+        method: "GET",
+        timeout: QUERY_FETCH_TIMEOUT,
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+      });
+      const textBody = await response.text().catch(() => "");
+      lastStatus = response.status;
+      lastBody = textBody;
+      this.logger.debug?.(
+        `Omni Flash Ext 查询 ${endpoint} → HTTP ${response.status}: ${textBody.slice(0, 800)}`,
+      );
+      if (!response.ok) {
+        if (response.status === 404) continue;
+        break;
+      }
+
+      let raw: any = {};
+      if (textBody) {
+        try {
+          raw = JSON.parse(textBody);
+        } catch {
+          raw = { raw: textBody };
+        }
+      }
+
+      const parsed = parseOmniFlashExtTaskResponse(raw, rawTaskId);
+      this.logger.debug?.(
+        `Omni Flash Ext 解析结果: taskId=${rawTaskId}, status=${parsed.status}, rawStatus=${parsed.rawStatus || "unknown"}, videoUrl=${parsed.videoUrl ? "yes" : "no"}`,
+      );
+
+      if (parsed.videoUrl) {
+        const finalVideoUrl = this.isOssPublicUrl(parsed.videoUrl)
+          ? parsed.videoUrl
+          : await this.uploadRemoteVideoToOss(
+              parsed.videoUrl,
+              `omni-flash-ext-${rawTaskId}`,
+            );
+        return {
+          status: "succeeded",
+          videoUrl: finalVideoUrl,
+          thumbnailUrl: parsed.thumbnailUrl,
+        };
+      }
+      return {
+        status: parsed.status,
+        ...(parsed.thumbnailUrl ? { thumbnailUrl: parsed.thumbnailUrl } : {}),
+      };
+    }
+
+    this.logger.warn(
+      `Omni Flash Ext 查询失败: taskId=${rawTaskId}, http=${lastStatus}, body=${lastBody.slice(0, 500)}`,
+    );
+    return { status: "processing" };
   }
 
   private async generateManagedKlingO3(

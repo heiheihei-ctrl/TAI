@@ -1090,6 +1090,17 @@ export class AiController {
     const normalizedKlingModel =
       typeof dto.klingModel === 'string' ? dto.klingModel.trim().toLowerCase() : '';
 
+    if (String(dto.managedModelKey || '').trim().toLowerCase() === 'omni-flash-ext') {
+      assignRouteParams(
+        await this.modelRoutingService.resolveVideoModel('omni-flash-ext', preferredVendorKey),
+      );
+      params.managedModelKey = 'omni-flash-ext';
+      params.modelKey = params.modelKey || 'omni-flash-ext';
+      params.routedProvider = params.routedProvider || 'omni-flash-ext';
+      params.providerChannel = params.providerChannel || 'apimart';
+      return params;
+    }
+
     if (
       (dto.provider === 'kling' ||
         dto.provider === 'kling-2.6' ||
@@ -1156,6 +1167,13 @@ export class AiController {
   private resolveVideoProviderServiceType(dto: VideoProviderRequestDto): ServiceType {
     const normalizedKlingModel =
       typeof dto.klingModel === 'string' ? dto.klingModel.trim().toLowerCase() : '';
+
+    if (
+      String(dto.managedModelKey || '').trim().toLowerCase() === 'omni-flash-ext' ||
+      dto.provider === 'omni-flash-ext'
+    ) {
+      return 'omni-flash-ext-video';
+    }
 
     if (dto.provider === 'kling-o3') {
       return 'kling-o3-video';
@@ -5354,6 +5372,7 @@ export class AiController {
         : {}),
     });
     const billingModel =
+      effectiveDto.managedModelKey ||
       effectiveDto.klingModel ||
       effectiveDto.viduModelVariant ||
       effectiveDto.viduModel ||
@@ -5567,7 +5586,7 @@ export class AiController {
    */
   @Get('video-task/:provider/:taskId')
   async queryVideoTask(
-    @Param('provider') provider: 'kling' | 'kling-2.6' | 'kling-o3' | 'vidu' | 'viduq3-pro' | 'doubao',
+    @Param('provider') provider: 'kling' | 'kling-2.6' | 'kling-o3' | 'vidu' | 'viduq3-pro' | 'doubao' | 'omni-flash-ext',
     @Param('taskId') taskId: string,
   ) {
     return this.normalizeVideoTaskResponse(

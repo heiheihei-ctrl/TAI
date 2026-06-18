@@ -4,7 +4,7 @@ import type { ManagedPricingBook } from './model-pricing-resolver';
 
 export const MODEL_PROVIDER_MAPPING_SETTING_KEY = 'model_provider_mapping_v2';
 
-type ModelVendorRouteType = 'legacy' | 'tencent_vod';
+type ModelVendorRouteType = 'legacy' | 'tencent_vod' | 'new_api';
 
 export interface ManagedVendorPlatformConfig {
   platformKey: string;
@@ -528,6 +528,14 @@ const DEFAULT_MODEL_PROVIDER_MAPPING_V2: ModelProviderMappingV2 = {
       metadata: DEFAULT_TENCENT_VOD_PLATFORM_METADATA,
     },
     {
+      platformKey: 'new_api',
+      platformName: 'new-api / APIMart',
+      enabled: true,
+      route: 'new_api',
+      provider: 'omni-flash-ext',
+      description: 'OpenAI compatible video route backed by APIMart',
+    },
+    {
       platformKey: 'vidu_api',
       platformName: 'Vidu API',
       enabled: true,
@@ -553,6 +561,105 @@ const DEFAULT_MODEL_PROVIDER_MAPPING_V2: ModelProviderMappingV2 = {
     },
   ],
   models: [
+    {
+      modelKey: 'omni-flash-ext',
+      modelName: 'Omni Flash Ext',
+      taskType: 'video',
+      enabled: true,
+      defaultVendor: 'new_api',
+      vendors: [
+        {
+          vendorKey: 'new_api',
+          platformKey: 'new_api',
+          label: 'new-api / APIMart',
+          enabled: true,
+          route: 'new_api',
+          provider: 'omni-flash-ext',
+          modelName: 'Omni Flash Ext',
+          modelVersion: 'Omni-Flash-Ext',
+          creditsPerCall: 600,
+          priceYuan: 6,
+          pricing: {
+            version: 'v2',
+            dimensions: [
+              {
+                key: 'videoMode',
+                label: '生成模式',
+                type: 'enum',
+                required: true,
+                options: [
+                  { value: 'frame', label: '单图模式' },
+                  { value: 'reference', label: '参考模式' },
+                ],
+              },
+              {
+                key: 'resolution',
+                label: '分辨率',
+                type: 'enum',
+                required: true,
+                options: [
+                  { value: '720P', label: '720P' },
+                  { value: '1080P', label: '1080P' },
+                  { value: '4K', label: '4K' },
+                ],
+              },
+              {
+                key: 'durationSec',
+                label: '时长（秒）',
+                type: 'enum',
+                required: false,
+                options: [
+                  { value: 4, label: '4 秒' },
+                  { value: 6, label: '6 秒' },
+                  { value: 8, label: '8 秒' },
+                  { value: 10, label: '10 秒' },
+                ],
+              },
+            ],
+            matchingRules: [
+              {
+                ruleKey: 'omni_flash_ext_resolution_rule',
+                label: 'Omni Flash Ext 分辨率价格',
+                enabled: true,
+                priority: 100,
+                evaluatorKey: 'omni_flash_ext_resolution_matrix',
+                conditions: { all: [], any: [] },
+              },
+            ],
+            evaluators: {
+              omni_flash_ext_resolution_matrix: {
+                type: 'lookup_matrix',
+                axes: ['resolution'],
+                matrix: {
+                  '720P': 600,
+                  '1080P': 900,
+                  '4K': 1600,
+                },
+              },
+            },
+            displayConfig: {
+              specAxes: ['videoMode', 'resolution', 'durationSec'],
+              labels: {
+                'videoMode.frame': '单图模式',
+                'videoMode.reference': '参考模式',
+                'resolution.720P': '720P',
+                'resolution.1080P': '1080P',
+                'resolution.4K': '4K',
+                'durationSec.4': '4 秒',
+                'durationSec.6': '6 秒',
+                'durationSec.8': '8 秒',
+                'durationSec.10': '10 秒',
+              },
+              defaultSelections: {
+                videoMode: 'frame',
+                resolution: '720P',
+                durationSec: 6,
+              },
+            },
+          },
+        },
+      ],
+    },
     {
       modelKey: 'kling-2.6',
       modelName: 'Kling 2.6',
@@ -1238,7 +1345,12 @@ export class ModelRoutingService {
     return {
       model,
       vendor: mergedVendor,
-      route: mergedVendor.route === 'tencent_vod' ? 'tencent_vod' : 'legacy',
+      route:
+        mergedVendor.route === 'tencent_vod'
+          ? 'tencent_vod'
+          : mergedVendor.route === 'new_api'
+            ? 'new_api'
+            : 'legacy',
     };
   }
 
@@ -1311,7 +1423,12 @@ export class ModelRoutingService {
       return {
         model,
         vendor: mergedVendor,
-        route: mergedVendor.route === 'tencent_vod' ? 'tencent_vod' : 'legacy',
+        route:
+          mergedVendor.route === 'tencent_vod'
+            ? 'tencent_vod'
+            : mergedVendor.route === 'new_api'
+              ? 'new_api'
+              : 'legacy',
       };
     });
   }

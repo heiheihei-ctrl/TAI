@@ -6,6 +6,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 ### Added
+- Flow/AI: added the independent `Omni Flash Ext` video node (`omniFlashExtVideo`) with managed model key `omni-flash-ext`, APIMart upstream model `Omni-Flash-Ext`, dedicated frontend validation, media collection, new_api/APIMart request adaptation, model routing, credit recognition, and adapter coverage tests.
 - AI Chat/Flow prompts now support image mentions: chat input can reference images from the current project, Prompt/TextPromptPro nodes can reference images already connected to their downstream model node, and runtime requests resolve those lightweight mentions into reference image URLs without storing inline image data in project JSON.
 - Auth UI: WeChat login is hidden on the test origin `http://101.96.217.132:8080` and the login page defaults to password login there, while production origins such as `https://tgtai.com` keep the WeChat tab (`frontend/src/pages/auth/Login.tsx`).
 - Auth UI: WeChat login now replaces the QR panel with the phone-binding card once a scan is recognized and the session enters `needs_phone_bind`, instead of stacking the binding form below the QR code (`frontend/src/pages/auth/Login.tsx`).
@@ -17,6 +18,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Settings modal user profile card now supports inline profile editing: users can open an edit dialog from the settings card, upload a persisted OSS avatar, and update their display name. The backend adds `PATCH /api/users/profile`, frontend auth state now carries `avatarUrl`, and settings/workspace UI reuse the saved avatar consistently.
 
 ### Fixed
+- Flow/Omni Flash Ext Playback: the node video player now uses the persisted direct URL first with asset-proxy fallback, lets the browser infer the media type, isolates native controls from ReactFlow drag events, and reports load failure instead of showing an inert `0:00` player.
+- AI/Omni Flash Ext: APIMart task polling now parses object/array `data`, `result.videos`, and `task_result.videos` response shapes, and sends cache-busting/no-cache query headers. Completed upstream tasks now return `succeeded` with the generated video instead of remaining `processing`.
+- Flow/Video Polling: unified frontend video-task polling timeout to 15 minutes for Omni Flash Ext and other video nodes; removed the previous Omni-specific 30-minute wait window that could leave the node running much longer than peer video nodes.
+- Flow/Omni Flash Ext: connection admission now recognizes `omniFlashExtVideo`, so its `text`, `image`, and `video` input handles can be connected; text/video inputs replace existing edges while image inputs are capped at 3.
 - Canvas HD upscale now uses the deterministic RealESRGAN x4 workflow instead of prompt-based `edit-image`, resolving cases where 4K upscaling redraws the selected image into unrelated content.
 - Frontend image source resolution now treats managed asset paths (`projects/`, `uploads/`, `templates/`, `videos/`, `ai/`) as first-party even when served through a custom CDN domain. Blob/DataURL conversion tries `/api/assets/proxy` before browser direct fetch for those URLs, preventing local CORS noise after fast background removal without changing `VITE_ASSET_PUBLIC_BASE_URL`.
 - Image mentions now use the `tai-image:` token prefix, render as inline thumbnail chips in chat and prompt textareas instead of exposing raw token strings, and support repeated `@` insertion in the same input reliably.

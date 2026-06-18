@@ -1,5 +1,14 @@
 # 前端模块：Flow（frontend-flow�?
 
+## 2026-06-17 Update
+- Added `omniFlashExtVideo` as an independent Flow video node named `Omni Flash Ext`.
+- The node exposes only `text`, `image`, and `video` input handles plus one `video` output handle. Runtime collection for Omni Flash Ext reads images only from the `image` handle, videos only from the `video` handle, and may append valid Prompt image mentions after connected images with stable de-duplication.
+- Flow connection admission explicitly handles `omniFlashExtVideo`: `text` accepts text sources with single-edge replacement, `image` accepts image sources up to 3 edges, and `video` accepts video/character-capable video sources with single-edge replacement.
+- Runtime validation blocks empty prompts, more than 3 images, more than 1 reference video, `frame` mode with more than 1 image, and `reference` mode without images. When a reference video is connected, the effective mode is forced to `reference` and `duration` is omitted from the backend request.
+- Frontend video-task polling now uses the same 15-minute window for Omni Flash Ext and other video nodes; the earlier Omni-specific 30-minute wait path was removed to keep timeout behavior consistent.
+- Omni Flash Ext playback uses the persisted direct video URL first and falls back to the asset proxy on media load failure. Its native controls are isolated from ReactFlow drag events, and the player no longer forces `video/mp4`, allowing the browser to use the actual response content type.
+- Temporary `blob:` / `data:` / bare base64 media is uploaded or converted to a persistable reference before calling video generation; persisted requests use `managedModelKey: "omni-flash-ext"` and provider `omni-flash-ext`.
+
 ## 2026-04-15 Update
 - Analysis node now uses node-local Fast/Pro/Ultra selection (analysisProvider) and does not change global provider state.
 - Analysis node requests are forced to Banana normal route, independent from global normal/stable channel toggles.
