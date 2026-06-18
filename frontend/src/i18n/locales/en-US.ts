@@ -27,6 +27,7 @@ const enUS = {
   home: {
     wechat: {
       followOfficial: "Follow Official Account",
+      taiOfficialAccount: "TAI Official Account",
       joinGroup: "Join WeChat Group",
       taiLearningGroup: "TAI Learning Group",
       noImage: "No image",

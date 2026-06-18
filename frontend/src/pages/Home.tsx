@@ -228,7 +228,7 @@ const WeChatFloatingButton = () => {
               <div className="mb-2 h-32 w-32 rounded-lg bg-white p-2">
                 <img
                   src={qrCodes.officialAccount}
-                  alt={t("home.wechat.followOfficial")}
+                  alt={t("home.wechat.taiOfficialAccount")}
                   className="h-full w-full"
                   onError={(e) => {
                     (e.target as HTMLImageElement).src =
@@ -237,7 +237,7 @@ const WeChatFloatingButton = () => {
                 />
               </div>
               <span className="text-xs text-white/80">
-                {t("home.wechat.followOfficial")}
+                {t("home.wechat.taiOfficialAccount")}
               </span>
             </div>
             <div className="flex flex-col items-center">
