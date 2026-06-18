@@ -141,7 +141,7 @@ export const useSimpleTextTool = ({ currentColor, ensureDrawingLayer }: UseSimpl
       if (!loaded) return;
       try {
         paperText.fontFamily = textStyle.fontFamily;
-        paper.view?.draw();
+        paper.view?.update();
       } catch {
         // ignore
       }
@@ -324,7 +324,7 @@ export const useSimpleTextTool = ({ currentColor, ensureDrawingLayer }: UseSimpl
             if (!loaded) return;
             try {
               item.paperText.fontFamily = updates.fontFamily as string;
-              paper.view?.draw();
+              paper.view?.update();
             } catch {
               // ignore
             }
@@ -862,7 +862,7 @@ export const useSimpleTextTool = ({ currentColor, ensureDrawingLayer }: UseSimpl
           if (!loaded) return;
           try {
             item.paperText.fontFamily = style.fontFamily;
-            paper.view?.draw();
+            paper.view?.update();
           } catch {
             // ignore
           }
