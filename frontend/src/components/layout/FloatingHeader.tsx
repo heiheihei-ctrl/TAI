@@ -156,7 +156,7 @@ const REFERRAL_NOTIFICATION_LAST_SEEN_DATE_STORAGE_KEY =
   "tanva-referral-notification-last-seen-date";
 const MAX_QUICK_PROJECTS = 5;
 const USER_MANUAL_URL =
-  "https://fcn0tn5wd2p8.feishu.cn/wiki/CWZpw5T9EiZvRzkaoe0c3Bmgn5c?from=from_copylink";
+  "https://my.feishu.cn/wiki/QPrBw5l5OiS8LgkMHPmcNkfPnpd?from=from_copylink";
 
 const getTodayDateKey = () => {
   const now = new Date();
