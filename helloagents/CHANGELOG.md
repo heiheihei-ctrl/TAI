@@ -19,6 +19,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ### Fixed
 - Backend build: fixed `tiled-watermark.util.ts` sharp typing by returning the callable sharp factory type instead of a `Sharp` instance type, resolving TypeScript compile failures on watermark overlay generation.
+- Backend membership typing: `getCurrentMembership` now uses explicit Prisma record types for active subscription/plan resolution, avoiding TS Server false `never` narrowing on `subscription` and `plan` fields.
 - Flow/Omni Flash Ext Playback: the node video player now uses the persisted direct URL first with asset-proxy fallback, lets the browser infer the media type, isolates native controls from ReactFlow drag events, and reports load failure instead of showing an inert `0:00` player.
 - AI/Omni Flash Ext: APIMart task polling now parses object/array `data`, `result.videos`, and `task_result.videos` response shapes, and sends cache-busting/no-cache query headers. Completed upstream tasks now return `succeeded` with the generated video instead of remaining `processing`.
 - Flow/Video Polling: unified frontend video-task polling timeout to 15 minutes for Omni Flash Ext and other video nodes; removed the previous Omni-specific 30-minute wait window that could leave the node running much longer than peer video nodes.

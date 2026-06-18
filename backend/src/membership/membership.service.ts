@@ -13,6 +13,9 @@ import type {
 } from './membership.types';
 import { getEffectiveMembershipPlanPrice } from './membership-pricing';
 
+type MembershipPlanRecord = Prisma.MembershipPlanGetPayload<Record<string, never>>;
+type UserMembershipSubscriptionRecord = Prisma.UserMembershipSubscriptionGetPayload<Record<string, never>>;
+
 @Injectable()
 export class MembershipService {
   private static readonly FREE_TIER_BENEFITS_SETTING_KEY = 'membership_free_tier_benefits';
@@ -210,31 +213,35 @@ export class MembershipService {
   }
 
   async getCurrentMembership(userId: string) {
-    const [subscription, nextChange] = await Promise.all([
-      this.withMissingMembershipTablesFallback(
-        () =>
-          this.prisma.userMembershipSubscription.findFirst({
-            where: {
-              userId,
-              status: 'active',
-            },
-            orderBy: [{ currentPeriodEndAt: 'desc' }, { createdAt: 'desc' }],
-          }),
-        () => null,
-      ),
-      this.getNextChange(userId),
-    ]);
+    const entitlement = await this.getMembershipEntitlement(userId);
+    const [subscription, nextChange]: [UserMembershipSubscriptionRecord | null, MembershipNextChangeView | null] =
+      await Promise.all([
+        this.withMissingMembershipTablesFallback<UserMembershipSubscriptionRecord | null>(
+          () =>
+            this.prisma.userMembershipSubscription.findFirst({
+              where: {
+                userId,
+                status: 'active',
+              },
+              orderBy: [{ currentPeriodEndAt: 'desc' }, { createdAt: 'desc' }],
+            }),
+          () => null,
+        ),
+        this.getNextChange(userId),
+      ]);
 
     if (!subscription) {
       return {
         subscription: null,
         plan: null,
         nextChange,
-        entitlement: await this.getMembershipEntitlement(userId),
+        entitlement,
       };
     }
 
-    const plan = await this.withMissingMembershipTablesFallback(
+    const plan: MembershipPlanRecord | null = await this.withMissingMembershipTablesFallback<
+      MembershipPlanRecord | null
+    >(
       () =>
         this.prisma.membershipPlan.findUnique({
           where: { id: subscription.membershipPlanId },
@@ -267,7 +274,7 @@ export class MembershipService {
           }
         : null,
       nextChange,
-      entitlement: await this.getMembershipEntitlement(userId),
+      entitlement,
     };
   }
 
