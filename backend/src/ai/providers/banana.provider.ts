@@ -171,6 +171,41 @@ export class BananaProvider implements IAIProvider {
     return this.apimartApiKey;
   }
 
+  private wrapApimartNetworkError(error: unknown, context: string): Error {
+    const err =
+      error instanceof Error ? error : new Error(typeof error === "string" ? error : "Unknown error");
+    const causeCode =
+      typeof (err as any)?.cause?.code === "string"
+        ? String((err as any).cause.code)
+        : typeof (err as any)?.code === "string"
+          ? String((err as any).code)
+          : "";
+    const message = String(err.message || "");
+    const normalized = message.toLowerCase();
+
+    if (causeCode === "ENOTFOUND") {
+      return new ServiceUnavailableException(
+        `APIMart 域名解析失败（api.apimart.ai），请检查服务器 DNS 或代理网络。${context}`
+      ) as unknown as Error;
+    }
+    if (causeCode === "ETIMEDOUT" || err.name === "AbortError") {
+      return new ServiceUnavailableException(
+        `APIMart 网络连接超时，请检查服务器到 api.apimart.ai 的网络链路或代理配置。${context}`
+      ) as unknown as Error;
+    }
+    if (
+      causeCode === "ECONNRESET" ||
+      causeCode === "ECONNREFUSED" ||
+      causeCode === "EAI_AGAIN" ||
+      normalized.includes("fetch failed")
+    ) {
+      return new ServiceUnavailableException(
+        `APIMart 网络请求失败，请检查服务器外网出口、代理或防火墙配置。${context} ${message}`.trim()
+      ) as unknown as Error;
+    }
+    return err;
+  }
+
   private getUserBananaImageRoute(
     providerOptions?: ProviderOptionsPayload
   ): BananaImageRoute | null {
@@ -1140,14 +1175,19 @@ export class BananaProvider implements IAIProvider {
       messages: this.buildApimartChatMessages(contents),
     };
 
-    const response = await fetch(this.apimartTextUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+    let response: Response;
+    try {
+      response = await fetch(this.apimartTextUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      throw this.wrapApimartNetworkError(error, "Banana 文本普通路线请求失败");
+    }
 
     const rawText = await response.text();
     let parsed: any = null;
@@ -1332,7 +1372,7 @@ export class BananaProvider implements IAIProvider {
           continue;
         }
 
-        throw err;
+        throw this.wrapApimartNetworkError(err, "Banana 生图普通路线提交失败");
       }
     }
 
@@ -1370,11 +1410,16 @@ export class BananaProvider implements IAIProvider {
 
   private async queryApimartTask(taskId: string): Promise<{ status: string; imageUrl?: string }> {
     const apiKey = this.ensureApimartApiKey();
-    const response = await fetch(`${this.apimartTaskBaseUrl}/${taskId}`, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${this.apimartTaskBaseUrl}/${taskId}`, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+      });
+    } catch (error) {
+      throw this.wrapApimartNetworkError(error, `Banana 普通路线查询任务失败(task=${taskId})`);
+    }
 
     if (!response.ok) {
       throw new Error(`Apimart task query failed: HTTP ${response.status}`);

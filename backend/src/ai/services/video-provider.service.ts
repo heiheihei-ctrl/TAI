@@ -868,15 +868,24 @@ export class VideoProviderService {
     this.logProviderPayload("omni-flash-ext/new-api", newApiPayload);
     this.logProviderPayload("omni-flash-ext/apimart", apimartPayload);
 
-    const response = await fetchWithTimeout("https://api.apimart.ai/v1/videos/generations", {
-      method: "POST",
-      timeout: DEFAULT_FETCH_TIMEOUT,
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(apimartPayload),
-    });
+    let response: Response;
+    try {
+      response = await fetchWithTimeout("https://api.apimart.ai/v1/videos/generations", {
+        method: "POST",
+        timeout: DEFAULT_FETCH_TIMEOUT,
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(apimartPayload),
+      });
+    } catch (error) {
+      const message = this.summarizeError(error);
+      this.logger.error(
+        `APIMart Omni Flash Ext 请求失败: vendor=${route.vendor.vendorKey}, platform=${route.vendor.platformKey || route.vendor.vendorKey}, message=${message}`,
+      );
+      throw new ServiceUnavailableException(`APIMart Omni Flash Ext 请求失败: ${message}`);
+    }
 
     const textBody = await response.text().catch(() => "");
     let data: any = {};
@@ -895,6 +904,9 @@ export class VideoProviderService {
         data?.message ||
         textBody ||
         `HTTP ${response.status}`;
+      this.logger.warn(
+        `APIMart Omni Flash Ext 创建任务失败: http=${response.status}, vendor=${route.vendor.vendorKey}, message=${String(message).slice(0, 500)}`,
+      );
       throw new BadRequestException(`APIMart Omni Flash Ext 创建任务失败: ${message}`);
     }
 
