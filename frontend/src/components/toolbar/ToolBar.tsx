@@ -512,7 +512,8 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
       const target = event.target as Node;
       if (
         target instanceof Element &&
-        target.closest('[data-abr-brush-library]')
+        (target.closest('[data-abr-brush-library]') ||
+          target.closest('[data-abr-brush-picker]'))
       ) {
         return;
       }
@@ -979,8 +980,12 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
 
         {/* 绘制次级菜单：点击展开显示 */}
         {isDrawingMenuOpen && !isEraser && (
-          <div className="absolute left-full ml-3 transition-all duration-[50ms] ease-out z-[1001]" style={{ top: '-14px' }}>
-            <div className="flex flex-col items-center gap-3 px-2 py-3 rounded-[999px] bg-liquid-glass-light backdrop-blur-minimal backdrop-saturate-125 shadow-liquid-glass-lg border border-liquid-glass-light" style={{ marginTop: '1px' }}>
+          <div className="absolute left-full ml-3 transition-all duration-[50ms] ease-out z-[1001] overflow-visible" style={{ top: '-14px' }}>
+            <div
+              className="flex h-[300px] flex-col overflow-hidden rounded-[999px] border border-liquid-glass-light bg-liquid-glass-light shadow-liquid-glass-lg backdrop-blur-minimal backdrop-saturate-125"
+              style={{ marginTop: '1px' }}
+            >
+              <div className="flex min-h-0 flex-1 flex-col items-center gap-3 overflow-y-auto overflow-x-hidden px-2 py-3 scrollbar-hidden">
               {/* 绘图工具按钮组 */}
               <div className="flex flex-col gap-1">
                 <Tooltip>
@@ -1124,6 +1129,7 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
                   onChange={setStrokeWidth}
                   disabled={isEraser}
                 />
+              </div>
               </div>
             </div>
           </div>

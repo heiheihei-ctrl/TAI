@@ -13,8 +13,8 @@ export type TextToolFontOption = {
   isPresetBold?: boolean;
 };
 
-/** 思源宋体等 CDN 字体（每款字重独立文件） */
-export const TEXT_TOOL_WEB_FONTS: TextToolFontOption[] = [
+/** 思源宋体 CDN 字体 */
+export const TEXT_TOOL_SOURCE_HAN_SERIF_FONTS: TextToolFontOption[] = [
   {
     value: '"Tanva Source Han Serif CN ExtraLight", "Source Han Serif CN", serif',
     labelZh: '思源宋体 特细',
@@ -59,6 +59,104 @@ export const TEXT_TOOL_WEB_FONTS: TextToolFontOption[] = [
     webFontUrl: `${TEXT_TOOL_FONT_CDN_BASE}/SourceHanSerifCN-Heavy.ttf`,
     isPresetBold: true,
   },
+];
+
+/** 阿里巴巴普惠体 CDN 字体 */
+export const TEXT_TOOL_ALIBABA_PUHUITI_FONTS: TextToolFontOption[] = [
+  {
+    value: '"Tanva Alibaba PuHuiTi Thin", "Alibaba PuHuiTi", sans-serif',
+    labelZh: '普惠体 纤细',
+    labelEn: 'Alibaba PuHuiTi Thin',
+    webFontUrl: `${TEXT_TOOL_FONT_CDN_BASE}/AlibabaPuHuiTi-3-35-Thin.ttf`,
+  },
+  {
+    value: '"Tanva Alibaba PuHuiTi Light", "Alibaba PuHuiTi", sans-serif',
+    labelZh: '普惠体 细体',
+    labelEn: 'Alibaba PuHuiTi Light',
+    webFontUrl: `${TEXT_TOOL_FONT_CDN_BASE}/AlibabaPuHuiTi-3-45-Light.ttf`,
+  },
+  {
+    value: '"Tanva Alibaba PuHuiTi Regular", "Alibaba PuHuiTi", sans-serif',
+    labelZh: '普惠体 常规',
+    labelEn: 'Alibaba PuHuiTi Regular',
+    webFontUrl: `${TEXT_TOOL_FONT_CDN_BASE}/AlibabaPuHuiTi-3-55-Regular.ttf`,
+  },
+  {
+    value: '"Tanva Alibaba PuHuiTi Regular L3", "Alibaba PuHuiTi", sans-serif',
+    labelZh: '普惠体 常规 L3',
+    labelEn: 'Alibaba PuHuiTi Regular L3',
+    webFontUrl: `${TEXT_TOOL_FONT_CDN_BASE}/AlibabaPuHuiTi-3-55-RegularL3.ttf`,
+  },
+  {
+    value: '"Tanva Alibaba PuHuiTi Medium", "Alibaba PuHuiTi", sans-serif',
+    labelZh: '普惠体 中等',
+    labelEn: 'Alibaba PuHuiTi Medium',
+    webFontUrl: `${TEXT_TOOL_FONT_CDN_BASE}/AlibabaPuHuiTi-3-65-Medium.ttf`,
+  },
+  {
+    value: '"Tanva Alibaba PuHuiTi SemiBold", "Alibaba PuHuiTi", sans-serif',
+    labelZh: '普惠体 半粗',
+    labelEn: 'Alibaba PuHuiTi SemiBold',
+    webFontUrl: `${TEXT_TOOL_FONT_CDN_BASE}/AlibabaPuHuiTi-3-75-SemiBold.ttf`,
+    isPresetBold: true,
+  },
+  {
+    value: '"Tanva Alibaba PuHuiTi Bold", "Alibaba PuHuiTi", sans-serif',
+    labelZh: '普惠体 粗体',
+    labelEn: 'Alibaba PuHuiTi Bold',
+    webFontUrl: `${TEXT_TOOL_FONT_CDN_BASE}/AlibabaPuHuiTi-3-85-Bold.ttf`,
+    isPresetBold: true,
+  },
+  {
+    value: '"Tanva Alibaba PuHuiTi ExtraBold", "Alibaba PuHuiTi", sans-serif',
+    labelZh: '普惠体 特粗',
+    labelEn: 'Alibaba PuHuiTi ExtraBold',
+    webFontUrl: `${TEXT_TOOL_FONT_CDN_BASE}/AlibabaPuHuiTi-3-95-ExtraBold.ttf`,
+    isPresetBold: true,
+  },
+  {
+    value: '"Tanva Alibaba PuHuiTi Heavy", "Alibaba PuHuiTi", sans-serif',
+    labelZh: '普惠体 超粗',
+    labelEn: 'Alibaba PuHuiTi Heavy',
+    webFontUrl: `${TEXT_TOOL_FONT_CDN_BASE}/AlibabaPuHuiTi-3-105-Heavy.ttf`,
+    isPresetBold: true,
+  },
+  {
+    value: '"Tanva Alibaba PuHuiTi Black", "Alibaba PuHuiTi", sans-serif',
+    labelZh: '普惠体 黑体',
+    labelEn: 'Alibaba PuHuiTi Black',
+    webFontUrl: `${TEXT_TOOL_FONT_CDN_BASE}/AlibabaPuHuiTi-3-115-Black.ttf`,
+    isPresetBold: true,
+  },
+];
+
+export type TextToolFontGroup = {
+  id: string;
+  labelZh: string;
+  labelEn: string;
+  fonts: TextToolFontOption[];
+};
+
+/** 在线字体分组（供下拉面板展示） */
+export const TEXT_TOOL_WEB_FONT_GROUPS: TextToolFontGroup[] = [
+  {
+    id: 'source-han-serif',
+    labelZh: '在线字体（思源宋体）',
+    labelEn: 'Web fonts (Source Han Serif)',
+    fonts: TEXT_TOOL_SOURCE_HAN_SERIF_FONTS,
+  },
+  {
+    id: 'alibaba-puhuiti',
+    labelZh: '在线字体（阿里巴巴普惠体）',
+    labelEn: 'Web fonts (Alibaba PuHuiTi)',
+    fonts: TEXT_TOOL_ALIBABA_PUHUITI_FONTS,
+  },
+];
+
+/** 全部 CDN 在线字体（扁平列表，供预加载等） */
+export const TEXT_TOOL_WEB_FONTS: TextToolFontOption[] = [
+  ...TEXT_TOOL_SOURCE_HAN_SERIF_FONTS,
+  ...TEXT_TOOL_ALIBABA_PUHUITI_FONTS,
 ];
 
 export const TEXT_TOOL_SYSTEM_FONTS: TextToolFontOption[] = [

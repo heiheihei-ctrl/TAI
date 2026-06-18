@@ -10,14 +10,13 @@ import { AlignLeft, AlignCenter, AlignRight, Italic } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
 import {
-  TEXT_TOOL_SYSTEM_FONTS,
-  TEXT_TOOL_WEB_FONTS,
   getTextToolFontOptionByValue,
 } from '@/constants/textToolFonts';
 import {
   ensureTextToolFontLoaded,
   preloadTextToolWebFonts,
 } from '@/utils/textToolFontLoader';
+import TextFontPicker from './TextFontPicker';
 
 interface TextStyle {
   fontFamily: string;
@@ -60,13 +59,6 @@ const TextStylePanel: React.FC<TextStylePanelProps> = ({
     [onStyleChange]
   );
 
-  const renderFontOptions = (fonts: typeof TEXT_TOOL_WEB_FONTS) =>
-    fonts.map((font) => (
-      <option key={font.value} value={font.value}>
-        {isZh ? font.labelZh : font.labelEn}
-      </option>
-    ));
-
   // 字重选项
   const fontWeights = [
     { value: 'normal', label: 'Regular' },
@@ -89,19 +81,12 @@ const TextStylePanel: React.FC<TextStylePanelProps> = ({
         
         {/* 字体选择 */}
         <div className="w-full">
-          <select
+          <TextFontPicker
             value={currentStyle.fontFamily}
-            onChange={(e) => void handleFontFamilyChange(e.target.value)}
-            className="tanva-text-style-panel-field w-full text-xs px-2 py-1.5 rounded border border-gray-300 bg-white cursor-pointer"
-            title={lt('字体', 'Font')}
-          >
-            <optgroup label={lt('在线字体（思源宋体）', 'Web fonts (Source Han Serif)')}>
-              {renderFontOptions(TEXT_TOOL_WEB_FONTS)}
-            </optgroup>
-            <optgroup label={lt('系统字体', 'System fonts')}>
-              {renderFontOptions(TEXT_TOOL_SYSTEM_FONTS)}
-            </optgroup>
-          </select>
+            isZh={isZh}
+            onChange={(fontFamily) => void handleFontFamilyChange(fontFamily)}
+            labelFont={lt('字体', 'Font')}
+          />
         </div>
 
         {/* 字重和样式 */}
