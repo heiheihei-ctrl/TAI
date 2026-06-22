@@ -10,6 +10,17 @@ import {
 } from "@/services/referralApi";
 import { Calendar, Users, Gift, Copy, Check, Sparkles } from "lucide-react";
 
+const normalizeInviteCodeForDisplay = (inviteCode?: string | null) => {
+  if (!inviteCode) {
+    return "TAI-XXXX";
+  }
+
+  const trimmed = inviteCode.trim().toUpperCase();
+  const separatorIndex = trimmed.indexOf("-");
+  const suffix = separatorIndex >= 0 ? trimmed.slice(separatorIndex + 1).trim() : trimmed;
+  return suffix ? `TAI-${suffix}` : "TAI-XXXX";
+};
+
 export default function ReferralRewards() {
   const { t } = useTranslation();
   const [stats, setStats] = useState<ReferralStats | null>(null);
@@ -67,14 +78,15 @@ export default function ReferralRewards() {
 
   const handleCopy = async () => {
     if (!stats?.inviteCode) return;
+    const inviteCodeToCopy = normalizeInviteCodeForDisplay(stats.inviteCode);
     try {
-      await navigator.clipboard.writeText(stats.inviteCode);
+      await navigator.clipboard.writeText(inviteCodeToCopy);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
       // 降级方案
       const input = document.createElement("input");
-      input.value = stats.inviteCode;
+      input.value = inviteCodeToCopy;
       document.body.appendChild(input);
       input.select();
       document.execCommand("copy");
@@ -107,7 +119,7 @@ export default function ReferralRewards() {
     });
   };
 
-  const displayInviteCode = stats?.inviteCode?.replace(/^(TANVAAS|TANVAS)-/i, "TAI-") || "TAI-XXXX";
+  const displayInviteCode = normalizeInviteCodeForDisplay(stats?.inviteCode);
 
   if (loading) {
     return (

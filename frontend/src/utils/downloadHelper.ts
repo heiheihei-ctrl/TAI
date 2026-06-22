@@ -8,30 +8,153 @@ import { fetchWithAuth } from "@/services/authFetch";
 import { requestSkipNextBeforeUnloadPrompt } from "@/utils/beforeUnloadGuard";
 import { proxifyRemoteAssetUrl } from "@/utils/assetProxy";
 
+const MIME_EXTENSION_MAP: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/bmp": "bmp",
+  "image/svg+xml": "svg",
+};
+
+const IMAGE_EXTENSIONS = new Set([
+  "png",
+  "jpg",
+  "jpeg",
+  "webp",
+  "gif",
+  "bmp",
+  "svg",
+  "jfif",
+]);
+
+const extractMimeType = (value: string): string | null => {
+  const trimmed = value.trim();
+  if (trimmed.startsWith("data:")) {
+    const match = /^data:([^;,]+)/i.exec(trimmed);
+    return match?.[1]?.toLowerCase() || null;
+  }
+  return null;
+};
+
+const inferExtensionFromMimeType = (mimeType?: string | null): string | null => {
+  if (!mimeType) return null;
+  return MIME_EXTENSION_MAP[mimeType.trim().toLowerCase()] || null;
+};
+
+const inferExtensionFromUrl = (value: string): string | null => {
+  try {
+    const url = new URL(value);
+    const cleanPath = url.pathname.toLowerCase();
+    const dotIndex = cleanPath.lastIndexOf(".");
+    if (dotIndex < 0) return null;
+    const extension = cleanPath.slice(dotIndex + 1);
+    return IMAGE_EXTENSIONS.has(extension) ? extension : null;
+  } catch {
+    return null;
+  }
+};
+
+const normalizeExtension = (extension?: string | null): string | null => {
+  if (!extension) return null;
+  const lower = extension.trim().toLowerCase();
+  if (!lower) return null;
+  if (lower === "jpeg" || lower === "jfif") return "jpg";
+  return lower;
+};
+
+const ensureFileNameMatchesActualFormat = (
+  fileName: string,
+  formatHint?: string | null
+): string => {
+  const normalizedHint = normalizeExtension(formatHint);
+  const trimmedName = fileName.trim() || "image";
+  const dotIndex = trimmedName.lastIndexOf(".");
+  const fallbackExtension = normalizedHint || "png";
+
+  if (dotIndex <= 0 || dotIndex === trimmedName.length - 1) {
+    return `${trimmedName.replace(/\.+$/, "")}.${fallbackExtension}`;
+  }
+
+  const currentExtension = normalizeExtension(trimmedName.slice(dotIndex + 1));
+  if (normalizedHint && currentExtension !== normalizedHint) {
+    return `${trimmedName.slice(0, dotIndex)}.${normalizedHint}`;
+  }
+
+  return trimmedName;
+};
+
+const triggerBrowserDownload = (url: string, fileName: string) => {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  requestSkipNextBeforeUnloadPrompt();
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
 /**
  * 下载图片文件
  * @param imageData - 图片数据URL或base64数据
  * @param fileName - 下载的文件名
  */
-export const downloadImage = (imageData: string, fileName: string = 'image') => {
+export const downloadImage = async (imageData: string, fileName: string = 'image') => {
   try {
-    // 创建一个临时的a标签
-    const link = document.createElement('a');
-    
-    // 处理不同格式的图片数据
     const downloadUrl = toRenderableImageSrc(imageData) || imageData;
-    
-    // 设置下载属性
-    link.href = downloadUrl;
-    link.download = fileName.includes('.') ? fileName : `${fileName}.png`;
-    
-    // 添加到DOM，触发下载，然后移除
-    requestSkipNextBeforeUnloadPrompt();
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    console.log('✅ 图片下载成功:', link.download);
+    const dataUrlMimeType = extractMimeType(downloadUrl);
+    const dataUrlExtension = inferExtensionFromMimeType(dataUrlMimeType);
+
+    if (downloadUrl.startsWith("data:")) {
+      const resolvedFileName = ensureFileNameMatchesActualFormat(fileName, dataUrlExtension);
+      triggerBrowserDownload(downloadUrl, resolvedFileName);
+      console.log("✅ 图片下载成功:", resolvedFileName);
+      return;
+    }
+
+    const isRemoteUrl = /^https?:\/\//i.test(downloadUrl);
+    if (isRemoteUrl || downloadUrl.startsWith("blob:")) {
+      const fetchUrl = isRemoteUrl
+        ? proxifyRemoteAssetUrl(downloadUrl, { forceProxy: true }) || downloadUrl
+        : downloadUrl;
+      const response = await fetchWithAuth(fetchUrl, {
+        auth: "omit",
+        allowRefresh: false,
+        credentials: "omit",
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const actualExtension =
+        inferExtensionFromMimeType(blob.type) ||
+        (isRemoteUrl ? inferExtensionFromUrl(downloadUrl) : null);
+      const resolvedFileName = ensureFileNameMatchesActualFormat(fileName, actualExtension);
+
+      try {
+        triggerBrowserDownload(blobUrl, resolvedFileName);
+      } finally {
+        setTimeout(() => {
+          try {
+            URL.revokeObjectURL(blobUrl);
+          } catch {}
+        }, 0);
+      }
+
+      console.log("✅ 图片下载成功:", resolvedFileName);
+      return;
+    }
+
+    const resolvedFileName = ensureFileNameMatchesActualFormat(
+      fileName,
+      dataUrlExtension || inferExtensionFromUrl(downloadUrl)
+    );
+    triggerBrowserDownload(downloadUrl, resolvedFileName);
+    console.log("✅ 图片下载成功:", resolvedFileName);
   } catch (error) {
     console.error('❌ 图片下载失败:', error);
     // 如果下载失败，尝试在新窗口打开图片
@@ -60,7 +183,7 @@ export const downloadCanvasAsImage = (
       const blob = await canvasToBlob(canvas, { type: "image/png", quality });
       const blobUrl = URL.createObjectURL(blob);
       try {
-        downloadImage(blobUrl, fileName);
+        await downloadImage(blobUrl, fileName);
       } finally {
         // 释放 blob URL，避免内存泄漏
         setTimeout(() => {
@@ -89,7 +212,7 @@ export const getSuggestedFileName = (originalName?: string, prefix: string = 'do
   
   const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
   const baseName = originalName || prefix;
-  return `${baseName}_${timestamp}.png`;
+  return `${baseName}_${timestamp}`;
 };
 
 /**

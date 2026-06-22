@@ -1059,7 +1059,7 @@
       "path": "backend/src/payment/payment.service.ts",
       "sha256": "4a0c10ac3ed5b453e468089aa1ed287156dcf786fcd481b3f763a6b890e22b55",
       "feature": "module",
-      "description": "Module `payment.service` (module). Exports: PaymentService. Ext deps: @nestjs/common, @nestjs/config, @nestjs/schedule, @prisma/client, alipay-sdk, qrcode | Local deps: backend/src/credits/credit-lot-grants.ts Tags: http, qrcode, subscription | API: https://openapi-sandbox.dl.alipaydev.com/gateway.do, https://www.tanvas.cn/api/payment/notify | Env: ALIPAY_NOTIFY_URL, WECHAT_NOTIFY_URL",
+      "description": "Module `payment.service` (module). Exports: PaymentService. Ext deps: @nestjs/common, @nestjs/config, @nestjs/schedule, @prisma/client, alipay-sdk, qrcode | Local deps: backend/src/credits/credit-lot-grants.ts Tags: http, qrcode, subscription | API: https://openapi-sandbox.dl.alipaydev.com/gateway.do, https://tgtai.com/api/payment/notify | Env: ALIPAY_NOTIFY_URL, WECHAT_NOTIFY_URL",
       "needsReview": true,
       "carriedFrom": "2026-04-29T08:07:45.093Z"
     },

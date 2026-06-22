@@ -4,7 +4,7 @@ import type sharp from 'sharp';
 const DEFAULT_WATERMARK_ANGLE = -45;
 const DEFAULT_WATERMARK_OPACITY = 0.22;
 const DEFAULT_WATERMARK_TILE_SCALE = 0.16;
-const DEFAULT_WATERMARK_TEXT = "Tanvas AI";
+const DEFAULT_WATERMARK_TEXT = "TAI";
 const DEFAULT_HORIZONTAL_GAP_RATIO = 0.55;
 const DEFAULT_VERTICAL_GAP_RATIO = 0.42;
 
@@ -14,6 +14,8 @@ export type TiledWatermarkOptions = {
   opacity?: number;
   tileScale?: number;
 };
+
+export type WatermarkOutputFormat = "png" | "jpeg" | "webp" | "gif";
 
 type TextStamp = {
   buffer: Buffer;
@@ -227,7 +229,8 @@ export async function createFullTiledWatermarkOverlay(
 
 export async function applyTiledWatermarkToBuffer(
   imageBuffer: Buffer,
-  options?: TiledWatermarkOptions
+  options?: TiledWatermarkOptions,
+  outputFormat?: WatermarkOutputFormat
 ): Promise<Buffer> {
   if (!isSharpAvailable()) {
     throw new Error(getSharpLoadError() ?? 'sharp 不可用，跳过水印');
@@ -243,9 +246,18 @@ export async function applyTiledWatermarkToBuffer(
   }
 
   const overlay = await buildStaggeredWatermarkOverlay(width, height, options);
+  const pipeline = sharp(imageBuffer, { animated: outputFormat === "gif" })
+    .composite([{ input: overlay, left: 0, top: 0 }]);
 
-  return sharp(imageBuffer)
-    .composite([{ input: overlay, left: 0, top: 0 }])
-    .png()
-    .toBuffer();
+  switch (outputFormat) {
+    case "jpeg":
+      return pipeline.jpeg().toBuffer();
+    case "webp":
+      return pipeline.webp().toBuffer();
+    case "gif":
+      return pipeline.gif().toBuffer();
+    case "png":
+    default:
+      return pipeline.png().toBuffer();
+  }
 }

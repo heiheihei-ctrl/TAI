@@ -535,7 +535,8 @@ export class AiController {
     }
 
     try {
-      return await applyWatermarkToBase64(imageData, { text: 'Tanvas AI' });
+      const watermarked = await applyWatermarkToBase64(imageData, { text: 'TAI' });
+      return `data:${watermarked.mimeType};base64,${watermarked.data}`;
     } catch (error) {
       this.logger.warn('Watermark failed, fallback to original image', error as any);
       return imageData;
@@ -4365,11 +4366,11 @@ export class AiController {
       throw new ForbiddenException('Only administrators can apply export watermarks');
     }
 
-    const watermarkedBase64 = await applyWatermarkToBase64(dto.imageData);
+    const watermarked = await applyWatermarkToBase64(dto.imageData);
     return {
       success: true,
-      imageData: `data:image/png;base64,${watermarkedBase64}`,
-      format: 'png',
+      imageData: `data:${watermarked.mimeType};base64,${watermarked.data}`,
+      format: watermarked.format,
     };
   }
 
@@ -4935,7 +4936,7 @@ export class AiController {
         this.logger.log('🎬 User needs watermark, adding...');
         try {
           const wm = await this.videoWatermarkService.addWatermarkAndUpload(result.videoUrl, {
-            text: 'Tanvas AI',
+            text: 'TAI',
           });
           this.logger.log(`✅ Video watermark success: ${wm.url?.substring(0, 80)}...`);
           return {
@@ -5169,7 +5170,7 @@ export class AiController {
               } else {
                 try {
                   const wm = await this.videoWatermarkService.addWatermarkAndUpload(videoResult.videoUrl, {
-                    text: 'Tanvas AI',
+                    text: 'TAI',
                   });
                   finalResult = {
                     ...videoResult,

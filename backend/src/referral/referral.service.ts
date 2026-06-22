@@ -99,16 +99,61 @@ export class ReferralService {
   }
 
   /**
-   * 生成用户专属邀请码（格式：TANVAS-XXXX）
+   * 生成用户专属邀请码（格式：TAI-XXXX）
    */
   private generateInviteCode(userId: string): string {
     // 使用用户ID的后4位作为邀请码后缀
     const suffix = userId.slice(-4).toUpperCase();
-    return `TANVAS-${suffix}`;
+    return `TAI-${suffix}`;
   }
 
   private normalizeInviteCode(code: string): string {
     return code.trim().toUpperCase();
+  }
+
+  private toCanonicalInviteCode(code: string): string {
+    const normalizedCode = this.normalizeInviteCode(code);
+    const separatorIndex = normalizedCode.indexOf('-');
+    const suffix =
+      separatorIndex >= 0 ? normalizedCode.slice(separatorIndex + 1).trim() : normalizedCode;
+    return suffix ? `TAI-${suffix}` : '';
+  }
+
+  private buildInviteCodeLookupWhere(normalizedCode: string): Prisma.InvitationCodeWhereInput {
+    const canonicalCode = this.toCanonicalInviteCode(normalizedCode);
+    if (!canonicalCode) {
+      return { code: '__invalid_invite_code__' };
+    }
+
+    const separatorIndex = canonicalCode.indexOf('-');
+    if (separatorIndex < 0) {
+      return { code: canonicalCode };
+    }
+
+    const suffix = canonicalCode.slice(separatorIndex + 1);
+    if (!suffix) {
+      return { code: canonicalCode };
+    }
+
+    return {
+      OR: [
+        { code: canonicalCode },
+        {
+          code: {
+            endsWith: `-${suffix}`,
+          },
+        },
+      ],
+    };
+  }
+
+  private async findInviteCodeByCode(
+    tx: Prisma.TransactionClient | PrismaService,
+    normalizedCode: string,
+  ) {
+    return tx.invitationCode.findFirst({
+      where: this.buildInviteCodeLookupWhere(normalizedCode),
+    });
   }
 
   private async applyInviteCodeWithTx(
@@ -120,9 +165,7 @@ export class ReferralService {
     await this.acquireInviteeTxLock(tx, inviteeUserId);
 
     // 查找邀请码
-    const inviteCode = await tx.invitationCode.findUnique({
-      where: { code: normalizedCode },
-    });
+    const inviteCode = await this.findInviteCodeByCode(tx, normalizedCode);
 
     if (!inviteCode) {
       throw new NotFoundException('邀请码不存在');
@@ -215,6 +258,24 @@ export class ReferralService {
     let inviteCode = await this.prisma.invitationCode.findFirst({
       where: { inviterUserId: userId },
     });
+
+    if (inviteCode) {
+      const canonicalCode = this.toCanonicalInviteCode(inviteCode.code);
+      if (canonicalCode && inviteCode.code !== canonicalCode) {
+        const conflictingCode = await this.prisma.invitationCode.findUnique({
+          where: { code: canonicalCode },
+        });
+        const nextCode =
+          conflictingCode && conflictingCode.id !== inviteCode.id
+            ? `${canonicalCode}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`
+            : canonicalCode;
+
+        inviteCode = await this.prisma.invitationCode.update({
+          where: { id: inviteCode.id },
+          data: { code: nextCode },
+        });
+      }
+    }
 
     if (inviteCode && inviteCode.maxUses !== expectedMaxUses) {
       inviteCode = await this.prisma.invitationCode.update({
@@ -315,8 +376,8 @@ export class ReferralService {
     }));
 
     return {
-      inviteCode: inviteCode.code,
-      inviteLink: `tanvas.ai/invite?code=${inviteCode.code}`,
+      inviteCode: this.toCanonicalInviteCode(inviteCode.code),
+      inviteLink: `tgtai.com/invite?code=${this.toCanonicalInviteCode(inviteCode.code)}`,
       successfulInvites,
       totalEarnings,
       inviteRecords: formattedRecords,
@@ -607,8 +668,8 @@ export class ReferralService {
       return { valid: false, message: '邀请码不能为空' };
     }
 
-    const inviteCode = await this.prisma.invitationCode.findUnique({
-      where: { code: normalizedCode },
+    const inviteCode = await this.prisma.invitationCode.findFirst({
+      where: this.buildInviteCodeLookupWhere(normalizedCode),
       include: {
         inviter: {
           select: {
