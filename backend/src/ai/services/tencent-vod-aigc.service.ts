@@ -742,6 +742,17 @@ export class TencentVodAigcService {
 
   private throwTencentError(action: string, code?: string, message?: string): never {
     const suffix = [code, message].filter(Boolean).join(': ');
+    const errorHaystack = [message, suffix, code].filter(Boolean).join(' ');
+
+    if (
+      /AudioGeneration\s+Enabled\s+is\s+not\s+supported\s+when\s+video\s+reference\s+is\s+provided/i.test(
+        errorHaystack,
+      )
+    ) {
+      throw new BadRequestException(
+        'Kling 3.0-Omni 在「视频参考」模式下不支持开启 AI 音频生成。请将节点上的「音频」切换为关闭后重试；如需保留参考视频原声，请使用「保留原视频声音」。',
+      );
+    }
 
     if (code?.startsWith('InvalidParameter') || code?.startsWith('MissingParameter')) {
       throw new BadRequestException(`Tencent VOD ${action} bad request${suffix ? ` (${suffix})` : ''}`);

@@ -12,6 +12,10 @@ import RunCreditBadge from "./RunCreditBadge";
 import { imageUploadService } from "@/services/imageUploadService";
 import { useBackendCreditsPreview } from "../hooks/useBackendCreditsPreview";
 import FlowResizableNodeShell from "./FlowResizableNodeShell";
+import {
+  KLING_VIDEO_REF_AUDIO_CONFLICT_MESSAGE_EN,
+  KLING_VIDEO_REF_AUDIO_CONFLICT_MESSAGE_ZH,
+} from "@/utils/videoProviderErrors";
 
 type Props = {
   id: string;
@@ -447,6 +451,7 @@ function KlingO1VideoNode({ id, data, selected }: Props) {
     totalImageCountWithUploads <= 7;
   const isVideoReference = hasVideoInput && referenceVideoType === "feature";
   const isVideoEdit = hasVideoInput && referenceVideoType === "base";
+  const videoRefDisablesAiAudio = isTencentRoute && isVideoReference;
 
   // 参数显示控制
   const shouldShowAspectSelector = totalImageCountWithUploads === 0 && !hasVideoInput;
@@ -689,8 +694,15 @@ function KlingO1VideoNode({ id, data, selected }: Props) {
   );
 
   const handleKlingSoundToggle = React.useCallback(() => {
+    if (videoRefDisablesAiAudio) return;
     patchNodeData({ sound: !klingSoundEnabled });
-  }, [klingSoundEnabled, patchNodeData]);
+  }, [klingSoundEnabled, patchNodeData, videoRefDisablesAiAudio]);
+
+  React.useEffect(() => {
+    if (videoRefDisablesAiAudio && klingSoundEnabled) {
+      patchNodeData({ sound: false });
+    }
+  }, [videoRefDisablesAiAudio, klingSoundEnabled, patchNodeData]);
 
   React.useEffect(() => {
     if ((data as any).sound !== undefined && (data as any).sound !== null) return;
@@ -1715,20 +1727,32 @@ function KlingO1VideoNode({ id, data, selected }: Props) {
         <button
           type="button"
           onClick={handleKlingSoundToggle}
+          disabled={videoRefDisablesAiAudio}
           style={{
             width: "100%",
             padding: "6px 10px",
             borderRadius: 8,
             border: "1px solid #e5e7eb",
-            background: klingSoundEnabled ? "#111827" : "#fff",
-            color: klingSoundEnabled ? "#fff" : "#111827",
+            background: videoRefDisablesAiAudio || !klingSoundEnabled ? "#fff" : "#111827",
+            color: videoRefDisablesAiAudio || !klingSoundEnabled ? "#111827" : "#fff",
             fontSize: 12,
-            cursor: "pointer",
+            cursor: videoRefDisablesAiAudio ? "not-allowed" : "pointer",
+            opacity: videoRefDisablesAiAudio ? 0.72 : 1,
           }}
         >
           {lt("音频", "Audio")}:{" "}
-          {klingSoundEnabled ? lt("开启", "On") : lt("关闭", "Off")}
+          {videoRefDisablesAiAudio || !klingSoundEnabled
+            ? lt("关闭", "Off")
+            : lt("开启", "On")}
         </button>
+        {videoRefDisablesAiAudio && (
+          <div style={{ marginTop: 6, fontSize: 11, color: "#6b7280", lineHeight: 1.45 }}>
+            {lt(
+              KLING_VIDEO_REF_AUDIO_CONFLICT_MESSAGE_ZH,
+              KLING_VIDEO_REF_AUDIO_CONFLICT_MESSAGE_EN
+            )}
+          </div>
+        )}
       </div>
 
       {isTencentRoute && (

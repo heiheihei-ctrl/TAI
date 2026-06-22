@@ -170,6 +170,7 @@ import {
   refundVideoTask,
   type VideoProvider,
 } from "@/services/videoProviderAPI";
+import { formatVideoProviderError } from "@/utils/videoProviderErrors";
 import {
   buildViduRequestSemantics,
   getEffectiveViduProvider,
@@ -12311,7 +12312,7 @@ function FlowInner() {
             }
             setNodes((ns) =>
               ns.map((n) =>
-                n.id === nodeId ? { ...n, data: { ...n.data, status: "failed", error: (queryResult as any).error || "任务生成失败", pendingTaskId: undefined, pendingApiUsageId: undefined, pendingProvider: undefined, pendingStartMs: undefined } } : n
+                n.id === nodeId ? { ...n, data: { ...n.data, status: "failed", error: formatVideoProviderError((queryResult as any).error || "任务生成失败"), pendingTaskId: undefined, pendingApiUsageId: undefined, pendingProvider: undefined, pendingStartMs: undefined } } : n
               )
             );
             return;
@@ -16265,6 +16266,10 @@ function FlowInner() {
               : rawNodeData.sound === "on" || rawNodeData.sound === true
               ? "on"
               : "off";
+          const effectiveKlingSound =
+            isTencentKlingO3Route && referenceVideoUrl
+              ? "off"
+              : normalizedKlingSound;
           const rawKlingStoryboardMode = String(rawNodeData.klingStoryboardMode || "")
             .trim()
             .toLowerCase();
@@ -16508,10 +16513,10 @@ function FlowInner() {
                   sound:
                     provider === "kling-o3" || provider === "kling-2.6" || provider === "kling"
                       ? isTencentKling26Route
-                        ? normalizedKlingSound
-                        : rawNodeData.mode === "pro"
+                        ? effectiveKlingSound
+                        : rawNodeData.mode === "pro" && !(isTencentKlingO3Route && referenceVideoUrl)
                         ? "on"
-                        : normalizedKlingSound
+                        : effectiveKlingSound
                       : undefined,
                   referenceVideo: referenceVideoUrl,
                   referenceVideoType: rawNodeData.referenceVideoType,
@@ -16710,6 +16715,9 @@ function FlowInner() {
                     });
                   }
                 }
+                const pollFailMsg = formatVideoProviderError(
+                  (queryResult as any).error || "任务生成失败"
+                );
                 setNodes((ns) =>
                   ns.map((n) =>
                     n.id === nodeId
@@ -16718,7 +16726,7 @@ function FlowInner() {
                           data: {
                             ...n.data,
                             status: "failed",
-                            error: (queryResult as any).error || "任务生成失败",
+                            error: pollFailMsg,
                             pendingTaskId: undefined,
                             pendingApiUsageId: undefined,
                             pendingProvider: undefined,
@@ -16727,6 +16735,11 @@ function FlowInner() {
                       }
                     : n
                   )
+                );
+                window.dispatchEvent(
+                  new CustomEvent("toast", {
+                    detail: { message: pollFailMsg, type: "warning" },
+                  })
                 );
                 return;
               }
@@ -16792,13 +16805,18 @@ function FlowInner() {
             provider,
             error: error instanceof Error ? error.message : String(error),
           });
-          const msg = error instanceof Error ? error.message : "视频生成失败";
+          const msg = formatVideoProviderError(error);
           setNodes((ns) =>
             ns.map((n) =>
               n.id === nodeId
                 ? { ...n, data: { ...n.data, status: "failed", error: msg } }
                 : n
             )
+          );
+          window.dispatchEvent(
+            new CustomEvent("toast", {
+              detail: { message: msg, type: "warning" },
+            })
           );
         }
         return;

@@ -2357,6 +2357,13 @@ export class VideoProviderService {
       audioGeneration = "Disabled";
     }
 
+    if (isKling30Family && hasReferenceVideo && audioGeneration === "Enabled") {
+      this.logger.warn(
+        "Tencent Kling 3.0-Omni does not support AudioGeneration when video reference is provided; forcing OutputConfig.AudioGeneration=Disabled",
+      );
+      audioGeneration = "Disabled";
+    }
+
     const extInfo = this.buildTencentKlingStoryboardExtInfo(
       options,
       modelVersion,

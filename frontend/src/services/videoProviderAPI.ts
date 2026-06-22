@@ -4,6 +4,7 @@
  */
 import { fetchWithAuth } from "./authFetch";
 import { getApiBaseUrl } from "../utils/assetProxy";
+import { formatVideoProviderError } from "../utils/videoProviderErrors";
 
 export type VideoProvider = "kling" | "kling-2.6" | "kling-o3" | "vidu" | "viduq3-pro" | "doubao" | "omni-flash-ext";
 
@@ -89,7 +90,7 @@ export async function generateVideoByProvider(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.message || `HTTP ${response.status}`);
+    throw new Error(formatVideoProviderError(error.message || `HTTP ${response.status}`));
   }
 
   return response.json();
@@ -109,10 +110,17 @@ export async function queryVideoTask(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.message || `HTTP ${response.status}`);
+    throw new Error(formatVideoProviderError(error.message || `HTTP ${response.status}`));
   }
 
-  return response.json();
+  const result = await response.json();
+  if (typeof result?.error === "string" && result.error.trim()) {
+    return {
+      ...result,
+      error: formatVideoProviderError(result.error),
+    };
+  }
+  return result;
 }
 
 /**
