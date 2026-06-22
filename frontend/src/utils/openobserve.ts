@@ -43,7 +43,7 @@ const DEFAULT_LOGS_BASE_URLS: Record<OpenObserveEnv, string> = {
 };
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
-const TEST_HOSTS = new Set(["101.96.217.132", "test.tgtai.com", "test.tanvas.cn"]);
+const TEST_HOSTS = new Set(["101.96.217.132", "test.tgtai.com"]);
 const PROD_HOSTS = new Set(["tgtai.com"]);
 
 const trimToString = (value: unknown): string => {

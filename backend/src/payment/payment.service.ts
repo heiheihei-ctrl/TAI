@@ -463,7 +463,7 @@ export class PaymentService implements OnModuleInit {
       const amountStr = numericAmount.toFixed(2);
       console.log(`[Alipay] 生成二维码请求 → out_trade_no=${orderNo}, total_amount=${amountStr}`);
       const result = await this.alipaySdk.exec('alipay.trade.precreate', {
-        notify_url: process.env.ALIPAY_NOTIFY_URL || 'https://www.tanvas.cn/api/payment/notify',
+        notify_url: process.env.ALIPAY_NOTIFY_URL || 'https://tgtai.com/api/payment/notify',
         bizContent: {
           out_trade_no: orderNo,
           total_amount: amountStr,
@@ -510,7 +510,7 @@ export class PaymentService implements OnModuleInit {
         mchid: this.configService.get<string>('WECHAT_MCH_ID'),
         description: `积分充值 - ${amount}元`,
         out_trade_no: orderNo,
-        notify_url: process.env.WECHAT_NOTIFY_URL || 'https://www.tanvas.cn/api/payment/wechat-notify',
+        notify_url: process.env.WECHAT_NOTIFY_URL || 'https://tgtai.com/api/payment/wechat-notify',
         amount: {
           total: Math.round(amount * 100), // 金额单位：分
           currency: 'CNY',

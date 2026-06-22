@@ -43,7 +43,7 @@ services:
       ZO_COMPACT_DATA_RETENTION_DAYS: ${ZO_COMPACT_DATA_RETENTION_DAYS:-7}
       ZO_LOCAL_MODE: "true"
       ZO_BASE_URI: /openobserve
-      ZO_WEB_URL: https://test.tanvas.cn/openobserve
+      ZO_WEB_URL: https://test.tgtai.com/openobserve
     volumes:
       - tanva_openobserve_data:/data
 
