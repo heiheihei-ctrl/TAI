@@ -3,6 +3,10 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import paper from 'paper';
 import { useCanvasStore } from '@/stores';
+import {
+  clampWorldPointToContentBounds,
+  ensureViewportShowsContent,
+} from '@/utils/viewportFit';
 
 /**
  * MiniMapImageOverlay
@@ -26,24 +30,24 @@ const MiniMapImageOverlay: React.FC = () => {
     raf: 0,
   });
 
-  // Pan world coordinates to the view center.
   const panToWorldCenter = React.useCallback((worldX: number, worldY: number) => {
     try {
+      const clamped = clampWorldPointToContentBounds(worldX, worldY);
       const { zoom, setPan } = useCanvasStore.getState();
       const vs = paper?.view?.viewSize;
       const cx = vs ? vs.width / 2 : window.innerWidth / 2;
       const cy = vs ? vs.height / 2 : window.innerHeight / 2;
-      const desiredPanX = (cx / (zoom || 1)) - worldX;
-      const desiredPanY = (cy / (zoom || 1)) - worldY;
+      const desiredPanX = (cx / (zoom || 1)) - clamped.x;
+      const desiredPanY = (cy / (zoom || 1)) - clamped.y;
       setPan(desiredPanX, desiredPanY);
     } catch {}
   }, []);
 
-  // Convert client coordinates to MiniMap world coordinates.
   const clientToWorld = React.useCallback((clientX: number, clientY: number) => {
     if (!svgEl) return null;
     const pt = svgEl.createSVGPoint();
-    pt.x = clientX; pt.y = clientY;
+    pt.x = clientX;
+    pt.y = clientY;
     const ctm = svgEl.getScreenCTM();
     if (!ctm) return null;
     const inv = ctm.inverse();
@@ -51,7 +55,20 @@ const MiniMapImageOverlay: React.FC = () => {
     return { x: svgPt.x, y: svgPt.y };
   }, [svgEl]);
 
-  // Find the MiniMap SVG host element.
+  const clampClientToMiniMap = React.useCallback((clientX: number, clientY: number) => {
+    if (!svgEl) return { x: clientX, y: clientY };
+    const rect = svgEl.getBoundingClientRect();
+    return {
+      x: Math.max(rect.left, Math.min(rect.right, clientX)),
+      y: Math.max(rect.top, Math.min(rect.bottom, clientY)),
+    };
+  }, [svgEl]);
+
+  const clientToWorldForInteraction = React.useCallback((clientX: number, clientY: number) => {
+    const clamped = clampClientToMiniMap(clientX, clientY);
+    return clientToWorld(clamped.x, clamped.y);
+  }, [clampClientToMiniMap, clientToWorld]);
+
   React.useEffect(() => {
     const find = () => {
       let host: SVGSVGElement | null = null;
@@ -63,11 +80,9 @@ const MiniMapImageOverlay: React.FC = () => {
           if (innerSvg instanceof SVGSVGElement) host = innerSvg as SVGSVGElement;
         }
       }
-      // Prefer the graph group so this layer inherits the same transforms/clipping.
       const graph = host?.querySelector('.react-flow__minimap-graph') as SVGGElement | null;
       const target = (graph || host) as any;
       if (target) {
-        try { if (!(window as any).__minimap_found__) { console.log('[MiniMapImageOverlay] Found MiniMap Graph'); (window as any).__minimap_found__ = true; } } catch {}
         setTargetEl(target);
         if (host) setSvgEl(host);
       }
@@ -80,7 +95,6 @@ const MiniMapImageOverlay: React.FC = () => {
   const updateImages = React.useCallback(() => {
     try {
       const list = (window as any).tanvaImageInstances || [];
-      // Keep visible images only.
       const visible = list.filter((img: any) => img && (img.visible !== false));
       const dpr = (window.devicePixelRatio || 1);
       const mapped = visible.map((img: any) => ({
@@ -90,7 +104,6 @@ const MiniMapImageOverlay: React.FC = () => {
         width: Number(img.bounds?.width || 0) / dpr,
         height: Number(img.bounds?.height || 0) / dpr,
       }));
-      // Build a signature and update state only when changed.
       const sig = JSON.stringify(mapped);
       if (sig !== lastSigRef.current) {
         lastSigRef.current = sig;
@@ -99,14 +112,12 @@ const MiniMapImageOverlay: React.FC = () => {
     } catch {}
   }, []);
 
-  // Event-driven refresh when image instances change.
   React.useEffect(() => {
     const onUpdate = () => updateImages();
     window.addEventListener("tanva-image-instances-updated", onUpdate);
     return () => window.removeEventListener("tanva-image-instances-updated", onUpdate);
   }, [updateImages]);
 
-  // Lightweight fallback polling in case events are missed.
   React.useEffect(() => {
     const id = window.setInterval(() => updateImages(), 1000);
     return () => window.clearInterval(id);
@@ -117,27 +128,31 @@ const MiniMapImageOverlay: React.FC = () => {
     updateImages();
   }, [targetEl, updateImages]);
 
-  // Click MiniMap to quickly center viewport.
   React.useEffect(() => {
     if (!svgEl) return;
     const onClick = (ev: MouseEvent) => {
       try {
-        const world = clientToWorld(ev.clientX, ev.clientY);
+        const world = clientToWorldForInteraction(ev.clientX, ev.clientY);
         if (!world) return;
 
-        // If clicked inside an image block, use its center; otherwise use click position.
-        const hit = images.find(m => world.x >= m.x && world.x <= m.x + m.width && world.y >= m.y && world.y <= m.y + m.height);
-        const worldX = hit ? (hit.x + hit.width / 2) : world.x;
-        const worldY = hit ? (hit.y + hit.height / 2) : world.y;
+        const hit = images.find(
+          (m) =>
+            world.x >= m.x &&
+            world.x <= m.x + m.width &&
+            world.y >= m.y &&
+            world.y <= m.y + m.height
+        );
+        const worldX = hit ? hit.x + hit.width / 2 : world.x;
+        const worldY = hit ? hit.y + hit.height / 2 : world.y;
 
         panToWorldCenter(worldX, worldY);
+        window.requestAnimationFrame(() => ensureViewportShowsContent());
       } catch {}
     };
     svgEl.addEventListener('click', onClick);
     return () => svgEl.removeEventListener('click', onClick);
-  }, [svgEl, images, clientToWorld, panToWorldCenter]);
+  }, [svgEl, images, clientToWorldForInteraction, panToWorldCenter]);
 
-  // Drag on MiniMap to pan canvas.
   React.useEffect(() => {
     const el = svgEl;
     if (!el) return;
@@ -147,7 +162,7 @@ const MiniMapImageOverlay: React.FC = () => {
       state.raf = 0;
       const ev = state.lastEvent;
       if (!ev) return;
-      const world = clientToWorld(ev.clientX, ev.clientY);
+      const world = clientToWorldForInteraction(ev.clientX, ev.clientY);
       if (!world) return;
       panToWorldCenter(world.x, world.y);
     };
@@ -168,8 +183,10 @@ const MiniMapImageOverlay: React.FC = () => {
       if (!state.raf) state.raf = window.requestAnimationFrame(applyDrag);
     };
 
-    const stopDrag = (ev: PointerEvent) => {
-      if (!state.active || state.pointerId !== ev.pointerId) return;
+    const stopDrag = (ev?: PointerEvent) => {
+      if (ev && state.pointerId !== null && ev.pointerId !== state.pointerId) return;
+      if (!state.active) return;
+      const pointerId = state.pointerId;
       state.active = false;
       state.pointerId = null;
       state.lastEvent = null;
@@ -177,21 +194,31 @@ const MiniMapImageOverlay: React.FC = () => {
         window.cancelAnimationFrame(state.raf);
         state.raf = 0;
       }
-      try { el.releasePointerCapture(ev.pointerId); } catch {}
+      if (pointerId != null) {
+        try { el.releasePointerCapture(pointerId); } catch {}
+      }
+      window.requestAnimationFrame(() => ensureViewportShowsContent());
+    };
+
+    const onLostPointerCapture = (ev: PointerEvent) => {
+      if (!state.active || state.pointerId !== ev.pointerId) return;
+      stopDrag(ev);
     };
 
     el.addEventListener('pointerdown', onPointerDown);
     el.addEventListener('pointermove', onPointerMove);
     el.addEventListener('pointerup', stopDrag);
     el.addEventListener('pointercancel', stopDrag);
+    el.addEventListener('lostpointercapture', onLostPointerCapture);
     return () => {
       el.removeEventListener('pointerdown', onPointerDown);
       el.removeEventListener('pointermove', onPointerMove);
       el.removeEventListener('pointerup', stopDrag);
       el.removeEventListener('pointercancel', stopDrag);
-      if (state.raf) window.cancelAnimationFrame(state.raf);
+      el.removeEventListener('lostpointercapture', onLostPointerCapture);
+      stopDrag();
     };
-  }, [svgEl, clientToWorld, panToWorldCenter]);
+  }, [svgEl, clientToWorldForInteraction, panToWorldCenter]);
 
   if (!targetEl || images.length === 0) return null;
 
@@ -204,7 +231,7 @@ const MiniMapImageOverlay: React.FC = () => {
           y={img.y}
           width={Math.max(0, img.width)}
           height={Math.max(0, img.height)}
-          fill="#10b98155" // Semi-transparent green with no stroke.
+          fill="#10b98155"
           rx={2}
           ry={2}
         />
