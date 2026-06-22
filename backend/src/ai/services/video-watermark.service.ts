@@ -21,7 +21,7 @@ interface VideoWatermarkOptions {
 @Injectable()
 export class VideoWatermarkService {
   private readonly logger = new Logger(VideoWatermarkService.name);
-  private readonly DEFAULT_TEXT = "Tanvas AI";
+  private readonly DEFAULT_TEXT = "TAI";
   private readonly DEFAULT_TIMEOUT = 180_000;
 
   constructor(private readonly oss: OssService) {}
