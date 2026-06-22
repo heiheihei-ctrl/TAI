@@ -47,7 +47,7 @@ export async function exportImageFile(
       exportData = await applyExportWatermark(imageData);
     }
 
-    downloadImage(exportData, fileName);
+    await downloadImage(exportData, fileName);
     return true;
   } catch (error) {
     console.error('Export image failed:', error);
