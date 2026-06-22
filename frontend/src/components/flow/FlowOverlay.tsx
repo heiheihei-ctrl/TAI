@@ -22680,7 +22680,9 @@ function FlowInner() {
             {/* 视口由 Canvas 驱动，禁用 MiniMap 交互避免竞态 */}
             <MiniMap pannable={false} zoomable={false} />
             {/* 将画布上的图片以绿色块显示在 MiniMap 内；大图时关闭该叠加层以减负 */}
-            {!isLargeGraphForMiniMapImageOverlay && <MiniMapImageOverlay />}
+            {!isLargeGraphForMiniMapImageOverlay && (
+              <MiniMapImageOverlay viewportContainerRef={containerRef} />
+            )}
           </>
         )}
       </ReactFlow>
