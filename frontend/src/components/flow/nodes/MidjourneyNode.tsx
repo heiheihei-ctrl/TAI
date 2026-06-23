@@ -194,6 +194,7 @@ function MidjourneyNodeInner({ id, type, data, selected }: Props) {
   const displaySrc = thumbAssetId ? (thumbAssetUrl || fullSrc) : (buildImageSrc(rawThumbValue) || fullSrc);
   const [hover, setHover] = React.useState<string | null>(null);
   const [preview, setPreview] = React.useState(false);
+  const [previewInitialImageId, setPreviewInitialImageId] = React.useState<string>('');
   const [currentImageId, setCurrentImageId] = React.useState<string>('');
   const [actionLoading, setActionLoading] = React.useState<string | null>(null);
   const [showHelp, setShowHelp] = React.useState(false);
@@ -930,7 +931,7 @@ function MidjourneyNodeInner({ id, type, data, selected }: Props) {
               <div
                 key={idx}
                 onDoubleClick={() => {
-                  setCurrentImageId(`mj-${idx}`);
+                  setPreviewInitialImageId(`mj-${idx}`);
                   setPreview(true);
                 }}
                 style={{
@@ -978,7 +979,11 @@ function MidjourneyNodeInner({ id, type, data, selected }: Props) {
           </div>
         ) : (
           <div
-            onDoubleClick={() => fullSrc && setPreview(true)}
+            onDoubleClick={() => {
+              if (!fullSrc) return;
+              setPreviewInitialImageId('');
+              setPreview(true);
+            }}
             style={{
               width: '100%',
               height: 180,
@@ -1193,7 +1198,11 @@ function MidjourneyNodeInner({ id, type, data, selected }: Props) {
 
       {/* 图片预览区域 */}
       <div
-        onDoubleClick={() => fullSrc && setPreview(true)}
+        onDoubleClick={() => {
+          if (!fullSrc) return;
+          setPreviewInitialImageId('');
+          setPreview(true);
+        }}
         style={{
           width: '100%',
           height: 180,
@@ -1380,15 +1389,15 @@ function MidjourneyNodeInner({ id, type, data, selected }: Props) {
 
       <ImagePreviewModal
         isOpen={preview}
-        imageSrc={
-          allImages.length > 0 && currentImageId
-            ? allImages.find((item) => item.id === currentImageId)?.src || fullSrc || ''
-            : fullSrc || ''
-        }
+        imageSrc={fullSrc || ''}
+        initialImageId={previewInitialImageId || undefined}
         imageTitle={lt("Midjourney 图片预览", "Midjourney image preview")}
-        onClose={() => setPreview(false)}
+        onClose={() => {
+          setPreview(false);
+          setPreviewInitialImageId('');
+          setCurrentImageId('');
+        }}
         imageCollection={allImages}
-        currentImageId={currentImageId}
         onImageChange={handleImageChange}
       />
     </FlowResizableNodeShell>

@@ -1115,15 +1115,13 @@ function Nano2NodeInner({ id, data, selected }: Props) {
 
       <ImagePreviewModal
         isOpen={preview}
-        imageSrc={
-          allImages.length > 0 && currentImageId
-            ? allImages.find((item) => item.id === currentImageId)?.src || fullSrc || ""
-            : fullSrc || ""
-        }
+        imageSrc={fullSrc || ""}
         imageTitle={lt("全局图片预览", "Global image preview")}
-        onClose={() => setPreview(false)}
+        onClose={() => {
+          setPreview(false);
+          setCurrentImageId("");
+        }}
         imageCollection={allImages}
-        currentImageId={currentImageId}
         onImageChange={handleImageChange}
       />
       {typeof maxReferenceImages === "number" ? (

@@ -4,11 +4,12 @@
 
 import React, { useEffect, useCallback, useState, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, ChevronUp, ChevronDown } from 'lucide-react';
+import { X } from 'lucide-react';
 import { Button } from './button';
 import SmartImage from './SmartImage';
 import './ImagePreviewModal.css';
 import { useTranslation } from 'react-i18next';
+import { findPreviewImageId } from '@/utils/previewImageMatch';
 
 export interface ImageItem {
   id: string;
@@ -22,11 +23,14 @@ interface ImagePreviewModalProps {
   imageSrc: string;
   imageTitle?: string;
   onClose: () => void;
-  imageCollection?: ImageItem[]; // 图片集合
-  currentImageId?: string; // 当前图片ID
-  onImageChange?: (imageId: string) => void; // 切换图片回调
-  collectionTitle?: string; // 缩略图集合标题
-  onLoadMore?: () => void; // 滚动加载更多
+  imageCollection?: ImageItem[];
+  /** @deprecated 仅用于兼容；打开预览时以 imageSrc / initialImageId 为准，不再沿用此值 */
+  currentImageId?: string;
+  /** 打开预览时优先选中的图片（如多图节点某一格） */
+  initialImageId?: string;
+  onImageChange?: (imageId: string) => void;
+  collectionTitle?: string;
+  onLoadMore?: () => void;
   hasMore?: boolean;
   isLoading?: boolean;
 }
@@ -37,7 +41,7 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
   imageTitle,
   onClose,
   imageCollection = [],
-  currentImageId,
+  initialImageId,
   onImageChange,
   collectionTitle,
   onLoadMore,
@@ -63,42 +67,80 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
       .map(({ _originalIndex, ...rest }) => rest as ImageItem);
   }, [imageCollection]);
 
-  const [thumbnailScrollPosition, setThumbnailScrollPosition] = useState(0);
+  const [activeImageId, setActiveImageId] = useState('');
+  const prevIsOpenRef = useRef(false);
   const hasCollection = sortedCollection.length > 0;
   const showOrderBadges = hasCollection && sortedCollection.some((item) => typeof item.timestamp === 'number');
   const thumbnailListRef = useRef<HTMLDivElement | null>(null);
   const loadMoreGuardRef = useRef(false);
-  // 处理缩略图点击
-  const handleThumbnailClick = useCallback((imageId: string) => {
-    if (onImageChange) {
-      onImageChange(imageId);
+
+  const resolveOpenActiveId = useCallback((): string => {
+    return findPreviewImageId(imageSrc, sortedCollection, initialImageId);
+  }, [imageSrc, initialImageId, sortedCollection]);
+
+  const displayImageSrc = useMemo(() => {
+    if (activeImageId && hasCollection) {
+      const activeItem = sortedCollection.find((item) => item.id === activeImageId);
+      if (activeItem?.src) return activeItem.src;
     }
+    return imageSrc;
+  }, [activeImageId, hasCollection, imageSrc, sortedCollection]);
+
+  const highlightedImageId = useMemo(() => {
+    if (activeImageId) return activeImageId;
+    return findPreviewImageId(imageSrc, sortedCollection);
+  }, [activeImageId, imageSrc, sortedCollection]);
+
+  // 每次打开预览：以当前节点传入的 imageSrc 重置选中项，避免沿用上次的侧边栏浏览状态
+  useEffect(() => {
+    const justOpened = isOpen && !prevIsOpenRef.current;
+    const justClosed = !isOpen && prevIsOpenRef.current;
+    prevIsOpenRef.current = isOpen;
+
+    if (justOpened) {
+      setActiveImageId(resolveOpenActiveId());
+    } else if (justClosed) {
+      setActiveImageId('');
+    }
+  }, [isOpen, resolveOpenActiveId]);
+
+  // 历史列表异步就绪后，若尚未选中则再尝试匹配 imageSrc
+  useEffect(() => {
+    if (!isOpen || activeImageId || !imageSrc || !hasCollection) return;
+    const matchedId = findPreviewImageId(imageSrc, sortedCollection, initialImageId);
+    if (matchedId) {
+      setActiveImageId(matchedId);
+    }
+  }, [activeImageId, hasCollection, imageSrc, initialImageId, isOpen, sortedCollection]);
+
+  const handleThumbnailClick = useCallback((imageId: string) => {
+    setActiveImageId(imageId);
+    onImageChange?.(imageId);
   }, [onImageChange]);
 
-  // 获取当前图片索引
   const getCurrentImageIndex = useCallback(() => {
-    if (!currentImageId || !hasCollection) return -1;
-    return sortedCollection.findIndex(item => item.id === currentImageId);
-  }, [currentImageId, sortedCollection, hasCollection]);
+    if (!highlightedImageId || !hasCollection) return -1;
+    return sortedCollection.findIndex((item) => item.id === highlightedImageId);
+  }, [highlightedImageId, sortedCollection, hasCollection]);
 
-  // 切换到下一张/上一张图片
   const navigateImage = useCallback((direction: 'prev' | 'next') => {
-    if (!hasCollection || !onImageChange) return;
-    
+    if (!hasCollection) return;
+
     const currentIndex = getCurrentImageIndex();
     if (currentIndex === -1) return;
 
-    let newIndex;
-    if (direction === 'next') {
-      newIndex = (currentIndex + 1) % sortedCollection.length;
-    } else {
-      newIndex = currentIndex === 0 ? sortedCollection.length - 1 : currentIndex - 1;
-    }
-    
-    onImageChange(sortedCollection[newIndex].id);
-  }, [hasCollection, onImageChange, getCurrentImageIndex, sortedCollection]);
+    const newIndex =
+      direction === 'next'
+        ? (currentIndex + 1) % sortedCollection.length
+        : currentIndex === 0
+          ? sortedCollection.length - 1
+          : currentIndex - 1;
 
-  // 键盘事件处理
+    const nextId = sortedCollection[newIndex].id;
+    setActiveImageId(nextId);
+    onImageChange?.(nextId);
+  }, [getCurrentImageIndex, hasCollection, onImageChange, sortedCollection]);
+
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') {
       onClose();
@@ -111,11 +153,9 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
     }
   }, [onClose, navigateImage]);
 
-  // 监听键盘事件
   useEffect(() => {
     if (isOpen) {
       document.addEventListener('keydown', handleKeyDown);
-      // 阻止背景滚动
       document.body.style.overflow = 'hidden';
     }
 
@@ -125,7 +165,6 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
     };
   }, [isOpen, handleKeyDown]);
 
-  // 点击背景关闭
   const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
       onClose();
@@ -165,17 +204,14 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
           bottom: 0
         }}
         onContextMenuCapture={(e) => {
-          // Keep native browser context menu in preview, but stop bubbling to node-level handlers.
           e.stopPropagation();
         }}
         onClick={handleBackgroundClick}
       >
-        {/* 关闭按钮 */}
         <Button
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            console.log('Preview close button clicked');
             onClose();
           }}
           variant="ghost"
@@ -186,14 +222,14 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
           <X className="h-4 w-4" />
         </Button>
 
-        {/* 主图片容器 */}
-        <div 
+        <div
           className="flex-1 flex items-center justify-center cursor-default"
           style={{ paddingRight: hasCollection ? '240px' : '0' }}
           onClick={(e) => e.stopPropagation()}
         >
           <SmartImage
-            src={imageSrc}
+            key={`${displayImageSrc}-${highlightedImageId}`}
+            src={displayImageSrc}
             alt={resolvedImageTitle}
             className="shadow-2xl"
             style={{
@@ -207,25 +243,21 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
             placeholder={
               <div className="text-white/70 text-sm">{lt('加载中...', 'Loading...')}</div>
             }
-            onLoad={() => console.log('Preview image loaded')}
             onError={(e) => {
               console.error('Preview image load failed:', e);
             }}
           />
         </div>
 
-        {/* 右侧缩略图栏 */}
         {hasCollection && (
-          <div 
+          <div
             className="absolute right-0 top-0 bottom-0 w-60 bg-black/80 border-l border-white/10 flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* 缩略图标题 */}
             <div className="px-3 py-2 border-b border-white/10 flex items-center justify-between">
               <h3 className="text-white text-sm font-medium">{resolvedCollectionTitle}</h3>
             </div>
 
-            {/* 缩略图滚动容器 */}
             <div
               className="flex-1 overflow-y-auto custom-scrollbar"
               ref={thumbnailListRef}
@@ -233,21 +265,19 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
             >
               <div className="p-2 space-y-2">
                 {sortedCollection.map((item, index) => {
-                  const isActive = item.id === currentImageId;
+                  const isActive = item.id === highlightedImageId;
                   const chronologicalNumber = sortedCollection.length - index;
                   const formattedTimestamp = item.timestamp
                     ? new Date(item.timestamp).toLocaleString()
                     : undefined;
-                  // 判断文件名是否以.png结尾
                   const isPngFileName = item.title?.toLowerCase().endsWith('.png') ?? false;
-                  // .png命名的图片永远不显示数字序号
                   const shouldShowBadge = showOrderBadges && !isPngFileName;
                   return (
                     <div
                       key={item.id}
                       className={`group relative cursor-pointer rounded-lg overflow-hidden transition-all duration-200 ${
-                        isActive 
-                          ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-black' 
+                        isActive
+                          ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-black'
                           : 'hover:ring-1 hover:ring-white/30'
                       }`}
                       onClick={() => handleThumbnailClick(item.id)}
@@ -262,7 +292,6 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
                           {chronologicalNumber}
                         </div>
                       )}
-                      {/* .png命名的图片显示"Current"标记 */}
                       {isPngFileName && isActive && (
                         <div className="absolute top-1 left-1 px-2 py-0.5 rounded-md bg-blue-600 text-white text-[9px] font-semibold flex items-center justify-center shadow-lg whitespace-nowrap z-10">
                           Current
@@ -277,7 +306,6 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
                           placeholder={<div className="w-full h-full bg-gray-800" />}
                         />
                       </div>
-                      {/* 标题 - hover时显示 */}
                       {item.title && (
                         <div className="absolute bottom-0 left-0 right-0 bg-black/80 p-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                           <p className="text-white text-xs truncate">{item.title}</p>
@@ -288,15 +316,12 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
                 })}
               </div>
             </div>
-
-            {/* 导航提示移除 */}
           </div>
         )}
 
     </div>
   );
 
-  // 使用Portal确保模态框在最顶层
   return createPortal(modalContent, document.body);
 };
 

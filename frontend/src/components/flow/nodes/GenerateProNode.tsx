@@ -2108,19 +2108,14 @@ function GenerateProNodeInner({ id, data, selected }: Props) {
 
       <ImagePreviewModal
         isOpen={preview}
-        imageSrc={
-          previewOverrideSrc ||
-          (allImages.length > 0 && currentImageId
-            ? allImages.find(item => item.id === currentImageId)?.src || fullSrc || ''
-            : fullSrc || '')
-        }
+        imageSrc={previewOverrideSrc || fullSrc || ""}
         imageTitle={lt("全局图片预览", "Global image preview")}
         onClose={() => {
           setPreview(false);
           setPreviewOverrideValue('');
+          setCurrentImageId('');
         }}
         imageCollection={previewOverrideSrc ? [] : allImages}
-        currentImageId={previewOverrideSrc ? '' : currentImageId}
         onImageChange={(imageId: string) => {
           if (previewOverrideSrc) return;
           handleImageChange(imageId);
