@@ -70,6 +70,9 @@ function inferExtension(fileName?: string, contentType?: string) {
       "model/gltf-binary": ".glb",
       "model/gltf+json": ".gltf",
       "application/json": ".json",
+      "text/plain": ".txt",
+      "application/x-subrip": ".srt",
+      "text/srt": ".srt",
     };
     if (map[contentType]) return map[contentType];
   }

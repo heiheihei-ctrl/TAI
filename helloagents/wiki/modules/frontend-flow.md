@@ -230,7 +230,8 @@ Flow 节点拖拽支持与其他节点进行边�?中心吸附，并显示对�
 - `reactflow`
 
 ## 语音节点补充
-- 新增 `TencentSpeechNode`（`frontend/src/components/flow/nodes/TencentSpeechNode.tsx`），对应节点类型 `tencentSpeech`�?
+- 新增 `TencentSpeechNode`（`frontend/src/components/flow/nodes/TencentSpeechNode.tsx`），对应节点类型 `tencentSpeech`。
+- 该节点对接后端 `POST /api/ai/tencent-speech`，参数按腾讯 MPS AI 配音文档映射；工作流运行可走异步任务 `POST /api/ai/tencent-speech/async` + 轮询 `GET /api/ai/tencent-speech/async/:taskId`（积分预扣/成功确认/失败退款）。
 - 新增系统音色数据�?`frontend/src/components/flow/nodes/tencentSystemVoices.ts`�?52 条，来源腾讯云文�?`https://cloud.tencent.com/document/product/862/129151`），用于节点内可检索下拉选择�?
 - 该节点对接后�?`POST /api/ai/tencent-speech`，参数按腾讯 MPS AI 配音文档映射�?
   - `text + voiceId` 模式：前端通过 `text` 句柄接入 Prompt 节点文本，并可填�?`voiceId`；后端会优先自动生成 `speaker.json` 并上�?OSS，再发起配音任务（适用于无原音轨视频）�?

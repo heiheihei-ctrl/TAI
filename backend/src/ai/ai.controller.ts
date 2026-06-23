@@ -14,6 +14,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Param,
+  Query,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { AiService } from './ai.service';
@@ -7060,8 +7061,46 @@ export class AiController {
   }
 
   @Post('tencent-speech/async')
-  async generateTencentSpeechAsync(@Body() dto: TencentSpeechDto) {
-    return this.tencentSpeechService.createAsyncSpeechTask(dto);
+  async generateTencentSpeechAsync(@Body() dto: TencentSpeechDto, @Req() req: any) {
+    let apiUsageId: string | undefined;
+    const result = await this.withCredits(
+      req,
+      'tencent-speech',
+      undefined,
+      async () => this.tencentSpeechService.createAsyncSpeechTask(dto),
+      undefined,
+      undefined,
+      false,
+      {
+        inputVideoUrl: dto.inputVideoUrl,
+        textLength: (dto.text || '').trim().length || undefined,
+        speakerUrl: dto.speakerUrl,
+        srcSubtitleUrl: dto.srcSubtitleUrl,
+        dstLangs: dto.dstLangs,
+      },
+      {
+        skipFinalizeSuccessIf: () => true,
+        onApiUsageId: (id) => {
+          apiUsageId = id;
+        },
+      },
+    );
+    return {
+      ...result,
+      apiUsageId,
+    };
+  }
+
+  @Get('tencent-speech/voices')
+  async listTencentSpeechVoices(
+    @Query('lang') lang?: string,
+    @Query('keyword') keyword?: string,
+  ) {
+    const voices = await this.tencentSpeechService.describeSystemVoices({
+      lang: lang?.trim() || undefined,
+      keyword: keyword?.trim() || undefined,
+    });
+    return { voices };
   }
 
   @Get('tencent-speech/async/:taskId')

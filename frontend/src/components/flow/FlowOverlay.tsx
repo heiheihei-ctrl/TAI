@@ -171,6 +171,7 @@ import {
   type VideoProvider,
 } from "@/services/videoProviderAPI";
 import { formatVideoProviderError } from "@/utils/videoProviderErrors";
+import { runTencentSpeechTask } from "@/services/tencentSpeechAPI";
 import {
   buildViduRequestSemantics,
   getEffectiveViduProvider,
@@ -17092,10 +17093,8 @@ function FlowInner() {
           const marginV = (node.data as any)?.marginV;
           const outputPattern = (node.data as any)?.outputPattern;
 
-          const response = await fetchWithAuth("/api/ai/tencent-speech", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
+          const result = await runTencentSpeechTask(
+            {
               inputVideoUrl,
               text: finalText || undefined,
               speakerUrl: speakerUrlInput?.trim() || undefined,
@@ -17110,19 +17109,28 @@ function FlowInner() {
               fontSize: typeof fontSize === "number" ? fontSize : undefined,
               marginV: typeof marginV === "number" ? marginV : undefined,
               outputPattern: outputPattern?.trim() || undefined,
-            }),
-          });
+            },
+            {
+              onProgress: ({ status }) => {
+                if (!status) return;
+                setNodes((ns) =>
+                  ns.map((n) =>
+                    n.id === nodeId
+                      ? {
+                          ...n,
+                          data: {
+                            ...n.data,
+                            status: "running",
+                            error: undefined,
+                          },
+                        }
+                      : n
+                  )
+                );
+              },
+            }
+          );
 
-          if (!response.ok) {
-            let message = "语音合成失败";
-            try {
-              const errorData = await response.json();
-              message = errorData?.message || errorData?.error || message;
-            } catch {}
-            throw new Error(message);
-          }
-
-          const result = await response.json();
           const audioUrl = result?.audioUrl;
           const videoUrl = result?.videoUrl;
 

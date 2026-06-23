@@ -53,6 +53,16 @@ export class TencentSpeechService {
   private readonly autoInjectSilentAudio: boolean;
   private readonly ffprobeTimeoutMs: number;
   private readonly ffmpegTimeoutMs: number;
+  private voicesCacheAt = 0;
+  private voicesCache: Array<{
+    voiceId: string;
+    name: string;
+    audioUrl?: string;
+    gender?: string;
+    languages?: string[];
+    description?: string;
+  }> = [];
+  private readonly voicesCacheTtlMs = 30 * 60 * 1000;
 
   constructor(
     private readonly configService: ConfigService,
@@ -1887,5 +1897,85 @@ export class TencentSpeechService {
       normalized.includes('提取并处理音频失败') ||
       normalized.includes('无原音轨')
     );
+  }
+
+  async describeSystemVoices(options?: {
+    lang?: string;
+    keyword?: string;
+  }): Promise<
+    Array<{
+      voiceId: string;
+      name: string;
+      audioUrl?: string;
+      gender?: string;
+      languages?: string[];
+      description?: string;
+    }>
+  > {
+    const now = Date.now();
+    if (!this.voicesCache.length || now - this.voicesCacheAt > this.voicesCacheTtlMs) {
+      this.ensureCredentialReady();
+      const body: Record<string, any> = {
+        Category: 'system',
+      };
+      if (typeof this.subAppId === 'number') {
+        body.SubAppId = this.subAppId;
+      }
+      const payload = await this.callTencentApi('DescribeVoices', body);
+      const response = this.extractResponse(payload);
+      const voices =
+        this.pickFirstArray(response?.Voices, response?.voices)?.filter(
+          (item) => item && typeof item === 'object',
+        ) || [];
+
+      this.voicesCache = voices
+        .map((item) => {
+          const record = item as Record<string, any>;
+          const voiceId = this.pickFirstString(record?.VoiceId, record?.voiceId);
+          if (!voiceId) return null;
+          const languagesRaw = this.pickFirstArray(record?.Languages, record?.languages) || [];
+          return {
+            voiceId,
+            name: this.pickFirstString(record?.Name, record?.name) || voiceId,
+            audioUrl: this.normalizeUrl(
+              this.pickFirstString(record?.AudioUrl, record?.audioUrl),
+            ),
+            gender: this.pickFirstString(record?.Gender, record?.gender),
+            languages: languagesRaw
+              .map((lang) => this.normalizeLangCode(String(lang)))
+              .filter((lang): lang is string => Boolean(lang)),
+            description: this.pickFirstString(record?.Description, record?.description),
+          };
+        })
+        .filter(
+          (
+            item,
+          ): item is {
+            voiceId: string;
+            name: string;
+            audioUrl?: string;
+            gender?: string;
+            languages?: string[];
+            description?: string;
+          } => item !== null,
+        );
+      this.voicesCacheAt = now;
+    }
+
+    let result = this.voicesCache;
+    const lang = this.normalizeLangCode(options?.lang);
+    if (lang) {
+      result = result.filter(
+        (voice) => !voice.languages?.length || voice.languages.includes(lang),
+      );
+    }
+    const keyword = (options?.keyword || '').trim().toLowerCase();
+    if (keyword) {
+      result = result.filter((voice) => {
+        const haystack = `${voice.name} ${voice.voiceId} ${voice.description || ''}`.toLowerCase();
+        return haystack.includes(keyword);
+      });
+    }
+    return result;
   }
 }
