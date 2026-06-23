@@ -42,7 +42,7 @@ export default function LoginPage() {
   const [wechatBindSubmitting, setWechatBindSubmitting] = useState(false);
   const consumingRef = useRef(false);
   const consumedSessionIdRef = useRef<string | null>(null);
-  const { login, loginWithSms, error, user, setAuthenticatedUser } = useAuthStore();
+  const { login, loginWithSms, error, user, setAuthenticatedUser, clearError } = useAuthStore();
 
   const returnTo = useMemo(() => {
     const fromState = typeof location.state?.from === "string" ? location.state.from : "";
@@ -262,6 +262,12 @@ export default function LoginPage() {
     void createWechatSession("refresh");
   };
 
+  const handleTabChange = (nextTab: "wechat" | "password" | "sms") => {
+    setWechatError(null);
+    clearError();
+    setTab(nextTab);
+  };
+
   const agreementSection = (
     <div className='flex items-center gap-2'>
       <button
@@ -294,12 +300,12 @@ export default function LoginPage() {
   );
 
   return (
-    <div className='relative flex min-h-screen items-start justify-center overflow-y-auto overflow-x-hidden px-4 py-6 sm:items-center sm:px-6 sm:py-10'>
+    <div className='relative flex min-h-dvh items-start justify-center overflow-y-auto overflow-x-hidden px-4 py-6 sm:items-center sm:overflow-y-hidden sm:px-6 sm:py-10'>
       <WelcomeShaderBackground className='z-[1]' />
       <div className='absolute inset-0 bg-black/50 z-[2]'></div>
 
       <div className='relative z-10 my-auto w-full max-w-xl flex flex-col items-center'>
-        <Card className='flex h-[560px] max-h-[calc(100dvh-3rem)] w-full flex-col overflow-hidden rounded-3xl border border-blue-400/20 bg-blue-500/10 p-6 shadow-2xl backdrop-blur-md sm:max-h-[calc(100dvh-5rem)] sm:p-8'>
+        <Card className='flex min-h-[560px] w-full flex-col rounded-3xl border border-blue-400/20 bg-blue-500/10 p-6 shadow-2xl backdrop-blur-md transition-[min-height,height] duration-300 sm:p-8'>
           {/* Logo 区域 */}
           <div className='flex shrink-0 items-center justify-center sm:mb-5'>
             <img src='/TAI-logo.png' alt='TAI' className='h-12 w-auto sm:h-14 pr-3.5 pb-1' />
@@ -312,17 +318,14 @@ export default function LoginPage() {
             <span className='typing-cursor-line-shorter' />
           </div>
 
-          <div className='flex min-h-0 flex-1 justify-center'>
-            <div className='flex min-h-0 w-full max-w-xl flex-col'>
+          <div className='flex flex-1 justify-center'>
+            <div className='flex w-full max-w-xl flex-col'>
               {/* Tab 切换 */}
               <div className='mb-6 flex shrink-0 items-center justify-center gap-12 sm:mb-8 sm:gap-16'>
                 {wechatLoginEnabled && (
                   <button
                     className='flex flex-col items-center'
-                    onClick={() => {
-                      setWechatError(null);
-                      setTab("wechat");
-                    }}
+                    onClick={() => handleTabChange("wechat")}
                   >
                     <span className={tab === "wechat" ? "text-sm font-semibold text-blue-400" : "text-sm text-white transition-all hover:text-white"}>
                       {t("auth.login.wechatTitle")}
@@ -332,7 +335,7 @@ export default function LoginPage() {
                 )}
                 <button
                   className='flex flex-col items-center'
-                  onClick={() => setTab("password")}
+                  onClick={() => handleTabChange("password")}
                 >
                   <span className={tab === "password" ? "text-sm font-semibold text-blue-400" : "text-sm text-white transition-all hover:text-white"}>
                     {t("auth.login.passwordTab")}
@@ -341,7 +344,7 @@ export default function LoginPage() {
                 </button>
                 <button
                   className='flex flex-col items-center'
-                  onClick={() => setTab("sms")}
+                  onClick={() => handleTabChange("sms")}
                 >
                   <span className={tab === "sms" ? "text-sm font-semibold text-blue-400" : "text-sm text-white transition-all hover:text-white"}>
                     {t("auth.login.smsTab")}
@@ -350,7 +353,7 @@ export default function LoginPage() {
                 </button>
               </div>
 
-              <div className='min-h-0 flex-1 overflow-y-auto px-1 pb-1'>
+              <div className='flex-1 px-1 pb-1'>
                 {wechatLoginEnabled && tab === "wechat" ? (
                 <div className='w-full space-y-5 sm:space-y-6'>
                   <div className='flex flex-col items-center gap-4 text-white'>
@@ -631,7 +634,7 @@ export default function LoginPage() {
         isOpen={isForgotPasswordOpen}
         onClose={() => setIsForgotPasswordOpen(false)}
         onSuccess={() => {
-          setTab("password");
+          handleTabChange("password");
         }}
       />
     </div>
