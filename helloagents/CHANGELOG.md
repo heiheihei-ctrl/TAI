@@ -18,6 +18,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Settings modal user profile card now supports inline profile editing: users can open an edit dialog from the settings card, upload a persisted OSS avatar, and update their display name. The backend adds `PATCH /api/users/profile`, frontend auth state now carries `avatarUrl`, and settings/workspace UI reuse the saved avatar consistently.
 
 ### Fixed
+- Auth UI: switching between WeChat, password, and SMS tabs on `/auth/login` now clears stale tab-specific error messages, so a password/SMS failure no longer remains visible after changing login methods (`frontend/src/pages/auth/Login.tsx`, `frontend/src/stores/authStore.ts`).
+- Auth UI: `/auth/login` no longer locks the card to a fixed internal scroll area on desktop. The page keeps desktop overflow hidden, allows the login card to grow with wrapped error/helper text, and preserves small-screen vertical scrolling (`frontend/src/pages/auth/Login.tsx`).
 - Backend deployment build now generates Prisma Client from `backend/prisma/schema.prisma` before TypeScript compilation, preventing empty/stale Prisma types from removing model delegates and `$transaction` in clean online builds. Windows builds may reuse an existing client only when its schema structure and generated delegates match the current schema.
 - Backend build: fixed `tiled-watermark.util.ts` sharp typing by returning the callable sharp factory type instead of a `Sharp` instance type, resolving TypeScript compile failures on watermark overlay generation.
 - Backend membership typing: `getCurrentMembership` now uses explicit Prisma record types for active subscription/plan resolution, avoiding TS Server false `never` narrowing on `subscription` and `plan` fields.
