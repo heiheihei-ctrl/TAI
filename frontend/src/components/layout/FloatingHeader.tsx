@@ -51,7 +51,6 @@ import {
   Pencil,
   Camera,
   X,
-  UserCircle,
 } from "lucide-react";
 import MemoryDebugPanel from "@/components/debug/MemoryDebugPanel";
 import HistoryDebugPanel from "@/components/debug/HistoryDebugPanel";
@@ -145,7 +144,6 @@ const resolveBananaCredits = (
 
 const SETTINGS_SECTIONS = [
   { id: "workspace", labelKey: "workspace.settings.sections.workspace", icon: Square },
-  { id: "profile", labelKey: "workspace.settings.sections.profile", icon: UserCircle },
   { id: "referral", labelKey: "workspace.settings.sections.referral", icon: Gift },
   { id: "appearance", labelKey: "workspace.settings.sections.appearance", icon: Eye },
   { id: "ai", labelKey: "workspace.settings.sections.ai", icon: Sparkles },
