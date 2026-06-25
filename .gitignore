@@ -27,12 +27,21 @@ dist-ssr
 server/aliyun-oss-config.json
 server/.env
 backend/.env
+<<<<<<< HEAD
 frontend/.env
+=======
+<<<<<<< Updated upstream
+=======
+frontend/.env
+apps/new-api/.env
+>>>>>>> Stashed changes
+>>>>>>> 688b416f (feat:new-api网关)
 backend/aliyun-oss-config.json
 frontend/bake/.env
 frontend/bake/.env.local
 frontend/bake/.env.production
 frontend/bake/back/.env
 frontend/bake/back/.env.production
+tmp_model_provider_mapping_v2_backup_*.json
 
 .npm-cache
