@@ -10,8 +10,6 @@ export const KLING_VIDEO_REF_AUDIO_CONFLICT_MESSAGE_EN =
 export const isKlingVideoRefAudioConflictError = (message: string): boolean =>
   KLING_VIDEO_REF_AUDIO_CONFLICT_PATTERN.test(message);
 
-<<<<<<< HEAD
-=======
 const mapSeedanceVideoProviderError = (
   message: string,
   locale: "zh" | "en"
@@ -77,8 +75,6 @@ const mapSeedanceVideoProviderError = (
 
   return null;
 };
-
->>>>>>> 688b416f (feat:new-api网关)
 export const formatVideoProviderError = (
   raw: unknown,
   options?: { locale?: "zh" | "en" }
@@ -104,13 +100,9 @@ export const formatVideoProviderError = (
       : KLING_VIDEO_REF_AUDIO_CONFLICT_MESSAGE_ZH;
   }
 
-<<<<<<< HEAD
-=======
   const seedanceMapped = mapSeedanceVideoProviderError(trimmed, locale);
   if (seedanceMapped) {
     return seedanceMapped;
   }
-
->>>>>>> 688b416f (feat:new-api网关)
   return trimmed;
 };
