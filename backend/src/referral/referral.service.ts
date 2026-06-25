@@ -114,6 +114,13 @@ export class ReferralService {
   private toCanonicalInviteCode(code: string): string {
     const normalizedCode = this.normalizeInviteCode(code);
     const separatorIndex = normalizedCode.indexOf('-');
+    if (separatorIndex >= 0) {
+      const prefix = normalizedCode.slice(0, separatorIndex).trim();
+      if (prefix !== 'TAI') {
+        return '';
+      }
+    }
+
     const suffix =
       separatorIndex >= 0 ? normalizedCode.slice(separatorIndex + 1).trim() : normalizedCode;
     return suffix ? `TAI-${suffix}` : '';
@@ -125,26 +132,7 @@ export class ReferralService {
       return { code: '__invalid_invite_code__' };
     }
 
-    const separatorIndex = canonicalCode.indexOf('-');
-    if (separatorIndex < 0) {
-      return { code: canonicalCode };
-    }
-
-    const suffix = canonicalCode.slice(separatorIndex + 1);
-    if (!suffix) {
-      return { code: canonicalCode };
-    }
-
-    return {
-      OR: [
-        { code: canonicalCode },
-        {
-          code: {
-            endsWith: `-${suffix}`,
-          },
-        },
-      ],
-    };
+    return { code: canonicalCode };
   }
 
   private async findInviteCodeByCode(
