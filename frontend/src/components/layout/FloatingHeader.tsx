@@ -51,6 +51,7 @@ import {
   Pencil,
   Camera,
   X,
+  UserCircle,
 } from "lucide-react";
 import MemoryDebugPanel from "@/components/debug/MemoryDebugPanel";
 import HistoryDebugPanel from "@/components/debug/HistoryDebugPanel";
@@ -87,6 +88,7 @@ import {
 } from "@/services/adminApi";
 import { uploadToOSS } from "@/services/ossUploadService";
 import Qrcode from "@/assets/group-erweima.jpg";
+import OfficialAccount from "@/assets/gzh.png";
 
 // Nano Banana 闂傚倸鍊搁崐鎼佸磹妞嬪孩顐介柨鐔哄Т绾惧鏌涘☉鍗炲箻闁哄棗妫濋弻娑樷槈濮楀牆濮涘銈傛櫆閻擄繝寮诲☉銏犵婵＄偠顕ф禍楣冩⒑缁嬫鍎愰柟鎼佺畺楠炲骞橀鑲╊槹濡炪倖鎸炬慨纾嬨亹鎼淬劍鈷掑ù锝堟鐢稓绱掗鎯р枅鐎规洖缍婇獮搴ㄦ寠婢跺鈧剙顪冮妶鍡樼５闁稿鎸婚〃銉╂倷鐎电顫ч梺鐟板槻閹虫ê鐣烽妸锔剧瘈閹煎瓨绻勯弫?
 type BananaPricingTier = "fast" | "pro" | "ultra";
@@ -143,6 +145,7 @@ const resolveBananaCredits = (
 
 const SETTINGS_SECTIONS = [
   { id: "workspace", labelKey: "workspace.settings.sections.workspace", icon: Square },
+  { id: "profile", labelKey: "workspace.settings.sections.profile", icon: UserCircle },
   { id: "referral", labelKey: "workspace.settings.sections.referral", icon: Gift },
   { id: "appearance", labelKey: "workspace.settings.sections.appearance", icon: Eye },
   { id: "ai", labelKey: "workspace.settings.sections.ai", icon: Sparkles },
@@ -2382,7 +2385,7 @@ const FloatingHeader: React.FC = () => {
                     <div className='flex flex-col items-center'>
                       <div className='w-28 h-28 bg-white rounded-lg p-2 mb-2'>
                         <img
-                          src={wechatQrCodes.officialAccount}
+                          src={OfficialAccount}
                           alt={t("home.wechat.taiOfficialAccount")}
                           className='w-full h-full object-contain'
                           onError={(event) => {
