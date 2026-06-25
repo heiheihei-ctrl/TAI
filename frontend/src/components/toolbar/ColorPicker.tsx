@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { Pipette } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -14,6 +15,7 @@ interface ColorPickerProps {
   isTransparent?: boolean; // 新增：是否当前为透明状态
   showLabel?: string; // 新增：在颜色块中心显示的字母标签
   showFillPattern?: boolean; // 新增：是否显示填充图案
+  panelPlacement?: 'bottom' | 'right';
 }
 
 interface EyeDropperResult {
@@ -74,7 +76,8 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
   showTransparent = false,
   isTransparent = false,
   showLabel,
-  showFillPattern = false
+  showFillPattern = false,
+  panelPlacement = 'bottom',
 }) => {
   const { i18n } = useTranslation();
   const isZh = (i18n.resolvedLanguage || i18n.language || '')
@@ -87,8 +90,32 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
   const colorInputRef = useRef<HTMLInputElement>(null);
   const cleanupCanvasPickRef = useRef<(() => void) | null>(null);
   const [isCanvasPicking, setIsCanvasPicking] = useState(false);
+  const [panelPos, setPanelPos] = useState<{ top: number; left: number } | null>(null);
   const eyeDropperSupported = typeof window !== 'undefined' &&
     typeof (window as Window & { EyeDropper?: EyeDropperConstructor }).EyeDropper === 'function';
+
+  const updatePanelPosition = () => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    setPanelPos({
+      top: rect.top + rect.height / 2,
+      left: rect.right + 8,
+    });
+  };
+
+  useLayoutEffect(() => {
+    if (!isOpen || panelPlacement !== 'right') {
+      setPanelPos(null);
+      return;
+    }
+    updatePanelPosition();
+    window.addEventListener('resize', updatePanelPosition);
+    window.addEventListener('scroll', updatePanelPosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePanelPosition);
+      window.removeEventListener('scroll', updatePanelPosition, true);
+    };
+  }, [isOpen, panelPlacement]);
 
   // 点击外部关闭
   useEffect(() => {
@@ -226,6 +253,111 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
     };
   }, []);
 
+  const panelContent = (
+    <>
+      {/* 预设颜色网格 - 1行10列 */}
+      <div className="grid grid-cols-10 gap-1 mb-3">
+        {PRESET_COLORS.slice(0, 10).map((color, index) => {
+          const normalized = (color || '').toString().trim().toLowerCase();
+          const isWhite = normalized === '#ffffff' || normalized === 'white';
+          return (
+            <div
+              key={index}
+              className="w-5 h-5 transition-all rounded cursor-pointer hover:ring-2 hover:ring-blue-400"
+              style={{
+                backgroundColor: color,
+                border: isWhite ? '1px solid rgba(0,0,0,0.35)' : '1px solid transparent',
+              }}
+              onClick={() => handleColorSelect(color)}
+              title={color}
+            />
+          );
+        })}
+      </div>
+
+      <div className="flex gap-2">
+        {showTransparent && (
+          <div
+            className="flex items-center justify-center w-16 h-8 bg-white border border-gray-300 rounded cursor-pointer hover:ring-2 hover:ring-blue-400"
+            onClick={handleTransparentSelect}
+            title={lt('透明（无填充）', 'Transparent (no fill)')}
+          >
+            <TransparentIcon />
+          </div>
+        )}
+
+        <div className={cn("flex gap-2", showTransparent ? "flex-1" : "w-full")}>
+          <input
+            ref={colorInputRef}
+            type="color"
+            value={value}
+            onChange={(e) => {
+              handleColorSelect(e.target.value, false);
+            }}
+            onBlur={() => {
+              setTimeout(() => {
+                setIsOpen(false);
+              }, 200);
+            }}
+            className="sr-only"
+          />
+          <button
+            type="button"
+            className="flex items-center justify-center flex-1 h-8 text-xs font-medium text-gray-600 border border-gray-300 rounded cursor-pointer bg-gray-50 hover:bg-gray-100"
+            onClick={() => {
+              colorInputRef.current?.click();
+            }}
+          >
+            {lt('更多', 'More')}
+          </button>
+          <button
+            type="button"
+            onClick={handleEyeDropperPick}
+            title={
+              isCanvasPicking
+                ? lt('正在等待点击画布取色（Esc 取消）', 'Waiting for canvas pick (Esc to cancel)')
+                : (eyeDropperSupported
+                  ? lt('吸管取色（从画布拾取）', 'Eyedropper (pick from canvas)')
+                  : lt('点击后在画布上取色（Esc 取消）', 'Click to pick from canvas (Esc to cancel)'))
+            }
+            className={cn(
+              "flex items-center justify-center w-8 h-8 border border-gray-300 rounded bg-gray-50 text-gray-600 cursor-pointer hover:bg-gray-100",
+              isCanvasPicking && "bg-blue-50 border-blue-300 text-blue-600",
+            )}
+          >
+            <Pipette className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </>
+  );
+
+  const renderPanel = () => {
+    if (panelPlacement === 'right') {
+      if (!panelPos || typeof document === 'undefined') return null;
+      return createPortal(
+        <div
+          ref={panelRef}
+          className="fixed z-[1010] w-60 -translate-y-1/2 rounded-lg border border-gray-300 bg-white p-3 shadow-lg"
+          style={{ top: panelPos.top, left: panelPos.left }}
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          {panelContent}
+        </div>,
+        document.body,
+      );
+    }
+
+    return (
+      <div
+        ref={panelRef}
+        className="absolute left-0 top-8 z-[1010] w-60 rounded-lg border border-gray-300 bg-white p-3 shadow-lg"
+      >
+        {panelContent}
+      </div>
+    );
+  };
+
   return (
     <div className="relative">
       {/* 颜色显示按钮 */}
@@ -265,95 +397,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
       </div>
 
       {/* 颜色面板 */}
-      {isOpen && (
-        <div
-          ref={panelRef}
-          className="absolute left-0 z-50 p-3 bg-white border border-gray-300 rounded-lg shadow-lg top-8 w-60"
-        >
-          {/* 预设颜色网格 - 1行10列 */}
-          <div className="grid grid-cols-10 gap-1 mb-3">
-            {/* 显示前10个颜色 */}
-            {PRESET_COLORS.slice(0, 10).map((color, index) => {
-              const normalized = (color || '').toString().trim().toLowerCase();
-              const isWhite = normalized === '#ffffff' || normalized === 'white';
-              return (
-                <div
-                  key={index}
-                  className="w-5 h-5 transition-all rounded cursor-pointer hover:ring-2 hover:ring-blue-400"
-                  style={{
-                    backgroundColor: color,
-                    // 给白色色块一条很细的黑灰色边框，其他颜色使用透明边框保证大小一致
-                    border: isWhite ? '1px solid rgba(0,0,0,0.35)' : '1px solid transparent'
-                  }}
-                  onClick={() => handleColorSelect(color)}
-                  title={color}
-                />
-              );
-            })}
-          </div>
-
-          {/* 无填充和More按钮并列 */}
-          <div className="flex gap-2">
-            {/* 无填充选项（如果需要） */}
-            {showTransparent && (
-              <div
-                className="flex items-center justify-center w-16 h-8 bg-white border border-gray-300 rounded cursor-pointer hover:ring-2 hover:ring-blue-400"
-                onClick={handleTransparentSelect}
-                title={lt('透明（无填充）', 'Transparent (no fill)')}
-              >
-                <TransparentIcon />
-              </div>
-            )}
-            
-            {/* 自定义颜色与吸管取色 */}
-            <div className={cn("flex gap-2", showTransparent ? "flex-1" : "w-full")}>
-              <input
-                ref={colorInputRef}
-                type="color"
-                value={value}
-                onChange={(e) => {
-                  // 只更新颜色值，不关闭面板，让用户可以继续调整
-                  handleColorSelect(e.target.value, false);
-                }}
-                onBlur={() => {
-                  // 当颜色选择器失去焦点时，延迟关闭面板
-                  // 使用 setTimeout 确保原生颜色选择器弹窗关闭后再关闭面板
-                  setTimeout(() => {
-                    setIsOpen(false);
-                  }, 200);
-                }}
-                className="sr-only"
-              />
-              <button
-                type="button"
-                className="flex items-center justify-center flex-1 h-8 text-xs font-medium text-gray-600 border border-gray-300 rounded cursor-pointer bg-gray-50 hover:bg-gray-100"
-                onClick={() => {
-                  colorInputRef.current?.click();
-                }}
-              >
-                {lt('更多', 'More')}
-              </button>
-              <button
-                type="button"
-                onClick={handleEyeDropperPick}
-                title={
-                  isCanvasPicking
-                    ? lt('正在等待点击画布取色（Esc 取消）', 'Waiting for canvas pick (Esc to cancel)')
-                    : (eyeDropperSupported
-                      ? lt('吸管取色（从画布拾取）', 'Eyedropper (pick from canvas)')
-                      : lt('点击后在画布上取色（Esc 取消）', 'Click to pick from canvas (Esc to cancel)'))
-                }
-                className={cn(
-                  "flex items-center justify-center w-8 h-8 border border-gray-300 rounded bg-gray-50 text-gray-600 cursor-pointer hover:bg-gray-100",
-                  isCanvasPicking && "bg-blue-50 border-blue-300 text-blue-600"
-                )}
-              >
-                <Pipette className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {isOpen && renderPanel()}
     </div>
   );
 };

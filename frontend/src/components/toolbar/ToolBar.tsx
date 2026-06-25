@@ -1080,6 +1080,7 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
                   onChange={setCurrentColor}
                   disabled={isEraser}
                   title={lt('线条颜色', 'Stroke Color')}
+                  panelPlacement="right"
                 />
               </div>
 
@@ -1113,6 +1114,7 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
                     showTransparent={true}
                     isTransparent={!hasFill}
                     showFillPattern={hasFill}
+                    panelPlacement="right"
                   />
                 </div>
               )}
