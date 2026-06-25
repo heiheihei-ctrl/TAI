@@ -6,6 +6,9 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 ### Added
+- Added a standalone AI gateway service under `apps/new-api/` with NestJS/Prisma/Redis/PostgreSQL foundations, Bearer-token auth, admin registry APIs, unified async video task protocol, provider adapter extension points, Docker Compose, and baseline e2e/unit coverage.
+- Backend AI video routing now has a dedicated `new-api` client path: managed routes resolved as `new_api` submit/query through `NEW_API_BASE_URL` + `NEW_API_KEY`, with wrapped task IDs (`new-api:<taskId>`) for polling.
+- Backend AI image/chat entrypoints now support model-by-model `new-api` rollout through `NEW_API_IMAGE_MODELS` and `NEW_API_CHAT_MODELS`, while unlisted models continue using existing direct provider chains.
 - Flow/AI: added the independent `Omni Flash Ext` video node (`omniFlashExtVideo`) with managed model key `omni-flash-ext`, APIMart upstream model `Omni-Flash-Ext`, dedicated frontend validation, media collection, new_api/APIMart request adaptation, model routing, credit recognition, and adapter coverage tests.
 - AI Chat/Flow prompts now support image mentions: chat input can reference images from the current project, Prompt/TextPromptPro nodes can reference images already connected to their downstream model node, and runtime requests resolve those lightweight mentions into reference image URLs without storing inline image data in project JSON.
 - Auth UI: WeChat login is hidden on the test origin `http://101.96.217.132:8080` and the login page defaults to password login there, while production origins such as `https://tgtai.com` keep the WeChat tab (`frontend/src/pages/auth/Login.tsx`).
