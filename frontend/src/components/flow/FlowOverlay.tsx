@@ -15318,18 +15318,18 @@ function FlowInner() {
 
         if (isOmniFlashExtNode) {
           if (!hasText || !promptText) {
-            failCurrentVideoNode("Omni Flash Ext 需要连接非空提示词");
+            failCurrentVideoNode("请先连接提示词，并确保内容不为空");
             return;
           }
           const referenceVideoEdgeCount = currentEdges.filter(
             (e) => e.target === nodeId && e.targetHandle === "video"
           ).length;
           if (referenceVideoEdgeCount > 1) {
-            failCurrentVideoNode("Omni Flash Ext 最多支持 1 条参考视频");
+            failCurrentVideoNode("参考视频最多支持 1 条");
             return;
           }
           if (imageCount > OMNI_FLASH_EXT_MAX_REFERENCE_IMAGES) {
-            failCurrentVideoNode("Omni Flash Ext 图片最多 3 张");
+            failCurrentVideoNode("参考图片最多支持 3 张");
             return;
           }
         } else if (isSeedanceNode && seedanceMode && seedanceModeSpec) {
@@ -15841,7 +15841,7 @@ function FlowInner() {
             (e) => e.target === nodeId && e.targetHandle === "video"
           );
           if (isOmniFlashExtNode && videoEdges.length > 1) {
-            failCurrentVideoNode("Omni Flash Ext 最多支持 1 条参考视频");
+            failCurrentVideoNode("参考视频最多支持 1 条");
             return;
           }
           const resolvedVideoUrls: string[] = [];
@@ -15937,7 +15937,7 @@ function FlowInner() {
 
         if (isOmniFlashExtNode) {
           if (referenceImages.length > OMNI_FLASH_EXT_MAX_REFERENCE_IMAGES) {
-            failCurrentVideoNode("Omni Flash Ext 图片最多 3 张");
+            failCurrentVideoNode("参考图片最多支持 3 张");
             return;
           }
           const effectiveOmniVideoMode =
@@ -15947,11 +15947,15 @@ function FlowInner() {
               ? "reference"
               : "frame";
           if (effectiveOmniVideoMode === "frame" && referenceImages.length > 1) {
-            failCurrentVideoNode("Omni Flash Ext 单图模式只接 1 张图");
+            failCurrentVideoNode("单图模式只能连接 1 张图片；如需多张图片，请切换到参考模式");
             return;
           }
-          if (effectiveOmniVideoMode === "reference" && referenceImages.length === 0) {
-            failCurrentVideoNode("Omni Flash Ext 参考模式至少接 1 张图");
+          if (
+            effectiveOmniVideoMode === "reference" &&
+            referenceImages.length === 0 &&
+            referenceVideoUrls.length === 0
+          ) {
+            failCurrentVideoNode("参考模式至少需要 1 张参考图，或 1 条参考视频");
             return;
           }
         }
