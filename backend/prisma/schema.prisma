@@ -17,6 +17,7 @@ model User {
   passwordHash               String
   name                       String?
   avatarUrl                  String?
+  profileRealName            String?
   profileNickname            String?
   profileGender              String?
   profileBirthday            DateTime?              @db.Date

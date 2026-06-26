@@ -296,7 +296,7 @@ const zhCN = {
       title: "设置",
       sections: {
         workspace: "工作区",
-        profile: "完善资料",
+        profile: "个人信息",
         referral: "推广激励",
         appearance: "视图外观",
         ai: "AI 设置",

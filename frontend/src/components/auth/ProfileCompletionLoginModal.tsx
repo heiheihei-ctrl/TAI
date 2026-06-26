@@ -47,11 +47,11 @@ export default function ProfileCompletionLoginModal({
             id="profile-completion-login-title"
             className="text-center text-lg font-semibold text-slate-900"
           >
-            完善个人资料
+            个人信息
           </h2>
           <p className="mt-3 text-center text-sm leading-6 text-slate-600">
-            您还有资料未填写完整。补充昵称、性别、生日、邮箱、职业、公司与省市区等信息后，可用于个性化推荐
-            {rewardCredits > 0 ? `，首次完成可领取 ${rewardCredits} 积分` : ""}。
+            请花一分钟完善您的个人资料，用于后期为您推荐个性化服务，首次完成奖励
+            {rewardCredits}积分。
           </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">

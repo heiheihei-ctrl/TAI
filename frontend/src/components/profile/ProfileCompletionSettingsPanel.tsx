@@ -23,6 +23,7 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [profile, setProfile] = React.useState<ExtendedProfile | null>(null);
+  const [realName, setRealName] = React.useState("");
   const [nickname, setNickname] = React.useState("");
   const [gender, setGender] = React.useState<"male" | "female" | "other" | "">("");
   const [birthday, setBirthday] = React.useState("");
@@ -35,6 +36,7 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
 
   const applyProfile = React.useCallback((next: ExtendedProfile) => {
     setProfile(next);
+    setRealName(next.realName || "");
     setNickname(next.nickname || "");
     setGender((next.gender as "male" | "female" | "other" | "") || "");
     setBirthday(next.birthday || "");
@@ -69,6 +71,10 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
     setError(null);
     setFeedback(null);
 
+    if (!realName.trim()) {
+      setError("请填写姓名");
+      return;
+    }
     if (!nickname.trim()) {
       setError("请填写昵称");
       return;
@@ -81,10 +87,6 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
       setError("请选择生日");
       return;
     }
-    if (!email.trim() || !emailPattern.test(email.trim())) {
-      setError("请填写有效邮箱");
-      return;
-    }
     if (!occupation.trim()) {
       setError("请填写职业");
       return;
@@ -93,12 +95,17 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
       setError("请填写公司");
       return;
     }
+    if (!email.trim() || !emailPattern.test(email.trim())) {
+      setError("请填写有效邮箱");
+      return;
+    }
     if (!isCompleteRegion(region)) {
       setError("请选择完整的省 / 市 / 区县");
       return;
     }
 
     const payload: UpdateExtendedProfilePayload = {
+      realName: realName.trim(),
       nickname: nickname.trim(),
       gender,
       birthday,
@@ -141,15 +148,26 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
   return (
     <div className="pb-6 space-y-5">
       <div className="mt-4">
-        <h2 className="text-xl font-semibold text-slate-900">完善资料</h2>
+        <h2 className="text-xl font-semibold text-slate-900">个人信息</h2>
         <p className="mt-2 text-sm leading-relaxed text-slate-500">
           {canEarnReward
-            ? `填写以下信息并保存，即可领取 ${rewardCredits} 积分奖励。`
-            : "您已领取完善资料奖励，仍可在此更新个人信息。"}
+            ? `填写以下信息并保存，首次完成可奖励 ${rewardCredits} 积分。`
+            : "您已领取奖励，仍可在此更新个人信息。"}
         </p>
       </div>
 
       <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4">
+        <label className="block space-y-1.5">
+          <span className="text-sm font-medium text-slate-700">姓名</span>
+          <input
+            className={inputClassName}
+            value={realName}
+            onChange={(event) => setRealName(event.target.value)}
+            placeholder="请输入您的姓名"
+            maxLength={50}
+          />
+        </label>
+
         <label className="block space-y-1.5">
           <span className="text-sm font-medium text-slate-700">昵称</span>
           <input
@@ -173,7 +191,7 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
             <option value="">请选择</option>
             <option value="male">男</option>
             <option value="female">女</option>
-            <option value="other">不愿透露</option>
+            <option value="other">未知</option>
           </select>
         </label>
 
@@ -181,18 +199,6 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
           <span className="text-sm font-medium text-slate-700">生日</span>
           <BirthdayPicker value={birthday} onChange={setBirthday} />
         </div>
-
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-slate-700">邮箱</span>
-          <input
-            className={inputClassName}
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder="请输入邮箱地址"
-            maxLength={120}
-          />
-        </label>
 
         <label className="block space-y-1.5">
           <span className="text-sm font-medium text-slate-700">职业</span>
@@ -212,6 +218,18 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
             value={company}
             onChange={(event) => setCompany(event.target.value)}
             placeholder="例如：某某设计有限公司"
+            maxLength={120}
+          />
+        </label>
+
+        <label className="block space-y-1.5">
+          <span className="text-sm font-medium text-slate-700">邮箱</span>
+          <input
+            className={inputClassName}
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="请输入邮箱地址"
             maxLength={120}
           />
         </label>

@@ -5,6 +5,7 @@ import type { UpdateExtendedProfileDto } from './dto/update-extended-profile.dto
 export const PROFILE_COMPLETION_REWARD_CREDITS = 100;
 
 export interface ExtendedProfileView {
+  realName: string | null;
   nickname: string | null;
   gender: string | null;
   birthday: string | null;
@@ -19,6 +20,7 @@ export interface ExtendedProfileView {
 }
 
 export interface UpdateExtendedProfileDtoInput {
+  realName?: string;
   nickname?: string;
   gender?: string;
   birthday?: string;
@@ -234,6 +236,7 @@ export class UsersService {
   }
 
   private mapExtendedProfile(user: {
+    profileRealName?: string | null;
     profileNickname?: string | null;
     profileGender?: string | null;
     profileBirthday?: Date | null;
@@ -244,6 +247,7 @@ export class UsersService {
     profileCompletedAt?: Date | null;
     profileRewardClaimed?: boolean | null;
   }): ExtendedProfileView {
+    const realName = user.profileRealName?.trim() || null;
     const nickname = user.profileNickname?.trim() || null;
     const gender = user.profileGender?.trim() || null;
     const birthday = this.formatBirthday(user.profileBirthday);
@@ -252,10 +256,18 @@ export class UsersService {
     const company = user.profileCompany?.trim() || null;
     const region = user.profileRegion?.trim() || null;
     const isComplete = Boolean(
-      nickname && gender && birthday && email && occupation && company && region,
+      realName &&
+        nickname &&
+        gender &&
+        birthday &&
+        email &&
+        occupation &&
+        company &&
+        region,
     );
 
     return {
+      realName,
       nickname,
       gender,
       birthday,
@@ -274,6 +286,7 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
+        profileRealName: true,
         profileNickname: true,
         profileGender: true,
         profileBirthday: true,
@@ -296,6 +309,7 @@ export class UsersService {
       where: { id: userId },
       select: {
         id: true,
+        profileRealName: true,
         profileNickname: true,
         profileGender: true,
         profileBirthday: true,
@@ -311,6 +325,7 @@ export class UsersService {
       throw new NotFoundException('用户不存在');
     }
 
+    const realName = (dto.realName ?? existing.profileRealName ?? '').trim();
     const nickname = (dto.nickname ?? existing.profileNickname ?? '').trim();
     const gender = (dto.gender ?? existing.profileGender ?? '').trim();
     const birthdayInput =
@@ -322,16 +337,32 @@ export class UsersService {
     const company = (dto.company ?? existing.profileCompany ?? '').trim();
     const region = (dto.region ?? existing.profileRegion ?? '').trim();
 
-    if (!nickname || !gender || !birthdayInput || !email || !occupation || !company || !region) {
+    if (
+      !realName ||
+      !nickname ||
+      !gender ||
+      !birthdayInput ||
+      !email ||
+      !occupation ||
+      !company ||
+      !region
+    ) {
       throw new BadRequestException(
-        '请填写完整资料：昵称、性别、生日、邮箱、职业、公司与所在地区',
+        '请填写完整资料：姓名、昵称、性别、生日、邮箱、职业、公司与所在地区',
       );
     }
 
     const birthday = this.parseBirthdayInput(birthdayInput);
 
     const isComplete = Boolean(
-      nickname && gender && birthday && email && occupation && company && region,
+      realName &&
+        nickname &&
+        gender &&
+        birthday &&
+        email &&
+        occupation &&
+        company &&
+        region,
     );
     const shouldGrantReward = isComplete && !existing.profileRewardClaimed;
 
@@ -339,6 +370,7 @@ export class UsersService {
       const updated = await tx.user.update({
         where: { id: userId },
         data: {
+          profileRealName: realName,
           profileNickname: nickname,
           profileGender: gender,
           profileBirthday: birthday,
@@ -350,6 +382,7 @@ export class UsersService {
           profileRewardClaimed: shouldGrantReward ? true : existing.profileRewardClaimed,
         },
         select: {
+          profileRealName: true,
           profileNickname: true,
           profileGender: true,
           profileBirthday: true,

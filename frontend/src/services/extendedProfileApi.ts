@@ -3,6 +3,7 @@ import { getAccessAuthHeader } from "./authTokenStorage";
 import { getApiBaseUrl } from "../utils/assetProxy";
 
 export type ExtendedProfile = {
+  realName: string | null;
   nickname: string | null;
   gender: string | null;
   birthday: string | null;
@@ -17,6 +18,7 @@ export type ExtendedProfile = {
 };
 
 export type UpdateExtendedProfilePayload = {
+  realName: string;
   nickname: string;
   gender: "male" | "female" | "other";
   birthday: string;
@@ -34,11 +36,19 @@ export type UpdateExtendedProfileResult = {
 
 const base = () => getApiBaseUrl();
 
-export async function fetchExtendedProfile(): Promise<ExtendedProfile> {
+export type FetchExtendedProfileOptions = {
+  /** 登录后立即拉取时可开启，避免 token 尚未就绪时 401 被当作登出 */
+  allowRefresh?: boolean;
+};
+
+export async function fetchExtendedProfile(
+  options: FetchExtendedProfileOptions = {},
+): Promise<ExtendedProfile> {
+  const { allowRefresh = false } = options;
   const response = await fetchWithAuth(`${base()}/api/users/extended-profile`, {
     credentials: "include",
     auth: "omit",
-    allowRefresh: false,
+    allowRefresh,
     headers: { ...getAccessAuthHeader() },
   });
   if (!response.ok) {
@@ -130,6 +140,7 @@ export function normalizeProfileCompletionBannerDismissCache(): void {
 }
 
 export const DEFAULT_INCOMPLETE_PROFILE: ExtendedProfile = {
+  realName: null,
   nickname: null,
   gender: null,
   birthday: null,

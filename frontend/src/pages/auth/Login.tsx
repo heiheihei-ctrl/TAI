@@ -10,6 +10,7 @@ import ForgotPasswordModal from "@/components/auth/ForgotPasswordModal";
 import ProfileCompletionLoginModal from "@/components/auth/ProfileCompletionLoginModal";
 import AgreementConsentModal from "@/components/auth/AgreementConsentModal";
 import {
+  DEFAULT_INCOMPLETE_PROFILE,
   fetchExtendedProfile,
   queueOpenSettingsSection,
 } from "@/services/extendedProfileApi";
@@ -47,7 +48,7 @@ export default function LoginPage() {
   const [wechatBindSubmitting, setWechatBindSubmitting] = useState(false);
   const consumingRef = useRef(false);
   const consumedSessionIdRef = useRef<string | null>(null);
-  const holdAutoRedirectRef = useRef(false);
+  const [profileGateActive, setProfileGateActive] = useState(false);
   const [isProfilePromptOpen, setIsProfilePromptOpen] = useState(false);
   const [profileRewardCredits, setProfileRewardCredits] = useState(100);
   const [pendingReturnTo, setPendingReturnTo] = useState("/app");
@@ -64,10 +65,10 @@ export default function LoginPage() {
   }, [location.search, location.state]);
 
   useEffect(() => {
-    if (user && !holdAutoRedirectRef.current && !isProfilePromptOpen) {
+    if (user && !profileGateActive && !isProfilePromptOpen) {
       navigate(returnTo, { replace: true });
     }
-  }, [user, navigate, returnTo, isProfilePromptOpen]);
+  }, [user, navigate, returnTo, isProfilePromptOpen, profileGateActive]);
 
   useEffect(() => {
     if (!wechatLoginEnabled && tab === "wechat") {
@@ -75,31 +76,55 @@ export default function LoginPage() {
     }
   }, [wechatLoginEnabled, tab]);
 
-  const finishLoginFlow = async (destination: string) => {
+  const activateProfileGate = () => {
+    setProfileGateActive(true);
+  };
+
+  const releaseProfileGate = () => {
+    setProfileGateActive(false);
+  };
+
+  const openProfilePrompt = (destination: string, rewardCredits = 100) => {
+    setPendingReturnTo(destination);
+    setProfileRewardCredits(rewardCredits);
+    setIsProfilePromptOpen(true);
+  };
+
+  const fetchProfileAfterLogin = async () => {
     try {
-      const profile = await fetchExtendedProfile();
-      if (!profile.isComplete) {
-        setPendingReturnTo(destination);
-        setProfileRewardCredits(profile.rewardCredits || 100);
-        setIsProfilePromptOpen(true);
-        return;
-      }
-    } catch (err) {
-      console.warn("加载完善资料状态失败，跳过登录提示:", err);
+      return await fetchExtendedProfile({ allowRefresh: true });
+    } catch {
+      await new Promise((resolve) => window.setTimeout(resolve, 200));
+      return await fetchExtendedProfile({ allowRefresh: true });
     }
-    holdAutoRedirectRef.current = false;
+  };
+
+  const finishLoginFlow = async (destination: string) => {
+    let profile = DEFAULT_INCOMPLETE_PROFILE;
+    try {
+      profile = await fetchProfileAfterLogin();
+    } catch (err) {
+      console.warn("加载个人资料状态失败，仍展示完善提示:", err);
+    }
+
+    if (!profile.isComplete) {
+      openProfilePrompt(destination, profile.rewardCredits || 100);
+      return;
+    }
+
+    releaseProfileGate();
     navigate(destination, { replace: true });
   };
 
   const handleProfilePromptClose = () => {
     setIsProfilePromptOpen(false);
-    holdAutoRedirectRef.current = false;
+    releaseProfileGate();
     navigate(pendingReturnTo || returnTo, { replace: true });
   };
 
   const handleProfilePromptGoFill = () => {
     setIsProfilePromptOpen(false);
-    holdAutoRedirectRef.current = false;
+    releaseProfileGate();
     const destination = pendingReturnTo || returnTo;
     queueOpenSettingsSection("profile");
     navigate(destination, {
@@ -109,7 +134,7 @@ export default function LoginPage() {
   };
 
   const finalizeWechatLogin = async (nextUser: any, nextReturnTo?: string) => {
-    holdAutoRedirectRef.current = true;
+    activateProfileGate();
     setAuthenticatedUser(nextUser, "server");
     await finishLoginFlow(nextReturnTo || returnTo);
   };
@@ -192,7 +217,7 @@ export default function LoginPage() {
 
   const performLogin = async () => {
     setIsSubmitting(true);
-    holdAutoRedirectRef.current = true;
+    activateProfileGate();
     try {
       if (tab === "password") {
         await login(phone, password);
@@ -201,7 +226,7 @@ export default function LoginPage() {
       }
       await finishLoginFlow(returnTo);
     } catch (err) {
-      holdAutoRedirectRef.current = false;
+      releaseProfileGate();
       console.error("登录失败:", err);
     } finally {
       setIsSubmitting(false);

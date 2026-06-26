@@ -2,6 +2,13 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsDateString, IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class UpdateExtendedProfileDto {
+  @ApiPropertyOptional({ description: '姓名' })
+  @IsOptional()
+  @IsString()
+  @MinLength(1, { message: '姓名不能为空' })
+  @MaxLength(50, { message: '姓名过长' })
+  realName?: string;
+
   @ApiPropertyOptional({ description: '昵称' })
   @IsOptional()
   @IsString()

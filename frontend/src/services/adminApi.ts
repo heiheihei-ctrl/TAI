@@ -172,6 +172,7 @@ export type AdminUserProfileDetail = {
     lastLoginAt: string | null;
   };
   profile: {
+    realName: string | null;
     nickname: string | null;
     gender: string | null;
     birthday: string | null;

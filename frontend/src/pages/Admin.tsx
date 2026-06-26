@@ -4858,7 +4858,7 @@ function UsersTab({
   const formatProfileGender = (gender: string | null | undefined) => {
     if (gender === "male") return "男";
     if (gender === "female") return "女";
-    if (gender === "other") return "不愿透露";
+    if (gender === "other") return "未知";
     return "-";
   };
 
@@ -5701,8 +5701,12 @@ function UsersTab({
                 </div>
 
                 <div>
-                  <h4 className='mb-3 text-sm font-semibold text-gray-800'>完善资料</h4>
+                  <h4 className='mb-3 text-sm font-semibold text-gray-800'>个人信息</h4>
                   <div className='rounded-lg border divide-y'>
+                    <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
+                      <div className='text-gray-500'>姓名</div>
+                      <div>{profileDetailData.profile.realName || "-"}</div>
+                    </div>
                     <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
                       <div className='text-gray-500'>昵称</div>
                       <div>{profileDetailData.profile.nickname || "-"}</div>
@@ -5716,16 +5720,16 @@ function UsersTab({
                       <div>{formatBirthdayLabel(profileDetailData.profile.birthday)}</div>
                     </div>
                     <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
-                      <div className='text-gray-500'>邮箱</div>
-                      <div>{profileDetailData.profile.email || "-"}</div>
-                    </div>
-                    <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
                       <div className='text-gray-500'>职业</div>
                       <div>{profileDetailData.profile.occupation || "-"}</div>
                     </div>
                     <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
                       <div className='text-gray-500'>公司</div>
                       <div>{profileDetailData.profile.company || "-"}</div>
+                    </div>
+                    <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
+                      <div className='text-gray-500'>邮箱</div>
+                      <div>{profileDetailData.profile.email || "-"}</div>
                     </div>
                     <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
                       <div className='text-gray-500'>所在地区</div>
