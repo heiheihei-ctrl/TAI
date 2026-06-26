@@ -346,15 +346,15 @@ export const buildOmniFlashExtNewApiPayload = (
 ): OmniFlashExtNewApiPayload => {
   const prompt = asTrimmedString(input.prompt);
   if (!prompt) {
-    throw new BadRequestException('Omni Flash Ext 需要连接非空提示词');
+    throw new BadRequestException('请先连接提示词，并确保内容不为空');
   }
 
   const { imageUrls, videoUrls } = collectOmniFlashExtMedia(input);
   if (imageUrls.length > 3) {
-    throw new BadRequestException('Omni Flash Ext 图片最多 3 张');
+    throw new BadRequestException('参考图片最多支持 3 张');
   }
   if (videoUrls.length > 1) {
-    throw new BadRequestException('Omni Flash Ext 最多支持 1 条参考视频');
+    throw new BadRequestException('参考视频最多支持 1 条');
   }
 
   assertPersistableRefs('Omni Flash Ext 参考图', imageUrls);
@@ -364,15 +364,13 @@ export const buildOmniFlashExtNewApiPayload = (
   const requestedMode = normalizeVideoMode(input.videoMode);
   const effectiveMode: OmniFlashExtVideoMode = hasReferenceVideo
     ? 'reference'
-    : imageUrls.length >= 2
-      ? 'reference'
-      : requestedMode;
+    : requestedMode;
 
   if (effectiveMode === 'frame' && imageUrls.length > 1) {
-    throw new BadRequestException('Omni Flash Ext 单图模式只接 1 张图');
+    throw new BadRequestException('单图模式只能连接 1 张图片；如需多张图片，请切换到参考模式');
   }
-  if (effectiveMode === 'reference' && imageUrls.length === 0) {
-    throw new BadRequestException('Omni Flash Ext 参考模式至少接 1 张图');
+  if (effectiveMode === 'reference' && imageUrls.length === 0 && !hasReferenceVideo) {
+    throw new BadRequestException('参考模式至少需要 1 张参考图，或 1 条参考视频');
   }
 
   const payload: OmniFlashExtNewApiPayload = {

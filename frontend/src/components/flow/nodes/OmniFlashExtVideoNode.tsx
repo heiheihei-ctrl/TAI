@@ -479,12 +479,24 @@ function OmniFlashExtVideoNode({ id, data, selected }: Props) {
           <NodeSelect
             value={videoMode}
             options={[
-              { value: "frame", label: lt("单图", "Frame") },
-              { value: "reference", label: lt("参考", "Reference") },
+              {
+                value: "frame",
+                label: lt("单图模式", "Single Image Mode"),
+                description: lt("1 张图生成视频", "Generate video from 1 image"),
+              },
+              {
+                value: "reference",
+                label: lt("参考模式", "Reference Mode"),
+                description: lt(
+                  "1~3张参考图，或1条参考视频",
+                  "1-3 reference images, or 1 reference video"
+                ),
+              },
             ]}
             onChange={(value) => updateNodeData(id, { videoMode: value })}
             menuLabel={lt("模式", "Mode")}
             title={lt("选择模式", "Select mode")}
+            descriptionClassName="text-xs"
           />
         </div>
         <div>

@@ -24,6 +24,7 @@ type NodeSelectProps = {
   variant?: "field" | "compact";
   className?: string;
   contentClassName?: string;
+  descriptionClassName?: string;
   align?: "start" | "center" | "end";
 };
 
@@ -36,6 +37,7 @@ export default function NodeSelect({
   variant = "field",
   className,
   contentClassName,
+  descriptionClassName,
   align = "start",
 }: NodeSelectProps) {
   const isFlowDark = useFlowNodeDarkTheme();
@@ -135,10 +137,11 @@ export default function NodeSelect({
                 {option.description ? (
                   <div
                     className={cn(
-                      "text-[11px] leading-snug",
+                      "leading-snug",
                       isFlowDark
                         ? "text-[#9ca3af]"
-                        : "text-slate-400 dark:!text-slate-400"
+                        : "text-slate-400 dark:!text-slate-400",
+                      descriptionClassName ?? "text-[11px]"
                     )}
                   >
                     {option.description}
