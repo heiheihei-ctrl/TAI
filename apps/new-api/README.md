@@ -260,7 +260,8 @@ curl -X POST http://localhost:4455/admin/channels \
 说明：
 
 - `credentialsJson.apiKey` 为必填。
-- `ApimartAdapter` 当前只实现了 `modelKey = "omni-flash-ext"` 的视频提交与查询。
+- `ApimartAdapter` 已支持 `POST /v1/chat/completions`，以及 `modelKey = "omni-flash-ext"` 的视频提交与查询。
+- 国内服务器访问 APIMart 时可配置环境变量 `API_PROXY_URL=socks5h://user:pass@host:port`；必须使用 `socks5h://`，否则会拒绝启动该代理请求，避免本地 DNS 污染。
 - 业务后端若通过 `generate-video-provider` 走 `omni-flash-ext`，应保持 `managedModelKey = "omni-flash-ext"`。
 
 ### Tencent VOD / Kling 3.0 真实视频示例

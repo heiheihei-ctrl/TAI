@@ -23,7 +23,7 @@
 - `src/modules/audit/*`：请求日志和渠道健康日志。
 - `src/modules/admin/*`：最小管理接口。
 - `src/gateways/video|image|chat/*`：对外统一业务协议。
-- `src/providers-adapters/*`：上游 provider 适配层，当前含 `dummy` 实现和 `volcengine/openai/apimart` 骨架。
+- `src/providers-adapters/*`：上游 provider 适配层，当前含 `dummy`、`tencent-vod`，以及 `volcengine/openai/apimart` 扩展点；`apimart` 已支持 chat completions 与 Omni Flash Ext 视频。
 
 ## 数据模型
 
@@ -41,8 +41,9 @@
 - 本地开发入口：`cd apps/new-api && npm run start:dev`
 - Docker 入口：`cd apps/new-api && docker compose up -d`
 - 第一个后台调用 token 通过 `POST /admin/tokens` 创建，初始化依赖 `NEW_API_BOOTSTRAP_TOKEN`
+- Apimart 国内服务器代理：设置 `API_PROXY_URL=socks5h://user:pass@host:port` 后，Apimart adapter 会通过 SOCKS5H 转发请求；为空直连，非 `socks5h://` 会报错，避免本地 DNS 污染。
 
 ## 当前状态
 
 - 已完成基础设施和扩展点。
-- 真实模型接入目前只提供骨架，后续按 provider adapter 扩展。
+- APIMart chat completions 和 Omni Flash Ext 视频已具备真实上游请求能力，其它 provider 继续按 adapter 扩展。

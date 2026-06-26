@@ -25,6 +25,10 @@ import {
 } from "./ai-provider.interface";
 import { parseToolSelectionJson } from "../tool-selection-json.util";
 import { TencentVodAigcService } from "../services/tencent-vod-aigc.service";
+import {
+  apimartRequest,
+  getApimartProxySummary,
+} from "../../utils/apimartHttpClient";
 
 const DEFAULT_TOOLS = [
   "generateImage",
@@ -109,6 +113,10 @@ export class BananaProvider implements IAIProvider {
   };
   private readonly DEFAULT_TIMEOUT = 900000; // 15鍒嗛挓
   private readonly TEXT_TIMEOUT = 45000; // 鏂囨湰鎺ュ彛鏇村揩澶辫触锛屼究浜庨€氶亾蹇€熷垏鎹?
+  private readonly APIMART_SUBMIT_TIMEOUT = 60000;
+  private readonly APIMART_QUERY_TIMEOUT = 30000;
+  private readonly APIMART_QUERY_MAX_RETRIES = 3;
+  private readonly APIMART_QUERY_RETRY_DELAYS_MS = [300, 800];
   private readonly MAX_RETRIES = 3;
   private readonly MAX_MODEL_ATTEMPTS = 3; // 涓绘ā鍨?+ 涓ょ骇闄嶇骇锛圲ltra -> Pro -> Fast锛?
   private readonly RETRY_DELAYS = [2000, 5000, 10000]; // 閫掑寤惰繜: 2s, 5s, 10s
@@ -149,7 +157,7 @@ export class BananaProvider implements IAIProvider {
     }
 
     this.logger.log(
-      `Banana provider initialized (legacy=${!!this.apiKey}, apimart=${!!this.apimartApiKey}, tencent=${tencentReady})`
+      `Banana provider initialized (legacy=${!!this.apiKey}, apimart=${!!this.apimartApiKey}, tencent=${tencentReady}, apimartProxy=${getApimartProxySummary()})`
     );
   }
 
@@ -188,7 +196,12 @@ export class BananaProvider implements IAIProvider {
         `APIMart 域名解析失败（api.apimart.ai），请检查服务器 DNS 或代理网络。${context}`
       ) as unknown as Error;
     }
-    if (causeCode === "ETIMEDOUT" || err.name === "AbortError") {
+    if (
+      causeCode === "ETIMEDOUT" ||
+      causeCode === "ECONNABORTED" ||
+      err.name === "AbortError" ||
+      normalized.includes("timeout")
+    ) {
       return new ServiceUnavailableException(
         `APIMart 网络连接超时，请检查服务器到 api.apimart.ai 的网络链路或代理配置。${context}`
       ) as unknown as Error;
@@ -1175,29 +1188,33 @@ export class BananaProvider implements IAIProvider {
       messages: this.buildApimartChatMessages(contents),
     };
 
-    let response: Response;
+    let response: {
+      status: number;
+      statusText: string;
+      data: any;
+    };
     try {
-      response = await fetch(this.apimartTextUrl, {
+      response = await apimartRequest({
+        url: this.apimartTextUrl,
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(payload),
+        data: payload,
+        timeout: this.TEXT_TIMEOUT,
       });
     } catch (error) {
       throw this.wrapApimartNetworkError(error, "Banana 文本普通路线请求失败");
     }
 
-    const rawText = await response.text();
-    let parsed: any = null;
-    try {
-      parsed = rawText ? JSON.parse(rawText) : null;
-    } catch {
-      parsed = null;
-    }
+    const parsed = response.data;
+    const rawText =
+      typeof response.data === "string"
+        ? response.data
+        : JSON.stringify(response.data ?? "");
 
-    if (!response.ok) {
+    if (response.status < 200 || response.status >= 300) {
       const message =
         parsed?.error?.message ||
         parsed?.message ||
@@ -1315,17 +1332,22 @@ export class BananaProvider implements IAIProvider {
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        const response = await fetch(this.apimartGenerateUrl, {
+        const response = await apimartRequest<any>({
+          url: this.apimartGenerateUrl,
           method: "POST",
           headers: {
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(payload),
+          data: payload,
+          timeout: this.APIMART_SUBMIT_TIMEOUT,
         });
 
-        if (!response.ok) {
-          const errorData = await response.text();
+        if (response.status < 200 || response.status >= 300) {
+          const errorData =
+            typeof response.data === "string"
+              ? response.data
+              : JSON.stringify(response.data ?? "");
           const normalized = errorData.toLowerCase();
           const retryable =
             response.status >= 500 ||
@@ -1348,7 +1370,7 @@ export class BananaProvider implements IAIProvider {
           continue;
         }
 
-        const data = (await response.json()) as any;
+        const data = response.data as any;
         const taskId = data?.data?.[0]?.task_id || data?.data?.task_id;
         if (!taskId) {
           throw new Error("Apimart submit response missing task_id");
@@ -1408,29 +1430,82 @@ export class BananaProvider implements IAIProvider {
     return undefined;
   }
 
+  private isRetryableApimartQueryError(error: unknown): boolean {
+    const err = error instanceof Error ? error : new Error(String(error));
+    const code =
+      typeof (err as any)?.cause?.code === "string"
+        ? String((err as any).cause.code)
+        : typeof (err as any)?.code === "string"
+          ? String((err as any).code)
+          : "";
+    const message = String(err.message || "").toLowerCase();
+
+    return (
+      code === "ECONNRESET" ||
+      code === "ETIMEDOUT" ||
+      code === "ECONNABORTED" ||
+      code === "EAI_AGAIN" ||
+      message.includes("econnreset") ||
+      message.includes("timeout") ||
+      message.includes("socket hang up") ||
+      message.includes("fetch failed")
+    );
+  }
+
   private async queryApimartTask(taskId: string): Promise<{ status: string; imageUrl?: string }> {
     const apiKey = this.ensureApimartApiKey();
-    let response: Response;
-    try {
-      response = await fetch(`${this.apimartTaskBaseUrl}/${taskId}`, {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
-      });
-    } catch (error) {
-      throw this.wrapApimartNetworkError(error, `Banana 普通路线查询任务失败(task=${taskId})`);
+    let lastError: unknown = null;
+
+    for (let attempt = 1; attempt <= this.APIMART_QUERY_MAX_RETRIES; attempt++) {
+      try {
+        const response = await apimartRequest<any>({
+          url: `${this.apimartTaskBaseUrl}/${taskId}`,
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+          },
+          timeout: this.APIMART_QUERY_TIMEOUT,
+        });
+
+        if (response.status < 200 || response.status >= 300) {
+          throw new Error(`Apimart task query failed: HTTP ${response.status}`);
+        }
+
+        const data = response.data as any;
+        const payload = data?.data ?? data;
+        const statusRaw = payload?.status ?? "processing";
+        const status = typeof statusRaw === "string" ? statusRaw.toLowerCase() : "processing";
+        const imageUrl = this.extractApimartImageUrl(data);
+        return { status, imageUrl };
+      } catch (error) {
+        lastError = error;
+        if (
+          attempt < this.APIMART_QUERY_MAX_RETRIES &&
+          this.isRetryableApimartQueryError(error)
+        ) {
+          const delayMs =
+            this.APIMART_QUERY_RETRY_DELAYS_MS[attempt - 1] ??
+            this.APIMART_QUERY_RETRY_DELAYS_MS[this.APIMART_QUERY_RETRY_DELAYS_MS.length - 1] ??
+            800;
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.warn(
+            `[Banana/Apimart] task query retry ${attempt}/${this.APIMART_QUERY_MAX_RETRIES} in ${delayMs}ms: task=${taskId}, error=${message}`
+          );
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          continue;
+        }
+
+        throw this.wrapApimartNetworkError(
+          error,
+          `Banana 普通路线查询任务失败(task=${taskId})`
+        );
+      }
     }
 
-    if (!response.ok) {
-      throw new Error(`Apimart task query failed: HTTP ${response.status}`);
-    }
-
-    const data = (await response.json()) as any;
-    const payload = data?.data ?? data;
-    const statusRaw = payload?.status ?? "processing";
-    const status = typeof statusRaw === "string" ? statusRaw.toLowerCase() : "processing";
-    const imageUrl = this.extractApimartImageUrl(data);
-    return { status, imageUrl };
+    throw this.wrapApimartNetworkError(
+      lastError,
+      `Banana 普通路线查询任务失败(task=${taskId})`
+    );
   }
 
   private async waitForApimartTask(

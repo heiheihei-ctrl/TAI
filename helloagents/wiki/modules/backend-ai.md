@@ -75,6 +75,7 @@
 - `edit-image` / `blend-images` 支持 `sourceImageUrl(s)`，后端会�?OSS 白名单拉取并转换�?dataURL�?
 - Banana 文本链路（`text-chat` / `tool-selection`）支持独立于图像链路的供应商配置�?`banana_text_provider`：`auto`（Apimart�?47）、`legacy_auto`�?47→Apimart）、`apimart`、`legacy`�?
 - Banana 文本�?Apimart 时使�?`https://api.apimart.ai/v1/chat/completions`（OpenAI Chat Completions 兼容格式），鉴权复用 `NANO2_API_KEY`�?
+- Banana/Apimart 请求统一走 `backend/src/utils/apimartHttpClient.ts`；生产国内服务器可配置 `API_PROXY_URL=socks5h://user:pass@host:port`，为空则直连。非 `socks5h://` 会被拒绝，避免本地 DNS 解析污染。
 - Banana 文本链路按档位映射：`Fast (banana-2.5) -> gemini-2.5-flash`、`Pro (banana) -> gemini-3-pro-preview`、`Ultra (banana-3.1/nano2) -> gemini-3.1-pro-preview`；其�?Ultra �?147 �?Apimart 通道均统一使用 `gemini-3.1-pro-preview`�?
 - `POST /api/ai/analyze-image` 默认优先使用 `gemini-3.1-pro`（语言模型）做多模态分析；`banana-2.5` 仍保�?`gemini-2.5-flash-image-preview`�?
 - 图像分析链路遇到上游配额/限流�?29 / quota / resource exhausted）时，后端会在退款后透传 HTTP `429`，不再统一返回 `500`�?
@@ -84,6 +85,7 @@
 - Gemini/第三方：`GOOGLE_GEMINI_API_KEY`、`RUNNINGHUB_API_KEY` �?
 - 视频/供应商：`DASHSCOPE_API_KEY`、`SORA2_API_ENDPOINT`、`BANANA_API_KEY` �?
 - Banana/Apimart 文本与图像：`BANANA_API_KEY`�?47）、`NANO2_API_KEY`（Apimart�?
+- Apimart 代理：`API_PROXY_URL`（可选，必须为 `socks5h://...`；为空直连）。
 - `new-api` 业务后端接入：`NEW_API_BASE_URL`、`NEW_API_KEY`，以及可选白名单 `NEW_API_IMAGE_MODELS`、`NEW_API_CHAT_MODELS`（逗号分隔的内部/统一模型 key）。
 
 ## 2026-04-24 Update

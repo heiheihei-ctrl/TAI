@@ -46,6 +46,7 @@
     "@types/qrcode": "^1.5.6",
     "ali-oss": "^6.20.0",
     "alipay-sdk": "^4.14.0",
+    "axios": "^1.18.1",
     "bcryptjs": "^2.4.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
@@ -62,6 +63,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "sharp": "^0.34.5",
+    "socks-proxy-agent": "^8.0.5",
     "wechatpay-node-v3": "^2.2.1"
   },
   "optionalDependencies": {
