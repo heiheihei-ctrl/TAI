@@ -26,6 +26,10 @@ import {
   parseOmniFlashExtTaskResponse,
 } from "./omni-flash-ext.adapter";
 import { NewApiGatewayService } from "./new-api-gateway.service";
+import {
+  apimartRequest,
+  getApimartProxySummary,
+} from "../../utils/apimartHttpClient";
 
 // 默认请求超时时间（毫秒）
 const DEFAULT_FETCH_TIMEOUT = 180000; // 3分钟
@@ -198,6 +202,46 @@ export class VideoProviderService {
   private summarizeError(error: unknown): string {
     if (error instanceof Error && error.message) return error.message;
     return String(error);
+  }
+
+  private wrapApimartNetworkError(error: unknown, context: string): Error {
+    const err =
+      error instanceof Error ? error : new Error(typeof error === "string" ? error : "Unknown error");
+    const causeCode =
+      typeof (err as any)?.cause?.code === "string"
+        ? String((err as any).cause.code)
+        : typeof (err as any)?.code === "string"
+          ? String((err as any).code)
+          : "";
+    const message = String(err.message || "");
+    const normalized = message.toLowerCase();
+
+    if (causeCode === "ENOTFOUND") {
+      return new ServiceUnavailableException(
+        `APIMart 域名解析失败（api.apimart.ai），请检查服务器 DNS 或代理网络。${context}`
+      ) as unknown as Error;
+    }
+    if (
+      causeCode === "ETIMEDOUT" ||
+      causeCode === "ECONNABORTED" ||
+      err.name === "AbortError" ||
+      normalized.includes("timeout")
+    ) {
+      return new ServiceUnavailableException(
+        `APIMart 网络连接超时，请检查服务器到 api.apimart.ai 的网络链路或代理配置。${context}`
+      ) as unknown as Error;
+    }
+    if (
+      causeCode === "ECONNRESET" ||
+      causeCode === "ECONNREFUSED" ||
+      causeCode === "EAI_AGAIN" ||
+      normalized.includes("fetch failed")
+    ) {
+      return new ServiceUnavailableException(
+        `APIMart 网络请求失败，请检查服务器外网出口、代理或防火墙配置。${context} ${message}`.trim()
+      ) as unknown as Error;
+    }
+    return err;
   }
 
   private isSeedance20Request(options: VideoProviderRequestDto): boolean {
@@ -1104,37 +1148,42 @@ export class VideoProviderService {
     this.logProviderPayload("omni-flash-ext/new-api", newApiPayload);
     this.logProviderPayload("omni-flash-ext/apimart", apimartPayload);
 
-    let response: Response;
+    let response: { status: number; data: any };
     try {
-      response = await fetchWithTimeout("https://api.apimart.ai/v1/videos/generations", {
+      response = await apimartRequest({
+        url: "https://api.apimart.ai/v1/videos/generations",
         method: "POST",
         timeout: DEFAULT_FETCH_TIMEOUT,
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(apimartPayload),
+        data: apimartPayload,
       });
     } catch (error) {
-      const message = this.summarizeError(error);
+      const wrapped = this.wrapApimartNetworkError(error, "Omni Flash Ext 提交任务失败");
+      const message = this.summarizeError(wrapped);
       this.logger.error(
-        `APIMart Omni Flash Ext 请求失败: vendor=${route.vendor.vendorKey}, platform=${route.vendor.platformKey || route.vendor.vendorKey}, message=${message}`,
+        `APIMart Omni Flash Ext 请求失败: vendor=${route.vendor.vendorKey}, platform=${route.vendor.platformKey || route.vendor.vendorKey}, proxy=${getApimartProxySummary()}, message=${message}`,
       );
-      throw new ServiceUnavailableException(`APIMart Omni Flash Ext 请求失败: ${message}`);
+      throw wrapped;
     }
 
-    const textBody = await response.text().catch(() => "");
-    let data: any = {};
-    if (textBody) {
-      try {
-        data = JSON.parse(textBody);
-      } catch {
-        data = { raw: textBody };
-      }
-    }
+    const data =
+      typeof response.data === "string"
+        ? (() => {
+            try {
+              return JSON.parse(response.data);
+            } catch {
+              return { raw: response.data };
+            }
+          })()
+        : (response.data ?? {});
+    const textBody =
+      typeof response.data === "string" ? response.data : JSON.stringify(response.data ?? "");
     this.logger.debug?.(`APIMart Omni Flash Ext 原始响应: ${textBody.slice(0, 500)}`);
 
-    if (!response.ok) {
+    if (response.status < 200 || response.status >= 300) {
       const message =
         data?.error?.message ||
         data?.message ||
@@ -1208,34 +1257,43 @@ export class VideoProviderService {
     let lastBody = "";
 
     for (const endpoint of endpoints) {
-      const response = await fetchWithTimeout(endpoint, {
-        method: "GET",
-        timeout: QUERY_FETCH_TIMEOUT,
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Cache-Control": "no-cache",
-          Pragma: "no-cache",
-        },
-      });
-      const textBody = await response.text().catch(() => "");
+      let response: { status: number; data: any };
+      try {
+        response = await apimartRequest({
+          url: endpoint,
+          method: "GET",
+          timeout: QUERY_FETCH_TIMEOUT,
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+          },
+        });
+      } catch (error) {
+        throw this.wrapApimartNetworkError(error, `Omni Flash Ext 查询任务失败: ${rawTaskId}`);
+      }
+      const textBody =
+        typeof response.data === "string" ? response.data : JSON.stringify(response.data ?? "");
       lastStatus = response.status;
       lastBody = textBody;
       this.logger.debug?.(
         `Omni Flash Ext 查询 ${endpoint} → HTTP ${response.status}: ${textBody.slice(0, 800)}`,
       );
-      if (!response.ok) {
+      if (response.status < 200 || response.status >= 300) {
         if (response.status === 404) continue;
         break;
       }
 
-      let raw: any = {};
-      if (textBody) {
-        try {
-          raw = JSON.parse(textBody);
-        } catch {
-          raw = { raw: textBody };
-        }
-      }
+      const raw =
+        typeof response.data === "string"
+          ? (() => {
+              try {
+                return JSON.parse(response.data);
+              } catch {
+                return { raw: response.data };
+              }
+            })()
+          : (response.data ?? {});
 
       const parsed = parseOmniFlashExtTaskResponse(raw, rawTaskId);
       this.logger.debug?.(
