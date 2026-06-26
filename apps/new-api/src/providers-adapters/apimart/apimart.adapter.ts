@@ -15,6 +15,10 @@ import {
   isOmniFlashExtModelKey,
   parseOmniFlashExtTaskResponse,
 } from './omni-flash-ext.util';
+import {
+  apimartRequest,
+  getApimartProxySummary,
+} from '../../common/utils/apimart-http-client';
 
 @Injectable()
 export class ApimartAdapter implements ProviderAdapter {
@@ -114,8 +118,20 @@ export class ApimartAdapter implements ProviderAdapter {
     throw new AppException('PROVIDER_NOT_IMPLEMENTED', 'APIMart adapter is not implemented yet', 501);
   }
 
-  async chatCompletions(_route: RouteResolution, _input: ChatCompletionInput): Promise<unknown> {
-    throw new AppException('PROVIDER_NOT_IMPLEMENTED', 'APIMart adapter is not implemented yet', 501);
+  async chatCompletions(route: RouteResolution, input: ChatCompletionInput): Promise<unknown> {
+    const channel = this.resolveChannel(route);
+    const payload = {
+      model: route.modelKey,
+      stream: false,
+      messages: input.messages,
+    };
+
+    const response = await this.fetchJson(channel, '/v1/chat/completions', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    return response.payload;
   }
 
   private assertSupportedVideoModel(route: RouteResolution) {
@@ -164,33 +180,29 @@ export class ApimartAdapter implements ProviderAdapter {
     init: RequestInit,
     options?: { allowNotFound?: boolean },
   ): Promise<{ status: number; payload: unknown }> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), channel.timeoutMs);
-
     try {
-      const response = await fetch(`${channel.baseUrl}${path}`, {
-        ...init,
+      const response = await apimartRequest({
+        url: `${channel.baseUrl}${path}`,
+        method: (init.method || 'GET') as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
         headers: {
           Authorization: `Bearer ${channel.apiKey}`,
           'Content-Type': 'application/json',
-          ...(init.headers || {}),
+          ...this.normalizeHeaders(init.headers),
         },
-        signal: controller.signal,
+        data: typeof init.body === 'string' ? JSON.parse(init.body) : init.body,
+        timeout: channel.timeoutMs,
       });
 
-      const text = await response.text().catch(() => '');
-      let payload: unknown = {};
-      if (text) {
-        try {
-          payload = JSON.parse(text);
-        } catch {
-          payload = { raw: text };
-        }
-      }
+      const payload: unknown =
+        typeof response.data === 'string'
+          ? this.parseJsonText(response.data)
+          : (response.data ?? {});
 
-      if (!response.ok && !(options?.allowNotFound && response.status === 404)) {
+      if ((response.status < 200 || response.status >= 300) && !(options?.allowNotFound && response.status === 404)) {
         const message = this.extractUpstreamError(payload) || `APIMart responded with HTTP ${response.status}`;
-        this.logger.warn(`APIMart request failed: path=${path}, status=${response.status}, message=${message}`);
+        this.logger.warn(
+          `APIMart request failed: path=${path}, status=${response.status}, proxy=${getApimartProxySummary()}, message=${message}`,
+        );
         throw new AppException('PROVIDER_UPSTREAM_ERROR', message, 502, {
           provider: this.providerKey,
           status: response.status,
@@ -204,19 +216,42 @@ export class ApimartAdapter implements ProviderAdapter {
         throw error;
       }
 
+      const code =
+        error && typeof error === 'object' && typeof (error as { code?: unknown }).code === 'string'
+          ? (error as { code: string }).code
+          : '';
       const message =
-        error instanceof Error && error.name === 'AbortError'
+        code === 'ECONNABORTED'
           ? 'APIMart request timed out'
           : error instanceof Error
             ? error.message
             : String(error);
+      this.logger.warn(`APIMart network error: path=${path}, proxy=${getApimartProxySummary()}, message=${message}`);
       throw new AppException('PROVIDER_NETWORK_ERROR', message, 502, {
         provider: this.providerKey,
         path,
       });
-    } finally {
-      clearTimeout(timeout);
     }
+  }
+
+  private parseJsonText(text: string): unknown {
+    if (!text) return {};
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { raw: text };
+    }
+  }
+
+  private normalizeHeaders(headers: HeadersInit | undefined): Record<string, string> {
+    if (!headers) return {};
+    if (headers instanceof Headers) {
+      return Object.fromEntries(headers.entries());
+    }
+    if (Array.isArray(headers)) {
+      return Object.fromEntries(headers);
+    }
+    return headers;
   }
 
   private pickTaskId(payload: unknown): string | undefined {

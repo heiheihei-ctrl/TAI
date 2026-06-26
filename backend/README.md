@@ -4,7 +4,7 @@ NestJS backend with Fastify adapter. Provides authentication (cookie-based JWT),
 
 ## Setup
 
-- Copy `server/.env.example` to `server/.env` and fill values.
+- Copy `backend/.env.example` to `backend/.env` and fill values.
 - Ensure PostgreSQL is available and `DATABASE_URL` is correct.
 - Local infra (Postgres + Redis): `docker compose up -d` (from `backend/`, uses `backend/.env` for defaults).
   - Images are pulled from `docker.1ms.run` mirror (see `backend/docker-compose.yml`).
@@ -15,11 +15,14 @@ NestJS backend with Fastify adapter. Provides authentication (cookie-based JWT),
 - 配置 VEO 视频服务相关环境变量：
   - `VEO_API_KEY`：VEO 提供的 API Key（必填；也可复用 `BANANA_API_KEY` / `SORA2_API_KEY`）
   - `VEO_API_ENDPOINT`：可选，默认 `https://api1.147ai.com`
+- Apimart 代理（可选，生产国内服务器推荐配置）：
+  - `API_PROXY_URL`：SOCKS5 代理地址，必须使用 `socks5h://user:pass@host:port`，确保 `api.apimart.ai` DNS 解析由海外代理执行；留空则直连。
+  - `NANO2_API_KEY`：Apimart/Banana 文本与图像链路 API Key。
 
 ## Install & Run
 
 ```bash
-cd server
+cd backend
 npm install
 # Generate Prisma client and DB tables
 npx prisma migrate dev --name init
