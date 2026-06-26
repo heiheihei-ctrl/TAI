@@ -1,6 +1,7 @@
 import { createPortal } from "react-dom";
 import { Gift, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import ProfileRewardCredits from "@/components/profile/ProfileRewardCredits";
 
 type Props = {
   isOpen: boolean;
@@ -51,7 +52,8 @@ export default function ProfileCompletionLoginModal({
           </h2>
           <p className="mt-3 text-center text-sm leading-6 text-slate-600">
             请花一分钟完善您的个人资料，用于后期为您推荐个性化服务，首次完成奖励
-            {rewardCredits}积分。
+            <ProfileRewardCredits credits={rewardCredits} />
+            积分。
           </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">

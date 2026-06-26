@@ -8,6 +8,7 @@ import {
 } from "@/services/extendedProfileApi";
 import BirthdayPicker from "@/components/profile/BirthdayPicker";
 import RegionPicker from "@/components/profile/RegionPicker";
+import ProfileRewardCredits from "@/components/profile/ProfileRewardCredits";
 import { isCompleteRegion } from "@/data/chinaRegions";
 
 type Props = {
@@ -31,7 +32,7 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
   const [occupation, setOccupation] = React.useState("");
   const [company, setCompany] = React.useState("");
   const [region, setRegion] = React.useState("");
-  const [feedback, setFeedback] = React.useState<string | null>(null);
+  const [feedback, setFeedback] = React.useState<React.ReactNode>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   const applyProfile = React.useCallback((next: ExtendedProfile) => {
@@ -121,7 +122,11 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
       applyProfile(result.profile);
       onProfileUpdated?.(result.profile);
       if (result.rewardGranted) {
-        setFeedback(`资料已保存，${result.rewardCredits} 积分已到账！`);
+        setFeedback(
+          <>
+            资料已保存，<ProfileRewardCredits credits={result.rewardCredits} /> 积分已到账！
+          </>,
+        );
         window.dispatchEvent(new CustomEvent("refresh-credits"));
       } else {
         setFeedback("资料已保存");
@@ -150,34 +155,41 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
       <div className="mt-4">
         <h2 className="text-xl font-semibold text-slate-900">个人信息</h2>
         <p className="mt-2 text-sm leading-relaxed text-slate-500">
-          {canEarnReward
-            ? `填写以下信息并保存，首次完成可奖励 ${rewardCredits} 积分。`
-            : "您已领取奖励，仍可在此更新个人信息。"}
+          {canEarnReward ? (
+            <>
+              填写以下信息并保存，首次完成可奖励{" "}
+              <ProfileRewardCredits credits={rewardCredits} /> 积分。
+            </>
+          ) : (
+            "您已领取奖励，仍可在此更新个人信息。"
+          )}
         </p>
       </div>
 
       <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4">
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-slate-700">姓名</span>
-          <input
-            className={inputClassName}
-            value={realName}
-            onChange={(event) => setRealName(event.target.value)}
-            placeholder="请输入您的姓名"
-            maxLength={50}
-          />
-        </label>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium text-slate-700">姓名</span>
+            <input
+              className={inputClassName}
+              value={realName}
+              onChange={(event) => setRealName(event.target.value)}
+              placeholder="请输入您的姓名"
+              maxLength={50}
+            />
+          </label>
 
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-slate-700">昵称</span>
-          <input
-            className={inputClassName}
-            value={nickname}
-            onChange={(event) => setNickname(event.target.value)}
-            placeholder="请输入您的昵称"
-            maxLength={50}
-          />
-        </label>
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium text-slate-700">昵称</span>
+            <input
+              className={inputClassName}
+              value={nickname}
+              onChange={(event) => setNickname(event.target.value)}
+              placeholder="请输入您的昵称"
+              maxLength={50}
+            />
+          </label>
+        </div>
 
         <label className="block space-y-1.5">
           <span className="text-sm font-medium text-slate-700">性别</span>

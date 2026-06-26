@@ -1,6 +1,7 @@
 import React from "react";
 import { Gift, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import ProfileRewardCredits from "@/components/profile/ProfileRewardCredits";
 import {
   dismissProfileCompletionBannerForToday,
   openSettingsSection,
@@ -39,7 +40,9 @@ export default function ProfileCompletionBanner({ profile, onDismiss }: Props) {
             <Gift className="h-4 w-4" />
           </div>
           <p className="truncate text-sm font-medium text-slate-900">
-            完善个人信息可获得100积分
+            完善个人信息可获得
+            <ProfileRewardCredits credits={profile.rewardCredits || 100} />
+            积分
           </p>
         </div>
         <div className="ml-[200px] flex shrink-0 items-center gap-2">
