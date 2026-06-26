@@ -51,6 +51,7 @@ import {
   Pencil,
   Camera,
   X,
+  UserCircle,
 } from "lucide-react";
 import MemoryDebugPanel from "@/components/debug/MemoryDebugPanel";
 import HistoryDebugPanel from "@/components/debug/HistoryDebugPanel";
@@ -87,7 +88,17 @@ import {
 } from "@/services/adminApi";
 import { uploadToOSS } from "@/services/ossUploadService";
 import Qrcode from "@/assets/group-erweima.jpg";
-import OfficialAccount from "@/assets/gzh.png";
+import ProfileCompletionBanner from "@/components/profile/ProfileCompletionBanner";
+import ProfileCompletionSettingsPanel from "@/components/profile/ProfileCompletionSettingsPanel";
+import {
+  clearProfileCompletionBannerDismissCache,
+  DEFAULT_INCOMPLETE_PROFILE,
+  fetchExtendedProfile,
+  isProfileCompletionBannerDismissedToday,
+  normalizeProfileCompletionBannerDismissCache,
+  OPEN_SETTINGS_SECTION_EVENT,
+  type ExtendedProfile,
+} from "@/services/extendedProfileApi";
 
 // Nano Banana 闂傚倸鍊搁崐鎼佸磹妞嬪孩顐介柨鐔哄Т绾惧鏌涘☉鍗炲箻闁哄棗妫濋弻娑樷槈濮楀牆濮涘銈傛櫆閻擄繝寮诲☉銏犵婵＄偠顕ф禍楣冩⒑缁嬫鍎愰柟鎼佺畺楠炲骞橀鑲╊槹濡炪倖鎸炬慨纾嬨亹鎼淬劍鈷掑ù锝堟鐢稓绱掗鎯р枅鐎规洖缍婇獮搴ㄦ寠婢跺鈧剙顪冮妶鍡樼５闁稿鎸婚〃銉╂倷鐎电顫ч梺鐟板槻閹虫ê鐣烽妸锔剧瘈閹煎瓨绻勯弫?
 type BananaPricingTier = "fast" | "pro" | "ultra";
@@ -144,6 +155,7 @@ const resolveBananaCredits = (
 
 const SETTINGS_SECTIONS = [
   { id: "workspace", labelKey: "workspace.settings.sections.workspace", icon: Square },
+  { id: "profile", labelKey: "workspace.settings.sections.profile", icon: UserCircle },
   { id: "referral", labelKey: "workspace.settings.sections.referral", icon: Gift },
   { id: "appearance", labelKey: "workspace.settings.sections.appearance", icon: Eye },
   { id: "ai", labelKey: "workspace.settings.sections.ai", icon: Sparkles },
@@ -334,11 +346,6 @@ const FloatingHeader: React.FC = () => {
   const [isHelpMenuOpen, setIsHelpMenuOpen] = useState(false);
   const [isPricingCatalogOpen, setIsPricingCatalogOpen] = useState(false);
   const [isWechatQrOpen, setIsWechatQrOpen] = useState(false);
-  const [fpsOverlayAdminButtonLayout, setFpsOverlayAdminButtonLayout] = useState<{
-    top: number;
-    left: number;
-    size: number;
-  } | null>(null);
   const [wechatQrCodes, setWechatQrCodes] = useState<{
     officialAccount: string;
     wechatGroup: string;
@@ -591,6 +598,11 @@ const FloatingHeader: React.FC = () => {
   const [profileAvatarDraftUrl, setProfileAvatarDraftUrl] = useState("");
   const [profileAvatarUploading, setProfileAvatarUploading] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
+  const [extendedProfile, setExtendedProfile] = useState<ExtendedProfile | null>(
+    null,
+  );
+  const [extendedProfileLoaded, setExtendedProfileLoaded] = useState(false);
+  const [profileBannerDismissed, setProfileBannerDismissed] = useState(false);
   // 闂傚倸鍊搁崐鐑芥嚄閸洖纾块柣銏㈩焾閻ょ偓绻濇繝鍌滃闁搞劌鍊块弻锝夊閵忊晝鍔哥紓浣哄У閼归箖鈥︾捄銊﹀磯闁惧繐婀辨导鍥╃磼妤ｅ啰鐣虹紒鐘崇墵瀵鎮㈢悰鈥充壕闁汇垺顔栭悞鎯归悩娆忓枤閻斿棝鎮峰▎蹇擃仼濠殿喖娲﹂妵鍕敇閻愭潙浠撮悗瑙勬礀閵堢鐣烽崡鐐嶆棃鍩€椤掑嫬姹查柣鏂挎啞閸欏繘鏌ㄥ┑鍡樺櫧濠⒀嶇畵閺岋紕浠﹂崜褉妲堥梺瀹狀嚙闁帮綁鐛崱妯奸檮濠㈣泛顦遍弫鏍⒑?
   useEffect(() => {
     setGridSizeInput(String(gridSize));
@@ -765,6 +777,65 @@ const FloatingHeader: React.FC = () => {
   };
 
   const { user, logout, loading, connection, updateProfile } = useAuthStore();
+
+  useEffect(() => {
+    if (!user) {
+      setExtendedProfile(null);
+      setExtendedProfileLoaded(false);
+      setProfileBannerDismissed(false);
+      return;
+    }
+    normalizeProfileCompletionBannerDismissCache();
+    setProfileBannerDismissed(isProfileCompletionBannerDismissedToday());
+    let cancelled = false;
+    setExtendedProfileLoaded(false);
+    void fetchExtendedProfile()
+      .then((profile) => {
+        if (!cancelled) {
+          setExtendedProfile(profile);
+          setExtendedProfileLoaded(true);
+          if (profile.isComplete) {
+            clearProfileCompletionBannerDismissCache();
+            setProfileBannerDismissed(true);
+          }
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setExtendedProfile(DEFAULT_INCOMPLETE_PROFILE);
+          setExtendedProfileLoaded(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleOpenSettingsSection = (event: Event) => {
+      const detail = (event as CustomEvent<{ section?: string }>).detail;
+      const section = detail?.section;
+      if (!section) return;
+      if (SETTINGS_SECTIONS.some((item) => item.id === section)) {
+        setActiveSettingsSection(section as SettingsSectionId);
+      }
+      setIsSettingsOpen(true);
+    };
+    window.addEventListener(OPEN_SETTINGS_SECTION_EVENT, handleOpenSettingsSection);
+    return () => {
+      window.removeEventListener(
+        OPEN_SETTINGS_SECTION_EVENT,
+        handleOpenSettingsSection,
+      );
+    };
+  }, []);
+
+  const showProfileCompletionBanner =
+    Boolean(user) &&
+    extendedProfileLoaded &&
+    !extendedProfile?.isComplete &&
+    !profileBannerDismissed;
 
   // 闂傚倸鍊搁崐椋庣矆娓氣偓楠炲鍨鹃幇浣圭稁缂傚倷鐒﹁摫闁告瑥绻橀弻鐔碱敍閿濆洣姹楅悷婊呭鐢帡鎮欐繝鍐︿簻闁瑰搫绉堕ˇ锕€霉閻樿櫕銇濇慨濠冩そ濡啫鈽夋潏鈺佸綃缂傚倷鑳舵慨鐢稿垂閸ф绠栭柨鐔哄Т閸楁娊鏌曡箛銉х？闁?Google API Key 闂傚倸鍊峰ù鍥х暦閸偅鍙忕€规洖娲ㄩ惌鍡椕归敐鍫綈婵炲懐濮撮湁闁绘ê妯婇崕鎰版煕?
   useEffect(() => {
@@ -987,76 +1058,6 @@ const FloatingHeader: React.FC = () => {
     }
   }, [profileAvatarDraftUrl, profileNameInput, t, updateProfile]);
 
-  useEffect(() => {
-    if (!isAdmin || typeof window === "undefined") {
-      setFpsOverlayAdminButtonLayout(null);
-      return;
-    }
-
-    const applyOverlayLayout = (detail?: {
-      visible?: boolean;
-      top?: number;
-      left?: number;
-      height?: number;
-    }) => {
-      if (!detail?.visible) {
-        setFpsOverlayAdminButtonLayout(null);
-        return;
-      }
-
-      const top = Number(detail.top);
-      const left = Number(detail.left);
-      const height = Number(detail.height);
-      if (!Number.isFinite(top) || !Number.isFinite(left) || !Number.isFinite(height)) {
-        setFpsOverlayAdminButtonLayout(null);
-        return;
-      }
-
-      const size = Math.max(24, Math.round(height));
-      const gap = 8;
-      setFpsOverlayAdminButtonLayout({
-        top,
-        left: Math.max(12, left - gap - size),
-        size,
-      });
-    };
-
-    const handleOverlayLayout = (event: Event) => {
-      const detail = (event as CustomEvent<{
-        visible?: boolean;
-        top?: number;
-        left?: number;
-        height?: number;
-      }>).detail;
-      applyOverlayLayout(detail);
-    };
-
-    window.addEventListener(
-      "tanva:fps-overlay-layout",
-      handleOverlayLayout as EventListener
-    );
-
-    const overlayEl = document.getElementById("tanva-fps-overlay");
-    if (overlayEl) {
-      const rect = overlayEl.getBoundingClientRect();
-      applyOverlayLayout({
-        visible: true,
-        top: rect.top,
-        left: rect.left,
-        height: rect.height,
-      });
-    } else {
-      applyOverlayLayout({ visible: false });
-    }
-
-    return () => {
-      window.removeEventListener(
-        "tanva:fps-overlay-layout",
-        handleOverlayLayout as EventListener
-      );
-    };
-  }, [isAdmin]);
-
   const showLibraryButton = false; // temporarily hide library entry
   const handleLogout = async () => {
     if (loading) return;
@@ -1227,6 +1228,18 @@ const FloatingHeader: React.FC = () => {
               </button>
             </div>
           </div>
+        );
+      case "profile":
+        return (
+          <ProfileCompletionSettingsPanel
+            onProfileUpdated={(profile) => {
+              setExtendedProfile(profile);
+              if (profile.isComplete) {
+                clearProfileCompletionBannerDismissCache();
+                setProfileBannerDismissed(true);
+              }
+            }}
+          />
         );
       case "referral":
         return <ReferralRewards />;
@@ -2003,10 +2016,17 @@ const FloatingHeader: React.FC = () => {
 
   return (
     <>
+      {showProfileCompletionBanner ? (
+        <ProfileCompletionBanner
+          profile={extendedProfile}
+          onDismiss={() => setProfileBannerDismissed(true)}
+        />
+      ) : null}
       <div
         aria-hidden={focusMode}
         className={cn(
-          "tanva-header-shell fixed top-4 left-0 right-0 z-50 px-4 flex items-start justify-between gap-4 transition-all duration-[50ms] ease-out pointer-events-none",
+          "tanva-header-shell fixed left-0 right-0 z-50 px-4 flex items-center justify-between gap-4 transition-all duration-[50ms] ease-out pointer-events-none",
+          showProfileCompletionBanner ? "top-14" : "top-4",
           showLayerPanel ? "left-[306px]" : "left-0",
           focusMode && "hidden"
         )}
@@ -2206,49 +2226,24 @@ const FloatingHeader: React.FC = () => {
           </div>
         </div>
 
-        {isAdmin && !fpsOverlayAdminButtonLayout && (
-          <div className='flex items-center h-[46px] pointer-events-auto'>
+        <div className='flex flex-1 items-center justify-center gap-2 min-w-0 pointer-events-none'>
+          {isAdmin && (
             <Button
               variant='ghost'
               size='sm'
-              className='h-8 w-8 p-0 text-slate-600 transition-all duration-200 border rounded-full bg-white/80 border-slate-300 hover:bg-slate-100 hover:text-slate-700'
+              className='pointer-events-auto h-8 w-8 p-0 text-slate-600 transition-all duration-200 border rounded-full bg-white/80 border-slate-300 hover:bg-slate-100 hover:text-slate-700'
               onClick={() => navigate("/admin")}
               title='Admin panel'
               aria-label='Open Admin panel'
             >
               <Activity className='w-3.5 h-3.5' />
             </Button>
-          </div>
-        )}
-        {isAdmin && fpsOverlayAdminButtonLayout && (
+          )}
           <div
-            className='pointer-events-auto'
-            style={{
-              position: "fixed",
-              top: fpsOverlayAdminButtonLayout.top,
-              left: fpsOverlayAdminButtonLayout.left,
-              zIndex: 1001,
-            }}
-          >
-            <Button
-              variant='ghost'
-              size='sm'
-              className='p-0 text-slate-600 transition-all duration-200 border rounded-full bg-white/80 border-slate-300 hover:bg-slate-100 hover:text-slate-700'
-              style={{
-                width: fpsOverlayAdminButtonLayout.size,
-                height: fpsOverlayAdminButtonLayout.size,
-              }}
-              onClick={() => navigate("/admin")}
-              title='Admin panel'
-              aria-label='Open Admin panel'
-            >
-              <Activity className='w-3.5 h-3.5' />
-            </Button>
-          </div>
-        )}
-
-        {/* 缂傚倸鍊搁崐鎼佸磹妞嬪海鐭嗗〒姘ｅ亾闁诡垰鏈幏鍛寲閺囩喓鈧椽姊洪幐搴ｇ畵闁瑰啿顦靛绋款吋閸ャ劌鏋戦梺鍝勫暙閻楀繐鐣垫笟鈧悡顐﹀炊閵婏妇鍙嗙紓浣稿閸嬫盯鈥︾捄銊﹀磯闁绘碍娼欐导鎰攽?*/}
-        <div className='flex-1' />
+            id='tanva-fps-overlay-anchor'
+            className='flex items-center justify-center pointer-events-none'
+          />
+        </div>
 
         {/* 闂傚倸鍊搁崐椋庣矆娓氣偓楠炲鏁撻悩鍐蹭画闂侀潧顦弲娑㈠磼閵娾晜鐓涚€广儱楠搁獮鏍煟閵堝鐣洪柡灞剧洴椤㈡洟鏁愰崱娆樻К闂備礁鎲￠崝蹇涘磻閹剧粯鈷掑┑鐘查娴滄粍绻涚仦鍌氱伈鐎规洘娲栭悾鐑藉炊閳哄啫绠垫繝寰锋澘鈧洟骞婅箛娑欏亗闁哄洢鍨洪悡娑㈡煕閹扳晛濡奸柍褜鍓氶幃鍌氼嚕缁嬪簱鏋庨柟鎯ь嚟閸橀亶妫呴銏″婵☆偅鍨块幊鎾诲箰鎼搭喗顔旈梺缁樺姈濞兼瑦鎱ㄩ崼鈶╁亾閸偅绶查悗姘嵆閻涱噣宕堕澶嬫櫍闂佺粯鍔曞鍫曞极?*/}
         <div className='pointer-events-auto'>
@@ -2383,7 +2378,7 @@ const FloatingHeader: React.FC = () => {
                     <div className='flex flex-col items-center'>
                       <div className='w-28 h-28 bg-white rounded-lg p-2 mb-2'>
                         <img
-                          src={OfficialAccount}
+                          src={wechatQrCodes.officialAccount}
                           alt={t("home.wechat.taiOfficialAccount")}
                           className='w-full h-full object-contain'
                           onError={(event) => {

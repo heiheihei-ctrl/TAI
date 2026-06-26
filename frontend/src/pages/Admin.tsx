@@ -53,6 +53,7 @@ import {
   getPaidUsers,
   getCreditChangeRecords,
   getAdminUserCreditTransactions,
+  getAdminUserProfileDetail,
   getCreditAnomalyRecords,
   getNodeConfigs,
   updateNodeConfig,
@@ -74,6 +75,7 @@ import {
   type PaidUsersSortBy,
   type CreditChangeRecord,
   type AdminUserCreditTransaction,
+  type AdminUserProfileDetail,
   type CreditAnomalyRecord,
   type NodeConfig,
   listVolcReviewGroups,
@@ -4661,6 +4663,13 @@ function UsersTab({
   const [creditDetailTransactions, setCreditDetailTransactions] = useState<
     AdminUserCreditTransaction[]
   >([]);
+  const [profileDetailModal, setProfileDetailModal] = useState<{
+    userId: string;
+    userName: string;
+  } | null>(null);
+  const [profileDetailLoading, setProfileDetailLoading] = useState(false);
+  const [profileDetailData, setProfileDetailData] =
+    useState<AdminUserProfileDetail | null>(null);
   const [membershipDrawer, setMembershipDrawer] = useState<{
     userId: string;
     userName: string;
@@ -4842,6 +4851,32 @@ function UsersTab({
       setCreditDetailTransactions([]);
     } finally {
       setCreditDetailLoading(false);
+    }
+  };
+
+  const formatProfileGender = (gender: string | null | undefined) => {
+    if (gender === "male") return "男";
+    if (gender === "female") return "女";
+    if (gender === "other") return "不愿透露";
+    return "-";
+  };
+
+  const loadUserProfileDetails = async (user: UserWithCredits) => {
+    setProfileDetailModal({
+      userId: user.id,
+      userName: user.name || user.phone,
+    });
+    setProfileDetailLoading(true);
+    setProfileDetailData(null);
+    try {
+      const result = await getAdminUserProfileDetail(user.id);
+      setProfileDetailData(result);
+    } catch (error: any) {
+      console.error("加载用户资料失败:", error);
+      alert(error.message || "加载用户资料失败");
+      setProfileDetailModal(null);
+    } finally {
+      setProfileDetailLoading(false);
     }
   };
 
@@ -5090,6 +5125,15 @@ function UsersTab({
                             size='sm'
                             variant='outline'
                             onClick={() => loadCreditDetails(user)}
+                          >
+                            积分
+                          </Button>
+                        )}
+                        {canManageSensitiveUserFields && (
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            onClick={() => void loadUserProfileDetails(user)}
                           >
                             详情
                           </Button>
@@ -5598,6 +5642,121 @@ function UsersTab({
                   )}
                 </div>
               </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 用户个人资料详情弹窗 */}
+      {profileDetailModal && (
+        <div className='fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4'>
+          <div className='bg-white rounded-lg p-6 w-full max-w-xl max-h-[85vh] overflow-auto'>
+            <div className='flex items-center justify-between mb-4'>
+              <h3 className='text-lg font-semibold'>
+                用户详情 - {profileDetailModal.userName}
+              </h3>
+              <Button
+                variant='outline'
+                size='sm'
+                onClick={() => {
+                  setProfileDetailModal(null);
+                  setProfileDetailData(null);
+                }}
+              >
+                关闭
+              </Button>
+            </div>
+
+            {profileDetailLoading ? (
+              <div className='py-10 text-center text-gray-500'>加载中...</div>
+            ) : profileDetailData ? (
+              <div className='space-y-6'>
+                <div>
+                  <h4 className='mb-3 text-sm font-semibold text-gray-800'>账号信息</h4>
+                  <div className='rounded-lg border divide-y'>
+                    <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
+                      <div className='text-gray-500'>昵称</div>
+                      <div>{profileDetailData.user.name || "-"}</div>
+                    </div>
+                    <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
+                      <div className='text-gray-500'>手机号</div>
+                      <div>{profileDetailData.user.phone}</div>
+                    </div>
+                    <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
+                      <div className='text-gray-500'>注册时间</div>
+                      <div>
+                        {new Date(profileDetailData.user.createdAt).toLocaleString()}
+                      </div>
+                    </div>
+                    <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
+                      <div className='text-gray-500'>最近登录</div>
+                      <div>
+                        {profileDetailData.user.lastLoginAt
+                          ? new Date(profileDetailData.user.lastLoginAt).toLocaleString()
+                          : "-"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className='mb-3 text-sm font-semibold text-gray-800'>完善资料</h4>
+                  <div className='rounded-lg border divide-y'>
+                    <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
+                      <div className='text-gray-500'>真实姓名</div>
+                      <div>{profileDetailData.profile.realName || "-"}</div>
+                    </div>
+                    <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
+                      <div className='text-gray-500'>性别</div>
+                      <div>{formatProfileGender(profileDetailData.profile.gender)}</div>
+                    </div>
+                    <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
+                      <div className='text-gray-500'>年龄</div>
+                      <div>
+                        {profileDetailData.profile.age != null
+                          ? profileDetailData.profile.age
+                          : "-"}
+                      </div>
+                    </div>
+                    <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
+                      <div className='text-gray-500'>职业</div>
+                      <div>{profileDetailData.profile.occupation || "-"}</div>
+                    </div>
+                    <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
+                      <div className='text-gray-500'>公司</div>
+                      <div>{profileDetailData.profile.company || "-"}</div>
+                    </div>
+                    <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
+                      <div className='text-gray-500'>所在地区</div>
+                      <div>{profileDetailData.profile.region || "-"}</div>
+                    </div>
+                    <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
+                      <div className='text-gray-500'>资料状态</div>
+                      <div>
+                        {profileDetailData.profile.isComplete ? "已完善" : "未完善"}
+                      </div>
+                    </div>
+                    <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
+                      <div className='text-gray-500'>奖励领取</div>
+                      <div>
+                        {profileDetailData.profile.rewardClaimed
+                          ? `已领取（${profileDetailData.profile.rewardCredits} 积分）`
+                          : "未领取"}
+                      </div>
+                    </div>
+                    <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
+                      <div className='text-gray-500'>完善时间</div>
+                      <div>
+                        {profileDetailData.profile.completedAt
+                          ? new Date(profileDetailData.profile.completedAt).toLocaleString()
+                          : "-"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className='py-10 text-center text-gray-500'>暂无资料</div>
             )}
           </div>
         </div>

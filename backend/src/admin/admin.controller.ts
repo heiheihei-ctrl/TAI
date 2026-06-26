@@ -30,6 +30,7 @@ import { BusinessPolicyService } from '../business-policy/business-policy.servic
 import type { UpdateMembershipCreditPolicyInput } from '../business-policy/business-policy.types';
 import { VolcAssetService } from '../volc-asset/volc-asset.service';
 import { MembershipService } from '../membership/membership.service';
+import { UsersService } from '../users/users.service';
 import {
   UsersQueryDto,
   ApiUsageStatsQueryDto,
@@ -92,6 +93,7 @@ export class AdminController {
     private readonly businessPolicyService: BusinessPolicyService,
     private readonly membershipService: MembershipService,
     private readonly volcAssetService: VolcAssetService,
+    private readonly usersService: UsersService,
   ) {}
 
   /**
@@ -139,6 +141,32 @@ export class AdminController {
       throw new NotFoundException('用户不存在');
     }
     return user;
+  }
+
+  @Get('users/:userId/extended-profile')
+  @ApiOperation({ summary: '获取用户个人资料（完善资料信息）' })
+  async getUserExtendedProfile(
+    @Request() req: AuthenticatedRequest,
+    @Param('userId') userId: string,
+  ) {
+    this.checkAdmin(req);
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new NotFoundException('用户不存在');
+    }
+    const profile = await this.usersService.getExtendedProfile(userId);
+    return {
+      user: {
+        id: user.id,
+        name: user.name,
+        phone: user.phone,
+        email: user.email,
+        avatarUrl: user.avatarUrl,
+        createdAt: user.createdAt,
+        lastLoginAt: user.lastLoginAt,
+      },
+      profile,
+    };
   }
 
   @Patch('users/:userId/status')

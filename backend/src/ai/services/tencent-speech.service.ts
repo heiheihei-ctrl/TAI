@@ -1934,30 +1934,18 @@ export class TencentSpeechService {
           const voiceId = this.pickFirstString(record?.VoiceId, record?.voiceId);
           if (!voiceId) return null;
           const languagesRaw = this.pickFirstArray(record?.Languages, record?.languages) || [];
-          const audioUrl = this.normalizeUrl(
-            this.pickFirstString(record?.AudioUrl, record?.audioUrl),
-          );
-          const gender = this.pickFirstString(record?.Gender, record?.gender);
-          const languages = languagesRaw
-            .map((lang) => this.normalizeLangCode(String(lang)))
-            .filter((lang): lang is string => Boolean(lang));
-          const description = this.pickFirstString(record?.Description, record?.description);
-          const voice: {
-            voiceId: string;
-            name: string;
-            audioUrl?: string;
-            gender?: string;
-            languages?: string[];
-            description?: string;
-          } = {
+          return {
             voiceId,
             name: this.pickFirstString(record?.Name, record?.name) || voiceId,
+            audioUrl: this.normalizeUrl(
+              this.pickFirstString(record?.AudioUrl, record?.audioUrl),
+            ),
+            gender: this.pickFirstString(record?.Gender, record?.gender),
+            languages: languagesRaw
+              .map((lang) => this.normalizeLangCode(String(lang)))
+              .filter((lang): lang is string => Boolean(lang)),
+            description: this.pickFirstString(record?.Description, record?.description),
           };
-          if (audioUrl) voice.audioUrl = audioUrl;
-          if (gender) voice.gender = gender;
-          if (languages.length) voice.languages = languages;
-          if (description) voice.description = description;
-          return voice;
         })
         .filter(
           (

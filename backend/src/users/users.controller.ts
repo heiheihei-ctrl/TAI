@@ -3,6 +3,7 @@ import { ApiBody, ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { UsersService, UpdateGoogleApiKeyDto } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { UpdateExtendedProfileDto } from './dto/update-extended-profile.dto';
 
 @ApiTags('users')
 @Controller('users')
@@ -64,5 +65,24 @@ export class UsersController {
     const userId = req.user.sub as string;
     const user = await this.usersService.updateProfile(userId, dto);
     return { user };
+  }
+
+  @Get('extended-profile')
+  @ApiCookieAuth('access_token')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: '获取完善资料信息' })
+  async getExtendedProfile(@Req() req: any) {
+    const userId = req.user.sub as string;
+    const profile = await this.usersService.getExtendedProfile(userId);
+    return { profile };
+  }
+
+  @Patch('extended-profile')
+  @ApiCookieAuth('access_token')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: '保存完善资料（首次完整填写可领取积分）' })
+  async updateExtendedProfile(@Req() req: any, @Body() dto: UpdateExtendedProfileDto) {
+    const userId = req.user.sub as string;
+    return this.usersService.updateExtendedProfile(userId, dto);
   }
 }

@@ -297,6 +297,7 @@ const enUS = {
       title: "Settings",
       sections: {
         workspace: "Workspace",
+        profile: "Complete Profile",
         referral: "Referral",
         appearance: "Appearance",
         ai: "AI Settings",

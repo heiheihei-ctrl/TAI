@@ -161,6 +161,41 @@ export async function getUserDetail(userId: string) {
   return response.json();
 }
 
+export type AdminUserProfileDetail = {
+  user: {
+    id: string;
+    name: string | null;
+    phone: string;
+    email: string | null;
+    avatarUrl: string | null;
+    createdAt: string;
+    lastLoginAt: string | null;
+  };
+  profile: {
+    realName: string | null;
+    gender: string | null;
+    age: number | null;
+    occupation: string | null;
+    company: string | null;
+    region: string | null;
+    isComplete: boolean;
+    rewardClaimed: boolean;
+    rewardCredits: number;
+    completedAt: string | null;
+  };
+};
+
+export async function getAdminUserProfileDetail(
+  userId: string,
+): Promise<AdminUserProfileDetail> {
+  const response = await request(`/api/admin/users/${userId}/extended-profile`);
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.message || error.error || `HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
 // 更新用户状态
 export async function updateUserStatus(userId: string, status: string) {
   const response = await request(`/api/admin/users/${userId}/status`, {

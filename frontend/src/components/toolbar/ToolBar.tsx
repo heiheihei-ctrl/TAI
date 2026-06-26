@@ -427,9 +427,14 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
     const handler = (event: Event) => {
       if (isTogglingFromButtonRef.current) return;
       const detail = (event as CustomEvent<any>)?.detail || {};
-      if (!detail.visible && useUIStore.getState().showTemplatePanel) {
-        setShowTemplatePanel(false);
+      if (!detail.visible) {
+        if (useUIStore.getState().showTemplatePanel) {
+          setShowTemplatePanel(false);
+        }
+        return;
       }
+      const tab = typeof detail.tab === 'string' ? detail.tab : '';
+      setShowTemplatePanel(tab === 'templates');
     };
     window.addEventListener('flow:add-panel-visibility-change', handler as EventListener);
     return () => window.removeEventListener('flow:add-panel-visibility-change', handler as EventListener);
