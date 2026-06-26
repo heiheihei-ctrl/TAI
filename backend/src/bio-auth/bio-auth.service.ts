@@ -56,6 +56,7 @@ type BioAuthGroupDelegate = {
 };
 
 const VOLC_API_TIMEOUT_MS = 25_000;
+const BIO_AUTH_TASK_EXPIRE_MS = 3 * 60 * 1000;
 
 @Injectable()
 export class BioAuthService implements OnModuleInit {
@@ -170,9 +171,30 @@ export class BioAuthService implements OnModuleInit {
       this.logger.warn('VOLC_ARK_ACCESS_KEY / VOLC_ARK_SECRET_KEY 未配置，BioAuth 能力不可用。');
     }
     const cbUrl = `${this.env.callbackBaseUrl}/api/bio-auth/callback`;
-    if (this.env.callbackBaseUrl.startsWith('http://localhost')) {
+    if (!this.hasReachableCallbackBaseUrl()) {
       this.logger.warn(`BioAuth 回调地址为本地地址 (${cbUrl})，火山引擎无法回调。生产环境请配置 APP_BASE_URL。`);
     }
+  }
+
+  private hasReachableCallbackBaseUrl(): boolean {
+    const raw = this.env.callbackBaseUrl;
+    if (!raw) return false;
+    try {
+      const parsed = new URL(raw);
+      const host = parsed.hostname.trim().toLowerCase();
+      if (!/^https?:$/.test(parsed.protocol)) return false;
+      if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return false;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private normalizeAssetStatus(status?: string): BioAuthStatus {
+    const normalized = String(status || '').trim().toLowerCase();
+    if (normalized === 'active') return 'active';
+    if (normalized === 'failed') return 'failed';
+    return 'processing';
   }
 
   private async call<T>(action: string, body: Record<string, any>): Promise<T> {
@@ -239,6 +261,9 @@ export class BioAuthService implements OnModuleInit {
   }
 
   async startTask(userId: string, imageUrl: string): Promise<StartBioAuthResponse> {
+    if (!this.hasReachableCallbackBaseUrl()) {
+      throw new Error('APP_BASE_URL 未配置为公网可访问地址，BioAuth 回调无法到达当前后端');
+    }
     const callbackUrl = `${this.env.callbackBaseUrl}/api/bio-auth/callback`;
     const resp = await this.call<{ H5Link?: string; BytedToken?: string }>(
       'CreateVisualValidateSession',
@@ -320,12 +345,12 @@ export class BioAuthService implements OnModuleInit {
           Id: assetId,
           ProjectName: this.env.projectName,
         });
-        const s = (resp?.Status || '').toLowerCase();
-        if (s === 'active') {
+        const status = this.normalizeAssetStatus(resp?.Status);
+        if (status === 'active') {
           task.status = 'active';
           task.assetId = assetId;
           this.logger.log(`bio-auth asset active: ${assetId}`);
-        } else if (s === 'failed') {
+        } else if (status === 'failed') {
           task.status = 'failed';
           task.errorMessage = '素材审核未通过';
         } else {
@@ -342,6 +367,10 @@ export class BioAuthService implements OnModuleInit {
     const task = this.tasks.get(taskId);
     if (!task) {
       return { status: 'failed', errorMessage: '任务不存在或已过期' };
+    }
+    if (task.status === 'processing' && Date.now() - task.createdAt > BIO_AUTH_TASK_EXPIRE_MS) {
+      task.status = 'failed';
+      task.errorMessage = '认证超时，请检查 APP_BASE_URL 回调配置或稍后重试';
     }
     return {
       status: task.status,
