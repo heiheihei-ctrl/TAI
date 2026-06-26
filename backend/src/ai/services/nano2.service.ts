@@ -1,5 +1,6 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { apimartRequest, getApimartProxySummary } from '../../utils/apimartHttpClient';
 
 interface Nano2GenerateRequest {
   prompt: string;
@@ -42,6 +43,7 @@ export class Nano2Service {
       this.logger.warn('NANO2_API_KEY not configured');
     }
     this.timeoutMs = this.parsePositiveInt(this.config.get<string>('NANO2_API_TIMEOUT_MS'), 30_000);
+    this.logger.log(`Nano2Service initialized (apimartProxy=${getApimartProxySummary()})`);
   }
 
   private sleep(ms: number): Promise<void> {
@@ -90,21 +92,26 @@ export class Nano2Service {
     return err;
   }
 
-  private async extractErrorDetails(response: Response): Promise<{
+  private extractErrorDetailsFromAxios(response: { status: number; data: unknown; headers?: Record<string, unknown> }): {
     message: string;
     rawBody: string;
     requestId?: string;
-  }> {
+  } {
+    const headers = response.headers ?? {};
+    const getHeader = (key: string): string | undefined => {
+      const value = headers[key] ?? headers[key.toLowerCase()];
+      return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+    };
     const requestId =
-      response.headers.get('x-request-id') ||
-      response.headers.get('request-id') ||
-      response.headers.get('x-trace-id') ||
-      response.headers.get('trace-id') ||
-      undefined;
+      getHeader('x-request-id') ||
+      getHeader('request-id') ||
+      getHeader('x-trace-id') ||
+      getHeader('trace-id');
 
-    const rawBody = await response.text().catch(() => '');
+    const rawBody =
+      typeof response.data === 'string' ? response.data : JSON.stringify(response.data ?? '');
     let parsed: Record<string, any> | null = null;
-    if (rawBody) {
+    if (rawBody && typeof rawBody === 'string') {
       try {
         parsed = JSON.parse(rawBody);
       } catch {
@@ -182,22 +189,20 @@ export class Nano2Service {
 
     let lastError: Error | null = null;
     for (let attempt = 1; attempt <= this.maxSubmitAttempts; attempt += 1) {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
-
       try {
-        const response = await fetch(this.baseUrl, {
+        const response = await apimartRequest<Nano2TaskResponse>({
+          url: this.baseUrl,
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(payload),
-          signal: controller.signal,
+          data: payload,
+          timeout: this.timeoutMs,
         });
 
-        if (!response.ok) {
-          const details = await this.extractErrorDetails(response);
+        if (response.status < 200 || response.status >= 300) {
+          const details = this.extractErrorDetailsFromAxios(response);
           const errorMessage = `HTTP ${response.status}${
             details.requestId ? ` [requestId=${details.requestId}]` : ''
           } - ${details.message}`;
@@ -217,7 +222,8 @@ export class Nano2Service {
           throw new Error(errorMessage);
         }
 
-        const data: Nano2TaskResponse = await response.json();
+        const data: Nano2TaskResponse =
+          typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
         if (!Array.isArray(data?.data) || data.data.length === 0 || !data.data[0]?.task_id) {
           throw new Error(`Nano2 submit succeeded but task_id missing. payload=${JSON.stringify(data)}`);
         }
@@ -244,8 +250,6 @@ export class Nano2Service {
           continue;
         }
         throw this.mapApimartNetworkError(lastError, 'Nano2 提交任务失败');
-      } finally {
-        clearTimeout(timeoutId);
       }
     }
 
@@ -257,24 +261,22 @@ export class Nano2Service {
       throw new ServiceUnavailableException('Nano2 API key not configured');
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
-
     try {
-      // 尝试 /v1/tasks/{taskId} 端点
       const queryUrl = `https://api.apimart.ai/v1/tasks/${taskId}`;
-      const response = await fetch(queryUrl, {
+      const response = await apimartRequest<any>({
+        url: queryUrl,
+        method: 'GET',
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
         },
-        signal: controller.signal,
+        timeout: this.timeoutMs,
       });
 
-      if (!response.ok) {
+      if (response.status < 200 || response.status >= 300) {
         throw new Error(`Failed to query task: HTTP ${response.status}`);
       }
 
-      const json = await response.json();
+      const json = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
       this.logger.log(`Nano2 task query raw response: ${JSON.stringify(json)}`);
 
       // 解析响应 - API 返回格式: { code: 200, data: { status, result: { images: [{ url: [...] }] } } }
@@ -296,12 +298,7 @@ export class Nano2Service {
         imageUrl,
       };
     } catch (error: any) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new ServiceUnavailableException(`APIMart 查询任务超时（${this.timeoutMs}ms）`);
-      }
       throw this.mapApimartNetworkError(error, 'Nano2 查询任务失败');
-    } finally {
-      clearTimeout(timeoutId);
     }
   }
 }
