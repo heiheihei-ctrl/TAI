@@ -1,0 +1,194 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TokenStatus {
+  active
+  disabled
+}
+
+enum ProviderStatus {
+  active
+  disabled
+}
+
+enum ChannelStatus {
+  active
+  disabled
+}
+
+enum ModelStatus {
+  active
+  disabled
+}
+
+enum TaskType {
+  video
+  image
+  chat
+  audio
+  other
+}
+
+enum ProtocolType {
+  task
+  sync
+  stream
+}
+
+enum TaskStatus {
+  queued
+  processing
+  succeeded
+  failed
+}
+
+model ApiToken {
+  id         String      @id @default(cuid())
+  name       String
+  tokenHash  String      @unique @map("token_hash")
+  status     TokenStatus @default(active)
+  scopes     String[]
+  lastUsedAt DateTime?   @map("last_used_at")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+
+  @@map("api_tokens")
+}
+
+model Provider {
+  id        String           @id @default(cuid())
+  providerKey String        @unique @map("provider_key")
+  name      String
+  type      String
+  status    ProviderStatus   @default(active)
+  metadata  Json?
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+
+  channels  Channel[]
+  mappings  ModelProviderMapping[]
+
+  @@map("providers")
+}
+
+model Channel {
+  id                   String        @id @default(cuid())
+  providerId           String        @map("provider_id")
+  channelKey           String        @unique @map("channel_key")
+  name                 String
+  status               ChannelStatus @default(active)
+  baseUrl              String?       @map("base_url")
+  credentialType       String        @map("credential_type")
+  credentialsEncrypted String?       @map("credentials_encrypted")
+  credentialsJson      Json?         @map("credentials_json")
+  priority             Int           @default(100)
+  rateLimitQps         Int?          @map("rate_limit_qps")
+  timeoutMs            Int?          @map("timeout_ms")
+  metadata             Json?
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
+
+  provider Provider @relation(fields: [providerId], references: [id])
+  mappings ModelProviderMapping[]
+
+  @@index([providerId])
+  @@map("channels")
+}
+
+model Model {
+  id           String        @id @default(cuid())
+  modelKey     String        @unique @map("model_key")
+  name         String
+  taskType     TaskType      @map("task_type")
+  protocolType ProtocolType  @map("protocol_type")
+  status       ModelStatus   @default(active)
+  metadata     Json?
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  mappings ModelProviderMapping[]
+
+  @@map("models")
+}
+
+model ModelProviderMapping {
+  id            String   @id @default(cuid())
+  modelId       String   @map("model_id")
+  providerId    String   @map("provider_id")
+  channelId     String   @map("channel_id")
+  routeKey      String   @map("route_key")
+  enabled       Boolean  @default(true)
+  priority      Int      @default(100)
+  fallbackOrder Int?     @map("fallback_order")
+  configJson    Json?    @map("config_json")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  model    Model    @relation(fields: [modelId], references: [id])
+  provider Provider @relation(fields: [providerId], references: [id])
+  channel  Channel  @relation(fields: [channelId], references: [id])
+
+  @@index([modelId, enabled, priority])
+  @@map("model_provider_mapping")
+}
+
+model Task {
+  id                     String     @id @default(cuid())
+  internalTaskId         String     @unique @map("internal_task_id")
+  taskType               TaskType   @map("task_type")
+  modelKey               String     @map("model_key")
+  providerKey            String?    @map("provider_key")
+  channelKey             String?    @map("channel_key")
+  upstreamTaskId         String?    @map("upstream_task_id")
+  status                 TaskStatus @default(queued)
+  upstreamStatus         String?    @map("upstream_status")
+  requestPayloadJson     Json       @map("request_payload_json")
+  normalizedResponseJson Json?      @map("normalized_response_json")
+  upstreamResponseJson   Json?      @map("upstream_response_json")
+  errorMessage           String?    @map("error_message")
+  callbackUrl            String?    @map("callback_url")
+  createdAt              DateTime   @default(now()) @map("created_at")
+  updatedAt              DateTime   @updatedAt @map("updated_at")
+  finishedAt             DateTime?  @map("finished_at")
+
+  @@index([modelKey, status])
+  @@map("tasks")
+}
+
+model RequestLog {
+  id           String   @id @default(cuid())
+  requestId    String   @map("request_id")
+  path         String
+  method       String
+  modelKey     String?  @map("model_key")
+  providerKey  String?  @map("provider_key")
+  channelKey   String?  @map("channel_key")
+  statusCode   Int      @map("status_code")
+  latencyMs    Int      @map("latency_ms")
+  success      Boolean
+  errorMessage String?  @map("error_message")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([requestId])
+  @@index([createdAt])
+  @@map("request_logs")
+}
+
+model ChannelHealthLog {
+  id          String   @id @default(cuid())
+  providerKey String   @map("provider_key")
+  channelKey  String   @map("channel_key")
+  eventType   String   @map("event_type")
+  message     String
+  detailJson  Json?    @map("detail_json")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([providerKey, channelKey, createdAt])
+  @@map("channel_health_logs")
+}

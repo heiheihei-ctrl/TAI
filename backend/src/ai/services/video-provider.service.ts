@@ -1,6 +1,9 @@
 // Video provider integration (Kling/Vidu/Seedance) with OSS post-processing.
 import {
+  BadGatewayException,
   BadRequestException,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   ServiceUnavailableException,
@@ -22,6 +25,11 @@ import {
   OMNI_FLASH_EXT_MODEL_KEY,
   parseOmniFlashExtTaskResponse,
 } from "./omni-flash-ext.adapter";
+import { NewApiGatewayService } from "./new-api-gateway.service";
+import {
+  apimartRequest,
+  getApimartProxySummary,
+} from "../../utils/apimartHttpClient";
 
 // 默认请求超时时间（毫秒）
 const DEFAULT_FETCH_TIMEOUT = 180000; // 3分钟
@@ -169,6 +177,7 @@ export class VideoProviderService {
     private readonly oss: OssService,
     private readonly tencentVodAigcService: TencentVodAigcService,
     private readonly modelRoutingService: ModelRoutingService,
+    private readonly newApiGatewayService: NewApiGatewayService,
   ) {}
 
   private withExecutionMetadata(
@@ -193,6 +202,204 @@ export class VideoProviderService {
   private summarizeError(error: unknown): string {
     if (error instanceof Error && error.message) return error.message;
     return String(error);
+  }
+
+  private wrapApimartNetworkError(error: unknown, context: string): Error {
+    const err =
+      error instanceof Error ? error : new Error(typeof error === "string" ? error : "Unknown error");
+    const causeCode =
+      typeof (err as any)?.cause?.code === "string"
+        ? String((err as any).cause.code)
+        : typeof (err as any)?.code === "string"
+          ? String((err as any).code)
+          : "";
+    const message = String(err.message || "");
+    const normalized = message.toLowerCase();
+
+    if (causeCode === "ENOTFOUND") {
+      return new ServiceUnavailableException(
+        `APIMart 域名解析失败（api.apimart.ai），请检查服务器 DNS 或代理网络。${context}`
+      ) as unknown as Error;
+    }
+    if (
+      causeCode === "ETIMEDOUT" ||
+      causeCode === "ECONNABORTED" ||
+      err.name === "AbortError" ||
+      normalized.includes("timeout")
+    ) {
+      return new ServiceUnavailableException(
+        `APIMart 网络连接超时，请检查服务器到 api.apimart.ai 的网络链路或代理配置。${context}`
+      ) as unknown as Error;
+    }
+    if (
+      causeCode === "ECONNRESET" ||
+      causeCode === "ECONNREFUSED" ||
+      causeCode === "EAI_AGAIN" ||
+      normalized.includes("fetch failed")
+    ) {
+      return new ServiceUnavailableException(
+        `APIMart 网络请求失败，请检查服务器外网出口、代理或防火墙配置。${context} ${message}`.trim()
+      ) as unknown as Error;
+    }
+    return err;
+  }
+
+  private isSeedance20Request(options: VideoProviderRequestDto): boolean {
+    const normalized = String(options.seedanceModel || "").trim().toLowerCase();
+    return (
+      normalized === "seedance-2.0" ||
+      normalized === "2.0" ||
+      normalized === "seedance-2.0-fast" ||
+      normalized === "2.0-fast"
+    );
+  }
+
+  private normalizeSeedanceErrorMessage(rawError: unknown, options: VideoProviderRequestDto): string {
+    const raw = this.summarizeError(rawError).trim();
+    const lower = raw.toLowerCase();
+    const isSeedance20 = this.isSeedance20Request(options);
+    const hasReferenceVideo =
+      (Array.isArray(options.referenceVideos) && options.referenceVideos.length > 0) ||
+      Boolean(String(options.referenceVideo || "").trim());
+    const hasReferenceAudio = Array.isArray(options.audioUrls) && options.audioUrls.length > 0;
+
+    if (!raw || lower === "internal server error") {
+      return isSeedance20
+        ? "Seedance 2.0 创建任务失败，请稍后重试。若持续失败，请检查参考图/参考视频是否可公网访问，或改用不含真人脸的参考素材。"
+        : "Seedance 创建任务失败，请稍后重试。";
+    }
+
+    if (
+      isSeedance20 &&
+      (
+        lower.includes("真人人脸") ||
+        lower.includes("真实人脸") ||
+        lower.includes("人脸") ||
+        lower.includes("real human face") ||
+        lower.includes("virtual human") ||
+        lower.includes("虚拟人像") ||
+        lower.includes("direct upload")
+      )
+    ) {
+      return "Seedance 2.0 不支持直接使用含真人脸的参考图或参考视频。请改用虚拟人像 asset，或改用同账号下最近生成的 Seedance 2.0 视频做二创素材。";
+    }
+
+    if (this.isUpstreamImageFetchFailure(raw) || lower.includes("http_request_failed")) {
+      return "Seedance 无法读取参考素材。请确认参考图、参考视频、音频都是可公网访问的直链，且文件仍然有效。";
+    }
+
+    if (lower.includes("resolution") && lower.includes("not valid")) {
+      return hasReferenceVideo
+        ? "当前 Seedance 参考视频模式不支持这个分辨率参数。请先改为“自动/默认分辨率”后重试。"
+        : "当前 Seedance 分辨率参数无效，请切换为模型支持的 480P 或 720P。";
+    }
+
+    if (lower.includes("generate_audio") && lower.includes("not supported") && hasReferenceVideo) {
+      return "当前 Seedance 参考视频模式不支持开启“音频开启”。请关闭音频生成后重试。";
+    }
+
+    if (
+      lower.includes("asset://") ||
+      lower.includes("asset id") ||
+      (lower.includes("asset") && (lower.includes("invalid") || lower.includes("not found") || lower.includes("not active")))
+    ) {
+      return "Seedance 引用的虚拟人像或素材 asset 还未就绪、已失效，或当前账号无权限访问。请重新选择可用素材后重试。";
+    }
+
+    if (
+      lower.includes("moderation") ||
+      lower.includes("blocked by our moderation system") ||
+      lower.includes("审核拦截") ||
+      lower.includes("safety")
+    ) {
+      return "Seedance 审核未通过。请调整提示词或更换参考素材，避免涉及真人脸、敏感人物、版权受限内容或其他平台限制内容。";
+    }
+
+    if (
+      lower.includes("enterprise") ||
+      lower.includes("公测") ||
+      lower.includes("beta") ||
+      lower.includes("permission") ||
+      lower.includes("unauthorized") ||
+      lower.includes("forbidden")
+    ) {
+      return "当前账号或渠道暂未开通 Seedance 2.0 对应能力，请检查模型权限、企业公测资格或供应商路由配置。";
+    }
+
+    if (lower.includes("timeout") || lower.includes("请求超时")) {
+      return "Seedance 请求超时。请稍后重试；若反复超时，优先检查参考视频大小、时长和网络可访问性。";
+    }
+
+    if (hasReferenceVideo && hasReferenceAudio) {
+      return `Seedance 图片/视频/音频组合请求失败：${raw}`;
+    }
+    if (hasReferenceVideo) {
+      return `Seedance 参考视频请求失败：${raw}`;
+    }
+    if (isSeedance20) {
+      return `Seedance 2.0 请求失败：${raw}`;
+    }
+    return `Seedance 请求失败：${raw}`;
+  }
+
+  private wrapSeedanceException(
+    rawError: unknown,
+    options: VideoProviderRequestDto,
+  ): HttpException {
+    if (rawError instanceof HttpException) {
+      const response = rawError.getResponse();
+      const status = rawError.getStatus();
+      const currentMessage =
+        typeof response === "string"
+          ? response
+          : Array.isArray((response as any)?.message)
+          ? (response as any).message.filter((item: unknown) => typeof item === "string").join("; ")
+          : typeof (response as any)?.message === "string"
+          ? (response as any).message
+          : this.summarizeError(rawError);
+      const friendlyMessage = this.normalizeSeedanceErrorMessage(currentMessage, options);
+      return new HttpException(
+        {
+          statusCode: status,
+          message: friendlyMessage,
+          error: status >= 500 ? "Service Unavailable" : "Bad Request",
+        },
+        status,
+      );
+    }
+
+    const raw = this.summarizeError(rawError);
+    const friendlyMessage = this.normalizeSeedanceErrorMessage(raw, options);
+    const lower = raw.toLowerCase();
+    const status =
+      lower.includes("timeout") || lower.includes("请求超时")
+        ? HttpStatus.GATEWAY_TIMEOUT
+        : lower.includes("forbidden") || lower.includes("unauthorized")
+        ? HttpStatus.FORBIDDEN
+        : this.isUpstreamImageFetchFailure(raw) ||
+          lower.includes("resolution") ||
+          lower.includes("generate_audio") ||
+          lower.includes("moderation") ||
+          lower.includes("asset")
+        ? HttpStatus.BAD_REQUEST
+        : HttpStatus.BAD_GATEWAY;
+
+    if (status === HttpStatus.BAD_REQUEST) {
+      return new BadRequestException(friendlyMessage);
+    }
+    if (status === HttpStatus.FORBIDDEN) {
+      return new HttpException(
+        { statusCode: status, message: friendlyMessage, error: "Forbidden" },
+        status,
+      );
+    }
+    if (status === HttpStatus.GATEWAY_TIMEOUT) {
+      return new HttpException(
+        { statusCode: status, message: friendlyMessage, error: "Gateway Timeout" },
+        status,
+      );
+    }
+    return new BadGatewayException(friendlyMessage);
   }
 
   private shouldFallbackToAlternativeRoute(error: unknown): boolean {
@@ -751,6 +958,10 @@ export class VideoProviderService {
     provider: "kling" | "kling-2.6" | "kling-o3" | "vidu" | "viduq3-pro" | "doubao" | "omni-flash-ext",
     taskId: string
   ): Promise<{ status: string; videoUrl?: string; thumbnailUrl?: string }> {
+    if (this.newApiGatewayService.isWrappedTaskId(taskId)) {
+      return this.queryNewApiTask(taskId);
+    }
+
     if (provider === "omni-flash-ext" || taskId.startsWith("omni-flash-ext:")) {
       return this.queryOmniFlashExtTask(taskId);
     }
@@ -826,6 +1037,12 @@ export class VideoProviderService {
         if (route.route !== "new_api") {
           throw new ServiceUnavailableException("Omni Flash Ext 仅支持 new_api/APIMart 路由");
         }
+        if (this.newApiGatewayService.isConfigured()) {
+          return this.generateManagedVideoViaNewApi(options, route);
+        }
+        this.logger.warn(
+          "new-api not configured for managed Omni Flash Ext route, falling back to direct APIMart path",
+        );
         return this.generateOmniFlashExtViaApimart(options, route);
       },
     );
@@ -851,6 +1068,69 @@ export class VideoProviderService {
     });
   }
 
+  private async generateManagedVideoViaNewApi(
+    options: VideoProviderRequestDto,
+    route: ResolvedManagedModelRoute,
+  ): Promise<VideoGenerationResult> {
+    const submission = await this.newApiGatewayService.submitVideoTask({
+      model: route.model.modelKey,
+      prompt: options.prompt,
+      metadata: {
+        provider: options.provider,
+        managedModelKey: options.managedModelKey || route.model.modelKey,
+        vendorKey: options.vendorKey || route.vendor.vendorKey,
+        platformKey: options.platformKey || route.vendor.platformKey || route.vendor.vendorKey,
+        videoMode: options.videoMode,
+        referenceImages: options.referenceImages,
+        referenceVideo: options.referenceVideo,
+        referenceVideos: options.referenceVideos,
+        referenceVideoType: options.referenceVideoType,
+        audioUrls: options.audioUrls,
+        aspectRatio: options.aspectRatio,
+        duration: options.duration,
+        resolution: options.resolution,
+        style: options.style,
+        mode: options.mode,
+        klingModel: options.klingModel,
+        viduModel: options.viduModel,
+        viduModelVariant: options.viduModelVariant,
+        seedanceModel: options.seedanceModel,
+        offPeak: options.offPeak,
+        camerafixed: options.camerafixed,
+        watermark: options.watermark,
+        generateAudio: options.generateAudio,
+        sound: options.sound,
+        klingStoryboardMode: options.klingStoryboardMode,
+        klingStoryboardScript: options.klingStoryboardScript,
+      },
+    });
+
+    return {
+      taskId: this.newApiGatewayService.wrapTaskId(submission.taskId),
+      status: submission.status,
+      execution: {
+        modelKey: route.model.modelKey,
+        vendorKey: route.vendor.vendorKey,
+        platformKey: route.vendor.platformKey || route.vendor.vendorKey,
+        route: "new_api",
+        providerChannel: route.vendor.platformKey || route.vendor.vendorKey,
+        routedProvider: route.vendor.provider || options.provider,
+        fallbackUsed: false,
+      },
+    };
+  }
+
+  private async queryNewApiTask(
+    taskId: string,
+  ): Promise<{ status: string; videoUrl?: string; thumbnailUrl?: string }> {
+    const result = await this.newApiGatewayService.queryVideoTask(taskId);
+    return {
+      status: result.status,
+      videoUrl: result.videoUrl,
+      thumbnailUrl: result.thumbnailUrl,
+    };
+  }
+
   private async generateOmniFlashExtViaApimart(
     options: VideoProviderRequestDto,
     route: ResolvedManagedModelRoute,
@@ -868,37 +1148,42 @@ export class VideoProviderService {
     this.logProviderPayload("omni-flash-ext/new-api", newApiPayload);
     this.logProviderPayload("omni-flash-ext/apimart", apimartPayload);
 
-    let response: Response;
+    let response: { status: number; data: any };
     try {
-      response = await fetchWithTimeout("https://api.apimart.ai/v1/videos/generations", {
+      response = await apimartRequest({
+        url: "https://api.apimart.ai/v1/videos/generations",
         method: "POST",
         timeout: DEFAULT_FETCH_TIMEOUT,
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(apimartPayload),
+        data: apimartPayload,
       });
     } catch (error) {
-      const message = this.summarizeError(error);
+      const wrapped = this.wrapApimartNetworkError(error, "Omni Flash Ext 提交任务失败");
+      const message = this.summarizeError(wrapped);
       this.logger.error(
-        `APIMart Omni Flash Ext 请求失败: vendor=${route.vendor.vendorKey}, platform=${route.vendor.platformKey || route.vendor.vendorKey}, message=${message}`,
+        `APIMart Omni Flash Ext 请求失败: vendor=${route.vendor.vendorKey}, platform=${route.vendor.platformKey || route.vendor.vendorKey}, proxy=${getApimartProxySummary()}, message=${message}`,
       );
-      throw new ServiceUnavailableException(`APIMart Omni Flash Ext 请求失败: ${message}`);
+      throw wrapped;
     }
 
-    const textBody = await response.text().catch(() => "");
-    let data: any = {};
-    if (textBody) {
-      try {
-        data = JSON.parse(textBody);
-      } catch {
-        data = { raw: textBody };
-      }
-    }
+    const data =
+      typeof response.data === "string"
+        ? (() => {
+            try {
+              return JSON.parse(response.data);
+            } catch {
+              return { raw: response.data };
+            }
+          })()
+        : (response.data ?? {});
+    const textBody =
+      typeof response.data === "string" ? response.data : JSON.stringify(response.data ?? "");
     this.logger.debug?.(`APIMart Omni Flash Ext 原始响应: ${textBody.slice(0, 500)}`);
 
-    if (!response.ok) {
+    if (response.status < 200 || response.status >= 300) {
       const message =
         data?.error?.message ||
         data?.message ||
@@ -972,34 +1257,43 @@ export class VideoProviderService {
     let lastBody = "";
 
     for (const endpoint of endpoints) {
-      const response = await fetchWithTimeout(endpoint, {
-        method: "GET",
-        timeout: QUERY_FETCH_TIMEOUT,
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Cache-Control": "no-cache",
-          Pragma: "no-cache",
-        },
-      });
-      const textBody = await response.text().catch(() => "");
+      let response: { status: number; data: any };
+      try {
+        response = await apimartRequest({
+          url: endpoint,
+          method: "GET",
+          timeout: QUERY_FETCH_TIMEOUT,
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+          },
+        });
+      } catch (error) {
+        throw this.wrapApimartNetworkError(error, `Omni Flash Ext 查询任务失败: ${rawTaskId}`);
+      }
+      const textBody =
+        typeof response.data === "string" ? response.data : JSON.stringify(response.data ?? "");
       lastStatus = response.status;
       lastBody = textBody;
       this.logger.debug?.(
         `Omni Flash Ext 查询 ${endpoint} → HTTP ${response.status}: ${textBody.slice(0, 800)}`,
       );
-      if (!response.ok) {
+      if (response.status < 200 || response.status >= 300) {
         if (response.status === 404) continue;
         break;
       }
 
-      let raw: any = {};
-      if (textBody) {
-        try {
-          raw = JSON.parse(textBody);
-        } catch {
-          raw = { raw: textBody };
-        }
-      }
+      const raw =
+        typeof response.data === "string"
+          ? (() => {
+              try {
+                return JSON.parse(response.data);
+              } catch {
+                return { raw: response.data };
+              }
+            })()
+          : (response.data ?? {});
 
       const parsed = parseOmniFlashExtTaskResponse(raw, rawTaskId);
       this.logger.debug?.(
@@ -1056,6 +1350,9 @@ export class VideoProviderService {
           keepOriginalSound: String(options.keepOriginalSound || "").trim() || null,
           promptPreview: this.previewDebugText(options.prompt, 120),
         });
+        if (route.route === "new_api") {
+          return this.generateManagedVideoViaNewApi(options, route);
+        }
         if (this.shouldUseManagedV2RequestProfile(route)) {
           return this.createManagedV2Task("kling-o3", options, route);
         }
@@ -1093,6 +1390,9 @@ export class VideoProviderService {
       "kling-2.6",
       options.vendorKey,
       async (route) => {
+      if (route.route === "new_api") {
+        return this.generateManagedVideoViaNewApi(options, route);
+      }
       if (this.shouldUseManagedV2RequestProfile(route)) {
         return this.createManagedV2Task("kling-2.6", options, route);
       }
@@ -1128,6 +1428,9 @@ export class VideoProviderService {
       "kling-3.0",
       options.vendorKey,
       async (route) => {
+      if (route.route === "new_api") {
+        return this.generateManagedVideoViaNewApi(options, route);
+      }
       if (this.shouldUseManagedV2RequestProfile(route)) {
         return this.createManagedV2Task("kling-3.0", options, route);
       }
@@ -1203,6 +1506,9 @@ export class VideoProviderService {
       resolved.modelKey,
       options.vendorKey,
       async (route) => {
+      if (route.route === "new_api") {
+        return this.generateManagedVideoViaNewApi(options, route);
+      }
       if (this.shouldUseManagedV2RequestProfile(route)) {
         return this.createManagedV2Task(resolved.modelKey, options, route);
       }
@@ -1247,24 +1553,31 @@ export class VideoProviderService {
       resolved.modelKey,
       options.vendorKey,
       async (route) => {
-      if (this.shouldUseManagedV2RequestProfile(route)) {
-        return this.createManagedV2Task(resolved.modelKey, options, route);
-      }
+        try {
+          if (route.route === "new_api") {
+            return this.generateManagedVideoViaNewApi(options, route);
+          }
+          if (this.shouldUseManagedV2RequestProfile(route)) {
+            return this.createManagedV2Task(resolved.modelKey, options, route);
+          }
 
-      if (route.route === "tencent_vod") {
-        const result = await this.generateSeedanceViaTencent(
-          options,
-          route.vendor,
-          resolved.modelVersion
-        );
-        return this.withManagedTencentTaskPrefix(resolved.modelKey, result);
-      }
+          if (route.route === "tencent_vod") {
+            const result = await this.generateSeedanceViaTencent(
+              options,
+              route.vendor,
+              resolved.modelVersion
+            );
+            return this.withManagedTencentTaskPrefix(resolved.modelKey, result);
+          }
 
-      const apiKey = this.apiKeys.doubao;
-      if (!apiKey || apiKey.includes("xxx")) {
-        throw new ServiceUnavailableException("doubao API Key 未配置");
-      }
-      return this.generateDoubao(options, apiKey, resolved.modelVersion);
+          const apiKey = this.apiKeys.doubao;
+          if (!apiKey || apiKey.includes("xxx")) {
+            throw new ServiceUnavailableException("doubao API Key 未配置");
+          }
+          return this.generateDoubao(options, apiKey, resolved.modelVersion);
+        } catch (error) {
+          throw this.wrapSeedanceException(error, options);
+        }
       },
     );
     if (managedResult) return managedResult;
@@ -1762,12 +2075,15 @@ export class VideoProviderService {
     }));
 
     if (!response.ok) {
-      throw new Error(
+      const errorMessage =
         this.readMappedValue(raw, stage.responseMapping?.error) ||
-          raw?.error?.message ||
-          raw?.message ||
-          `HTTP ${response.status}`
-      );
+        raw?.error?.message ||
+        raw?.message ||
+        `HTTP ${response.status}`;
+      if (response.status >= 400 && response.status < 500) {
+        throw new BadRequestException(String(errorMessage));
+      }
+      throw new BadGatewayException(String(errorMessage));
     }
 
     const mapped = Object.fromEntries(
@@ -2679,9 +2995,12 @@ export class VideoProviderService {
       } catch {
         error = { rawText };
       }
-      throw new Error(
-        error.error?.message || error.message || error.rawText || `HTTP ${response.status}`
-      );
+      const errorMessage =
+        error.error?.message || error.message || error.rawText || `HTTP ${response.status}`;
+      if (response.status >= 400 && response.status < 500) {
+        throw new BadRequestException(String(errorMessage));
+      }
+      throw new BadGatewayException(String(errorMessage));
     }
 
     const data = await response.json();
