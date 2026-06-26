@@ -1,6 +1,7 @@
 // @ts-nocheck
 // Flow 主画布与节点调度入口。
 import React from "react";
+import { createPortal } from "react-dom";
 import { Trash2, Plus, Upload, Download, Group, Ungroup, Lock, Crown } from "lucide-react";
 import { fetchTemplateCategories } from "@/services/publicTemplateService";
 import { fetchWithAuth } from "@/services/authFetch";
@@ -6356,6 +6357,29 @@ function FlowInner() {
   const [dragMaxFrameMs, setDragMaxFrameMs] = React.useState<number>(0);
   const [fpsMode, setFpsMode] = React.useState<"Drag" | "Image" | null>(null);
   const fpsOverlayRef = React.useRef<HTMLDivElement | null>(null);
+  const [fpsOverlayAnchor, setFpsOverlayAnchor] =
+    React.useState<HTMLElement | null>(null);
+
+  React.useEffect(() => {
+    if (!showFpsOverlay) {
+      setFpsOverlayAnchor(null);
+      return;
+    }
+    let cancelled = false;
+    const resolveAnchor = () => {
+      if (cancelled) return;
+      const anchor = document.getElementById("tanva-fps-overlay-anchor");
+      if (anchor) {
+        setFpsOverlayAnchor(anchor);
+        return;
+      }
+      requestAnimationFrame(resolveAnchor);
+    };
+    resolveAnchor();
+    return () => {
+      cancelled = true;
+    };
+  }, [showFpsOverlay]);
 
   // 方便性能排查：开发环境默认打开拖拽 FPS 监控（可在面板里随时关掉）
   React.useEffect(() => {
@@ -6441,61 +6465,6 @@ function FlowInner() {
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [showFpsOverlay]);
-
-  React.useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const emitLayout = () => {
-      const el = fpsOverlayRef.current;
-      if (!showFpsOverlay || !el) {
-        window.dispatchEvent(
-          new CustomEvent("tanva:fps-overlay-layout", {
-            detail: { visible: false },
-          })
-        );
-        return;
-      }
-
-      const rect = el.getBoundingClientRect();
-      window.dispatchEvent(
-        new CustomEvent("tanva:fps-overlay-layout", {
-          detail: {
-            visible: true,
-            top: rect.top,
-            left: rect.left,
-            height: rect.height,
-          },
-        })
-      );
-    };
-
-    emitLayout();
-
-    const el = fpsOverlayRef.current;
-    if (!showFpsOverlay || !el || typeof ResizeObserver === "undefined") {
-      return () => {
-        window.dispatchEvent(
-          new CustomEvent("tanva:fps-overlay-layout", {
-            detail: { visible: false },
-          })
-        );
-      };
-    }
-
-    const resizeObserver = new ResizeObserver(() => emitLayout());
-    resizeObserver.observe(el);
-    window.addEventListener("resize", emitLayout);
-
-    return () => {
-      resizeObserver.disconnect();
-      window.removeEventListener("resize", emitLayout);
-      window.dispatchEvent(
-        new CustomEvent("tanva:fps-overlay-layout", {
-          detail: { visible: false },
-        })
-      );
-    };
   }, [showFpsOverlay]);
 
   // Flow独立的背景状态管理，不再同步到Canvas
@@ -6876,7 +6845,8 @@ function FlowInner() {
           ) as AddPanelTab[])
         : undefined;
       const targetTab: AddPanelTab =
-        detail.tab === "personal" || detail.tab === "nodes"
+        detail.tab === "personal" ||
+        detail.tab === "nodes"
           ? detail.tab
           : "templates";
       const scope: "public" | "mine" | undefined =
@@ -8086,7 +8056,6 @@ function FlowInner() {
     };
   }, [addPanel.visible, addTab, tplIndex, normalizeTemplateCategory]);
 
-  // 加载后端维护的分类列表（供公共模板使用）
   React.useEffect(() => {
     if (!addPanel.visible || addTab !== "templates") return;
     let cancelled = false;
@@ -22838,32 +22807,25 @@ function FlowInner() {
         )}
       </div>
 
-      {showFpsOverlay && (
-        <div
-          ref={fpsOverlayRef}
-          id='tanva-fps-overlay'
-          style={{
-            position: "fixed",
-            top: 12,
-            left: "50%",
-            transform: "translateX(-50%)",
-            zIndex: 1000,
-            pointerEvents: "none",
-            fontSize: 12,
-            padding: "6px 8px",
-            borderRadius: 16,
-            border: "1px solid rgba(229,231,235,0.9)",
-            background: "rgba(255,255,255,0.85)",
-            color: "#111827",
-            fontFamily:
-              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-          }}
-        >
-          {(fpsMode || "Image") + " FPS"}: {dragFps ? dragFps.toFixed(1) : "--"}{" "}
-          | max: {dragMaxFrameMs ? dragMaxFrameMs.toFixed(1) : "--"}ms | long:{" "}
-          {dragLongFrames}
-        </div>
-      )}
+      {showFpsOverlay &&
+        fpsOverlayAnchor &&
+        createPortal(
+          <div
+            ref={fpsOverlayRef}
+            id='tanva-fps-overlay'
+            className='flex h-[46px] items-center whitespace-nowrap rounded-2xl border border-liquid-glass bg-liquid-glass px-3 text-xs text-slate-700 shadow-liquid-glass-lg backdrop-blur-minimal backdrop-saturate-125'
+            style={{
+              pointerEvents: "none",
+              fontFamily:
+                'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+            }}
+          >
+            {(fpsMode || "Image") + " FPS"}: {dragFps ? dragFps.toFixed(1) : "--"}{" "}
+            | max: {dragMaxFrameMs ? dragMaxFrameMs.toFixed(1) : "--"}ms | long:{" "}
+            {dragLongFrames}
+          </div>,
+          fpsOverlayAnchor,
+        )}
 
       {edgeLabelEditor.visible && (
         <div
@@ -23348,7 +23310,9 @@ function FlowInner() {
                   border: isFlowBlackTheme ? "1px solid #2b2b2b" : "none",
                 }}
               >
-                {templateScope === "public" && tplIndex ? (
+                {templateScope === "public" ? (
+                  <>
+                {tplIndex ? (
                   <div style={{ marginBottom: 18 }}>
                     <div
                       style={{
@@ -23506,6 +23470,8 @@ function FlowInner() {
                       ))}
                     </div>
                   </div>
+                ) : null}
+                  </>
                 ) : null}
                 {templateScope === "mine" ? (
                   <div>

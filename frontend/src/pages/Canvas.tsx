@@ -120,17 +120,14 @@ const Canvas: React.FC = () => {
                 </>
             )}
 
+            {/* Floating header - hidden by component in focus mode */}
+            <FloatingHeader />
+
             {/* Flow canvas overlay */}
             <FlowOverlay />
 
             {/* Selection box overlay (above Flow nodes) */}
             <SelectionBoxOverlay />
-
-            {/* Origin cross helper (disabled) */}
-            {/* <OriginCross canvasRef={canvasRef} /> */}
-
-            {/* Floating header - hidden by component in focus mode */}
-            <FloatingHeader />
 
             {/* Toolbar */}
             <ToolBar />
