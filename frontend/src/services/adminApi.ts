@@ -172,9 +172,10 @@ export type AdminUserProfileDetail = {
     lastLoginAt: string | null;
   };
   profile: {
-    realName: string | null;
+    nickname: string | null;
     gender: string | null;
-    age: number | null;
+    birthday: string | null;
+    email: string | null;
     occupation: string | null;
     company: string | null;
     region: string | null;

@@ -5,6 +5,9 @@ All notable changes to this knowledge base will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning (knowledge-base versioning).
 
 ## [Unreleased]
+### Changed
+- Profile completion: **真实姓名 → 昵称**，**年龄 → 生日（年月日）**，新增 **邮箱**，**所在地区** 改为省/市点选，完善资料奖励 **50 → 100 积分**（`User.profileNickname` / `profileBirthday` / `profileEmail` migration `202606230001_update_user_extended_profile_fields`）。
+
 ### Removed
 - Flow/Templates: removed the **Illustration Library** (`图例库`) feature — frontend panel/toolbar entry, admin CRUD tab, public/admin APIs, and `IllustrationLibraryItem` database table.
 

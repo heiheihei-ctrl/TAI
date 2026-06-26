@@ -1928,8 +1928,7 @@ export class TencentSpeechService {
           (item) => item && typeof item === 'object',
         ) || [];
 
-      this.voicesCache = voices
-        .map((item) => {
+      const mapped = voices.map((item) => {
           const record = item as Record<string, any>;
           const voiceId = this.pickFirstString(record?.VoiceId, record?.voiceId);
           if (!voiceId) return null;
@@ -1946,19 +1945,10 @@ export class TencentSpeechService {
               .filter((lang): lang is string => Boolean(lang)),
             description: this.pickFirstString(record?.Description, record?.description),
           };
-        })
-        .filter(
-          (
-            item,
-          ): item is {
-            voiceId: string;
-            name: string;
-            audioUrl?: string;
-            gender?: string;
-            languages?: string[];
-            description?: string;
-          } => item !== null,
-        );
+        });
+      this.voicesCache = mapped.filter(
+        (item): item is NonNullable<(typeof mapped)[number]> => item !== null,
+      );
       this.voicesCacheAt = now;
     }
 

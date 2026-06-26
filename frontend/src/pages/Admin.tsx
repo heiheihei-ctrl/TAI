@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { formatBirthdayLabel } from "@/components/profile/BirthdayPicker";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/authStore";
 import { authApi } from "@/services/authApi";
@@ -5703,20 +5704,20 @@ function UsersTab({
                   <h4 className='mb-3 text-sm font-semibold text-gray-800'>完善资料</h4>
                   <div className='rounded-lg border divide-y'>
                     <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
-                      <div className='text-gray-500'>真实姓名</div>
-                      <div>{profileDetailData.profile.realName || "-"}</div>
+                      <div className='text-gray-500'>昵称</div>
+                      <div>{profileDetailData.profile.nickname || "-"}</div>
                     </div>
                     <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
                       <div className='text-gray-500'>性别</div>
                       <div>{formatProfileGender(profileDetailData.profile.gender)}</div>
                     </div>
                     <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
-                      <div className='text-gray-500'>年龄</div>
-                      <div>
-                        {profileDetailData.profile.age != null
-                          ? profileDetailData.profile.age
-                          : "-"}
-                      </div>
+                      <div className='text-gray-500'>生日</div>
+                      <div>{formatBirthdayLabel(profileDetailData.profile.birthday)}</div>
+                    </div>
+                    <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
+                      <div className='text-gray-500'>邮箱</div>
+                      <div>{profileDetailData.profile.email || "-"}</div>
                     </div>
                     <div className='grid grid-cols-[120px_1fr] gap-3 px-4 py-3 text-sm'>
                       <div className='text-gray-500'>职业</div>

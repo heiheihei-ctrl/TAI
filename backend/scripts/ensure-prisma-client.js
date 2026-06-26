@@ -81,4 +81,9 @@ if (hasCurrentGeneratedClient()) {
 console.error(
   'Prisma Client generation failed and no current generated client is available. Build cannot continue.',
 );
+if (String(result.stderr || result.stdout || '').includes('EPERM') || String(result.statusMessage || '').includes('EPERM')) {
+  console.error(
+    'Hint: stop the running backend/dev process, then run `npx prisma generate` again (Windows locks query_engine-windows.dll.node).',
+  );
+}
 process.exit(result.status || 1);

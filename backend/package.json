@@ -10,7 +10,7 @@
     "diagnose:sharp": "node scripts/diagnose-sharp.js",
     "fix:sharp": "node scripts/fix-sharp-install.js",
     "verify:native": "node scripts/diagnose-sharp.js",
-    "dev": "ts-node-dev --respawn --transpile-only -r ./src/tracing.bootstrap.ts src/main.ts",
+    "dev": "npm run prisma:generate && ts-node-dev --respawn --transpile-only -r ./src/tracing.bootstrap.ts src/main.ts",
     "lint": "echo 'no lint configured'",
     "sanitize:design-json": "ts-node scripts/sanitize-design-json.ts",
     "backfill:global-video-history": "ts-node scripts/backfill-global-video-history.ts"

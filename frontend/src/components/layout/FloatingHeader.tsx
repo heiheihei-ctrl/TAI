@@ -6,7 +6,7 @@ import React, {
   useMemo,
 } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -97,6 +97,7 @@ import {
   isProfileCompletionBannerDismissedToday,
   normalizeProfileCompletionBannerDismissCache,
   OPEN_SETTINGS_SECTION_EVENT,
+  takePendingSettingsSection,
   type ExtendedProfile,
 } from "@/services/extendedProfileApi";
 
@@ -182,6 +183,7 @@ const getTodayDateKey = () => {
 const FloatingHeader: React.FC = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const untitledProjectLabel = t("workspacePage.prompt.defaultName", {
     defaultValue: t("common.untitled"),
   });
@@ -830,6 +832,27 @@ const FloatingHeader: React.FC = () => {
       );
     };
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const sectionFromNavigation = (
+      location.state as { openSettingsSection?: string } | null
+    )?.openSettingsSection;
+    const pendingSection = sectionFromNavigation || takePendingSettingsSection();
+    if (!pendingSection) return;
+    if (!SETTINGS_SECTIONS.some((item) => item.id === pendingSection)) return;
+
+    setActiveSettingsSection(pendingSection as SettingsSectionId);
+    setIsSettingsOpen(true);
+
+    if (sectionFromNavigation) {
+      navigate(`${location.pathname}${location.search}`, {
+        replace: true,
+        state: null,
+      });
+    }
+  }, [user, location.key, location.pathname, location.search, location.state, navigate]);
 
   const showProfileCompletionBanner =
     Boolean(user) &&

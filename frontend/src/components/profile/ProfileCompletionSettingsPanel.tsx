@@ -6,6 +6,9 @@ import {
   type ExtendedProfile,
   type UpdateExtendedProfilePayload,
 } from "@/services/extendedProfileApi";
+import BirthdayPicker from "@/components/profile/BirthdayPicker";
+import RegionPicker from "@/components/profile/RegionPicker";
+import { isCompleteRegion } from "@/data/chinaRegions";
 
 type Props = {
   onProfileUpdated?: (profile: ExtendedProfile) => void;
@@ -14,13 +17,16 @@ type Props = {
 const inputClassName =
   "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition-colors focus:border-violet-400 focus:ring-2 focus:ring-violet-100";
 
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Props) {
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [profile, setProfile] = React.useState<ExtendedProfile | null>(null);
-  const [realName, setRealName] = React.useState("");
+  const [nickname, setNickname] = React.useState("");
   const [gender, setGender] = React.useState<"male" | "female" | "other" | "">("");
-  const [age, setAge] = React.useState("");
+  const [birthday, setBirthday] = React.useState("");
+  const [email, setEmail] = React.useState("");
   const [occupation, setOccupation] = React.useState("");
   const [company, setCompany] = React.useState("");
   const [region, setRegion] = React.useState("");
@@ -29,9 +35,10 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
 
   const applyProfile = React.useCallback((next: ExtendedProfile) => {
     setProfile(next);
-    setRealName(next.realName || "");
+    setNickname(next.nickname || "");
     setGender((next.gender as "male" | "female" | "other" | "") || "");
-    setAge(next.age != null ? String(next.age) : "");
+    setBirthday(next.birthday || "");
+    setEmail(next.email || "");
     setOccupation(next.occupation || "");
     setCompany(next.company || "");
     setRegion(next.region || "");
@@ -62,17 +69,20 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
     setError(null);
     setFeedback(null);
 
-    const parsedAge = Number.parseInt(age, 10);
-    if (!realName.trim()) {
-      setError("请填写真实姓名");
+    if (!nickname.trim()) {
+      setError("请填写昵称");
       return;
     }
     if (!gender) {
       setError("请选择性别");
       return;
     }
-    if (!Number.isFinite(parsedAge) || parsedAge < 1 || parsedAge > 120) {
-      setError("请填写有效年龄（1-120）");
+    if (!birthday) {
+      setError("请选择生日");
+      return;
+    }
+    if (!email.trim() || !emailPattern.test(email.trim())) {
+      setError("请填写有效邮箱");
       return;
     }
     if (!occupation.trim()) {
@@ -83,15 +93,16 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
       setError("请填写公司");
       return;
     }
-    if (!region.trim()) {
-      setError("请填写所在地区");
+    if (!isCompleteRegion(region)) {
+      setError("请选择完整的省 / 市 / 区县");
       return;
     }
 
     const payload: UpdateExtendedProfilePayload = {
-      realName: realName.trim(),
+      nickname: nickname.trim(),
       gender,
-      age: parsedAge,
+      birthday,
+      email: email.trim().toLowerCase(),
       occupation: occupation.trim(),
       company: company.trim(),
       region: region.trim(),
@@ -124,7 +135,7 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
     );
   }
 
-  const rewardCredits = profile?.rewardCredits || 50;
+  const rewardCredits = profile?.rewardCredits || 100;
   const canEarnReward = !profile?.rewardClaimed;
 
   return (
@@ -140,12 +151,12 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
 
       <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4">
         <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-slate-700">真实姓名</span>
+          <span className="text-sm font-medium text-slate-700">昵称</span>
           <input
             className={inputClassName}
-            value={realName}
-            onChange={(event) => setRealName(event.target.value)}
-            placeholder="请输入您的真实姓名"
+            value={nickname}
+            onChange={(event) => setNickname(event.target.value)}
+            placeholder="请输入您的昵称"
             maxLength={50}
           />
         </label>
@@ -166,16 +177,20 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
           </select>
         </label>
 
+        <div className="space-y-1.5">
+          <span className="text-sm font-medium text-slate-700">生日</span>
+          <BirthdayPicker value={birthday} onChange={setBirthday} />
+        </div>
+
         <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-slate-700">年龄</span>
+          <span className="text-sm font-medium text-slate-700">邮箱</span>
           <input
             className={inputClassName}
-            type="number"
-            min={1}
-            max={120}
-            value={age}
-            onChange={(event) => setAge(event.target.value)}
-            placeholder="请输入年龄"
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="请输入邮箱地址"
+            maxLength={120}
           />
         </label>
 
@@ -201,16 +216,10 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
           />
         </label>
 
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-slate-700">所在地区</span>
-          <input
-            className={inputClassName}
-            value={region}
-            onChange={(event) => setRegion(event.target.value)}
-            placeholder="例如：广东省深圳市"
-            maxLength={120}
-          />
-        </label>
+        <div className="space-y-1.5">
+          <span className="text-sm font-medium text-slate-700">所在地区（省 / 市 / 区县）</span>
+          <RegionPicker value={region} onChange={setRegion} />
+        </div>
 
         {error ? <div className="text-sm text-red-500">{error}</div> : null}
         {feedback ? <div className="text-sm text-emerald-600">{feedback}</div> : null}

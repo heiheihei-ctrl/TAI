@@ -3,9 +3,10 @@ import { getAccessAuthHeader } from "./authTokenStorage";
 import { getApiBaseUrl } from "../utils/assetProxy";
 
 export type ExtendedProfile = {
-  realName: string | null;
+  nickname: string | null;
   gender: string | null;
-  age: number | null;
+  birthday: string | null;
+  email: string | null;
   occupation: string | null;
   company: string | null;
   region: string | null;
@@ -16,9 +17,10 @@ export type ExtendedProfile = {
 };
 
 export type UpdateExtendedProfilePayload = {
-  realName: string;
+  nickname: string;
   gender: "male" | "female" | "other";
-  age: number;
+  birthday: string;
+  email: string;
   occupation: string;
   company: string;
   region: string;
@@ -128,21 +130,46 @@ export function normalizeProfileCompletionBannerDismissCache(): void {
 }
 
 export const DEFAULT_INCOMPLETE_PROFILE: ExtendedProfile = {
-  realName: null,
+  nickname: null,
   gender: null,
-  age: null,
+  birthday: null,
+  email: null,
   occupation: null,
   company: null,
   region: null,
   isComplete: false,
   rewardClaimed: false,
-  rewardCredits: 50,
+  rewardCredits: 100,
   completedAt: null,
 };
 
 export const OPEN_SETTINGS_SECTION_EVENT = "tanva-open-settings-section";
+export const PENDING_SETTINGS_SECTION_KEY = "tanva-pending-settings-section";
+
+export function queueOpenSettingsSection(section: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(PENDING_SETTINGS_SECTION_KEY, section);
+  } catch {
+    // ignore
+  }
+}
+
+export function takePendingSettingsSection(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const section = window.sessionStorage.getItem(PENDING_SETTINGS_SECTION_KEY);
+    if (section) {
+      window.sessionStorage.removeItem(PENDING_SETTINGS_SECTION_KEY);
+    }
+    return section;
+  } catch {
+    return null;
+  }
+}
 
 export function openSettingsSection(section: string) {
+  queueOpenSettingsSection(section);
   window.dispatchEvent(
     new CustomEvent(OPEN_SETTINGS_SECTION_EVENT, { detail: { section } }),
   );

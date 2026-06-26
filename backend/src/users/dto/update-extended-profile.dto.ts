@@ -1,14 +1,13 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsDateString, IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class UpdateExtendedProfileDto {
-  @ApiPropertyOptional({ description: '真实姓名' })
+  @ApiPropertyOptional({ description: '昵称' })
   @IsOptional()
   @IsString()
-  @MinLength(1, { message: '真实姓名不能为空' })
-  @MaxLength(50, { message: '真实姓名过长' })
-  realName?: string;
+  @MinLength(1, { message: '昵称不能为空' })
+  @MaxLength(50, { message: '昵称过长' })
+  nickname?: string;
 
   @ApiPropertyOptional({ description: '性别', enum: ['male', 'female', 'other'] })
   @IsOptional()
@@ -16,13 +15,16 @@ export class UpdateExtendedProfileDto {
   @IsIn(['male', 'female', 'other'], { message: '性别选项无效' })
   gender?: string;
 
-  @ApiPropertyOptional({ description: '年龄' })
+  @ApiPropertyOptional({ description: '生日', example: '1990-01-01' })
   @IsOptional()
-  @Type(() => Number)
-  @IsInt({ message: '年龄必须是整数' })
-  @Min(1, { message: '年龄无效' })
-  @Max(120, { message: '年龄无效' })
-  age?: number;
+  @IsDateString({}, { message: '生日格式无效' })
+  birthday?: string;
+
+  @ApiPropertyOptional({ description: '邮箱' })
+  @IsOptional()
+  @IsEmail({}, { message: '邮箱格式无效' })
+  @MaxLength(120, { message: '邮箱过长' })
+  email?: string;
 
   @ApiPropertyOptional({ description: '职业' })
   @IsOptional()
@@ -42,6 +44,6 @@ export class UpdateExtendedProfileDto {
   @IsOptional()
   @IsString()
   @MinLength(1, { message: '所在地区不能为空' })
-  @MaxLength(120, { message: '所在地区过长' })
+  @MaxLength(150, { message: '所在地区过长' })
   region?: string;
 }

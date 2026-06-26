@@ -2,12 +2,13 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import type { UpdateExtendedProfileDto } from './dto/update-extended-profile.dto';
 
-export const PROFILE_COMPLETION_REWARD_CREDITS = 50;
+export const PROFILE_COMPLETION_REWARD_CREDITS = 100;
 
 export interface ExtendedProfileView {
-  realName: string | null;
+  nickname: string | null;
   gender: string | null;
-  age: number | null;
+  birthday: string | null;
+  email: string | null;
   occupation: string | null;
   company: string | null;
   region: string | null;
@@ -18,9 +19,10 @@ export interface ExtendedProfileView {
 }
 
 export interface UpdateExtendedProfileDtoInput {
-  realName?: string;
+  nickname?: string;
   gender?: string;
-  age?: number;
+  birthday?: string;
+  email?: string;
   occupation?: string;
   company?: string;
   region?: string;
@@ -36,6 +38,17 @@ export interface UpdateProfileDto {
   avatarUrl?: string | null;
 }
 
+const AUTH_USER_SELECT = {
+  id: true,
+  email: true,
+  phone: true,
+  passwordHash: true,
+  name: true,
+  avatarUrl: true,
+  role: true,
+  status: true,
+} as const;
+
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
@@ -45,11 +58,21 @@ export class UsersService {
   }
 
   async findByPhone(phone: string) {
-    return this.prisma.user.findUnique({ where: { phone } });
+    return this.prisma.user.findUnique({
+      where: { phone },
+      select: AUTH_USER_SELECT,
+    });
   }
 
   async findById(id: string) {
     return this.prisma.user.findUnique({ where: { id } });
+  }
+
+  async findAuthUserById(id: string) {
+    return this.prisma.user.findUnique({
+      where: { id },
+      select: AUTH_USER_SELECT,
+    });
   }
 
   async touchLastLoginAt(userId: string, throttleMs = 60 * 1000) {
@@ -160,9 +183,10 @@ export class UsersService {
         phone: true,
         avatarUrl: true,
         role: true,
-        profileRealName: true,
+        profileNickname: true,
         profileGender: true,
-        profileAge: true,
+        profileBirthday: true,
+        profileEmail: true,
         profileOccupation: true,
         profileCompany: true,
         profileRegion: true,
@@ -172,28 +196,70 @@ export class UsersService {
     });
   }
 
+  private formatBirthday(value: Date | null | undefined): string | null {
+    if (!value) return null;
+    const year = value.getUTCFullYear();
+    const month = String(value.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(value.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  private parseBirthdayInput(value: string): Date {
+    const trimmed = value.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      throw new BadRequestException('生日格式无效');
+    }
+    const [yearText, monthText, dayText] = trimmed.split('-');
+    const year = Number.parseInt(yearText, 10);
+    const month = Number.parseInt(monthText, 10);
+    const day = Number.parseInt(dayText, 10);
+    const birthday = new Date(Date.UTC(year, month - 1, day));
+    if (
+      birthday.getUTCFullYear() !== year ||
+      birthday.getUTCMonth() !== month - 1 ||
+      birthday.getUTCDate() !== day
+    ) {
+      throw new BadRequestException('生日日期无效');
+    }
+    const today = new Date();
+    const todayUtc = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+    if (birthday.getTime() > todayUtc) {
+      throw new BadRequestException('生日不能晚于今天');
+    }
+    const minYear = today.getFullYear() - 120;
+    if (year < minYear) {
+      throw new BadRequestException('生日无效');
+    }
+    return birthday;
+  }
+
   private mapExtendedProfile(user: {
-    profileRealName?: string | null;
+    profileNickname?: string | null;
     profileGender?: string | null;
-    profileAge?: number | null;
+    profileBirthday?: Date | null;
+    profileEmail?: string | null;
     profileOccupation?: string | null;
     profileCompany?: string | null;
     profileRegion?: string | null;
     profileCompletedAt?: Date | null;
     profileRewardClaimed?: boolean | null;
   }): ExtendedProfileView {
-    const realName = user.profileRealName?.trim() || null;
+    const nickname = user.profileNickname?.trim() || null;
     const gender = user.profileGender?.trim() || null;
-    const age = typeof user.profileAge === 'number' ? user.profileAge : null;
+    const birthday = this.formatBirthday(user.profileBirthday);
+    const email = user.profileEmail?.trim().toLowerCase() || null;
     const occupation = user.profileOccupation?.trim() || null;
     const company = user.profileCompany?.trim() || null;
     const region = user.profileRegion?.trim() || null;
-    const isComplete = Boolean(realName && gender && age && occupation && company && region);
+    const isComplete = Boolean(
+      nickname && gender && birthday && email && occupation && company && region,
+    );
 
     return {
-      realName,
+      nickname,
       gender,
-      age,
+      birthday,
+      email,
       occupation,
       company,
       region,
@@ -208,9 +274,10 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
-        profileRealName: true,
+        profileNickname: true,
         profileGender: true,
-        profileAge: true,
+        profileBirthday: true,
+        profileEmail: true,
         profileOccupation: true,
         profileCompany: true,
         profileRegion: true,
@@ -229,9 +296,10 @@ export class UsersService {
       where: { id: userId },
       select: {
         id: true,
-        profileRealName: true,
+        profileNickname: true,
         profileGender: true,
-        profileAge: true,
+        profileBirthday: true,
+        profileEmail: true,
         profileOccupation: true,
         profileCompany: true,
         profileRegion: true,
@@ -243,30 +311,38 @@ export class UsersService {
       throw new NotFoundException('用户不存在');
     }
 
-    const realName = (dto.realName ?? existing.profileRealName ?? '').trim();
+    const nickname = (dto.nickname ?? existing.profileNickname ?? '').trim();
     const gender = (dto.gender ?? existing.profileGender ?? '').trim();
-    const age = dto.age ?? existing.profileAge ?? null;
+    const birthdayInput =
+      dto.birthday !== undefined
+        ? dto.birthday
+        : this.formatBirthday(existing.profileBirthday);
+    const email = (dto.email ?? existing.profileEmail ?? '').trim().toLowerCase();
     const occupation = (dto.occupation ?? existing.profileOccupation ?? '').trim();
     const company = (dto.company ?? existing.profileCompany ?? '').trim();
     const region = (dto.region ?? existing.profileRegion ?? '').trim();
 
-    if (!realName || !gender || age == null || !occupation || !company || !region) {
-      throw new BadRequestException('请填写完整资料：真实姓名、性别、年龄、职业、公司与所在地区');
-    }
-    if (age < 1 || age > 120) {
-      throw new BadRequestException('年龄无效');
+    if (!nickname || !gender || !birthdayInput || !email || !occupation || !company || !region) {
+      throw new BadRequestException(
+        '请填写完整资料：昵称、性别、生日、邮箱、职业、公司与所在地区',
+      );
     }
 
-    const isComplete = Boolean(realName && gender && age && occupation && company && region);
+    const birthday = this.parseBirthdayInput(birthdayInput);
+
+    const isComplete = Boolean(
+      nickname && gender && birthday && email && occupation && company && region,
+    );
     const shouldGrantReward = isComplete && !existing.profileRewardClaimed;
 
     const result = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.user.update({
         where: { id: userId },
         data: {
-          profileRealName: realName,
+          profileNickname: nickname,
           profileGender: gender,
-          profileAge: age,
+          profileBirthday: birthday,
+          profileEmail: email,
           profileOccupation: occupation,
           profileCompany: company,
           profileRegion: region,
@@ -274,9 +350,10 @@ export class UsersService {
           profileRewardClaimed: shouldGrantReward ? true : existing.profileRewardClaimed,
         },
         select: {
-          profileRealName: true,
+          profileNickname: true,
           profileGender: true,
-          profileAge: true,
+          profileBirthday: true,
+          profileEmail: true,
           profileOccupation: true,
           profileCompany: true,
           profileRegion: true,

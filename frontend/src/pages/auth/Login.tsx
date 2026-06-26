@@ -7,7 +7,12 @@ import { useAuthStore } from "@/stores/authStore";
 import { Loader2, Eye, EyeOff, Check, RefreshCw } from "lucide-react";
 import { authApi, type WechatOfficialSessionDetail } from "@/services/authApi";
 import ForgotPasswordModal from "@/components/auth/ForgotPasswordModal";
+import ProfileCompletionLoginModal from "@/components/auth/ProfileCompletionLoginModal";
 import AgreementConsentModal from "@/components/auth/AgreementConsentModal";
+import {
+  fetchExtendedProfile,
+  queueOpenSettingsSection,
+} from "@/services/extendedProfileApi";
 import { useTranslation } from "react-i18next";
 import WelcomeShaderBackground from "@/components/background/WelcomeShaderBackground";
 
@@ -42,6 +47,10 @@ export default function LoginPage() {
   const [wechatBindSubmitting, setWechatBindSubmitting] = useState(false);
   const consumingRef = useRef(false);
   const consumedSessionIdRef = useRef<string | null>(null);
+  const holdAutoRedirectRef = useRef(false);
+  const [isProfilePromptOpen, setIsProfilePromptOpen] = useState(false);
+  const [profileRewardCredits, setProfileRewardCredits] = useState(100);
+  const [pendingReturnTo, setPendingReturnTo] = useState("/app");
   const { login, loginWithSms, error, user, setAuthenticatedUser, clearError } = useAuthStore();
 
   const returnTo = useMemo(() => {
@@ -55,10 +64,10 @@ export default function LoginPage() {
   }, [location.search, location.state]);
 
   useEffect(() => {
-    if (user) {
+    if (user && !holdAutoRedirectRef.current && !isProfilePromptOpen) {
       navigate(returnTo, { replace: true });
     }
-  }, [user, navigate, returnTo]);
+  }, [user, navigate, returnTo, isProfilePromptOpen]);
 
   useEffect(() => {
     if (!wechatLoginEnabled && tab === "wechat") {
@@ -66,9 +75,43 @@ export default function LoginPage() {
     }
   }, [wechatLoginEnabled, tab]);
 
-  const finalizeWechatLogin = (nextUser: any, nextReturnTo?: string) => {
+  const finishLoginFlow = async (destination: string) => {
+    try {
+      const profile = await fetchExtendedProfile();
+      if (!profile.isComplete) {
+        setPendingReturnTo(destination);
+        setProfileRewardCredits(profile.rewardCredits || 100);
+        setIsProfilePromptOpen(true);
+        return;
+      }
+    } catch (err) {
+      console.warn("加载完善资料状态失败，跳过登录提示:", err);
+    }
+    holdAutoRedirectRef.current = false;
+    navigate(destination, { replace: true });
+  };
+
+  const handleProfilePromptClose = () => {
+    setIsProfilePromptOpen(false);
+    holdAutoRedirectRef.current = false;
+    navigate(pendingReturnTo || returnTo, { replace: true });
+  };
+
+  const handleProfilePromptGoFill = () => {
+    setIsProfilePromptOpen(false);
+    holdAutoRedirectRef.current = false;
+    const destination = pendingReturnTo || returnTo;
+    queueOpenSettingsSection("profile");
+    navigate(destination, {
+      replace: true,
+      state: { openSettingsSection: "profile" },
+    });
+  };
+
+  const finalizeWechatLogin = async (nextUser: any, nextReturnTo?: string) => {
+    holdAutoRedirectRef.current = true;
     setAuthenticatedUser(nextUser, "server");
-    navigate(nextReturnTo || returnTo, { replace: true });
+    await finishLoginFlow(nextReturnTo || returnTo);
   };
 
   const createWechatSession = async (mode: "initial" | "refresh" = "initial") => {
@@ -121,7 +164,7 @@ export default function LoginPage() {
       void authApi
         .consumeWechatOfficialSession(wechatSession.id)
         .then((result) => {
-          finalizeWechatLogin(result.user, result.returnTo);
+          void finalizeWechatLogin(result.user, result.returnTo);
         })
         .catch((err: any) => {
           consumingRef.current = false;
@@ -149,14 +192,18 @@ export default function LoginPage() {
 
   const performLogin = async () => {
     setIsSubmitting(true);
+    holdAutoRedirectRef.current = true;
     try {
       if (tab === "password") {
         await login(phone, password);
       } else {
         await loginWithSms(phone, code || "");
       }
+      await finishLoginFlow(returnTo);
     } catch (err) {
+      holdAutoRedirectRef.current = false;
       console.error("登录失败:", err);
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -245,7 +292,7 @@ export default function LoginPage() {
         code: wechatBindCode.trim(),
         inviteCode: wechatInviteCode.trim() || undefined,
       });
-      finalizeWechatLogin(result.user, result.returnTo);
+      void finalizeWechatLogin(result.user, result.returnTo);
     } catch (err: any) {
       setWechatError(err?.message || t("auth.login.wechatBindFailed"));
     } finally {
@@ -628,6 +675,13 @@ export default function LoginPage() {
         isOpen={isAgreementModalOpen}
         onAgree={() => void handleAgreementAgree()}
         onDisagree={() => setIsAgreementModalOpen(false)}
+      />
+
+      <ProfileCompletionLoginModal
+        isOpen={isProfilePromptOpen}
+        rewardCredits={profileRewardCredits}
+        onClose={handleProfilePromptClose}
+        onGoFill={handleProfilePromptGoFill}
       />
 
       <ForgotPasswordModal

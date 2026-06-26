@@ -17,9 +17,10 @@ model User {
   passwordHash               String
   name                       String?
   avatarUrl                  String?
-  profileRealName            String?
+  profileNickname            String?
   profileGender              String?
-  profileAge                 Int?
+  profileBirthday            DateTime?              @db.Date
+  profileEmail               String?
   profileOccupation          String?
   profileCompany             String?
   profileRegion              String?

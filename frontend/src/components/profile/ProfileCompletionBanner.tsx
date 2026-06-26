@@ -26,7 +26,7 @@ export default function ProfileCompletionBanner({ profile, onDismiss }: Props) {
     return null;
   }
 
-  const rewardCredits = profile.rewardCredits || 50;
+  const rewardCredits = profile.rewardCredits || 100;
 
   return (
     <div
@@ -40,10 +40,10 @@ export default function ProfileCompletionBanner({ profile, onDismiss }: Props) {
           <Gift className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1 text-sm leading-snug text-slate-700">
-          <span className="font-medium text-slate-900">完善个人资料，领取 {rewardCredits} 积分</span>
+          <span className="font-medium text-slate-900">完善个人资料</span>
           <span className="hidden sm:inline">
             {" "}
-            · 补充真实姓名、性别、年龄、职业、公司与所在地区，即可用于个性化推荐，首次完成赠送 {rewardCredits} 积分。
+            · 首次完成赠送 {rewardCredits} 积分。
           </span>
         </div>
         <button

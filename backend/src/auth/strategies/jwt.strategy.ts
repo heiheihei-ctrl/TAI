@@ -31,7 +31,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
 
   async validate(payload: any) {
     // 获取完整用户信息
-    const user = await this.usersService.findById(payload.sub);
+    const user = await this.usersService.findAuthUserById(payload.sub);
     if (!user) return null;
     void this.usersService.touchLastLoginAt(user.id).catch(() => undefined);
     const result = {
