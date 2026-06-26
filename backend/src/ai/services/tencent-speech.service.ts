@@ -22,6 +22,14 @@ import {
 } from '../dto/tencent-speech.dto';
 
 type TencentResponsePayload = Record<string, any>;
+type TencentSystemVoice = {
+  voiceId: string;
+  name: string;
+  audioUrl?: string;
+  gender?: string;
+  languages?: string[];
+  description?: string;
+};
 
 @Injectable()
 export class TencentSpeechService {
@@ -54,14 +62,7 @@ export class TencentSpeechService {
   private readonly ffprobeTimeoutMs: number;
   private readonly ffmpegTimeoutMs: number;
   private voicesCacheAt = 0;
-  private voicesCache: Array<{
-    voiceId: string;
-    name: string;
-    audioUrl?: string;
-    gender?: string;
-    languages?: string[];
-    description?: string;
-  }> = [];
+  private voicesCache: TencentSystemVoice[] = [];
   private readonly voicesCacheTtlMs = 30 * 60 * 1000;
 
   constructor(
@@ -1902,16 +1903,7 @@ export class TencentSpeechService {
   async describeSystemVoices(options?: {
     lang?: string;
     keyword?: string;
-  }): Promise<
-    Array<{
-      voiceId: string;
-      name: string;
-      audioUrl?: string;
-      gender?: string;
-      languages?: string[];
-      description?: string;
-    }>
-  > {
+  }): Promise<TencentSystemVoice[]> {
     const now = Date.now();
     if (!this.voicesCache.length || now - this.voicesCacheAt > this.voicesCacheTtlMs) {
       this.ensureCredentialReady();
@@ -1929,7 +1921,7 @@ export class TencentSpeechService {
         ) || [];
 
       this.voicesCache = voices
-        .map((item) => {
+        .map<TencentSystemVoice | null>((item) => {
           const record = item as Record<string, any>;
           const voiceId = this.pickFirstString(record?.VoiceId, record?.voiceId);
           if (!voiceId) return null;
@@ -1948,16 +1940,7 @@ export class TencentSpeechService {
           };
         })
         .filter(
-          (
-            item,
-          ): item is {
-            voiceId: string;
-            name: string;
-            audioUrl?: string;
-            gender?: string;
-            languages?: string[];
-            description?: string;
-          } => item !== null,
+          (item): item is TencentSystemVoice => item !== null,
         );
       this.voicesCacheAt = now;
     }
