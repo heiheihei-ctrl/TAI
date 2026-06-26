@@ -36,6 +36,8 @@ export class Nano2Service {
   private readonly maxSubmitAttempts = 2;
   private readonly submitRetryDelayMs = 1200;
   private readonly timeoutMs: number;
+  private readonly queryMaxRetries = 3;
+  private readonly queryRetryDelayMs = [300, 800];
 
   constructor(private readonly config: ConfigService) {
     this.apiKey = this.config.get<string>('NANO2_API_KEY') || '';
@@ -90,6 +92,28 @@ export class Nano2Service {
       ) as unknown as Error;
     }
     return err;
+  }
+
+  private isRetryableApimartQueryError(error: unknown): boolean {
+    const err = error instanceof Error ? error : new Error(String(error));
+    const code =
+      typeof (err as any)?.cause?.code === 'string'
+        ? String((err as any).cause.code)
+        : typeof (err as any)?.code === 'string'
+          ? String((err as any).code)
+          : '';
+    const message = String(err.message || '').toLowerCase();
+
+    return (
+      code === 'ECONNRESET' ||
+      code === 'ETIMEDOUT' ||
+      code === 'ECONNABORTED' ||
+      code === 'EAI_AGAIN' ||
+      message.includes('econnreset') ||
+      message.includes('timeout') ||
+      message.includes('socket hang up') ||
+      message.includes('fetch failed')
+    );
   }
 
   private extractErrorDetailsFromAxios(response: { status: number; data: unknown; headers?: Record<string, unknown> }): {
@@ -261,44 +285,63 @@ export class Nano2Service {
       throw new ServiceUnavailableException('Nano2 API key not configured');
     }
 
-    try {
-      const queryUrl = `https://api.apimart.ai/v1/tasks/${taskId}`;
-      const response = await apimartRequest<any>({
-        url: queryUrl,
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-        },
-        timeout: this.timeoutMs,
-      });
+    const queryUrl = `https://api.apimart.ai/v1/tasks/${taskId}`;
+    let lastError: unknown = null;
 
-      if (response.status < 200 || response.status >= 300) {
-        throw new Error(`Failed to query task: HTTP ${response.status}`);
+    for (let attempt = 1; attempt <= this.queryMaxRetries; attempt += 1) {
+      try {
+        const response = await apimartRequest<any>({
+          url: queryUrl,
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Cache-Control': 'no-cache',
+            Pragma: 'no-cache',
+          },
+          timeout: this.timeoutMs,
+        });
+
+        if (response.status < 200 || response.status >= 300) {
+          throw new Error(`Failed to query task: HTTP ${response.status}`);
+        }
+
+        const json = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
+        this.logger.log(`Nano2 task query raw response: ${JSON.stringify(json)}`);
+
+        const data = json.data || json;
+
+        let imageUrl: string | undefined;
+        if (data.result?.images?.[0]?.url) {
+          const urlField = data.result.images[0].url;
+          imageUrl = Array.isArray(urlField) ? urlField[0] : urlField;
+        } else {
+          imageUrl = data.image_url || data.imageUrl;
+        }
+
+        this.logger.log(`Nano2 parsed - status: ${data.status}, imageUrl: ${imageUrl || 'not found'}`);
+
+        return {
+          status: data.status || 'processing',
+          imageUrl,
+        };
+      } catch (error: any) {
+        lastError = error;
+        if (attempt < this.queryMaxRetries && this.isRetryableApimartQueryError(error)) {
+          const delayMs =
+            this.queryRetryDelayMs[attempt - 1] ??
+            this.queryRetryDelayMs[this.queryRetryDelayMs.length - 1] ??
+            800;
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.warn(
+            `Nano2 task query retry ${attempt}/${this.queryMaxRetries} in ${delayMs}ms: task=${taskId}, error=${message}`,
+          );
+          await this.sleep(delayMs);
+          continue;
+        }
+        throw this.mapApimartNetworkError(error, 'Nano2 查询任务失败');
       }
-
-      const json = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
-      this.logger.log(`Nano2 task query raw response: ${JSON.stringify(json)}`);
-
-      // 解析响应 - API 返回格式: { code: 200, data: { status, result: { images: [{ url: [...] }] } } }
-      const data = json.data || json;
-
-      // 提取图片 URL - 格式是 result.images[0].url[0]
-      let imageUrl: string | undefined;
-      if (data.result?.images?.[0]?.url) {
-        const urlField = data.result.images[0].url;
-        imageUrl = Array.isArray(urlField) ? urlField[0] : urlField;
-      } else {
-        imageUrl = data.image_url || data.imageUrl;
-      }
-
-      this.logger.log(`Nano2 parsed - status: ${data.status}, imageUrl: ${imageUrl || 'not found'}`);
-
-      return {
-        status: data.status || 'processing',
-        imageUrl,
-      };
-    } catch (error: any) {
-      throw this.mapApimartNetworkError(error, 'Nano2 查询任务失败');
     }
+
+    throw this.mapApimartNetworkError(lastError, 'Nano2 查询任务失败');
   }
 }
