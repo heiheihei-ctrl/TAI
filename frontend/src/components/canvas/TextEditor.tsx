@@ -243,7 +243,7 @@ const TextEditor: React.FC<TextEditorProps> = ({ className }) => {
           onBlur={finishEditing}
           className="resize-none border-2 border-blue-400 rounded-md p-2 shadow-lg min-w-[200px] min-h-[40px] font-inherit"
           style={{
-            backgroundColor: isDarkTheme ? '#374151' : '#ffffff',
+            backgroundColor: isDarkTheme ? '#171717' : '#ffffff',
             boxShadow: isDarkTheme ? '0 2px 8px rgba(0, 0, 0, 0.4)' : '0 2px 8px rgba(0, 0, 0, 0.15)',
             fontSize: activeText.style.fontSize,
             fontFamily: activeText.style.fontFamily,

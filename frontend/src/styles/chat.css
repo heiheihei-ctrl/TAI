@@ -309,9 +309,10 @@ body.tanva-premium-black-theme .tanva-settings-modal button[class*="bg-gray-"]:n
 body.tanva-premium-black-theme .tanva-settings-modal input,
 body.tanva-premium-black-theme .tanva-settings-modal select,
 body.tanva-premium-black-theme .tanva-settings-modal textarea {
-  background: #1d1d1d !important;
+  background: #171717 !important;
   border-color: #404040 !important;
   color: #ffffff !important;
+  caret-color: #ffffff !important;
 }
 
 body.tanva-premium-black-theme .tanva-brand-logo-wrap {
@@ -1111,10 +1112,10 @@ body.tanva-premium-black-theme .tanva-flow-theme-mono-dark .react-flow__node-tex
 
 body.tanva-premium-black-theme .tanva-flow-theme-mono-dark .react-flow__node-textChat textarea,
 body.tanva-premium-black-theme .tanva-flow-theme-mono-dark .react-flow__node-textChat input:not([type="checkbox"]):not([type="radio"]) {
-  background: #ffffff !important;
-  border: 1px solid #d1d5db !important;
-  color: #111827 !important;
-  caret-color: #111827 !important;
+  background: #171717 !important;
+  border: 1px solid #404040 !important;
+  color: #ffffff !important;
+  caret-color: #ffffff !important;
 }
 
 body.tanva-premium-black-theme .tanva-flow-theme-mono-dark .react-flow__node-textChat textarea::placeholder,
@@ -1644,10 +1645,10 @@ body.tanva-premium-black-theme .tanva-layer-panel .tanva-layer-item-row.tanva-la
 }
 
 body.tanva-premium-black-theme .tanva-layer-panel .tanva-layer-rename-input {
-  background: #111827 !important;
-  color: #f9fafb !important;
-  border: 1px solid #4b5563 !important;
-  caret-color: #f9fafb !important;
+  background: #171717 !important;
+  color: #ffffff !important;
+  border: 1px solid #404040 !important;
+  caret-color: #ffffff !important;
   box-shadow: none !important;
 }
 
@@ -2030,42 +2031,44 @@ body.tanva-premium-black-theme .tanva-flow-theme-mono-dark :is(
   box-shadow: none !important;
 }
 
-/* Dark theme: text-type nodes use black text on light input surfaces while editing */
+/* Dark theme: unified text-entry surfaces (#171717 bg, white text) */
+body.tanva-premium-black-theme :is(
+  .tanva-inline-mention-editor,
+  .tanva-textnote-editor[contenteditable="true"],
+  .tanva-edge-label-editor,
+  .tanva-edge-label-editor input,
+  .tanva-settings-modal textarea,
+  .tanva-settings-modal input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  .tanva-layer-panel .tanva-layer-rename-input,
+  .tanva-library-panel .tanva-library-search-input,
+  .tanva-flow-theme-mono-dark .react-flow__node textarea,
+  .tanva-flow-theme-mono-dark .react-flow__node input:not([type="checkbox"]):not([type="radio"])
+) {
+  background: #171717 !important;
+  border-color: #404040 !important;
+  color: #ffffff !important;
+  caret-color: #ffffff !important;
+}
+
+body.tanva-premium-black-theme :is(
+  .tanva-inline-mention-editor:empty:before,
+  .tanva-textnote-editor[contenteditable="true"]:empty:before,
+  .tanva-edge-label-editor input::placeholder,
+  .tanva-settings-modal textarea::placeholder,
+  .tanva-settings-modal input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
+  .tanva-layer-panel .tanva-layer-rename-input::placeholder,
+  .tanva-library-panel .tanva-library-search-input::placeholder,
+  .tanva-flow-theme-mono-dark .react-flow__node textarea::placeholder,
+  .tanva-flow-theme-mono-dark .react-flow__node input::placeholder
+) {
+  color: #9ca3af !important;
+  opacity: 1 !important;
+}
+
+body.tanva-premium-black-theme .tanva-edge-label-editor {
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35) !important;
+}
+
 body.tanva-premium-black-theme .tanva-flow-theme-mono-dark .react-flow__node-textNote .tanva-textnote-editor:not([contenteditable="true"]) {
   color: #ffffff !important;
-}
-
-body.tanva-premium-black-theme .tanva-flow-theme-mono-dark .react-flow__node-textNote .tanva-textnote-editor[contenteditable="true"] {
-  color: #111827 !important;
-  caret-color: #111827 !important;
-  background: #ffffff !important;
-}
-
-body.tanva-premium-black-theme .tanva-flow-theme-mono-dark .react-flow__node-textNote .tanva-textnote-editor[contenteditable="true"]:empty:before {
-  color: #9ca3af !important;
-}
-
-body.tanva-premium-black-theme .tanva-flow-theme-mono-dark :is(
-  .react-flow__node-textPrompt,
-  .react-flow__node-textPromptPro
-) .tanva-inline-mention-editor:focus {
-  color: #111827 !important;
-  caret-color: #111827 !important;
-  background: #ffffff !important;
-  border: 1px solid #d1d5db !important;
-}
-
-body.tanva-premium-black-theme .tanva-flow-theme-mono-dark .react-flow__node-textPrompt .tanva-inline-mention-editor {
-  color: #111827 !important;
-  caret-color: #111827 !important;
-  background: #ffffff !important;
-  border: 1px solid #d1d5db !important;
-}
-
-body.tanva-premium-black-theme .tanva-flow-theme-mono-dark :is(
-  .react-flow__node-textPrompt,
-  .react-flow__node-textPromptPro
-) .tanva-inline-mention-editor:focus:empty:before,
-body.tanva-premium-black-theme .tanva-flow-theme-mono-dark .react-flow__node-textPrompt .tanva-inline-mention-editor:empty:before {
-  color: #9ca3af !important;
 }

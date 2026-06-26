@@ -234,7 +234,7 @@ const SimpleTextEditor: React.FC<SimpleTextEditorProps> = ({
         padding: '2px 4px',
         border: '2px solid #3b82f6',
         borderRadius: '4px',
-        backgroundColor: isDarkTheme ? '#374151' : 'rgba(255, 255, 255, 0.98)',
+        backgroundColor: isDarkTheme ? '#171717' : 'rgba(255, 255, 255, 0.98)',
         // 同步实际文本样式
         fontSize: `${displayFontSize}px`,
         fontFamily: textStyle.fontFamily,
