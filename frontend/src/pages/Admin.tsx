@@ -96,6 +96,7 @@ import {
 } from "@/services/publicTemplateService";
 import type { PublicTemplate } from "@/services/publicTemplateService";
 import { OpenObserveLogButton } from "@/components/admin/OpenObserveLogButton";
+import DashboardTrendChart from "@/components/admin/DashboardTrendChart";
 
 const FULL_ADMIN_ROLE = "admin";
 const NORMAL_ADMIN_ROLE = "normal_admin";
@@ -137,6 +138,44 @@ const canAccessAdminTab = (role: string | null | undefined, tab: AdminTabKey) =>
   return normalizeRole(role) === NORMAL_ADMIN_ROLE && NORMAL_ADMIN_ALLOWED_TABS.has(tab);
 };
 
+const DASHBOARD_TREND_MAX_DAYS = 90;
+
+function formatDashboardDateInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function createDefaultDashboardTrendRange() {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - 13);
+  return {
+    startDate: formatDashboardDateInput(start),
+    endDate: formatDashboardDateInput(end),
+  };
+}
+
+function validateDashboardTrendRange(startDate: string, endDate: string): string | null {
+  if (!startDate || !endDate) {
+    return "请选择开始日期和结束日期";
+  }
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return "日期格式无效";
+  }
+  if (start > end) {
+    return "开始日期不能晚于结束日期";
+  }
+  const dayCount = Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+  if (dayCount > DASHBOARD_TREND_MAX_DAYS) {
+    return `日期范围不能超过 ${DASHBOARD_TREND_MAX_DAYS} 天`;
+  }
+  return null;
+}
+
 // 统计卡片组件
 function StatCard({
   title,
@@ -152,83 +191,6 @@ function StatCard({
       <div className='text-sm text-gray-500'>{title}</div>
       <div className='text-2xl font-bold mt-1'>{value}</div>
       {subtitle && <div className='text-xs text-gray-400 mt-1'>{subtitle}</div>}
-    </div>
-  );
-}
-
-function DashboardTrendChart({
-  data,
-}: {
-  data: DashboardStats["userTrend"];
-}) {
-  if (!data || data.length === 0) {
-    return <div className='text-sm text-gray-400 py-8 text-center'>暂无趋势数据</div>;
-  }
-
-  const maxValue = Math.max(
-    ...data.map((item) => Math.max(item.registeredUsers, item.dailyActiveUsers)),
-    1
-  );
-  const midValue = Math.max(1, Math.round(maxValue / 2));
-
-  const toPoints = (key: "registeredUsers" | "dailyActiveUsers") =>
-    data
-      .map((item, index) => {
-        const x = (index / Math.max(data.length - 1, 1)) * 100;
-        const y = 100 - (item[key] / maxValue) * 100;
-        return `${x},${y}`;
-      })
-      .join(" ");
-
-  const regPoints = toPoints("registeredUsers");
-  const dauPoints = toPoints("dailyActiveUsers");
-
-  return (
-    <div>
-      <div className='flex items-center gap-5 text-xs text-gray-600 mb-3'>
-        <div className='flex items-center gap-2'>
-          <span className='w-2.5 h-2.5 rounded-full bg-blue-500' />
-          <span>注册用户</span>
-        </div>
-        <div className='flex items-center gap-2'>
-          <span className='w-2.5 h-2.5 rounded-full bg-emerald-500' />
-          <span>日活用户</span>
-        </div>
-      </div>
-      <div className='grid grid-cols-[38px_1fr] gap-2'>
-        <div className='relative h-44 text-[11px] text-gray-400 leading-none select-none'>
-          <span className='absolute left-0 top-0'>{maxValue}</span>
-          <span className='absolute left-0 top-1/2 -translate-y-1/2'>{midValue}</span>
-          <span className='absolute left-0 bottom-0'>0</span>
-        </div>
-        <div className='relative h-44'>
-          <svg width='100%' height='100%' viewBox='0 0 100 100' preserveAspectRatio='none'>
-            <line x1='0' y1='100' x2='100' y2='100' stroke='#e5e7eb' strokeWidth='0.6' />
-            <line x1='0' y1='66.6' x2='100' y2='66.6' stroke='#f3f4f6' strokeWidth='0.5' />
-            <line x1='0' y1='33.3' x2='100' y2='33.3' stroke='#f3f4f6' strokeWidth='0.5' />
-
-            <polyline
-              fill='none'
-              stroke='#3b82f6'
-              strokeWidth='2'
-              points={regPoints}
-              vectorEffect='non-scaling-stroke'
-            />
-            <polyline
-              fill='none'
-              stroke='#10b981'
-              strokeWidth='2'
-              points={dauPoints}
-              vectorEffect='non-scaling-stroke'
-            />
-          </svg>
-          <div className='absolute bottom-0 left-0 right-0 flex justify-between text-[11px] text-gray-400'>
-            <span>{data[0]?.date}</span>
-            <span>{data[Math.floor(data.length / 2)]?.date}</span>
-            <span>{data[data.length - 1]?.date}</span>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -13450,6 +13412,11 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const defaultTrendRangeRef = useRef(createDefaultDashboardTrendRange());
+  const [trendStartDate, setTrendStartDate] = useState(defaultTrendRangeRef.current.startDate);
+  const [trendEndDate, setTrendEndDate] = useState(defaultTrendRangeRef.current.endDate);
+  const [appliedTrendRange, setAppliedTrendRange] = useState(defaultTrendRangeRef.current);
+  const [trendRangeError, setTrendRangeError] = useState<string | null>(null);
   const userRole = user?.role;
   const hasAdminPanelAccess = canAccessAdminPanel(userRole);
   const canManageSensitiveUserFields = isFullAdmin(userRole);
@@ -13478,7 +13445,10 @@ export default function Admin() {
     const loadDashboard = async (showLoading = false) => {
       if (showLoading) setLoading(true);
       try {
-        const data = await getDashboardStats();
+        const data = await getDashboardStats({
+          trendStartDate: appliedTrendRange.startDate,
+          trendEndDate: appliedTrendRange.endDate,
+        });
         if (cancelled) return;
         setStats(data);
         setDashboardError(null);
@@ -13486,7 +13456,9 @@ export default function Admin() {
       } catch (error) {
         if (cancelled) return;
         console.error("加载统计失败:", error);
-        setDashboardError("统计刷新失败，请稍后重试");
+        setDashboardError(
+          error instanceof Error ? error.message : "统计刷新失败，请稍后重试",
+        );
       } finally {
         if (!cancelled && showLoading) setLoading(false);
       }
@@ -13503,7 +13475,28 @@ export default function Admin() {
       cancelled = true;
       if (timer) clearInterval(timer);
     };
-  }, [user, hasAdminPanelAccess, currentTab]);
+  }, [user, hasAdminPanelAccess, currentTab, appliedTrendRange]);
+
+  const handleApplyTrendRange = () => {
+    const validationError = validateDashboardTrendRange(trendStartDate, trendEndDate);
+    if (validationError) {
+      setTrendRangeError(validationError);
+      return;
+    }
+    setTrendRangeError(null);
+    setAppliedTrendRange({
+      startDate: trendStartDate,
+      endDate: trendEndDate,
+    });
+  };
+
+  const handleResetTrendRange = () => {
+    const nextRange = createDefaultDashboardTrendRange();
+    setTrendStartDate(nextRange.startDate);
+    setTrendEndDate(nextRange.endDate);
+    setTrendRangeError(null);
+    setAppliedTrendRange(nextRange);
+  };
 
   if (!user || !hasAdminPanelAccess) {
     return (
@@ -13565,12 +13558,63 @@ export default function Admin() {
       <main className='max-w-7xl mx-auto px-4 py-6'>
         {currentTab === "dashboard" && (
           <div>
-            <h2 className='text-lg font-semibold mb-4'>系统概览</h2>
             {loading && !stats ? (
               <div className='text-center py-8 text-gray-500'>加载中...</div>
             ) : stats ? (
               <div className='space-y-4'>
+                <div className='flex flex-wrap items-end justify-between gap-4'>
+                  <h2 className='text-lg font-semibold'>系统概览</h2>
+                  <div className='flex flex-wrap items-end gap-2'>
+                    <div className='space-y-1'>
+                      <Label htmlFor='dashboard-trend-start' className='text-xs text-gray-500'>
+                        开始日期
+                      </Label>
+                      <Input
+                        id='dashboard-trend-start'
+                        type='date'
+                        value={trendStartDate}
+                        onChange={(event) => {
+                          setTrendStartDate(event.target.value);
+                          setTrendRangeError(null);
+                        }}
+                        className='h-9 w-[150px] text-sm'
+                      />
+                    </div>
+                    <div className='space-y-1'>
+                      <Label htmlFor='dashboard-trend-end' className='text-xs text-gray-500'>
+                        结束日期
+                      </Label>
+                      <Input
+                        id='dashboard-trend-end'
+                        type='date'
+                        value={trendEndDate}
+                        onChange={(event) => {
+                          setTrendEndDate(event.target.value);
+                          setTrendRangeError(null);
+                        }}
+                        className='h-9 w-[150px] text-sm'
+                      />
+                    </div>
+                    <Button type='button' size='sm' className='h-9' onClick={handleApplyTrendRange}>
+                      查询
+                    </Button>
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      className='h-9'
+                      onClick={handleResetTrendRange}
+                    >
+                      近14天
+                    </Button>
+                  </div>
+                </div>
+                {trendRangeError ? (
+                  <div className='text-xs text-red-500'>{trendRangeError}</div>
+                ) : null}
                 <div className='text-xs text-gray-500'>
+                  统计时段：{appliedTrendRange.startDate} 至 {appliedTrendRange.endDate}
+                  {" · "}
                   自动刷新：每 10 分钟
                   {lastUpdatedAt
                     ? ` · 最后更新 ${new Date(lastUpdatedAt).toLocaleTimeString("zh-CN", {
@@ -13580,9 +13624,25 @@ export default function Admin() {
                 </div>
                 <div className='grid grid-cols-2 md:grid-cols-4 gap-4'>
                   <StatCard title='总用户数' value={stats.totalUsers} />
-                  <StatCard title='日活用户' value={stats.dailyActiveUsers} subtitle='当天累计去重' />
+                  <StatCard
+                    title='日活用户'
+                    value={stats.dailyActiveUsers}
+                    subtitle={
+                      appliedTrendRange.startDate === appliedTrendRange.endDate
+                        ? "所选日期当天累计去重"
+                        : "所选时段日均日活"
+                    }
+                  />
                   <StatCard title='在线用户' value={stats.onlineUsers} subtitle='最近 15 分钟内有登录态请求' />
-                  <StatCard title='当日注册用户' value={stats.todayRegisteredUsers} subtitle='当天新增' />
+                  <StatCard
+                    title='注册用户'
+                    value={stats.todayRegisteredUsers}
+                    subtitle={
+                      appliedTrendRange.startDate === appliedTrendRange.endDate
+                        ? "所选日期当天新增"
+                        : "所选时段累计新增"
+                    }
+                  />
                   <StatCard
                     title='流通积分'
                     value={stats.totalCreditsInCirculation}
@@ -13606,7 +13666,7 @@ export default function Admin() {
                   />
                 </div>
                 <div className='bg-white rounded-lg border p-4 shadow-sm'>
-                  <div className='text-sm font-medium text-gray-700 mb-3'>注册用户 vs 日活用户（近 14 天）</div>
+                  <div className='text-sm font-medium text-gray-700 mb-3'>注册用户 vs 日活用户</div>
                   <DashboardTrendChart data={stats.userTrend} />
                 </div>
                 {dashboardError && <div className='text-sm text-red-500'>{dashboardError}</div>}

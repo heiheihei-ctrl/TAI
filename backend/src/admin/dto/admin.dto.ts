@@ -1,6 +1,18 @@
 import { IsString, IsOptional, IsNumber, IsDateString, Min, Max, IsIn } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+export class DashboardQueryDto {
+  @ApiPropertyOptional({ description: '趋势图开始日期（YYYY-MM-DD）' })
+  @IsOptional()
+  @IsDateString()
+  trendStartDate?: string;
+
+  @ApiPropertyOptional({ description: '趋势图结束日期（YYYY-MM-DD）' })
+  @IsOptional()
+  @IsDateString()
+  trendEndDate?: string;
+}
+
 export class UsersQueryDto {
   @ApiPropertyOptional({ description: '页码', default: 1 })
   @IsOptional()

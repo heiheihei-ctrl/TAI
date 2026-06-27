@@ -111,6 +111,78 @@ export class AdminService {
     return `${date.getMonth() + 1}/${date.getDate()}`;
   }
 
+  private parseDateInput(value: string): Date | null {
+    const trimmed = value.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return null;
+    }
+    const [year, month, day] = trimmed.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) {
+      return null;
+    }
+    return this.startOfDay(date);
+  }
+
+  private isSameDay(a: Date, b: Date): boolean {
+    return (
+      a.getFullYear() === b.getFullYear() &&
+      a.getMonth() === b.getMonth() &&
+      a.getDate() === b.getDate()
+    );
+  }
+
+  private buildDayStarts(start: Date, end: Date): Date[] {
+    const days: Date[] = [];
+    const cursor = new Date(start);
+    while (cursor <= end) {
+      days.push(new Date(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return days;
+  }
+
+  private resolveTrendRange(
+    now: Date,
+    trendStartDate?: string,
+    trendEndDate?: string,
+  ): { trendDayStarts: Date[] } {
+    const startOfToday = this.startOfDay(now);
+    const defaultTrendDays = 14;
+
+    if (!trendStartDate && !trendEndDate) {
+      const trendStart = new Date(startOfToday);
+      trendStart.setDate(trendStart.getDate() - (defaultTrendDays - 1));
+      return { trendDayStarts: this.buildDayStarts(trendStart, startOfToday) };
+    }
+
+    if (!trendStartDate || !trendEndDate) {
+      throw new BadRequestException('趋势图日期筛选需同时提供开始日期和结束日期');
+    }
+
+    const trendStart = this.parseDateInput(trendStartDate);
+    const trendEnd = this.parseDateInput(trendEndDate);
+    if (!trendStart || !trendEnd) {
+      throw new BadRequestException('日期格式无效，请使用 YYYY-MM-DD');
+    }
+    if (trendStart > trendEnd) {
+      throw new BadRequestException('开始日期不能晚于结束日期');
+    }
+
+    const maxTrendDays = 90;
+    const dayCount =
+      Math.floor((trendEnd.getTime() - trendStart.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+    if (dayCount > maxTrendDays) {
+      throw new BadRequestException(`日期范围不能超过 ${maxTrendDays} 天`);
+    }
+
+    return { trendDayStarts: this.buildDayStarts(trendStart, trendEnd) };
+  }
+
   private asJsonObject(value: unknown): Record<string, any> | null {
     if (value && typeof value === 'object' && !Array.isArray(value)) {
       return value as Record<string, any>;
@@ -139,26 +211,24 @@ export class AdminService {
   /**
    * 获取管理后台统计数据
    */
-  async getDashboardStats(): Promise<AdminDashboardStats> {
+  async getDashboardStats(options?: {
+    trendStartDate?: string;
+    trendEndDate?: string;
+  }): Promise<AdminDashboardStats> {
     const now = new Date();
     const startOfToday = this.startOfDay(now);
     const endOfToday = new Date(startOfToday);
     endOfToday.setDate(endOfToday.getDate() + 1);
     const onlineThreshold = new Date(now.getTime() - 15 * 60 * 1000);
-    const trendDays = 14;
-    const trendStart = new Date(startOfToday);
-    trendStart.setDate(trendStart.getDate() - (trendDays - 1));
-
-    const trendDayStarts = Array.from({ length: trendDays }, (_, idx) => {
-      const d = new Date(trendStart);
-      d.setDate(trendStart.getDate() + idx);
-      return d;
-    });
+    const { trendDayStarts } = this.resolveTrendRange(
+      now,
+      options?.trendStartDate,
+      options?.trendEndDate,
+    );
 
     const [
       totalUsers,
       todayActiveUsersByLastSeen,
-      todayRegisteredUsers,
       onlineUsers,
       todayActiveUsersBySessionRows,
       creditStats,
@@ -169,14 +239,6 @@ export class AdminService {
       this.prisma.user.count({
         where: {
           lastLoginAt: {
-            gte: startOfToday,
-            lt: endOfToday,
-          },
-        },
-      }),
-      this.prisma.user.count({
-        where: {
-          createdAt: {
             gte: startOfToday,
             lt: endOfToday,
           },
@@ -236,25 +298,45 @@ export class AdminService {
     ]);
 
     const todayActiveUsersBySession = this.toNumber(todayActiveUsersBySessionRows[0]?.count ?? 0);
-    const dailyActiveUsers = Math.max(todayActiveUsersByLastSeen, todayActiveUsersBySession);
+    const dailyActiveUsersForToday = Math.max(
+      todayActiveUsersByLastSeen,
+      todayActiveUsersBySession,
+    );
 
     const totalApiCalls = apiStats.reduce((sum, item) => sum + item._count, 0);
     const successfulApiCalls = apiStats.find(s => s.responseStatus === ApiResponseStatus.SUCCESS)?._count || 0;
     const failedApiCalls = apiStats.find(s => s.responseStatus === ApiResponseStatus.FAILED)?._count || 0;
 
+    const lastTrendDay = trendDayStarts[trendDayStarts.length - 1];
     const userTrend = trendRows.map((item, index) => {
-      if (index === trendRows.length - 1) {
-        return { ...item, dailyActiveUsers };
+      if (
+        index === trendRows.length - 1 &&
+        lastTrendDay &&
+        this.isSameDay(lastTrendDay, startOfToday)
+      ) {
+        return { ...item, dailyActiveUsers: dailyActiveUsersForToday };
       }
       return item;
     });
 
+    const periodRegisteredUsers = userTrend.reduce(
+      (sum, item) => sum + item.registeredUsers,
+      0,
+    );
+    const periodDailyActiveUsers =
+      userTrend.length <= 1
+        ? (userTrend[0]?.dailyActiveUsers ?? 0)
+        : Math.round(
+            userTrend.reduce((sum, item) => sum + item.dailyActiveUsers, 0) /
+              Math.max(userTrend.length, 1),
+          );
+
     return {
       totalUsers,
-      activeUsers: dailyActiveUsers,
-      dailyActiveUsers,
+      activeUsers: periodDailyActiveUsers,
+      dailyActiveUsers: periodDailyActiveUsers,
       onlineUsers,
-      todayRegisteredUsers,
+      todayRegisteredUsers: periodRegisteredUsers,
       totalCreditsInCirculation: creditStats._sum.balance || 0,
       totalCreditsSpent: creditStats._sum.totalSpent || 0,
       totalApiCalls,

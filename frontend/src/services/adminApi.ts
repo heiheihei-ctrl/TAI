@@ -131,8 +131,19 @@ export interface PaginatedResponse<T> {
 
 
 // 获取管理后台统计数据
-export async function getDashboardStats(): Promise<DashboardStats> {
-  const response = await request("/api/admin/dashboard");
+export async function getDashboardStats(params?: {
+  trendStartDate?: string;
+  trendEndDate?: string;
+}): Promise<DashboardStats> {
+  const searchParams = new URLSearchParams();
+  if (params?.trendStartDate) {
+    searchParams.set("trendStartDate", params.trendStartDate);
+  }
+  if (params?.trendEndDate) {
+    searchParams.set("trendEndDate", params.trendEndDate);
+  }
+  const query = searchParams.toString();
+  const response = await request(`/api/admin/dashboard${query ? `?${query}` : ""}`);
   return response.json();
 }
 

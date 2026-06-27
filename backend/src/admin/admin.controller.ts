@@ -32,6 +32,7 @@ import { VolcAssetService } from '../volc-asset/volc-asset.service';
 import { MembershipService } from '../membership/membership.service';
 import { UsersService } from '../users/users.service';
 import {
+  DashboardQueryDto,
   UsersQueryDto,
   ApiUsageStatsQueryDto,
   ApiUsageRecordsQueryDto,
@@ -114,9 +115,15 @@ export class AdminController {
 
   @Get('dashboard')
   @ApiOperation({ summary: '获取管理后台统计数据' })
-  async getDashboardStats(@Request() req: AuthenticatedRequest) {
+  async getDashboardStats(
+    @Request() req: AuthenticatedRequest,
+    @Query() query: DashboardQueryDto,
+  ) {
     this.checkAdmin(req, 'dashboard:view');
-    return this.adminService.getDashboardStats();
+    return this.adminService.getDashboardStats({
+      trendStartDate: query.trendStartDate,
+      trendEndDate: query.trendEndDate,
+    });
   }
 
   @Get('users')
