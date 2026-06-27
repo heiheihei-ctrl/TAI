@@ -117,7 +117,7 @@ export const CREDIT_PRICING_CONFIG = {
   'gemini-text': {
     serviceName: 'Gemini 文字对话',
     provider: 'gemini',
-    creditsPerCall: 2,
+    creditsPerCall: 5,
     description: '使用 Gemini 进行文字对话',
     maxInputTokens: 8000,
     maxContextLength: 32000,
@@ -151,7 +151,7 @@ export const CREDIT_PRICING_CONFIG = {
   'gemini-video-analyze': {
     serviceName: 'Gemini-3.0-flash 视频分析',
     provider: 'gemini',
-    creditsPerCall: 30,
+    creditsPerCall: 60,
     description: '使用 Gemini-3.0-flash 分析视频内容',
   },
 

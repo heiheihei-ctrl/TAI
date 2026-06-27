@@ -19,6 +19,7 @@ type Params = {
   bananaImageRoute?: string | null;
   imageSize?: string | null;
   aspectRatio?: string | null;
+  quality?: "auto" | "low" | "medium" | "high";
   outputImageCount?: number;
   referenceImageCount?: number;
   managedModelKey?: string | null;
@@ -131,6 +132,7 @@ export const useImageNodeCreditsPreview = ({
   bananaImageRoute,
   imageSize,
   aspectRatio,
+  quality,
   outputImageCount,
   referenceImageCount,
   managedModelKey,
@@ -212,6 +214,7 @@ export const useImageNodeCreditsPreview = ({
       requestParams: {
         aiProvider: provider,
         imageSize: normalizedImageSize,
+        ...(nodeType === "gptImage2" ? { quality: quality || "auto" } : {}),
         aspectRatio: safeAspectRatio,
         referenceImageCount: safeReferenceCount,
         bananaImageRoute: bananaImageRoute || undefined,
@@ -235,6 +238,7 @@ export const useImageNodeCreditsPreview = ({
     aspectRatio,
     bananaImageRoute,
     imageSize,
+    quality,
     managedModelKey,
     nodeType,
     platformKey,
