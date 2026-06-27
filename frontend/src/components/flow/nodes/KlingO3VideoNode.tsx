@@ -453,8 +453,9 @@ function KlingO1VideoNode({ id, data, selected }: Props) {
   const isVideoEdit = hasVideoInput && referenceVideoType === "base";
   const videoRefDisablesAiAudio = isTencentRoute && isVideoReference;
 
-  // 参数显示控制
-  const shouldShowAspectSelector = totalImageCountWithUploads === 0 && !hasVideoInput;
+  // 参数显示控制：视频参考模式仍可选择输出尺寸；视频编辑模式跟随原视频
+  const shouldShowAspectSelector =
+    totalImageCountWithUploads === 0 && (!hasVideoInput || isVideoReference);
   const shouldShowDurationSelector = !isVideoEdit;
 
   // Kling O3 支持 3-10 秒
