@@ -101,3 +101,4 @@
 - `GridRenderer` now applies black-theme visibility fallback for near-black grid colors and uses stronger line alpha/width in black theme so the grid remains visible on `#000` canvas.
 - In black theme + `GridStyle.SOLID`, canvas solid background is forced to `#090909` (Surface) for consistent monochrome workspace contrast.
 - Premium dark palette alignment: toolbar shell / header cards / AI dialog / node shell use `Base #111111`; internal controls and modules use `Elevated #161616`.
+- `FloatingHeader` 右侧工具栏提供“生文/生图线路”快捷选择，直接复用 `aiChatStore.bananaImageRoute`；与设置页 AI 线路入口双向同步，设置页入口继续保留。

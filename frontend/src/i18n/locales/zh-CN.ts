@@ -287,6 +287,9 @@ const zhCN = {
       globalAutoRun: "全局运行",
       globalAutoRunning: "全局运行中...",
       globalAutoStop: "终止",
+      routeSelector: {
+        title: "生文/生图线路",
+      },
     },
     appearance: {
       languageTitle: "界面语言",
