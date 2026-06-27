@@ -152,7 +152,7 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
 
   return (
     <div className="pb-6 space-y-5">
-      <div className="mt-4">
+      <div className="">
         <h2 className="text-xl font-semibold text-slate-900">个人信息</h2>
         <p className="mt-2 text-sm leading-relaxed text-slate-500">
           {canEarnReward ? (
@@ -166,7 +166,7 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
         </p>
       </div>
 
-      <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4">
+      <form onSubmit={(event) => void handleSubmit(event)} className="space-y-2">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="block space-y-1.5">
             <span className="text-sm font-medium text-slate-700">姓名</span>
@@ -248,26 +248,27 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
 
         <div className="space-y-1.5">
           <span className="text-sm font-medium text-slate-700">所在地区（省 / 市 / 区县）</span>
-          <RegionPicker value={region} onChange={setRegion} />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <RegionPicker value={region} onChange={setRegion} className="min-w-0 flex-1" />
+            <button
+              type="submit"
+              disabled={saving}
+              className="inline-flex shrink-0 items-center justify-center rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60 sm:px-5"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  保存中...
+                </>
+              ) : (
+                "保存资料"
+              )}
+            </button>
+          </div>
         </div>
 
         {error ? <div className="text-sm text-red-500">{error}</div> : null}
         {feedback ? <div className="text-sm text-emerald-600">{feedback}</div> : null}
-
-        <button
-          type="submit"
-          disabled={saving}
-          className="inline-flex items-center justify-center rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {saving ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              保存中...
-            </>
-          ) : (
-            "保存资料"
-          )}
-        </button>
       </form>
     </div>
   );
