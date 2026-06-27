@@ -45,6 +45,7 @@ import {
   Gift,
   MessageCircle,
   Star,
+  Crown,
   Plus,
   Sun,
   Moon,
@@ -2308,6 +2309,88 @@ const FloatingHeader: React.FC = () => {
               </span>
               <span className='tabular-nums font-medium'>{topCreditsText}</span>
             </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  className={cn(
+                    "h-7 w-7 rounded-full border p-0 transition-all duration-200",
+                    bananaImageRoute === "stable"
+                      ? "border-amber-300/80 bg-amber-50/90 text-amber-700 hover:bg-amber-100 hover:text-amber-800 dark:border-amber-700/70 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900/70"
+                      : "border-sky-300/80 bg-sky-50/90 text-sky-700 hover:bg-sky-100 hover:text-sky-800 dark:border-sky-700/70 dark:bg-sky-950/60 dark:text-sky-300 dark:hover:bg-sky-900/70"
+                  )}
+                  title={t("workspace.header.routeSelector.title")}
+                  aria-label={t("workspace.header.routeSelector.title")}
+                >
+                  {bananaImageRoute === "stable" ? (
+                    <Crown className='h-3.5 w-3.5' />
+                  ) : (
+                    <Zap className='h-3.5 w-3.5' />
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align='end'
+                sideOffset={10}
+                className='w-[292px] rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-xl backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900/95'
+              >
+                <DropdownMenuLabel className='px-2 pb-2 pt-1 text-xs font-semibold text-slate-500 dark:text-slate-300'>
+                  {t("workspace.header.routeSelector.title")}
+                </DropdownMenuLabel>
+                <div className='space-y-1.5' role='radiogroup'>
+                  <DropdownMenuItem
+                    role='radio'
+                    aria-checked={bananaImageRoute === "normal"}
+                    onClick={() => setBananaImageRoute("normal")}
+                    className={cn(
+                      "items-start cursor-pointer rounded-xl border px-3 py-2.5 focus:bg-sky-50 dark:focus:bg-sky-950/50",
+                      bananaImageRoute === "normal"
+                        ? "border-sky-400 bg-sky-50 dark:border-sky-600 dark:bg-sky-950/50"
+                        : "border-slate-200 bg-white hover:border-sky-300 dark:border-slate-700 dark:bg-slate-800/80"
+                    )}
+                  >
+                    <Zap className='mr-2 mt-0.5 h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400' />
+                    <div className='min-w-0 flex-1'>
+                      <div className='text-sm font-semibold text-slate-700 dark:text-slate-100'>
+                        {t("workspace.settings.aiTab.bananaRoute.normal")}
+                      </div>
+                      <div className='mt-0.5 text-xs font-normal text-slate-500 dark:text-slate-400'>
+                        {t("workspace.settings.aiTab.bananaRoute.normalDesc")}
+                      </div>
+                    </div>
+                    {bananaImageRoute === "normal" && (
+                      <Check className='ml-2 h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400' />
+                    )}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    role='radio'
+                    aria-checked={bananaImageRoute === "stable"}
+                    onClick={() => setBananaImageRoute("stable")}
+                    className={cn(
+                      "items-start cursor-pointer rounded-xl border px-3 py-2.5 focus:bg-amber-50 dark:focus:bg-amber-950/50",
+                      bananaImageRoute === "stable"
+                        ? "border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/50"
+                        : "border-slate-200 bg-white hover:border-amber-300 dark:border-slate-700 dark:bg-slate-800/80"
+                    )}
+                  >
+                    <Crown className='mr-2 mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400' />
+                    <div className='min-w-0 flex-1'>
+                      <div className='text-sm font-semibold text-slate-700 dark:text-slate-100'>
+                        {t("workspace.settings.aiTab.bananaRoute.stable")}
+                      </div>
+                      <div className='mt-0.5 text-xs font-normal text-slate-500 dark:text-slate-400'>
+                        {t("workspace.settings.aiTab.bananaRoute.stableDesc")}
+                      </div>
+                    </div>
+                    {bananaImageRoute === "stable" && (
+                      <Check className='ml-2 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400' />
+                    )}
+                  </DropdownMenuItem>
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <Button
               variant='ghost'

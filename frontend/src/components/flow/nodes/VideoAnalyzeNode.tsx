@@ -12,6 +12,7 @@ import {
   useFlowNodeDarkTheme,
 } from './flowNodeDarkTheme';
 import { useImeSafeTextValue } from '../hooks/useImeSafeTextInput';
+import { useBackendCreditsPreview } from '../hooks/useBackendCreditsPreview';
 import FlowResizableNodeShell from './FlowResizableNodeShell';
 
 type Props = {
@@ -56,9 +57,21 @@ function VideoAnalyzeNodeInner({ id, data, selected = false }: Props) {
   const analyzeBananaImageRoute: 'normal' | 'stable' =
     bananaImageRoute === 'stable' ? 'stable' : 'normal';
   const textModel = React.useMemo(() => getTextModelForProvider(aiProvider), [aiProvider]);
+  const { credits: backendCredits } = useBackendCreditsPreview({
+    serviceType: 'gemini-video-analyze',
+    model: textModel,
+    requestParams: {
+      aiProvider,
+      channelHint: analyzeBananaImageRoute === 'stable' ? 'tencent' : 'apimart',
+      bananaImageRoute: analyzeBananaImageRoute,
+    },
+    enabled: true,
+  });
 
   const { status, error } = data;
-  const hasRunCredits = typeof data.creditsPerCall === 'number' && data.creditsPerCall > 0;
+  const resolvedRunCredits = backendCredits ?? data.creditsPerCall;
+  const hasRunCredits =
+    typeof resolvedRunCredits === 'number' && resolvedRunCredits > 0;
   const [hover, setHover] = React.useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = React.useState(false);
 
@@ -335,7 +348,7 @@ function VideoAnalyzeNodeInner({ id, data, selected = false }: Props) {
           ) : (
             <>
               <span className="run-text-trigger">{lt('分析', 'Analyze')}</span>
-              {hasRunCredits ? <RunCreditBadge credits={data.creditsPerCall} runButton /> : null}
+              {hasRunCredits ? <RunCreditBadge credits={resolvedRunCredits} runButton /> : null}
             </>
           )}
         </button>

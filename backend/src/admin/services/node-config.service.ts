@@ -630,10 +630,14 @@ export class NodeConfigService {
     nodeKey: string,
     serviceType?: string | null,
   ): number | undefined {
-    if (nodeKey === 'textChat') return 2;
+    if (nodeKey === 'gptImage2') return 20;
+    if (nodeKey === 'videoAnalyze') return 60;
+    if (nodeKey === 'textChat') return 5;
     if (nodeKey === 'promptOptimize') return 5;
     if (nodeKey === 'storyboardSplit') return 0;
-    if (serviceType === 'gemini-text') return 2;
+    if (serviceType === 'gpt-image-2') return 20;
+    if (serviceType === 'gemini-video-analyze') return 60;
+    if (serviceType === 'gemini-text') return 5;
     if (serviceType === 'gemini-prompt-optimize') return 5;
     return undefined;
   }
@@ -692,11 +696,17 @@ export class NodeConfigService {
         const selectedVendor =
           managedRoutes?.vendors?.find((vendor) => vendor.vendorKey === managedRoutes.defaultVendor) ||
           managedRoutes?.vendors?.[0];
+        const canonicalCredits = this.resolveCanonicalNodeCredits(
+          normalizedConfig.nodeKey,
+          normalizedConfig.serviceType,
+        );
 
         return {
           ...normalizedConfig,
           creditsPerCall:
-            typeof selectedVendor?.creditsPerCall === 'number'
+            typeof canonicalCredits === 'number'
+              ? canonicalCredits
+              : typeof selectedVendor?.creditsPerCall === 'number'
               ? selectedVendor.creditsPerCall
               : normalizedConfig.creditsPerCall,
           priceYuan:
@@ -901,9 +911,9 @@ export class NodeConfigService {
         nameEn: 'Gpt-Imgae-2',
         category: 'image',
         sortOrder: 16,
-        creditsPerCall: 40,
+        creditsPerCall: 20,
         serviceType: 'gpt-image-2',
-        priceYuan: 0.4,
+        priceYuan: 0.2,
         description: 'Gpt-Imgae-2，支持文生图/图生图，最多 16 张参考图',
         metadata: {
           type: 'gptImage2',
@@ -1442,7 +1452,7 @@ export class NodeConfigService {
       },
 
       // 其他节点
-      { nodeKey: 'videoAnalyze', nameZh: '视频分析节点', nameEn: 'Video Analysis', category: 'other', sortOrder: 30, creditsPerCall: 30, serviceType: 'gemini-video-analyze', priceYuan: 0.3, description: '分析视频内容' },
+      { nodeKey: 'videoAnalyze', nameZh: '视频分析节点', nameEn: 'Video Analysis', category: 'other', sortOrder: 30, creditsPerCall: 60, serviceType: 'gemini-video-analyze', priceYuan: 0.6, description: '分析视频内容' },
       { nodeKey: 'videoFrameExtract', nameZh: '视频帧提取', nameEn: 'Frame Extract', category: 'other', sortOrder: 31, creditsPerCall: 0, description: '从视频提取帧，免费' },
       { nodeKey: 'videoToGif', nameZh: '视频转GIF', nameEn: 'Video to GIF', category: 'other', sortOrder: 32, creditsPerCall: 30, serviceType: 'video-to-gif', priceYuan: 0.3, description: '将视频片段转换为GIF' },
       {
@@ -1464,8 +1474,8 @@ export class NodeConfigService {
           nodeKind: 'ai_image_analysis',
         }),
       },
-      { nodeKey: 'promptOptimize', nameZh: '提示词优化', nameEn: 'Optimize', category: 'other', sortOrder: 34, creditsPerCall: 5, serviceType: 'gemini-prompt-optimize', priceYuan: 0.02, description: 'AI优化提示词' },
-      { nodeKey: 'textChat', nameZh: '文字对话', nameEn: 'Chat', category: 'other', sortOrder: 35, creditsPerCall: 2, serviceType: 'gemini-text', priceYuan: 0.02, description: 'AI文字对话' },
+      { nodeKey: 'promptOptimize', nameZh: '提示词优化', nameEn: 'Optimize', category: 'other', sortOrder: 34, creditsPerCall: 5, serviceType: 'gemini-prompt-optimize', priceYuan: 0.05, description: 'AI优化提示词' },
+      { nodeKey: 'textChat', nameZh: '文字对话', nameEn: 'Chat', category: 'other', sortOrder: 35, creditsPerCall: 5, serviceType: 'gemini-text', priceYuan: 0.05, description: 'AI文字对话' },
       { nodeKey: 'storyboardSplit', nameZh: '分镜拆解', nameEn: 'Storyboard', category: 'other', sortOrder: 36, creditsPerCall: 0, description: '将整片分镜脚本提示词拆分为单独条目' },
       { nodeKey: 'imageGrid', nameZh: '图片拼接', nameEn: 'Grid', category: 'other', sortOrder: 37, creditsPerCall: 0, description: '拼接多张图片，免费' },
       { nodeKey: 'imageSplit', nameZh: '图片拆分', nameEn: 'Split', category: 'other', sortOrder: 38, creditsPerCall: 0, description: '拆分图片，免费' },
@@ -1566,9 +1576,9 @@ export class NodeConfigService {
         nameEn: 'Gpt-Imgae-2',
         category: 'image',
         sortOrder: 16,
-        creditsPerCall: 40,
+        creditsPerCall: 20,
         serviceType: 'gpt-image-2',
-        priceYuan: 0.4,
+        priceYuan: 0.2,
         description: 'Gpt-Imgae-2 生图，支持文生图/图生图，最多 16 张参考图',
         metadata: {
           type: 'gptImage2',
@@ -1983,7 +1993,7 @@ export class NodeConfigService {
       },
 
       // 其他节点
-      { nodeKey: 'videoAnalyze', nameZh: '视频分析节点', nameEn: 'Video Analysis', category: 'other', sortOrder: 30, creditsPerCall: 30, serviceType: 'gemini-video-analyze', priceYuan: 0.3, description: '分析视频内容' },
+      { nodeKey: 'videoAnalyze', nameZh: '视频分析节点', nameEn: 'Video Analysis', category: 'other', sortOrder: 30, creditsPerCall: 60, serviceType: 'gemini-video-analyze', priceYuan: 0.6, description: '分析视频内容' },
       { nodeKey: 'videoFrameExtract', nameZh: '视频帧提取', nameEn: 'Frame Extract', category: 'other', sortOrder: 31, creditsPerCall: 0, description: '从视频提取帧，免费' },
       { nodeKey: 'videoToGif', nameZh: '视频转GIF', nameEn: 'Video to GIF', category: 'other', sortOrder: 32, creditsPerCall: 30, serviceType: 'video-to-gif', priceYuan: 0.3, description: '将视频片段转换为GIF' },
       {
@@ -2005,8 +2015,8 @@ export class NodeConfigService {
           nodeKind: 'ai_image_analysis',
         }),
       },
-      { nodeKey: 'promptOptimize', nameZh: '提示词优化', nameEn: 'Optimize', category: 'other', sortOrder: 34, creditsPerCall: 5, serviceType: 'gemini-prompt-optimize', priceYuan: 0.02, description: 'AI优化提示词' },
-      { nodeKey: 'textChat', nameZh: '文字对话', nameEn: 'Chat', category: 'other', sortOrder: 35, creditsPerCall: 2, serviceType: 'gemini-text', priceYuan: 0.02, description: 'AI文字对话' },
+      { nodeKey: 'promptOptimize', nameZh: '提示词优化', nameEn: 'Optimize', category: 'other', sortOrder: 34, creditsPerCall: 5, serviceType: 'gemini-prompt-optimize', priceYuan: 0.05, description: 'AI优化提示词' },
+      { nodeKey: 'textChat', nameZh: '文字对话', nameEn: 'Chat', category: 'other', sortOrder: 35, creditsPerCall: 5, serviceType: 'gemini-text', priceYuan: 0.05, description: 'AI文字对话' },
       { nodeKey: 'storyboardSplit', nameZh: '分镜拆解', nameEn: 'Storyboard', category: 'other', sortOrder: 36, creditsPerCall: 0, description: '将整片分镜脚本提示词拆分为单独条目' },
       { nodeKey: 'imageGrid', nameZh: '图片拼接', nameEn: 'Grid', category: 'other', sortOrder: 37, creditsPerCall: 0, description: '拼接多张图片，免费' },
       { nodeKey: 'imageSplit', nameZh: '图片拆分', nameEn: 'Split', category: 'other', sortOrder: 38, creditsPerCall: 0, description: '拆分图片，免费' },

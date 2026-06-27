@@ -19,6 +19,7 @@ type Params = {
   bananaImageRoute?: string | null;
   imageSize?: string | null;
   aspectRatio?: string | null;
+  quality?: "auto" | "low" | "medium" | "high";
   outputImageCount?: number;
   referenceImageCount?: number;
   managedModelKey?: string | null;
@@ -131,6 +132,7 @@ export const useImageNodeCreditsPreview = ({
   bananaImageRoute,
   imageSize,
   aspectRatio,
+  quality,
   outputImageCount,
   referenceImageCount,
   managedModelKey,
@@ -187,6 +189,26 @@ export const useImageNodeCreditsPreview = ({
       };
     }
 
+    if (nodeType === "gptImage2") {
+      return {
+        serviceType: "gpt-image-2",
+        model: "gpt-image-2",
+        requestParams: {
+          aiProvider: "nano2",
+          imageSize: normalizeBananaImageSize(imageSize) || "1K",
+          quality: quality || "auto",
+          aspectRatio: safeAspectRatio,
+          referenceImageCount: safeReferenceCount,
+          bananaImageRoute: bananaImageRoute || undefined,
+          providerOptions: {
+            banana: {
+              imageRoute: bananaImageRoute || undefined,
+            },
+          },
+        },
+      };
+    }
+
     const mode =
       nodeType === "generateRef"
         ? "blend"
@@ -235,6 +257,7 @@ export const useImageNodeCreditsPreview = ({
     aspectRatio,
     bananaImageRoute,
     imageSize,
+    quality,
     managedModelKey,
     nodeType,
     platformKey,

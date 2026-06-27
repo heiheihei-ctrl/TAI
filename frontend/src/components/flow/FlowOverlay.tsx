@@ -1445,7 +1445,7 @@ const QUICK_CONNECT_BASE_PRESET: Record<
 const NODE_CREDITS_MAP: Record<string, number | string> = {
   // 普通节点
   textPrompt: 0, // 提示词节点 - 不消耗积分
-  textChat: 2, // 纯文本交互节点 - gemini-text
+  textChat: 5, // 纯文本交互节点 - gemini-text
   textNote: 0, // 纯文本节点 - 不消耗积分
   promptOptimize: 5, // 提示词优化节点
   analysis: 10, // 图像分析节点 - gemini-2.5-image-analyze (Fast default)
@@ -1460,7 +1460,7 @@ const NODE_CREDITS_MAP: Record<string, number | string> = {
   midjourneyV7: 50, // Midjourney V7 生成
   niji7: 50, // Niji 7 生成
   nano2: 30, // Nano Banana 2 生图
-  gptImage2: 40, // Gpt-Imgae-2 生图
+  gptImage2: 20, // Gpt-Imgae-2 生图（默认按普通 1K 兜底）
   seedream5: 30, // Seedream 5.0 生图
   three: 200, // 三维节点 - convert-2d-to-3d
   sora2Video: "40-400", // 视频生成节点 - sora-sd (40) 或 sora-hd (400)
@@ -1975,27 +1975,58 @@ const BANANA_TEXT_ROUTE_PRICING: Record<
   Record<BananaPricingTier, number>
 > = {
   normal: {
-    fast: 2,
-    pro: 2,
-    ultra: 2,
+    fast: 5,
+    pro: 5,
+    ultra: 5,
   },
   stable: {
-    fast: 2,
-    pro: 2,
-    ultra: 2,
+    fast: 10,
+    pro: 10,
+    ultra: 10,
+  },
+};
+
+const BANANA_VIDEO_ANALYZE_ROUTE_PRICING: Record<
+  "normal" | "stable",
+  Record<BananaPricingTier, number>
+> = {
+  normal: {
+    fast: 60,
+    pro: 90,
+    ultra: 120,
+  },
+  stable: {
+    fast: 80,
+    pro: 120,
+    ultra: 160,
   },
 };
 
 // GPT-Image-2 在 Stable(尊享/腾讯) 路由下独立计费
-const GPT_IMAGE_2_STABLE_ROUTE_PRICING: Record<"1K" | "2K" | "4K", number> = {
-  "1K": 40,
-  "2K": 80,
-  "4K": 110,
-};
 const GPT_IMAGE_2_NORMAL_ROUTE_PRICING: Record<"1K" | "2K" | "4K", number> = {
   "1K": 20,
   "2K": 30,
   "4K": 40,
+};
+const GPT_IMAGE_2_STABLE_ROUTE_PRICING: Record<
+  "low" | "medium" | "high",
+  Record<"1K" | "2K" | "4K", number>
+> = {
+  low: {
+    "1K": 30,
+    "2K": 35,
+    "4K": 40,
+  },
+  medium: {
+    "1K": 65,
+    "2K": 110,
+    "4K": 160,
+  },
+  high: {
+    "1K": 190,
+    "2K": 350,
+    "4K": 560,
+  },
 };
 
 const BANANA_STABLE_DYNAMIC_NODE_TYPES = new Set<FlowNodeType>([
@@ -2058,6 +2089,15 @@ const normalizeGptImage2StableImageSize = (
   if (normalized === "2K") return "2K";
   if (normalized === "4K") return "4K";
   return "1K";
+};
+
+const normalizeGptImage2Quality = (
+  rawQuality: unknown
+): "low" | "medium" | "high" => {
+  const normalized = typeof rawQuality === "string" ? rawQuality.trim().toLowerCase() : "";
+  if (normalized === "medium") return "medium";
+  if (normalized === "high") return "high";
+  return "low";
 };
 
 const VIDEO_DYNAMIC_CREDIT_NODE_TYPES = new Set([
@@ -2420,13 +2460,27 @@ const resolveStableRouteCredits = (params: {
     typeof nodeData?.modelProvider === "string" && nodeData.modelProvider.trim().length > 0
       ? nodeData.modelProvider.trim()
       : aiProvider;
+  const pricingTier =
+    resolveBananaPricingTierByProvider(providerForPricing) ||
+    resolveBananaPricingTierByModel(globalImageModel) ||
+    "pro";
 
   if (normalizedType === "textChat") {
-    resolvedCredits = 2;
+    resolvedCredits = BANANA_TEXT_ROUTE_PRICING[
+      bananaImageRoute === "stable" ? "stable" : "normal"
+    ][pricingTier];
   }
 
   if (normalizedType === "promptOptimize") {
-    resolvedCredits = 5;
+    resolvedCredits = BANANA_TEXT_ROUTE_PRICING[
+      bananaImageRoute === "stable" ? "stable" : "normal"
+    ][pricingTier];
+  }
+
+  if (normalizedType === "videoAnalyze") {
+    resolvedCredits = BANANA_VIDEO_ANALYZE_ROUTE_PRICING[
+      bananaImageRoute === "stable" ? "stable" : "normal"
+    ][pricingTier];
   }
 
   if (bananaImageRoute === "stable" && normalizedType === "gptImage2") {
@@ -2437,7 +2491,10 @@ const resolveStableRouteCredits = (params: {
         ? nodeData.imageSize
         : globalImageSize;
     const normalizedSize = normalizeGptImage2StableImageSize(preferredSize);
-    const unitCredits = Number(GPT_IMAGE_2_STABLE_ROUTE_PRICING[normalizedSize]);
+    const normalizedQuality = normalizeGptImage2Quality(nodeData?.quality);
+    const unitCredits = Number(
+      GPT_IMAGE_2_STABLE_ROUTE_PRICING[normalizedQuality][normalizedSize]
+    );
     if (Number.isFinite(unitCredits) && unitCredits > 0) {
       resolvedCredits = unitCredits;
     }

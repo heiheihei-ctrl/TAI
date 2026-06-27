@@ -288,6 +288,9 @@ const enUS = {
       globalAutoRun: "Global Auto Run",
       globalAutoRunning: "Global Run in Progress...",
       globalAutoStop: "Terminate",
+      routeSelector: {
+        title: "Text/Image Route",
+      },
     },
     appearance: {
       languageTitle: "Interface Language",

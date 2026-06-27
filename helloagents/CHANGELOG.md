@@ -12,6 +12,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Flow/Templates: removed the **Illustration Library** (`图例库`) feature — frontend panel/toolbar entry, admin CRUD tab, public/admin APIs, and `IllustrationLibraryItem` database table.
 
 ### Added
+- Workspace header: added a compact text/image route selector for switching between normal and premium routes; it shares `aiChatStore.bananaImageRoute` with the existing AI settings selector, which remains available.
 - Backend APIMart requests now support optional `API_PROXY_URL=socks5h://...` SOCKS5H forwarding with remote DNS, timeout handling, and sanitized proxy logging; `apps/new-api` also implements real APIMart chat completions through the same proxy rule.
 - Added a standalone AI gateway service under `apps/new-api/` with NestJS/Prisma/Redis/PostgreSQL foundations, Bearer-token auth, admin registry APIs, unified async video task protocol, provider adapter extension points, Docker Compose, and baseline e2e/unit coverage.
 - Backend AI video routing now has a dedicated `new-api` client path: managed routes resolved as `new_api` submit/query through `NEW_API_BASE_URL` + `NEW_API_KEY`, with wrapped task IDs (`new-api:<taskId>`) for polling.
