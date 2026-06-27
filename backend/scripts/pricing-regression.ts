@@ -232,6 +232,16 @@ async function runBackendQuoteAssertions() {
 function runFrontendStaticAssertions() {
   expectIncludes(
     'frontend/src/services/nodeConfigService.ts',
+    'nodeKey: "gptImage2"',
+    'frontend fallback gptImage2 node exists',
+  );
+  expectIncludes(
+    'frontend/src/services/nodeConfigService.ts',
+    'creditsPerCall: 20',
+    'frontend fallback gptImage2 credits',
+  );
+  expectIncludes(
+    'frontend/src/services/nodeConfigService.ts',
     'videoAnalyze", nameZh: "视频分析节点", nameEn: "Video Analysis", category: "other", status: "normal", sortOrder: 31, creditsPerCall: 60',
     'frontend fallback videoAnalyze credits',
   );
@@ -252,7 +262,7 @@ function runFrontendStaticAssertions() {
   );
   expectIncludes(
     'frontend/src/components/flow/FlowOverlay.tsx',
-    'gptImage2: 30',
+    'gptImage2: 20',
     'flow overlay gptImage2 credits',
   );
   expectIncludes(
@@ -267,8 +277,18 @@ function runFrontendStaticAssertions() {
   );
   expectIncludes(
     'frontend/src/components/flow/hooks/useImageNodeCreditsPreview.ts',
-    '...(nodeType === "gptImage2" ? { quality: quality || "auto" } : {})',
+    'serviceType: "gpt-image-2"',
+    'image preview hook uses gpt-image-2 service type',
+  );
+  expectIncludes(
+    'frontend/src/components/flow/hooks/useImageNodeCreditsPreview.ts',
+    'quality: quality || "auto"',
     'image preview hook forwards gpt-image-2 quality',
+  );
+  expectIncludes(
+    'backend/src/admin/services/node-config.service.ts',
+    "if (nodeKey === 'gptImage2') return 20;",
+    'backend canonical gptImage2 credits',
   );
   expectIncludes(
     'frontend/src/components/flow/nodes/Nano2Node.tsx',

@@ -630,12 +630,12 @@ export class NodeConfigService {
     nodeKey: string,
     serviceType?: string | null,
   ): number | undefined {
-    if (nodeKey === 'gptImage2') return 30;
+    if (nodeKey === 'gptImage2') return 20;
     if (nodeKey === 'videoAnalyze') return 60;
     if (nodeKey === 'textChat') return 5;
     if (nodeKey === 'promptOptimize') return 5;
     if (nodeKey === 'storyboardSplit') return 0;
-    if (serviceType === 'gpt-image-2') return 30;
+    if (serviceType === 'gpt-image-2') return 20;
     if (serviceType === 'gemini-video-analyze') return 60;
     if (serviceType === 'gemini-text') return 5;
     if (serviceType === 'gemini-prompt-optimize') return 5;
@@ -911,9 +911,9 @@ export class NodeConfigService {
         nameEn: 'Gpt-Imgae-2',
         category: 'image',
         sortOrder: 16,
-        creditsPerCall: 30,
+        creditsPerCall: 20,
         serviceType: 'gpt-image-2',
-        priceYuan: 0.3,
+        priceYuan: 0.2,
         description: 'Gpt-Imgae-2，支持文生图/图生图，最多 16 张参考图',
         metadata: {
           type: 'gptImage2',
@@ -1576,9 +1576,9 @@ export class NodeConfigService {
         nameEn: 'Gpt-Imgae-2',
         category: 'image',
         sortOrder: 16,
-        creditsPerCall: 30,
+        creditsPerCall: 20,
         serviceType: 'gpt-image-2',
-        priceYuan: 0.3,
+        priceYuan: 0.2,
         description: 'Gpt-Imgae-2 生图，支持文生图/图生图，最多 16 张参考图',
         metadata: {
           type: 'gptImage2',

@@ -189,6 +189,26 @@ export const useImageNodeCreditsPreview = ({
       };
     }
 
+    if (nodeType === "gptImage2") {
+      return {
+        serviceType: "gpt-image-2",
+        model: "gpt-image-2",
+        requestParams: {
+          aiProvider: "nano2",
+          imageSize: normalizeBananaImageSize(imageSize) || "1K",
+          quality: quality || "auto",
+          aspectRatio: safeAspectRatio,
+          referenceImageCount: safeReferenceCount,
+          bananaImageRoute: bananaImageRoute || undefined,
+          providerOptions: {
+            banana: {
+              imageRoute: bananaImageRoute || undefined,
+            },
+          },
+        },
+      };
+    }
+
     const mode =
       nodeType === "generateRef"
         ? "blend"
@@ -214,7 +234,6 @@ export const useImageNodeCreditsPreview = ({
       requestParams: {
         aiProvider: provider,
         imageSize: normalizedImageSize,
-        ...(nodeType === "gptImage2" ? { quality: quality || "auto" } : {}),
         aspectRatio: safeAspectRatio,
         referenceImageCount: safeReferenceCount,
         bananaImageRoute: bananaImageRoute || undefined,
