@@ -78,11 +78,6 @@ const GPT_IMAGE2_NORMAL_RESOLUTION_PRICING: Record<'1K' | '2K' | '4K', number> =
   '2K': 30,
   '4K': 40,
 };
-const GPT_IMAGE2_TENCENT_RESOLUTION_PRICING: Record<'1K' | '2K' | '4K', number> = {
-  '1K': 40,
-  '2K': 80,
-  '4K': 110,
-};
 const STALE_PENDING_IMAGE_SERVICE_TYPES: ServiceType[] = [
   'gemini-3-pro-image',
   'gemini-3.1-image',
@@ -256,6 +251,7 @@ type SoraBillingModel = 'sora-2' | 'sora-2-vip' | 'sora-2-pro';
 type KlingBillingModel = 'kling-v2-6' | 'kling-v3-0' | 'kling-o3';
 type BananaTencentPricingTier = 'fast' | 'pro' | 'ultra';
 type BananaTextPricingTier = 'fast' | 'pro' | 'ultra';
+type GptImage2Quality = 'auto' | 'low' | 'medium' | 'high';
 
 const BANANA_TENCENT_IMAGE_SERVICE_TIERS: Partial<
   Record<ServiceType, BananaTencentPricingTier>
@@ -302,7 +298,7 @@ const BANANA_TENCENT_RESOLUTION_PRICING: Record<
 };
 
 // 尊享路线 (stable/tencent) 定价
-// Fast: 1K=30
+// Fast: 1K=40
 // Pro: 1K=90, 2K=100, 4K=170
 // Ultra: 0.5K=30, 1K=50, 2K=70, 4K=110
 const BANANA_TENCENT_STABLE_RESOLUTION_PRICING: Record<
@@ -310,10 +306,10 @@ const BANANA_TENCENT_STABLE_RESOLUTION_PRICING: Record<
   Record<'0.5K' | '1K' | '2K' | '4K', number>
 > = {
   fast: {
-    '0.5K': 30,
-    '1K': 30,
-    '2K': 30,
-    '4K': 30,
+    '0.5K': 40,
+    '1K': 40,
+    '2K': 40,
+    '4K': 40,
   },
   pro: {
     '0.5K': 90,
@@ -326,6 +322,27 @@ const BANANA_TENCENT_STABLE_RESOLUTION_PRICING: Record<
     '1K': 50,
     '2K': 70,
     '4K': 110,
+  },
+};
+
+const GPT_IMAGE2_TENCENT_QUALITY_PRICING: Record<
+  Exclude<GptImage2Quality, 'auto'>,
+  Record<'1K' | '2K' | '4K', number>
+> = {
+  low: {
+    '1K': 30,
+    '2K': 35,
+    '4K': 40,
+  },
+  medium: {
+    '1K': 65,
+    '2K': 110,
+    '4K': 160,
+  },
+  high: {
+    '1K': 190,
+    '2K': 350,
+    '4K': 560,
   },
 };
 
@@ -342,6 +359,22 @@ const BANANA_TEXT_CHAT_ROUTE_PRICING: Record<
     fast: 10,
     pro: 10,
     ultra: 10,
+  },
+};
+
+const BANANA_VIDEO_ANALYZE_ROUTE_PRICING: Record<
+  'normal' | 'stable',
+  Record<BananaTextPricingTier, number>
+> = {
+  normal: {
+    fast: 60,
+    pro: 90,
+    ultra: 120,
+  },
+  stable: {
+    fast: 80,
+    pro: 120,
+    ultra: 160,
   },
 };
 @Injectable()
@@ -631,6 +664,13 @@ export class CreditsService {
     );
 
     creditsToDeduct = this.resolveBananaTextRouteCredits(
+      params.serviceType,
+      creditsToDeduct,
+      effectiveRequestParams,
+      params.model,
+    );
+
+    creditsToDeduct = this.resolveVideoAnalyzeRouteCredits(
       params.serviceType,
       creditsToDeduct,
       effectiveRequestParams,
@@ -1352,6 +1392,30 @@ export class CreditsService {
     return null;
   }
 
+  private resolveBananaRouteFromRequestParams(
+    requestParams: any,
+  ): 'normal' | 'stable' | null {
+    const explicitRoute =
+      this.normalizeBananaImageRoute(requestParams?.bananaImageRoute) ||
+      this.normalizeBananaImageRoute(requestParams?.providerOptions?.banana?.imageRoute) ||
+      this.normalizeBananaImageRoute(requestParams?.providerOptions?.bananaImageRoute);
+    if (explicitRoute) return explicitRoute;
+
+    const channelCandidates = [
+      requestParams?.channel,
+      requestParams?.providerChannel,
+      requestParams?.executionChannel,
+      requestParams?.channelHint,
+    ];
+    for (const candidate of channelCandidates) {
+      if (typeof candidate !== 'string') continue;
+      const normalized = this.normalizeChannel(candidate);
+      if (normalized === 'tencent') return 'stable';
+      if (normalized === 'apimart') return 'normal';
+    }
+    return null;
+  }
+
   private resolveBananaTextPricingTierFromProvider(
     rawProvider: unknown,
   ): BananaTextPricingTier | null {
@@ -1380,17 +1444,55 @@ export class CreditsService {
     return null;
   }
 
+  private normalizeGptImage2Quality(rawQuality: unknown): GptImage2Quality {
+    if (typeof rawQuality !== 'string') return 'auto';
+    const normalized = rawQuality.trim().toLowerCase();
+    if (normalized === 'low') return 'low';
+    if (normalized === 'medium') return 'medium';
+    if (normalized === 'high') return 'high';
+    return 'auto';
+  }
+
   private resolveBananaTextRouteCredits(
     serviceType: ServiceType,
     defaultCredits: number,
     requestParams: any,
     model?: string,
   ): number {
-    if (serviceType === 'gemini-text') {
-      return 2;
+    if (serviceType !== 'gemini-text' && serviceType !== 'gemini-prompt-optimize') {
+      return defaultCredits;
     }
-    if (serviceType === 'gemini-prompt-optimize') {
-      return 5;
+
+    const route = this.resolveBananaRouteFromRequestParams(requestParams) || 'normal';
+    const tier =
+      this.resolveBananaTextPricingTierFromProvider(requestParams?.aiProvider) ||
+      this.resolveBananaTextPricingTierFromModel(model) ||
+      'pro';
+    const configuredCredits = Number(BANANA_TEXT_CHAT_ROUTE_PRICING[route][tier]);
+    if (Number.isFinite(configuredCredits) && configuredCredits > 0) {
+      return configuredCredits;
+    }
+    return defaultCredits;
+  }
+
+  private resolveVideoAnalyzeRouteCredits(
+    serviceType: ServiceType,
+    defaultCredits: number,
+    requestParams: any,
+    model?: string,
+  ): number {
+    if (serviceType !== 'gemini-video-analyze') {
+      return defaultCredits;
+    }
+
+    const route = this.resolveBananaRouteFromRequestParams(requestParams) || 'normal';
+    const tier =
+      this.resolveBananaTextPricingTierFromProvider(requestParams?.aiProvider) ||
+      this.resolveBananaTextPricingTierFromModel(model) ||
+      'pro';
+    const configuredCredits = Number(BANANA_VIDEO_ANALYZE_ROUTE_PRICING[route][tier]);
+    if (Number.isFinite(configuredCredits) && configuredCredits > 0) {
+      return configuredCredits;
     }
     return defaultCredits;
   }
@@ -1399,29 +1501,7 @@ export class CreditsService {
     serviceType: ServiceType,
     requestParams: any,
   ): number | null {
-    // 解析路线：normal=普通路线，stable=尊享路线
-    const explicitRoute =
-      this.normalizeBananaImageRoute(requestParams?.bananaImageRoute) ||
-      this.normalizeBananaImageRoute(requestParams?.providerOptions?.banana?.imageRoute) ||
-      this.normalizeBananaImageRoute(requestParams?.providerOptions?.bananaImageRoute);
-    let route: 'normal' | 'stable' | null = explicitRoute;
-    if (!route) {
-      const channelCandidates = [
-        requestParams?.channel,
-        requestParams?.providerChannel,
-        requestParams?.executionChannel,
-        requestParams?.channelHint,
-      ];
-      for (const candidate of channelCandidates) {
-        if (typeof candidate !== 'string') continue;
-        const normalized = this.normalizeChannel(candidate);
-        if (normalized) {
-          if (normalized === 'tencent') route = 'stable';
-          if (normalized === 'apimart') route = 'normal';
-          break;
-        }
-      }
-    }
+    const route = this.resolveBananaRouteFromRequestParams(requestParams);
 
     if (serviceType === GPT_IMAGE2_SERVICE_TYPE) {
       if (!route) return null;
@@ -1429,12 +1509,15 @@ export class CreditsService {
       const normalizedSize = this.normalizeResolutionForGptImage2TencentPricing(
         requestParams?.imageSize,
       );
-      // 普通路线使用 GPT_IMAGE2_NORMAL_RESOLUTION_PRICING，尊享路线使用 GPT_IMAGE2_TENCENT_RESOLUTION_PRICING
-      const configuredCredits = Number(
+      const normalizedQuality = this.normalizeGptImage2Quality(requestParams?.quality);
+      const stableQuality: Exclude<GptImage2Quality, 'auto'> =
+        normalizedQuality === 'auto' ? 'low' : normalizedQuality;
+      const configuredCredits =
         route === 'stable'
-          ? GPT_IMAGE2_TENCENT_RESOLUTION_PRICING[normalizedSize]
-          : GPT_IMAGE2_NORMAL_RESOLUTION_PRICING[normalizedSize],
-      );
+          ? Number(
+              GPT_IMAGE2_TENCENT_QUALITY_PRICING[stableQuality][normalizedSize],
+            )
+          : Number(GPT_IMAGE2_NORMAL_RESOLUTION_PRICING[normalizedSize]);
       if (!Number.isFinite(configuredCredits) || configuredCredits <= 0) {
         return null;
       }
