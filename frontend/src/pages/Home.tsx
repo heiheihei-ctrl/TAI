@@ -37,6 +37,7 @@ import BoxIcon1 from "@/assets/box1.jpg";
 import BoxIcon2 from "@/assets/box2.jpg";
 import BoxIcon3 from "@/assets/box3.png";
 import Qrcode from "@/assets/group-erweima.jpg";
+import gzhImg from "@/assets/gzh.png";
 
 
 const FEATURE_CARD_IMAGES = [
@@ -227,7 +228,7 @@ const WeChatFloatingButton = () => {
             <div className="flex flex-col items-center">
               <div className="mb-2 h-32 w-32 rounded-lg bg-white p-2">
                 <img
-                  src={qrCodes.officialAccount}
+                  src={gzhImg}
                   alt={t("home.wechat.taiOfficialAccount")}
                   className="h-full w-full"
                   onError={(e) => {
