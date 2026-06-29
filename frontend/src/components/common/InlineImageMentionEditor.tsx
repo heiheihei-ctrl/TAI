@@ -173,6 +173,32 @@ const serializeNode = (node: Node): string => {
   return text;
 };
 
+const serializeEditor = (editor: HTMLDivElement): string => {
+  let nextValue = "";
+  editor.childNodes.forEach((child) => {
+    nextValue += serializeNode(child);
+  });
+  return nextValue;
+};
+
+const focusEditorAtEnd = (editor: HTMLDivElement) => {
+  editor.focus();
+  const selection = window.getSelection();
+  if (!selection) return;
+  const range = document.createRange();
+  if (editor.lastChild) {
+    range.setStartAfter(editor.lastChild);
+  } else {
+    range.selectNodeContents(editor);
+    range.collapse(false);
+  }
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+};
+
+const MAX_UNDO_STACK = 100;
+
 const isSelectionInside = (root: HTMLElement, node: Node | null): boolean =>
   !!node && (node === root || root.contains(node));
 
@@ -224,7 +250,75 @@ export default function InlineImageMentionEditor({
 }: Props) {
   const editorInnerRef = React.useRef<HTMLDivElement | null>(null);
   const queryRef = React.useRef<MentionQuery | null>(null);
+  const valueRef = React.useRef(value);
+  const undoStackRef = React.useRef<string[]>([]);
+  const redoStackRef = React.useRef<string[]>([]);
+  const isApplyingHistoryRef = React.useRef(false);
+  const skipNextInputUndoRef = React.useRef(false);
   const [query, setQuery] = React.useState<MentionQuery | null>(null);
+
+  React.useEffect(() => {
+    if (isApplyingHistoryRef.current) {
+      valueRef.current = value;
+      return;
+    }
+    const editor = editorInnerRef.current;
+    const domValue = editor ? serializeEditor(editor) : null;
+    if (value !== domValue && value !== valueRef.current) {
+      undoStackRef.current = [];
+      redoStackRef.current = [];
+    }
+    valueRef.current = value;
+  }, [value]);
+
+  const pushUndoSnapshot = React.useCallback((snapshot: string) => {
+    if (isApplyingHistoryRef.current) return;
+    const stack = undoStackRef.current;
+    if (stack.length > 0 && stack[stack.length - 1] === snapshot) return;
+    stack.push(snapshot);
+    while (stack.length > MAX_UNDO_STACK) {
+      stack.shift();
+    }
+    redoStackRef.current = [];
+  }, []);
+
+  const applyHistoryValue = React.useCallback(
+    (nextValue: string) => {
+      isApplyingHistoryRef.current = true;
+      valueRef.current = nextValue;
+      onChange(nextValue);
+      requestAnimationFrame(() => {
+        isApplyingHistoryRef.current = false;
+        const editor = editorInnerRef.current;
+        if (editor) {
+          focusEditorAtEnd(editor);
+        }
+      });
+    },
+    [onChange]
+  );
+
+  const handleUndo = React.useCallback(() => {
+    const stack = undoStackRef.current;
+    if (stack.length === 0) return;
+    const snapshot = stack.pop();
+    if (snapshot === undefined) return;
+    redoStackRef.current.push(valueRef.current);
+    applyHistoryValue(snapshot);
+    queryRef.current = null;
+    setQuery(null);
+  }, [applyHistoryValue]);
+
+  const handleRedo = React.useCallback(() => {
+    const stack = redoStackRef.current;
+    if (stack.length === 0) return;
+    const snapshot = stack.pop();
+    if (snapshot === undefined) return;
+    undoStackRef.current.push(valueRef.current);
+    applyHistoryValue(snapshot);
+    queryRef.current = null;
+    setQuery(null);
+  }, [applyHistoryValue]);
 
   const setEditorNode = React.useCallback(
     (node: HTMLDivElement | null) => {
@@ -255,17 +349,26 @@ export default function InlineImageMentionEditor({
   const emitValue = React.useCallback(() => {
     const editor = editorInnerRef.current;
     if (!editor) return;
-    let nextValue = "";
-    editor.childNodes.forEach((child) => {
-      nextValue += serializeNode(child);
-    });
+    const nextValue = serializeEditor(editor);
+    valueRef.current = nextValue;
     onChange(nextValue);
   }, [onChange]);
 
+  const commitEditorMutation = React.useCallback(
+    (mutate: () => void) => {
+      pushUndoSnapshot(valueRef.current);
+      skipNextInputUndoRef.current = true;
+      mutate();
+      emitValue();
+    },
+    [emitValue, pushUndoSnapshot]
+  );
+
   const removeChipElement = React.useCallback(
     (chip: HTMLElement) => {
-      chip.remove();
-      emitValue();
+      commitEditorMutation(() => {
+        chip.remove();
+      });
       queryRef.current = null;
       setQuery(null);
       requestAnimationFrame(() => {
@@ -287,13 +390,13 @@ export default function InlineImageMentionEditor({
         editor.focus();
       });
     },
-    [emitValue]
+    [commitEditorMutation]
   );
 
   const renderValue = React.useCallback(() => {
     const editor = editorInnerRef.current;
     if (!editor) return;
-    const currentValue = serializeNode(editor);
+    const currentValue = serializeEditor(editor);
     if (currentValue === value) return;
     editor.innerHTML = "";
     const fragment = document.createDocumentFragment();
@@ -327,17 +430,18 @@ export default function InlineImageMentionEditor({
       if (!selection || !selection.rangeCount || !editor) return;
       const range = selection.getRangeAt(0);
       if (!isSelectionInside(editor, range.startContainer)) return;
-      range.deleteContents();
-      const textNode = document.createTextNode(text);
-      range.insertNode(textNode);
-      range.setStart(textNode, textNode.textContent?.length || 0);
-      range.collapse(true);
-      selection.removeAllRanges();
-      selection.addRange(range);
-      emitValue();
+      commitEditorMutation(() => {
+        range.deleteContents();
+        const textNode = document.createTextNode(text);
+        range.insertNode(textNode);
+        range.setStart(textNode, textNode.textContent?.length || 0);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      });
       syncQuery();
     },
-    [emitValue, syncQuery]
+    [commitEditorMutation, syncQuery]
   );
 
   const handleSelectMention = React.useCallback(
@@ -349,6 +453,8 @@ export default function InlineImageMentionEditor({
       const sourceNode = activeQuery.node;
       if (!editor.contains(sourceNode)) return;
 
+      pushUndoSnapshot(valueRef.current);
+      skipNextInputUndoRef.current = true;
       const text = (sourceNode.textContent || "").replaceAll(ZERO_WIDTH_SPACE, "");
       const before = text.slice(0, activeQuery.startOffset);
       const after = text.slice(activeQuery.endOffset);
@@ -381,7 +487,7 @@ export default function InlineImageMentionEditor({
         editorInnerRef.current?.focus();
       });
     },
-    [emitValue, removeChipElement]
+    [emitValue, pushUndoSnapshot, removeChipElement]
   );
 
   return (
@@ -393,10 +499,39 @@ export default function InlineImageMentionEditor({
         suppressContentEditableWarning
         data-placeholder={placeholder}
         onInput={() => {
+          if (skipNextInputUndoRef.current) {
+            skipNextInputUndoRef.current = false;
+            emitValue();
+            syncQuery();
+            return;
+          }
+          if (!isApplyingHistoryRef.current) {
+            pushUndoSnapshot(valueRef.current);
+          }
           emitValue();
           syncQuery();
         }}
         onKeyDown={(event) => {
+          const isModKey = event.ctrlKey || event.metaKey;
+          if (isModKey) {
+            const key = event.key.toLowerCase();
+            if (key === "z") {
+              event.preventDefault();
+              event.stopPropagation();
+              if (event.shiftKey) {
+                handleRedo();
+              } else {
+                handleUndo();
+              }
+              return;
+            }
+            if (key === "y") {
+              event.preventDefault();
+              event.stopPropagation();
+              handleRedo();
+              return;
+            }
+          }
           if (event.key === "Escape" && queryRef.current) {
             event.preventDefault();
             queryRef.current = null;

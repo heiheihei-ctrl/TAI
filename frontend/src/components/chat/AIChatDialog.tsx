@@ -3421,10 +3421,7 @@ const AIChatDialog: React.FC = () => {
                 onKeyUp={() => {
                   scheduleEnsureInputVisible();
                 }}
-                onPaste={(event) => {
-                  event.preventDefault();
-                  handlePaste(event as unknown as React.ClipboardEvent<HTMLTextAreaElement>);
-                }}
+                onPaste={handlePaste}
                 menuStyle={{ position: "absolute", left: 12, bottom: "100%", marginBottom: 8 }}
                 style={{
                   minHeight: 80,

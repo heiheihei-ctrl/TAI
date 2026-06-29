@@ -44,7 +44,9 @@ export default function KeyboardShortcuts() {
     const isEditableTarget = (element: Element | null): boolean => {
       if (!element) return false;
       const tagName = element.tagName?.toLowerCase();
-      return tagName === 'input' || tagName === 'textarea' || (element as HTMLElement).isContentEditable;
+      if (tagName === 'input' || tagName === 'textarea') return true;
+      if ((element as HTMLElement).isContentEditable) return true;
+      return !!element.closest?.('.tanva-inline-mention-editor');
     };
 
     const getHistoryShortcut = (event: KeyboardEvent): 'undo' | 'redo' | null => {
