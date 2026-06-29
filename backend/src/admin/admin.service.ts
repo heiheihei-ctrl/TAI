@@ -3,6 +3,23 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiResponseStatus } from '../credits/dto/credits.dto';
 
+export interface ProfileDistributionItem {
+  label: string;
+  value: number;
+  percentage: number;
+}
+
+export interface UserProfileDemographics {
+  totalUsers: number;
+  profiledUsers: number;
+  completionRate: number;
+  gender: ProfileDistributionItem[];
+  age: ProfileDistributionItem[];
+  occupation: ProfileDistributionItem[];
+  regionByProvince: ProfileDistributionItem[];
+  regionByCity: ProfileDistributionItem[];
+}
+
 export interface AdminDashboardStats {
   totalUsers: number;
   activeUsers: number;
@@ -20,6 +37,7 @@ export interface AdminDashboardStats {
     registeredUsers: number;
     dailyActiveUsers: number;
   }>;
+  userProfileDemographics: UserProfileDemographics;
 }
 
 export interface UserWithCredits {
@@ -234,6 +252,7 @@ export class AdminService {
       creditStats,
       apiStats,
       trendRows,
+      profileRows,
     ] = await Promise.all([
       this.prisma.user.count(),
       this.prisma.user.count({
@@ -295,6 +314,15 @@ export class AdminService {
           };
         })
       ),
+      this.prisma.user.findMany({
+        select: {
+          profileGender: true,
+          profileBirthday: true,
+          profileOccupation: true,
+          profileRegion: true,
+          profileCompletedAt: true,
+        },
+      }),
     ]);
 
     const todayActiveUsersBySession = this.toNumber(todayActiveUsersBySessionRows[0]?.count ?? 0);
@@ -344,7 +372,160 @@ export class AdminService {
       failedApiCalls,
       generatedAt: now.toISOString(),
       userTrend,
+      userProfileDemographics: this.buildUserProfileDemographics(profileRows, totalUsers, now),
     };
+  }
+
+  private buildUserProfileDemographics(
+    rows: Array<{
+      profileGender: string | null;
+      profileBirthday: Date | null;
+      profileOccupation: string | null;
+      profileRegion: string | null;
+      profileCompletedAt: Date | null;
+    }>,
+    totalUsers: number,
+    now: Date,
+  ): UserProfileDemographics {
+    const profiledUsers = rows.filter((row) => row.profileCompletedAt).length;
+    const genderCounts = new Map<string, number>();
+    const ageCounts = new Map<string, number>();
+    const occupationCounts = new Map<string, number>();
+    const provinceCounts = new Map<string, number>();
+    const cityCounts = new Map<string, number>();
+
+    for (const row of rows) {
+      const genderKey = this.normalizeGenderLabel(row.profileGender);
+      genderCounts.set(genderKey, (genderCounts.get(genderKey) ?? 0) + 1);
+
+      const ageKey = this.getAgeBucket(this.computeAge(row.profileBirthday, now));
+      ageCounts.set(ageKey, (ageCounts.get(ageKey) ?? 0) + 1);
+
+      const occupationKey = this.normalizeOccupationLabel(row.profileOccupation);
+      occupationCounts.set(occupationKey, (occupationCounts.get(occupationKey) ?? 0) + 1);
+
+      const { province, city } = this.parseRegionParts(row.profileRegion);
+      const provinceKey = province || '未填写';
+      provinceCounts.set(provinceKey, (provinceCounts.get(provinceKey) ?? 0) + 1);
+
+      const cityKey =
+        province && city ? `${province} / ${city}` : province ? `${province}（未选市）` : '未填写';
+      cityCounts.set(cityKey, (cityCounts.get(cityKey) ?? 0) + 1);
+    }
+
+    return {
+      totalUsers,
+      profiledUsers,
+      completionRate:
+        totalUsers > 0 ? Math.round((profiledUsers / totalUsers) * 1000) / 10 : 0,
+      gender: this.toDistribution(genderCounts, totalUsers, ['男', '女', '其他', '未填写']),
+      age: this.toDistribution(ageCounts, totalUsers, [
+        '18岁以下',
+        '18-30岁',
+        '30-50岁',
+        '50岁以上',
+        '未填写',
+      ]),
+      occupation: this.toTopDistribution(occupationCounts, totalUsers, 12, '未填写'),
+      regionByProvince: this.toTopDistribution(provinceCounts, totalUsers, 15, '未填写'),
+      regionByCity: this.toTopDistribution(cityCounts, totalUsers, 12, '未填写'),
+    };
+  }
+
+  private computeAge(birthday: Date | null, now: Date): number | null {
+    if (!birthday) return null;
+    let age = now.getFullYear() - birthday.getFullYear();
+    const monthDiff = now.getMonth() - birthday.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birthday.getDate())) {
+      age -= 1;
+    }
+    return age;
+  }
+
+  private getAgeBucket(age: number | null): string {
+    if (age === null || age < 0) return '未填写';
+    if (age < 18) return '18岁以下';
+    if (age <= 30) return '18-30岁';
+    if (age <= 50) return '30-50岁';
+    return '50岁以上';
+  }
+
+  private normalizeGenderLabel(value: string | null | undefined): string {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (normalized === 'male') return '男';
+    if (normalized === 'female') return '女';
+    if (normalized === 'other') return '其他';
+    return '未填写';
+  }
+
+  private normalizeOccupationLabel(value: string | null | undefined): string {
+    const trimmed = String(value || '').trim();
+    return trimmed || '未填写';
+  }
+
+  private parseRegionParts(value: string | null | undefined): { province: string; city: string } {
+    const trimmed = String(value || '').trim();
+    if (!trimmed) {
+      return { province: '', city: '' };
+    }
+    const separator = trimmed.includes(' / ') ? ' / ' : '/';
+    const parts = trimmed.split(separator).map((part) => part.trim()).filter(Boolean);
+    return {
+      province: parts[0] || '',
+      city: parts[1] || '',
+    };
+  }
+
+  private toDistribution(
+    counts: Map<string, number>,
+    total: number,
+    preferredOrder?: string[],
+  ): ProfileDistributionItem[] {
+    const entries = Array.from(counts.entries());
+    const sorted = preferredOrder
+      ? preferredOrder
+          .filter((label) => counts.has(label))
+          .map((label) => [label, counts.get(label) ?? 0] as const)
+      : entries.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-CN'));
+
+    return sorted.map(([label, value]) => ({
+      label,
+      value,
+      percentage: total > 0 ? Math.round((value / total) * 1000) / 10 : 0,
+    }));
+  }
+
+  private toTopDistribution(
+    counts: Map<string, number>,
+    total: number,
+    topN: number,
+    emptyLabel: string,
+  ): ProfileDistributionItem[] {
+    const emptyCount = counts.get(emptyLabel) ?? 0;
+    const ranked = Array.from(counts.entries())
+      .filter(([label]) => label !== emptyLabel)
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-CN'));
+
+    const top = ranked.slice(0, topN);
+    const otherCount =
+      ranked.slice(topN).reduce((sum, [, value]) => sum + value, 0);
+
+    const ordered: Array<[string, number]> = [];
+    for (const item of top) {
+      ordered.push(item);
+    }
+    if (otherCount > 0) {
+      ordered.push(['其他', otherCount]);
+    }
+    if (emptyCount > 0) {
+      ordered.push([emptyLabel, emptyCount]);
+    }
+
+    return ordered.map(([label, value]) => ({
+      label,
+      value,
+      percentage: total > 0 ? Math.round((value / total) * 1000) / 10 : 0,
+    }));
   }
 
   /**

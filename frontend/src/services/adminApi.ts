@@ -23,6 +23,23 @@ async function request(path: string, options: RequestInit = {}) {
   return response;
 }
 
+export interface ProfileDistributionItem {
+  label: string;
+  value: number;
+  percentage: number;
+}
+
+export interface UserProfileDemographics {
+  totalUsers: number;
+  profiledUsers: number;
+  completionRate: number;
+  gender: ProfileDistributionItem[];
+  age: ProfileDistributionItem[];
+  occupation: ProfileDistributionItem[];
+  regionByProvince: ProfileDistributionItem[];
+  regionByCity: ProfileDistributionItem[];
+}
+
 export interface DashboardStats {
   totalUsers: number;
   activeUsers: number;
@@ -40,6 +57,7 @@ export interface DashboardStats {
     registeredUsers: number;
     dailyActiveUsers: number;
   }>;
+  userProfileDemographics: UserProfileDemographics;
 }
 
 export interface UserWithCredits {

@@ -97,6 +97,7 @@ import {
 import type { PublicTemplate } from "@/services/publicTemplateService";
 import { OpenObserveLogButton } from "@/components/admin/OpenObserveLogButton";
 import DashboardTrendChart from "@/components/admin/DashboardTrendChart";
+import UserProfileDemographicsPanel from "@/components/admin/UserProfileDemographicsPanel";
 
 const FULL_ADMIN_ROLE = "admin";
 const NORMAL_ADMIN_ROLE = "normal_admin";
@@ -13669,6 +13670,9 @@ export default function Admin() {
                   <div className='text-sm font-medium text-gray-700 mb-3'>注册用户 vs 日活用户</div>
                   <DashboardTrendChart data={stats.userTrend} />
                 </div>
+                {stats.userProfileDemographics ? (
+                  <UserProfileDemographicsPanel data={stats.userProfileDemographics} />
+                ) : null}
                 {dashboardError && <div className='text-sm text-red-500'>{dashboardError}</div>}
               </div>
             ) : (
