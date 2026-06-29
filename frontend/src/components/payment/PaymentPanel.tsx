@@ -20,6 +20,7 @@ import {
   type RechargePackage,
 } from "@/services/adminApi";
 import { useLocaleText } from "@/utils/localeText";
+import PaymentSuccessView from "@/components/payment/PaymentSuccessView";
 
 // 全局 toast 提示
 const showToast = (message: string, type: "success" | "error" | "info" = "info") => {
@@ -74,6 +75,7 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
   const isWhite = useAIChatStore((s) => s.chatTheme === "white");
   const [customAmountMode, setCustomAmountMode] = useState(false);
   const [customCreditsInput, setCustomCreditsInput] = useState("");
+  const [paymentSuccessMessage, setPaymentSuccessMessage] = useState<string | null>(null);
 
   const parseCustomCredits = (raw: string) =>
     Math.max(0, Math.floor(Number.parseFloat(raw.replace(/,/g, "").trim()) || 0));
@@ -156,15 +158,21 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
         clearInterval(pollingRef.current);
         pollingRef.current = null;
       }
-      showToast(lt(`支付成功！获得 ${credits} 积分`, `Payment successful! You received ${credits} credits`), "success");
       window.dispatchEvent(new CustomEvent("refresh-credits"));
-      onPaymentSuccess?.();
-      if (!embeddedInVip) {
-        onBack();
-      }
+      setPaymentSuccessMessage(
+        lt(`已获得 ${credits.toLocaleString()} 积分`, `You received ${credits.toLocaleString()} credits`),
+      );
     },
-    [embeddedInVip, onBack, onPaymentSuccess, lt],
+    [lt],
   );
+
+  const handlePaymentSuccessDone = useCallback(() => {
+    setPaymentSuccessMessage(null);
+    onPaymentSuccess?.();
+    if (!embeddedInVip) {
+      onBack();
+    }
+  }, [embeddedInVip, onBack, onPaymentSuccess]);
 
   useImperativeHandle(
     ref,
@@ -442,6 +450,14 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
             : "bg-[#0a0a0f] text-zinc-100",
       )}
     >
+      {paymentSuccessMessage ? (
+        <PaymentSuccessView
+          message={paymentSuccessMessage}
+          isWhite={isWhite}
+          onDone={handlePaymentSuccessDone}
+        />
+      ) : (
+        <>
       {/* 独立积分页顶栏；嵌入 VIP 时由 MembershipPanel 承接 */}
       {!embeddedInVip && !isWhite && (
         <div className="flex items-center justify-between border-b border-zinc-800/60 pb-6 pt-4">
@@ -664,7 +680,7 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
                   <div className={cn("mt-2 text-xs", isWhite ? "text-slate-500" : "text-zinc-400")}>
                     {lt(
                       `自定义充值最低为 ${minCustomRechargeCredits} 积分（¥${MIN_CUSTOM_RECHARGE_AMOUNT}）`,
-                      `Custom top-up minimum is ${minCustomRechargeCredits} credits (¥${MIN_CUSTOM_RECHARGE_AMOUNT})`
+                      `Custom top-up minimum is ${minCustomRechargeCredits} credits (¥${MIN_CUSTOM_RECHARGE_AMOUNT})`,
                     )}
                   </div>
                 </div>
@@ -792,6 +808,8 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
           )}
         </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

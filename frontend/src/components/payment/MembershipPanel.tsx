@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ArrowLeft, Check, CheckCircle, Clock, Crown, FileText, Loader2, RefreshCw, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import PaymentPanel from "@/components/payment/PaymentPanel";
+import PaymentSuccessView from "@/components/payment/PaymentSuccessView";
 import { useAIChatStore } from "@/stores/aiChatStore";
 import { useAuthStore } from "@/stores/authStore";
 import { fetchPublicMembershipPlans } from "@/services/settingsApi";
@@ -234,6 +235,7 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
   const [orders, setOrders] = useState<MembershipOrderRecord[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [hasWhitelistTopUpAccess, setHasWhitelistTopUpAccess] = useState(false);
+  const [membershipPaymentSuccess, setMembershipPaymentSuccess] = useState(false);
   const countdownRef = useRef<TimerHandle | null>(null);
   const pollingRef = useRef<TimerHandle | null>(null);
   const hasYearlyPlans = useMemo(() => (plans || []).some((plan) => plan.billingCycle === "yearly"), [plans]);
@@ -345,14 +347,19 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
       clearInterval(pollingRef.current);
       pollingRef.current = null;
     }
-    showToast("VIP 订阅成功", "success");
     await loadData();
+    window.dispatchEvent(new CustomEvent("refresh-credits"));
+    setMembershipPaymentSuccess(true);
+  }, [loadData]);
+
+  const handleMembershipPaymentSuccessDone = useCallback(() => {
+    setMembershipPaymentSuccess(false);
     if (onPaymentSuccess) {
       onPaymentSuccess();
     } else {
       onBack();
     }
-  }, [loadData, onBack, onPaymentSuccess]);
+  }, [onBack, onPaymentSuccess]);
 
   const pollPaymentStatus = useCallback(async () => {
     if (!currentOrderNo) return;
@@ -517,7 +524,13 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
         )}
       </div>
 
-      {showOrders ? (
+      {membershipPaymentSuccess ? (
+        <PaymentSuccessView
+          message="VIP 订阅已生效"
+          isWhite={isWhite}
+          onDone={handleMembershipPaymentSuccessDone}
+        />
+      ) : showOrders ? (
         <div className="mt-6">
           {ordersLoading ? (
             <div className="flex items-center justify-center py-16">
