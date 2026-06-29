@@ -49,12 +49,19 @@ const PIE_COLORS = [
   "#a855f7",
 ];
 
-const toChartPoints = (data: ProfileDistributionItem[]): ChartPoint[] =>
-  data.map((item) => ({
+const EMPTY_LABEL = "未填写";
+
+const toChartPoints = (data: ProfileDistributionItem[]): ChartPoint[] => {
+  const filtered = data.filter(
+    (item) => item.label !== EMPTY_LABEL && item.value > 0,
+  );
+  const total = filtered.reduce((sum, item) => sum + item.value, 0);
+  return filtered.map((item) => ({
     name: item.label,
     value: item.value,
-    percentage: typeof item.percentage === "number" ? item.percentage : 0,
+    percentage: total > 0 ? Math.round((item.value / total) * 1000) / 10 : 0,
   }));
+};
 
 const formatTooltip = (params: unknown) => {
   const point = (Array.isArray(params) ? params[0] : params) as {

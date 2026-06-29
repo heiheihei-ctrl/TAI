@@ -418,17 +418,27 @@ export class AdminService {
       profiledUsers,
       completionRate:
         totalUsers > 0 ? Math.round((profiledUsers / totalUsers) * 1000) / 10 : 0,
-      gender: this.toDistribution(genderCounts, totalUsers, ['男', '女', '其他', '未填写']),
-      age: this.toDistribution(ageCounts, totalUsers, [
-        '18岁以下',
-        '18-30岁',
-        '30-50岁',
-        '50岁以上',
-        '未填写',
-      ]),
-      occupation: this.toTopDistribution(occupationCounts, totalUsers, 12, '未填写'),
-      regionByProvince: this.toTopDistribution(provinceCounts, totalUsers, 15, '未填写'),
-      regionByCity: this.toTopDistribution(cityCounts, totalUsers, 12, '未填写'),
+      gender: this.finalizeDistribution(
+        this.toDistribution(genderCounts, totalUsers, ['男', '女', '其他', '未填写']),
+      ),
+      age: this.finalizeDistribution(
+        this.toDistribution(ageCounts, totalUsers, [
+          '18岁以下',
+          '18-30岁',
+          '30-50岁',
+          '50岁以上',
+          '未填写',
+        ]),
+      ),
+      occupation: this.finalizeDistribution(
+        this.toTopDistribution(occupationCounts, totalUsers, 12, '未填写'),
+      ),
+      regionByProvince: this.finalizeDistribution(
+        this.toTopDistribution(provinceCounts, totalUsers, 15, '未填写'),
+      ),
+      regionByCity: this.finalizeDistribution(
+        this.toTopDistribution(cityCounts, totalUsers, 12, '未填写'),
+      ),
     };
   }
 
@@ -501,7 +511,6 @@ export class AdminService {
     topN: number,
     emptyLabel: string,
   ): ProfileDistributionItem[] {
-    const emptyCount = counts.get(emptyLabel) ?? 0;
     const ranked = Array.from(counts.entries())
       .filter(([label]) => label !== emptyLabel)
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-CN'));
@@ -517,14 +526,24 @@ export class AdminService {
     if (otherCount > 0) {
       ordered.push(['其他', otherCount]);
     }
-    if (emptyCount > 0) {
-      ordered.push([emptyLabel, emptyCount]);
-    }
 
     return ordered.map(([label, value]) => ({
       label,
       value,
       percentage: total > 0 ? Math.round((value / total) * 1000) / 10 : 0,
+    }));
+  }
+
+  private finalizeDistribution(
+    items: ProfileDistributionItem[],
+  ): ProfileDistributionItem[] {
+    const filtered = items.filter(
+      (item) => item.label !== '未填写' && item.value > 0,
+    );
+    const sum = filtered.reduce((acc, item) => acc + item.value, 0);
+    return filtered.map((item) => ({
+      ...item,
+      percentage: sum > 0 ? Math.round((item.value / sum) * 1000) / 10 : 0,
     }));
   }
 
