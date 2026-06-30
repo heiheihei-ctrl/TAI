@@ -46,6 +46,12 @@ import {
   type ManagedPricingMatchingRule,
   type ResolvedManagedPricing,
 } from '../ai/services/model-pricing-resolver';
+import {
+  resolveVolcVideoEnhanceBillingResolution,
+  resolveVolcVideoEnhanceFpsTier,
+  VOLC_VIDEO_ENHANCE_PRICE_MATRIX,
+  type VolcVideoEnhanceToolVersion,
+} from '../ai/constants/volc-video-enhance.constants';
 
 let IORedis: any;
 try {
@@ -689,6 +695,12 @@ export class CreditsService {
       effectiveRequestParams,
     );
 
+    creditsToDeduct = this.resolveVolcEnhanceVideoCredits(
+      params.serviceType,
+      creditsToDeduct,
+      effectiveRequestParams,
+    );
+
     creditsToDeduct = this.resolveSeedanceCredits(
       params.serviceType,
       creditsToDeduct,
@@ -1307,6 +1319,36 @@ export class CreditsService {
       return fallbackCredits;
     }
     return currentCredits;
+  }
+
+  private resolveVolcEnhanceVideoCredits(
+    serviceType: ServiceType,
+    currentCredits: number,
+    requestParams: any,
+  ): number {
+    if (serviceType !== 'volc-enhance-video') {
+      return currentCredits;
+    }
+
+    const toolVersion =
+      typeof requestParams?.toolVersion === 'string'
+        ? requestParams.toolVersion.trim().toLowerCase()
+        : '';
+    if (toolVersion !== 'standard' && toolVersion !== 'professional') {
+      return currentCredits;
+    }
+
+    const billingResolution = resolveVolcVideoEnhanceBillingResolution({
+      resolution: requestParams?.resolution,
+      resolutionLimit: requestParams?.resolutionLimit,
+    });
+    const fpsTier = resolveVolcVideoEnhanceFpsTier(requestParams?.fps);
+    const credits =
+      VOLC_VIDEO_ENHANCE_PRICE_MATRIX[toolVersion as VolcVideoEnhanceToolVersion]?.[
+        billingResolution
+      ]?.[fpsTier];
+
+    return Number.isFinite(credits) ? credits : currentCredits;
   }
 
   /**

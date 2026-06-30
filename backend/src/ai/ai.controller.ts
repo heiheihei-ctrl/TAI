@@ -57,7 +57,6 @@ import { Sora2VideoService } from './services/sora2-video.service';
 import { VeoVideoService } from './services/veo-video.service';
 import { VideoProviderService } from './services/video-provider.service';
 import { ModelRoutingService } from './services/model-routing.service';
-import { NewApiGatewayService } from './services/new-api-gateway.service';
 import { MinimaxSpeechService } from './services/minimax-speech.service';
 import { MinimaxMusicService } from './services/minimax-music.service';
 import { TencentSpeechService } from './services/tencent-speech.service';
@@ -404,7 +403,6 @@ export class AiController {
     private readonly veoVideoService: VeoVideoService,
     private readonly videoProviderService: VideoProviderService,
     private readonly modelRoutingService: ModelRoutingService,
-    private readonly newApiGatewayService: NewApiGatewayService,
     private readonly minimaxSpeechService: MinimaxSpeechService,
     private readonly tencentSpeechService: TencentSpeechService,
     private readonly minimaxMusicService: MinimaxMusicService,
@@ -3376,7 +3374,6 @@ export class AiController {
       );
     }
     const model = this.resolveImageModel(providerName, dto.model);
-    const useNewApiGateway = this.newApiGatewayService.shouldHandleImageModel(model);
     const serviceType = this.getImageGenerationServiceType(model, providerName || undefined);
     const normalizedImageUrlsForProvider = this.normalizeImageUrlsForUpstream(
       (dto.imageUrls || []).filter(
@@ -3462,68 +3459,6 @@ export class AiController {
           try {
             if (attempt > 1) {
               this.logger.warn(`[generate-image] 重试生成第 ${attempt}/${maxAttempts} 次`);
-            }
-
-            if (useNewApiGateway) {
-              const result = await this.newApiGatewayService.generateImage({
-                model,
-                prompt: dto.prompt,
-                size: dto.imageSize,
-                metadata: {
-                  provider: providerName,
-                  aspectRatio: dto.aspectRatio,
-                  outputFormat: dto.outputFormat,
-                  providerOptions: dto.providerOptions,
-                  enableWebSearch: dto.enableWebSearch,
-                  imageUrls: normalizedImageUrlsForProvider,
-                  googleSearch: dto.googleSearch ?? dto.enableWebSearch,
-                  googleImageSearch: dto.googleImageSearch ?? dto.enableWebSearch,
-                  batchMode: dto.batchMode,
-                  batchCount: dto.batchCount,
-                },
-              });
-
-              if (result.imageBase64) {
-                const watermarked = await this.watermarkIfNeeded(result.imageBase64, req);
-                const upload = await this.uploadGeneratedImageToOss(watermarked || '', { userId });
-                return {
-                  imageUrl: upload.url,
-                  textResponse: '',
-                  metadata: {
-                    gateway: 'new-api',
-                    imageUrl: upload.url,
-                    imageKey: upload.key,
-                    mimeType: upload.mimeType,
-                    bytes: upload.size,
-                  },
-                };
-              }
-
-              if (result.imageUrl) {
-                const persisted = await this.persistProviderImageUrlToManagedWithRetry(
-                  result.imageUrl,
-                  req,
-                  userId,
-                );
-                return {
-                  imageUrl: persisted.url,
-                  textResponse: '',
-                  metadata: {
-                    gateway: 'new-api',
-                    imageUrl: persisted.url,
-                    sourceImageUrl: result.imageUrl,
-                    ...(persisted.uploaded
-                      ? {
-                          imageKey: persisted.key,
-                          mimeType: persisted.mimeType,
-                          bytes: persisted.bytes,
-                        }
-                      : {}),
-                  },
-                };
-              }
-
-              throw new BadGatewayException('new-api image generation returned no image payload');
             }
 
             if (providerName && providerName !== 'gemini-pro') {
@@ -3729,7 +3664,6 @@ export class AiController {
     const parentRequestId = this.getRequestId(req);
     const providerName = dto.aiProvider && dto.aiProvider !== 'gemini' ? dto.aiProvider : null;
     const model = this.resolveImageModel(providerName, dto.model);
-    const useNewApiGateway = this.newApiGatewayService.shouldHandleImageModel(model);
 
     // 检查是否使用自定义 API Key（gemini 和 gemini-pro 都支持）
     const customApiKey = this.isGeminiProvider(providerName) ? await this.getUserCustomApiKey(req) : null;
@@ -3856,51 +3790,6 @@ export class AiController {
             // 非 MJ 时验证 sourceImage 是有效的图片格式
             this.validateImageDataUrl(sourceImage);
           }
-
-            if (useNewApiGateway) {
-              const result = await this.newApiGatewayService.editImage({
-                model,
-                prompt: dto.prompt,
-                imageUrl:
-                  fallbackUrl ||
-                  (sourceImage.startsWith('http://') || sourceImage.startsWith('https://')
-                    ? sourceImage
-                    : undefined),
-                metadata: {
-                  provider: providerName,
-                  aspectRatio: dto.aspectRatio,
-                  imageSize: dto.imageSize,
-                  outputFormat: dto.outputFormat,
-                  providerOptions: dto.providerOptions,
-                },
-              });
-
-              if (result.imageBase64) {
-                const watermarked = await this.watermarkIfNeeded(result.imageBase64, req);
-                return {
-                  imageData: watermarked,
-                  textResponse: '',
-                  metadata: {
-                    gateway: 'new-api',
-                  },
-                };
-              }
-
-              if (result.imageUrl) {
-                const sourceImageDataUrl = await this.fetchImageAsDataUrl(result.imageUrl);
-                const watermarked = await this.watermarkIfNeeded(sourceImageDataUrl, req);
-                return {
-                  imageData: watermarked,
-                  textResponse: '',
-                  metadata: {
-                    gateway: 'new-api',
-                    sourceImageUrl: result.imageUrl,
-                  },
-                };
-              }
-
-              throw new BadGatewayException('new-api image edit returned no image payload');
-            }
 
             if (providerName && providerName !== 'gemini-pro') {
 
@@ -4427,7 +4316,6 @@ export class AiController {
   async textChat(@Body() dto: TextChatDto, @Req() req: any) {
     const providerName = dto.aiProvider && dto.aiProvider !== 'gemini' ? dto.aiProvider : null;
     const model = this.resolveTextModel(providerName, dto.model);
-    const useNewApiGateway = this.newApiGatewayService.shouldHandleChatModel(model);
     const billingTag = dto.billingTag === 'prompt_optimize' ? 'prompt_optimize' : 'text_chat';
     const serviceType: ServiceType =
       billingTag === 'prompt_optimize' ? 'gemini-prompt-optimize' : 'gemini-text';
@@ -4437,22 +4325,6 @@ export class AiController {
     const skipCredits = !!customApiKey;
 
     return this.withCredits(req, serviceType, model, async () => {
-      if (useNewApiGateway) {
-        const result = await this.newApiGatewayService.chatCompletions({
-          model,
-          prompt: dto.prompt,
-          metadata: {
-            provider: providerName,
-            enableWebSearch: dto.enableWebSearch,
-            providerOptions: dto.providerOptions,
-            billingTag,
-          },
-        });
-        return {
-          text: result.text,
-        };
-      }
-
       if (providerName && providerName !== 'gemini-pro') {
 
         const provider = this.factory.getProvider(dto.model, providerName);

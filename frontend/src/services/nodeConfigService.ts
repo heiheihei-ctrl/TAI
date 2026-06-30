@@ -177,12 +177,12 @@ function getDefaultConfigs(): NodeConfig[] {
         managedModelKey: "omni-flash-ext",
         managedRoutes: {
           modelKey: "omni-flash-ext",
-          defaultVendor: "new_api",
+          defaultVendor: "apimart",
           vendors: [
             {
-              vendorKey: "new_api",
-              platformKey: "new_api",
-              label: "new-api / APIMart",
+              vendorKey: "apimart",
+              platformKey: "apimart",
+              label: "APIMart",
               provider: "omni-flash-ext",
               creditsPerCall: 600,
             },
@@ -190,8 +190,8 @@ function getDefaultConfigs(): NodeConfig[] {
         },
         defaultData: {
           managedModelKey: "omni-flash-ext",
-          vendorKey: "new_api",
-          platformKey: "new_api",
+          vendorKey: "apimart",
+          platformKey: "apimart",
           videoMode: "frame",
           duration: 6,
           clipDuration: 6,
@@ -205,6 +205,7 @@ function getDefaultConfigs(): NodeConfig[] {
     // 其他节点
     { nodeKey: "videoAnalyze", nameZh: "视频分析节点", nameEn: "Video Analysis", category: "other", status: "normal", sortOrder: 31, creditsPerCall: 60 },
     { nodeKey: "videoFrameExtract", nameZh: "视频帧提取", nameEn: "Frame Extract", category: "other", status: "normal", sortOrder: 32, creditsPerCall: 0 },
+    { nodeKey: "videoCompose", nameZh: "视频合成", nameEn: "Video Compose", category: "video", status: "normal", sortOrder: 33, creditsPerCall: 0 },
     { nodeKey: "analysis", nameZh: "图像分析节点", nameEn: "Analysis", category: "other", status: "normal", sortOrder: 33, creditsPerCall: 10 },
     { nodeKey: "promptOptimize", nameZh: "提示词优化", nameEn: "Optimize", category: "other", status: "normal", sortOrder: 34, creditsPerCall: 5 },
     { nodeKey: "textChat", nameZh: "文字对话", nameEn: "Chat", category: "other", status: "normal", sortOrder: 35, creditsPerCall: 5 },

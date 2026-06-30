@@ -146,6 +146,9 @@ export function proxifyRemoteAssetUrl(
 
   // 对普通视频资源（非 presigned），优先直接使用已知允许的 OSS/CDN 主机的原始 URL
   if (looksLikeVideo) {
+    if (forceProxy) {
+      return buildAssetProxyUrl(value, apiBase);
+    }
     try {
       const url = new URL(value);
       if (shouldForceProxyHost(url.hostname)) {
@@ -162,6 +165,7 @@ export function proxifyRemoteAssetUrl(
         "alicdn.com",
         "tencentcos.cn",
         "myqcloud.com",
+        "getapib.org",
       ];
       const isAllowed = allowedHosts.some(
         (host) => url.hostname === host || url.hostname.endsWith(host)
@@ -231,6 +235,7 @@ export function proxifyRemoteAssetUrl(
       "alicdn.com",
       "tencentcos.cn",
       "myqcloud.com",
+      "getapib.org",
     ];
 
     const isAllowed = allowedHosts.some(

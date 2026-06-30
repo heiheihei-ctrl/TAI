@@ -18,7 +18,7 @@ flowchart LR
 - NestJS + Fastify adapter，启用压缩、Helmet、Cookie、Multipart、CORS。
 - 全局前缀 `/api`，Swagger 暴露在 `/api/docs`。
 - Prisma 负责数据访问，数据源通过 `DATABASE_URL` 连接 PostgreSQL。
-- 新增独立 AI 网关 `apps/new-api/`：NestJS + Prisma + Redis + PostgreSQL，直接提供 `/api/status`、`/admin/*`、`/v1/videos`、`/v1/images/*`、`/v1/chat/completions`，供业务后端以 Bearer Token 方式调用。
+- 业务后端当前直接对接外部 AI Provider；不再维护独立 `new-api` 网关层。
 
 ## 关键关注点
 - 认证：Cookie + JWT（以代码为准，见 `backend/src/auth/*`）

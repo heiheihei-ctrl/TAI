@@ -116,6 +116,9 @@ export class AssetsController {
     const abortUpstream = () => {
       if (abortedByClient) return;
       abortedByClient = true;
+      this.logger.warn(
+        `[assets/proxy] client aborted key=${managedKeyForLog || '-'} url=${typeof url === 'string' ? url : '-'}`
+      );
       try {
         abortController.abort();
       } catch {
@@ -189,6 +192,10 @@ export class AssetsController {
     if (ifNoneMatch) upstreamHeaders['if-none-match'] = ifNoneMatch;
     if (ifModifiedSince) upstreamHeaders['if-modified-since'] = ifModifiedSince;
 
+    this.logger.log(
+      `[assets/proxy] start key=${managedKeyForLog || '-'} host=${parsed.hostname} range=${range || '-'} target=${parsed.toString()}`
+    );
+
     const upstreamTimeoutMs = (() => {
       const raw =
         process.env.ASSET_PROXY_UPSTREAM_TIMEOUT_MS ||
@@ -221,6 +228,9 @@ export class AssetsController {
     const fetchWithRedirectCheck = async (inputUrl: string) => {
       let currentUrl = inputUrl;
       for (let i = 0; i < 5; i++) {
+        this.logger.log(
+          `[assets/proxy] upstream fetch attempt=${i + 1} key=${managedKeyForLog || '-'} target=${currentUrl}`
+        );
         const res = await fetchWithAbortAndTimeout(currentUrl);
 
         if (res.status >= 300 && res.status < 400) {
@@ -240,6 +250,10 @@ export class AssetsController {
           if (!this.isAllowedHost(next.hostname)) {
             throw new BadRequestException('Redirect host not allowed');
           }
+
+          this.logger.log(
+            `[assets/proxy] redirect status=${res.status} key=${managedKeyForLog || '-'} from=${currentUrl} to=${next.toString()}`
+          );
 
           // 继续跟随重定向前，必须显式取消/消费上一个响应体，否则 undici 会占用连接与内存。
           try {
@@ -262,6 +276,9 @@ export class AssetsController {
         try {
           const res = await fetchWithRedirectCheck(inputUrl);
           if (RETRYABLE_PROXY_STATUS.has(res.status) && attempt < MAX_PROXY_UPSTREAM_RETRIES) {
+            this.logger.warn(
+              `[assets/proxy] retryable status=${res.status} retry=${attempt + 1}/${MAX_PROXY_UPSTREAM_RETRIES} key=${managedKeyForLog || '-'} target=${inputUrl}`
+            );
             try {
               await res.body?.cancel();
             } catch {
@@ -274,9 +291,15 @@ export class AssetsController {
         } catch (err: any) {
           if (abortedByClient) throw err;
           if (err instanceof BadRequestException || attempt >= MAX_PROXY_UPSTREAM_RETRIES) {
+            this.logger.error(
+              `[assets/proxy] fetch failed retry=${attempt} key=${managedKeyForLog || '-'} target=${inputUrl} error=${err?.message || err}`
+            );
             throw err;
           }
           lastError = err;
+          this.logger.warn(
+            `[assets/proxy] fetch error retry=${attempt + 1}/${MAX_PROXY_UPSTREAM_RETRIES} key=${managedKeyForLog || '-'} target=${inputUrl} error=${err?.message || err}`
+          );
           await sleep(150 * (attempt + 1));
         }
       }
@@ -310,12 +333,24 @@ export class AssetsController {
       'etag',
       'last-modified',
       'cache-control',
-      'content-disposition',
     ] as const;
     passthroughHeaders.forEach((name) => {
       const value = upstream.headers.get(name);
       if (value) reply.header(name, value);
     });
+    const upstreamContentType = (upstream.headers.get('content-type') || '').toLowerCase();
+    if (
+      upstreamContentType.startsWith('video/') ||
+      upstreamContentType.startsWith('audio/') ||
+      upstreamContentType.startsWith('image/')
+    ) {
+      reply.header('content-disposition', 'inline');
+    } else {
+      const contentDisposition = upstream.headers.get('content-disposition');
+      if (contentDisposition) {
+        reply.header('content-disposition', contentDisposition);
+      }
+    }
     const upstreamContentLength = upstream.headers.get('content-length');
     if (upstreamContentLength && !upstreamContentEncoding) {
       reply.header('content-length', upstreamContentLength);
@@ -336,6 +371,12 @@ export class AssetsController {
       );
       reply.header('cache-control', 'no-store');
     }
+
+    this.logger.log(
+      `[assets/proxy] response status=${upstream.status} content-type=${upstream.headers.get('content-type') || '-'} content-range=${
+        upstream.headers.get('content-range') || '-'
+      } content-length=${upstream.headers.get('content-length') || '-'} key=${managedKeyForLog || '-'} target=${parsed.toString()}`
+    );
 
     reply.status(upstream.status);
 

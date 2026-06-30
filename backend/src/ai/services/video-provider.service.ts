@@ -25,7 +25,6 @@ import {
   OMNI_FLASH_EXT_MODEL_KEY,
   parseOmniFlashExtTaskResponse,
 } from "./omni-flash-ext.adapter";
-import { NewApiGatewayService } from "./new-api-gateway.service";
 import {
   apimartRequest,
   getApimartProxySummary,
@@ -160,7 +159,7 @@ export interface VideoGenerationResult {
     modelKey?: string;
     vendorKey?: string;
     platformKey?: string;
-    route?: "legacy" | "tencent_vod" | "new_api";
+    route?: "legacy" | "tencent_vod";
     providerChannel?: string;
     routedProvider?: string;
     fallbackUsed?: boolean;
@@ -177,7 +176,6 @@ export class VideoProviderService {
     private readonly oss: OssService,
     private readonly tencentVodAigcService: TencentVodAigcService,
     private readonly modelRoutingService: ModelRoutingService,
-    private readonly newApiGatewayService: NewApiGatewayService,
   ) {}
 
   private withExecutionMetadata(
@@ -958,10 +956,6 @@ export class VideoProviderService {
     provider: "kling" | "kling-2.6" | "kling-o3" | "vidu" | "viduq3-pro" | "doubao" | "omni-flash-ext",
     taskId: string
   ): Promise<{ status: string; videoUrl?: string; thumbnailUrl?: string }> {
-    if (this.newApiGatewayService.isWrappedTaskId(taskId)) {
-      return this.queryNewApiTask(taskId);
-    }
-
     if (provider === "omni-flash-ext" || taskId.startsWith("omni-flash-ext:")) {
       return this.queryOmniFlashExtTask(taskId);
     }
@@ -1033,18 +1027,7 @@ export class VideoProviderService {
     const managedResult = await this.executeManagedRouteWithFallback(
       OMNI_FLASH_EXT_MODEL_KEY,
       options.vendorKey,
-      async (route) => {
-        if (route.route !== "new_api") {
-          throw new ServiceUnavailableException("Omni Flash Ext 仅支持 new_api/APIMart 路由");
-        }
-        if (this.newApiGatewayService.isConfigured()) {
-          return this.generateManagedVideoViaNewApi(options, route);
-        }
-        this.logger.warn(
-          "new-api not configured for managed Omni Flash Ext route, falling back to direct APIMart path",
-        );
-        return this.generateOmniFlashExtViaApimart(options, route);
-      },
+      async (route) => this.generateOmniFlashExtViaApimart(options, route),
     );
     if (managedResult) return managedResult;
 
@@ -1054,81 +1037,18 @@ export class VideoProviderService {
         modelName: "Omni Flash Ext",
         taskType: "video",
         enabled: true,
-        defaultVendor: "new_api",
+        defaultVendor: "apimart",
       },
       vendor: {
-        vendorKey: "new_api",
-        platformKey: "new_api",
-        label: "new-api / APIMart",
+        vendorKey: "apimart",
+        platformKey: "apimart",
+        label: "APIMart",
         enabled: true,
-        route: "new_api",
+        route: "legacy",
         provider: "omni-flash-ext",
       },
-      route: "new_api",
+      route: "legacy",
     });
-  }
-
-  private async generateManagedVideoViaNewApi(
-    options: VideoProviderRequestDto,
-    route: ResolvedManagedModelRoute,
-  ): Promise<VideoGenerationResult> {
-    const submission = await this.newApiGatewayService.submitVideoTask({
-      model: route.model.modelKey,
-      prompt: options.prompt,
-      metadata: {
-        provider: options.provider,
-        managedModelKey: options.managedModelKey || route.model.modelKey,
-        vendorKey: options.vendorKey || route.vendor.vendorKey,
-        platformKey: options.platformKey || route.vendor.platformKey || route.vendor.vendorKey,
-        videoMode: options.videoMode,
-        referenceImages: options.referenceImages,
-        referenceVideo: options.referenceVideo,
-        referenceVideos: options.referenceVideos,
-        referenceVideoType: options.referenceVideoType,
-        audioUrls: options.audioUrls,
-        aspectRatio: options.aspectRatio,
-        duration: options.duration,
-        resolution: options.resolution,
-        style: options.style,
-        mode: options.mode,
-        klingModel: options.klingModel,
-        viduModel: options.viduModel,
-        viduModelVariant: options.viduModelVariant,
-        seedanceModel: options.seedanceModel,
-        offPeak: options.offPeak,
-        camerafixed: options.camerafixed,
-        watermark: options.watermark,
-        generateAudio: options.generateAudio,
-        sound: options.sound,
-        klingStoryboardMode: options.klingStoryboardMode,
-        klingStoryboardScript: options.klingStoryboardScript,
-      },
-    });
-
-    return {
-      taskId: this.newApiGatewayService.wrapTaskId(submission.taskId),
-      status: submission.status,
-      execution: {
-        modelKey: route.model.modelKey,
-        vendorKey: route.vendor.vendorKey,
-        platformKey: route.vendor.platformKey || route.vendor.vendorKey,
-        route: "new_api",
-        providerChannel: route.vendor.platformKey || route.vendor.vendorKey,
-        routedProvider: route.vendor.provider || options.provider,
-        fallbackUsed: false,
-      },
-    };
-  }
-
-  private async queryNewApiTask(
-    taskId: string,
-  ): Promise<{ status: string; videoUrl?: string; thumbnailUrl?: string }> {
-    const result = await this.newApiGatewayService.queryVideoTask(taskId);
-    return {
-      status: result.status,
-      videoUrl: result.videoUrl,
-      thumbnailUrl: result.thumbnailUrl,
-    };
   }
 
   private async generateOmniFlashExtViaApimart(
@@ -1145,7 +1065,7 @@ export class VideoProviderService {
       throw new ServiceUnavailableException("APIMart API Key 未配置");
     }
 
-    this.logProviderPayload("omni-flash-ext/new-api", newApiPayload);
+    this.logProviderPayload("omni-flash-ext/normalized", newApiPayload);
     this.logProviderPayload("omni-flash-ext/apimart", apimartPayload);
 
     let response: { status: number; data: any };
@@ -1228,7 +1148,7 @@ export class VideoProviderService {
         modelKey: OMNI_FLASH_EXT_MODEL_KEY,
         vendorKey: route.vendor.vendorKey,
         platformKey: route.vendor.platformKey || route.vendor.vendorKey,
-        route: "new_api",
+        route: "legacy",
         providerChannel: "apimart",
         routedProvider: "omni-flash-ext",
         fallbackUsed: false,
@@ -1350,9 +1270,6 @@ export class VideoProviderService {
           keepOriginalSound: String(options.keepOriginalSound || "").trim() || null,
           promptPreview: this.previewDebugText(options.prompt, 120),
         });
-        if (route.route === "new_api") {
-          return this.generateManagedVideoViaNewApi(options, route);
-        }
         if (this.shouldUseManagedV2RequestProfile(route)) {
           return this.createManagedV2Task("kling-o3", options, route);
         }
@@ -1390,9 +1307,6 @@ export class VideoProviderService {
       "kling-2.6",
       options.vendorKey,
       async (route) => {
-      if (route.route === "new_api") {
-        return this.generateManagedVideoViaNewApi(options, route);
-      }
       if (this.shouldUseManagedV2RequestProfile(route)) {
         return this.createManagedV2Task("kling-2.6", options, route);
       }
@@ -1428,9 +1342,6 @@ export class VideoProviderService {
       "kling-3.0",
       options.vendorKey,
       async (route) => {
-      if (route.route === "new_api") {
-        return this.generateManagedVideoViaNewApi(options, route);
-      }
       if (this.shouldUseManagedV2RequestProfile(route)) {
         return this.createManagedV2Task("kling-3.0", options, route);
       }
@@ -1506,9 +1417,6 @@ export class VideoProviderService {
       resolved.modelKey,
       options.vendorKey,
       async (route) => {
-      if (route.route === "new_api") {
-        return this.generateManagedVideoViaNewApi(options, route);
-      }
       if (this.shouldUseManagedV2RequestProfile(route)) {
         return this.createManagedV2Task(resolved.modelKey, options, route);
       }
@@ -1554,9 +1462,6 @@ export class VideoProviderService {
       options.vendorKey,
       async (route) => {
         try {
-          if (route.route === "new_api") {
-            return this.generateManagedVideoViaNewApi(options, route);
-          }
           if (this.shouldUseManagedV2RequestProfile(route)) {
             return this.createManagedV2Task(resolved.modelKey, options, route);
           }

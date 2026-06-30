@@ -201,7 +201,6 @@ export const CREDIT_PRICING_CONFIG = {
       perSecondByResolution: { '720P': 120, '1080P': 200 },
     },
   },
-
   // Midjourney 服务
   'midjourney-imagine': {
     serviceName: 'Midjourney 生图',

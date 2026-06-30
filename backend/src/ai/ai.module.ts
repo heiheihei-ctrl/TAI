@@ -31,7 +31,6 @@ import { MinimaxMusicService } from './services/minimax-music.service';
 import { TencentSpeechService } from './services/tencent-speech.service';
 import { TencentVodAigcService } from './services/tencent-vod-aigc.service';
 import { ModelRoutingService } from './services/model-routing.service';
-import { NewApiGatewayService } from './services/new-api-gateway.service';
 import { TelemetryModule } from '../telemetry/telemetry.module';
 
 @Module({
@@ -68,7 +67,6 @@ import { TelemetryModule } from '../telemetry/telemetry.module';
     TencentSpeechService,
     TencentVodAigcService,
     ModelRoutingService,
-    NewApiGatewayService,
     ImageTaskService, // 添加图像任务服务
     ApiKeyOrJwtGuard,
   ],

@@ -1,6 +1,6 @@
 import type { Node, Edge } from 'reactflow';
 
-export type NodeKind = 'textPrompt' | 'textChat' | 'textNote' | 'promptOptimize' | 'image' | 'generate' | 'generate4' | 'generatePro' | 'storyboardSplit' | 'imageSplit' | 'imageCompress' | 'audioUpload' | 'minimaxSpeech' | 'tencentSpeech';
+export type NodeKind = 'textPrompt' | 'textChat' | 'textNote' | 'promptOptimize' | 'image' | 'generate' | 'generate4' | 'generatePro' | 'storyboardSplit' | 'imageSplit' | 'imageCompress' | 'audioUpload' | 'minimaxSpeech' | 'tencentSpeech' | 'videoEnhance';
 
 export type TextPromptData = {
   text?: string;
@@ -212,7 +212,47 @@ export type TencentSpeechData = {
   selectedHistoryId?: string;
 };
 
-export type AnyNodeData = TextPromptData | PromptOptimizeData | ImageData | GenerateData | GenerateProData | Generate4Data | TextChatData | StoryboardSplitData | ImageSplitData | ImageCompressData | AudioUploadData | MinimaxSpeechData | TencentSpeechData;
+export type VideoEnhanceData = {
+  status?: 'idle' | 'running' | 'succeeded' | 'failed';
+  error?: string;
+  inputVideoUrl?: string;
+  videoUrl?: string;
+  taskId?: string;
+  apiUsageId?: string;
+  progress?: number;
+  toolVersion?: 'standard' | 'professional';
+  scene?: 'aigc' | 'ugc' | 'short_series' | 'old_film';
+  resolutionMode?: 'preset' | 'limit';
+  resolution?: '720p' | '1080p' | '2k' | '4k';
+  resolutionLimit?: number;
+  fps?: number;
+  history?: Array<{
+    id: string;
+    taskId: string;
+    apiUsageId?: string;
+    status: 'queued' | 'processing' | 'succeeded' | 'failed' | 'timeout';
+    inputVideoUrl: string;
+    outputVideoUrl?: string;
+    error?: string;
+    createdAt: number;
+    finishedAt?: number;
+    processingTime?: number;
+    toolVersion: 'standard' | 'professional';
+    scene: 'aigc' | 'ugc' | 'short_series' | 'old_film';
+    resolutionMode: 'preset' | 'limit';
+    resolution?: '720p' | '1080p' | '2k' | '4k';
+    resolutionLimit?: number;
+    fps?: number;
+  }>;
+  pendingTaskId?: string;
+  pendingApiUsageId?: string;
+  pendingStartMs?: number;
+  processingTime?: number;
+  boxW?: number;
+  boxH?: number;
+};
+
+export type AnyNodeData = TextPromptData | PromptOptimizeData | ImageData | GenerateData | GenerateProData | Generate4Data | TextChatData | StoryboardSplitData | ImageSplitData | ImageCompressData | AudioUploadData | MinimaxSpeechData | TencentSpeechData | VideoEnhanceData;
 
 export type AnyNode = Node<AnyNodeData>;
 export type AnyEdge = Edge;

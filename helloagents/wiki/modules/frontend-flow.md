@@ -1,5 +1,19 @@
 # 前端模块：Flow（frontend-flow�?
 
+## 2026-06-30 Update
+- `VideoComposeEditorModal` 初次打开时会先完成视频转存、metadata 读取、`MP4Clip` 解码实例创建与时间线缩略图生成，再结束 loading，避免“编辑器先出来但预览仍半初始化”的首屏抖动。
+- 视频合成预览区改为首屏可见后统一走 `canvas` 渲染，不再先挂原生 `<video>` 再切换到 `@webav/av-cliper` 的帧绘制路径；同时移除逐帧绘制前的强制清屏，并提高播放头刷新频率，以降低播放时黑屏闪烁与卡顿感。
+
+## 2026-06-29 Update
+- Added a browser-local `videoCompose` Flow node for sequential MP4 stitching with optional BGM mix-in. The compose path is frontend-only and does not call backend transcoding or billing logic.
+- New compose internals live under `frontend/src/components/flow/nodes/videoCompose/`:
+  - `collectUpstreamComposeSources` extracts upstream video/audio inputs from Flow edges.
+  - `fetchClip` prefers same-origin proxy URLs, falls back to direct URLs, retries with exponential backoff, and rejects HTML error pages masquerading as media.
+  - `composeVideosToBlob` uses `@webav/av-cliper` / WebCodecs to rebuild a final MP4 from normalized `sources[]` (`url/trimStart/trimEnd/title/thumbnailUrl`) plus optional `AudioClip` mix-in.
+  - `composeWriteback` writes a local `blob:` preview first, then asynchronously uploads to OSS and swaps in the persistent URL.
+- `VideoComposeEditorModal` provides a usable fullscreen timeline editor with preview playback, playhead seeking, zoom, segment selection, trim handles, in/out point setting, split-at-playhead, delete, undo/redo, and playhead snapping to clip boundaries.
+- Editor runtime `clip` instances are destroyed on close; composed preview blob URLs are revoked after persistent upload replacement.
+
 ## 2026-06-17 Update
 - Added `omniFlashExtVideo` as an independent Flow video node named `Omni Flash Ext`.
 - The node exposes only `text`, `image`, and `video` input handles plus one `video` output handle. Runtime collection for Omni Flash Ext reads images only from the `image` handle, videos only from the `video` handle, and may append valid Prompt image mentions after connected images with stable de-duplication.
