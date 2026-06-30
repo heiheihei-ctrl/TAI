@@ -341,6 +341,27 @@ const revokeThumbsFromSnapshots = (snapshots: EditableClip[][]) => {
   });
 };
 
+const inheritThumbsForSplit = (params: {
+  thumbs: ClipThumb[];
+  parentTrimEndUs: number;
+  trimStartUs: number;
+  trimEndUs: number;
+}): ClipThumb[] => {
+  const { thumbs, parentTrimEndUs, trimStartUs, trimEndUs } = params;
+  if (thumbs.length === 0) return [];
+
+  const inherited = thumbs.filter((thumb, index) => {
+    const segStart = thumb.ts;
+    const segEnd = thumbs[index + 1]?.ts ?? parentTrimEndUs;
+    return segEnd > trimStartUs && segStart < trimEndUs;
+  });
+
+  if (inherited.length > 0) return inherited;
+
+  const fallback = thumbs.find((thumb) => thumb.ts >= trimStartUs && thumb.ts < trimEndUs);
+  return fallback ? [fallback] : [];
+};
+
 const createThumbsForClip = async (
   clip: MP4ClipLike,
   options: {
@@ -408,18 +429,34 @@ const createThumbsForClip = async (
   return manualThumbs;
 };
 
-const updateClipThumbs = async (params: {
+const refreshClipThumbsFromSource = async (params: {
+  MP4ClipCtor: new (stream: ReadableStream<Uint8Array>) => MP4ClipLike;
   clip: EditableClip;
+  signal?: AbortSignal;
 }): Promise<EditableClip> => {
-  if (!params.clip.clip) {
-    return params.clip;
+  const { MP4ClipCtor, clip, signal } = params;
+  const fetched = await reliableClipFetch(clip.sourceUrl, signal);
+  if (signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
   }
-  const thumbs = await createThumbsForClip(params.clip.clip, {
-    trimStartUs: params.clip.trimStart,
-    trimEndUs: params.clip.trimEnd,
-    sourceOffsetUs: params.clip.sourceOffsetUs,
-  });
-  return cloneClipState(params.clip, { thumbs });
+
+  const sourceClip = new MP4ClipCtor(fetched.stream);
+  try {
+    await withTimeout(sourceClip.ready, 60_000, `片段「${clip.sourceMeta.title}」缩略图生成超时`);
+    if (signal?.aborted) {
+      throw new DOMException("Aborted", "AbortError");
+    }
+    const thumbs = await createThumbsForClip(sourceClip, {
+      trimStartUs: clip.trimStart,
+      trimEndUs: clip.trimEnd,
+      sourceOffsetUs: 0,
+    });
+    return cloneClipState(clip, { thumbs });
+  } finally {
+    try {
+      sourceClip.destroy();
+    } catch {}
+  }
 };
 
 async function createEditableClipBase(params: {
@@ -712,8 +749,10 @@ export default function VideoComposeEditorModal({
         }
         try {
           const nextClip = clip.clip
-            ? await updateClipThumbs({
+            ? await refreshClipThumbsFromSource({
+                MP4ClipCtor: clipCtor as new (stream: ReadableStream<Uint8Array>) => MP4ClipLike,
                 clip,
+                signal: controller.signal,
               })
             : await hydrateEditableClip({
                 MP4ClipCtor: clipCtor as new (stream: ReadableStream<Uint8Array>) => MP4ClipLike,
@@ -1051,6 +1090,18 @@ export default function VideoComposeEditorModal({
       setLoadingMessage(lt("正在分割片段...", "Splitting clip..."));
       const localSplitUs = splitAbsUs - selectedEntry.clip.sourceOffsetUs;
       const [leftClip, rightClip] = await selectedEntry.clip.clip.split(localSplitUs);
+      const leftThumbs = inheritThumbsForSplit({
+        thumbs: selectedEntry.clip.thumbs,
+        parentTrimEndUs: selectedEntry.clip.trimEnd,
+        trimStartUs: selectedEntry.clip.trimStart,
+        trimEndUs: splitAbsUs,
+      });
+      const rightThumbs = inheritThumbsForSplit({
+        thumbs: selectedEntry.clip.thumbs,
+        parentTrimEndUs: selectedEntry.clip.trimEnd,
+        trimStartUs: splitAbsUs,
+        trimEndUs: selectedEntry.clip.trimEnd,
+      });
 
       const leftStateBase: EditableClip = {
         ...selectedEntry.clip,
@@ -1061,7 +1112,7 @@ export default function VideoComposeEditorModal({
         clipDurationUs: localSplitUs,
         trimStart: selectedEntry.clip.trimStart,
         trimEnd: splitAbsUs,
-        thumbs: [],
+        thumbs: leftThumbs,
       };
       const rightStateBase: EditableClip = {
         ...selectedEntry.clip,
@@ -1072,7 +1123,7 @@ export default function VideoComposeEditorModal({
         clipDurationUs: Math.max(1, selectedEntry.clip.clipDurationUs - localSplitUs),
         trimStart: splitAbsUs,
         trimEnd: selectedEntry.clip.trimEnd,
-        thumbs: [],
+        thumbs: rightThumbs,
       };
       registerClipRuntime(leftStateBase);
       registerClipRuntime(rightStateBase);
@@ -1087,6 +1138,34 @@ export default function VideoComposeEditorModal({
       }
       pushHistory(nextClips);
       setSelectedId(rightStateBase.id);
+      void (async () => {
+        try {
+          const [nextLeftClip, nextRightClip] = await Promise.all([
+            refreshClipThumbsFromSource({
+              MP4ClipCtor: clipCtor as new (stream: ReadableStream<Uint8Array>) => MP4ClipLike,
+              clip: leftStateBase,
+            }),
+            refreshClipThumbsFromSource({
+              MP4ClipCtor: clipCtor as new (stream: ReadableStream<Uint8Array>) => MP4ClipLike,
+              clip: rightStateBase,
+            }),
+          ]);
+          replaceRuntimeClip(nextLeftClip);
+          replaceRuntimeClip(nextRightClip);
+          setHistory((prevHistory) =>
+            prevHistory.map((snapshot, snapshotIndex) => {
+              if (snapshotIndex !== historyIndexRef.current) return snapshot;
+              return snapshot.map((item) => {
+                if (item.runtimeId === nextLeftClip.runtimeId) return nextLeftClip;
+                if (item.runtimeId === nextRightClip.runtimeId) return nextRightClip;
+                return item;
+              });
+            })
+          );
+        } catch (err) {
+          console.warn("[VideoComposeEditorModal] refine split thumbnails failed:", err);
+        }
+      })();
     } catch (err) {
       window.dispatchEvent(
         new CustomEvent("toast", {
@@ -1099,7 +1178,7 @@ export default function VideoComposeEditorModal({
     } finally {
       setLoadingMessage(null);
     }
-  }, [clipCtor, clips, currentUs, lt, pxPerSecond, pushHistory, registerClipRuntime, selectedEntry]);
+  }, [clipCtor, clips, currentUs, lt, pushHistory, registerClipRuntime, replaceRuntimeClip, selectedEntry]);
 
   const handleExport = React.useCallback(async () => {
     const exportSources = clips.map<VideoComposeSource>((clip) => ({
