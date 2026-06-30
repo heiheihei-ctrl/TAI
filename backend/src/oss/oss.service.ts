@@ -374,6 +374,7 @@ export class OssService {
       'qcloud.com',             // 腾讯云下载域名（含 vod-qcloud.com）
       'vod-qcloud.com',         // 腾讯 VOD 临时资源常见域名
       'tgtai.com',              // Tanva CDN 域名（供 AI 上游服务访问）
+      'getapib.org',            // APIB 外部视频资源代理
     ];
 
     defaultAllowed.forEach(h => hosts.push(h));

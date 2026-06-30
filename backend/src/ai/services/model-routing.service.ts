@@ -4,7 +4,7 @@ import type { ManagedPricingBook } from './model-pricing-resolver';
 
 export const MODEL_PROVIDER_MAPPING_SETTING_KEY = 'model_provider_mapping_v2';
 
-type ModelVendorRouteType = 'legacy' | 'tencent_vod' | 'new_api';
+type ModelVendorRouteType = 'legacy' | 'tencent_vod';
 
 export interface ManagedVendorPlatformConfig {
   platformKey: string;
@@ -528,12 +528,12 @@ const DEFAULT_MODEL_PROVIDER_MAPPING_V2: ModelProviderMappingV2 = {
       metadata: DEFAULT_TENCENT_VOD_PLATFORM_METADATA,
     },
     {
-      platformKey: 'new_api',
-      platformName: 'new-api / APIMart',
+      platformKey: 'apimart',
+      platformName: 'APIMart',
       enabled: true,
-      route: 'new_api',
+      route: 'legacy',
       provider: 'omni-flash-ext',
-      description: 'OpenAI compatible video route backed by APIMart',
+      description: 'APIMart 直连视频路由',
     },
     {
       platformKey: 'vidu_api',
@@ -566,14 +566,14 @@ const DEFAULT_MODEL_PROVIDER_MAPPING_V2: ModelProviderMappingV2 = {
       modelName: 'Omni Flash Ext',
       taskType: 'video',
       enabled: true,
-      defaultVendor: 'new_api',
+      defaultVendor: 'apimart',
       vendors: [
         {
-          vendorKey: 'new_api',
-          platformKey: 'new_api',
-          label: 'new-api / APIMart',
+          vendorKey: 'apimart',
+          platformKey: 'apimart',
+          label: 'APIMart',
           enabled: true,
-          route: 'new_api',
+          route: 'legacy',
           provider: 'omni-flash-ext',
           modelName: 'Omni Flash Ext',
           modelVersion: 'Omni-Flash-Ext',
@@ -1345,12 +1345,7 @@ export class ModelRoutingService {
     return {
       model,
       vendor: mergedVendor,
-      route:
-        mergedVendor.route === 'tencent_vod'
-          ? 'tencent_vod'
-          : mergedVendor.route === 'new_api'
-            ? 'new_api'
-            : 'legacy',
+      route: mergedVendor.route === 'tencent_vod' ? 'tencent_vod' : 'legacy',
     };
   }
 
@@ -1423,12 +1418,7 @@ export class ModelRoutingService {
       return {
         model,
         vendor: mergedVendor,
-        route:
-          mergedVendor.route === 'tencent_vod'
-            ? 'tencent_vod'
-            : mergedVendor.route === 'new_api'
-              ? 'new_api'
-              : 'legacy',
+        route: mergedVendor.route === 'tencent_vod' ? 'tencent_vod' : 'legacy',
       };
     });
   }

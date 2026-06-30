@@ -72,14 +72,6 @@ const LEGACY_MJ_MODELS = new Set([
   'mj-fast',
 ]);
 
-function safeJsonParse(text: string) {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-}
-
 @Injectable()
 export class MidjourneyProvider implements IAIProvider {
   private readonly logger = new Logger(MidjourneyProvider.name);
@@ -159,19 +151,6 @@ export class MidjourneyProvider implements IAIProvider {
 
   private hasYouchuanCredentials(): boolean {
     return Boolean(this.youchuanAppId && this.youchuanSecretKey);
-  }
-
-  private isManagedMidjourneyEnabled(): boolean {
-    const raw = this.config.get<string>('MIDJOURNEY_VIA_NEW_API')?.trim().toLowerCase();
-    return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
-  }
-
-  private getNewApiBaseUrl(): string | null {
-    return this.config.get<string>('NEW_API_BASE_URL')?.trim().replace(/\/$/, '') || null;
-  }
-
-  private getNewApiKey(): string | null {
-    return this.config.get<string>('NEW_API_KEY')?.trim() || null;
   }
 
   private normalizeMidjourneyModel(input?: string): string {
@@ -571,119 +550,6 @@ export class MidjourneyProvider implements IAIProvider {
     return [];
   }
 
-  private async submitNewApiMidjourneyTask(params: {
-    baseUrl: string;
-    apiKey: string;
-    model: string;
-    prompt: string;
-    images?: string[];
-  }): Promise<string> {
-    const res = await fetch(`${params.baseUrl}/v1/video/generations`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        Authorization: `Bearer ${params.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: this.normalizeMidjourneyModel(params.model),
-        prompt: (params.prompt || '').replace(/\r?\n/g, ' ').trim(),
-        ...(params.images?.length ? { images: params.images } : {}),
-      }),
-    });
-
-    const text = await res.text();
-    const data = safeJsonParse(text);
-    if (!res.ok) {
-      const msg =
-        data?.error?.message ||
-        data?.message ||
-        text ||
-        `HTTP ${res.status}`;
-      throw new Error(`MJ 提交失败：${msg}`);
-    }
-
-    const taskId = data?.task_id || data?.id || data?.data?.task_id || data?.data?.id;
-    if (!taskId) {
-      throw new Error('MJ 提交失败：new-api 未返回 task_id');
-    }
-    return String(taskId);
-  }
-
-  private extractImageUrls(task: any): string[] {
-    const candidates = [
-      task?.result_url,
-      task?.result_urls,
-      task?.image_url,
-      task?.image_urls,
-      task?.url,
-      task?.urls,
-      task?.images,
-      task?.output,
-      task?.data?.images,
-      task?.data?.imageUrls,
-      task?.result?.images,
-      task?.result?.imageUrls,
-    ];
-
-    const urls = new Set<string>();
-    for (const candidate of candidates) {
-      for (const url of this.flattenUrlCandidate(candidate)) urls.add(url);
-    }
-    return [...urls];
-  }
-
-  private async pollNewApiMidjourneyTask(params: {
-    baseUrl: string;
-    apiKey: string;
-    taskId: string;
-    maxPollAttempts?: number;
-    pollIntervalMs?: number;
-  }): Promise<ManagedMidjourneyResult> {
-    const maxPollAttempts = params.maxPollAttempts ?? 60;
-    const pollIntervalMs = params.pollIntervalMs ?? 4000;
-
-    for (let i = 0; i < maxPollAttempts; i += 1) {
-      if (i > 0) {
-        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-      }
-
-      const res = await fetch(
-        `${params.baseUrl}/v1/video/generations/${encodeURIComponent(params.taskId)}`,
-        {
-          headers: {
-            Accept: 'application/json',
-            Authorization: `Bearer ${params.apiKey}`,
-          },
-        },
-      );
-
-      const text = await res.text();
-      const data = safeJsonParse(text);
-      if (!res.ok) continue;
-
-      const task = data?.data ?? data;
-      const status = String(task?.status ?? '').toUpperCase();
-      const imageUrls = this.extractImageUrls(task);
-
-      if (status === 'SUCCESS' || status === 'SUCCEEDED') {
-        if (imageUrls.length === 0) continue;
-        return {
-          taskId: params.taskId,
-          imageUrl: imageUrls[0] ?? null,
-          imageUrls,
-          raw: task,
-        };
-      }
-
-      if (status === 'FAILURE' || status === 'FAILED') {
-        throw new Error(`MJ 任务失败：${task?.fail_reason || task?.failReason || '未知原因'}`);
-      }
-    }
-
-    throw new Error('MJ 任务超时');
-  }
-
   private async runManagedMidjourney(params: {
     model: string;
     prompt: string;
@@ -692,38 +558,9 @@ export class MidjourneyProvider implements IAIProvider {
     const normalizedModel = this.normalizeMidjourneyModel(params.model);
     const images = Array.isArray(params.images) ? params.images.filter(Boolean) : [];
 
-    if (this.isManagedMidjourneyEnabled()) {
-      const newApiBaseUrl = this.getNewApiBaseUrl();
-      const newApiKey = this.getNewApiKey();
-      if (newApiBaseUrl && newApiKey) {
-        try {
-          const taskId = await this.submitNewApiMidjourneyTask({
-            baseUrl: newApiBaseUrl,
-            apiKey: newApiKey,
-            model: normalizedModel,
-            prompt: params.prompt,
-            images,
-          });
-          return await this.pollNewApiMidjourneyTask({
-            baseUrl: newApiBaseUrl,
-            apiKey: newApiKey,
-            taskId,
-            maxPollAttempts: this.maxPollAttempts,
-            pollIntervalMs: this.pollIntervalMs,
-          });
-        } catch (error) {
-          this.logger.warn(
-            `[Midjourney] managed new-api failed, falling back to Youchuan direct: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
-      }
-    }
-
     if (!this.hasYouchuanCredentials()) {
       throw new ServiceUnavailableException(
-        'Midjourney 受管链路未配置。请设置 NEW_API_BASE_URL/NEW_API_KEY 或 YOUCHUAN_APP_ID/YOUCHUAN_SECRET_KEY。'
+        'Midjourney 受管链路未配置。请设置 YOUCHUAN_APP_ID/YOUCHUAN_SECRET_KEY。'
       );
     }
 

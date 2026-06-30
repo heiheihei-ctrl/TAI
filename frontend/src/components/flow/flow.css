@@ -530,6 +530,10 @@ input[type="text"],
   background: #ea580c !important;
 }
 
+.tanva-flow-overlay .react-flow__handle.tanva-beta-handle.tanva-video-compose-audio-handle {
+  background: #ec4899 !important;
+}
+
 .tanva-flow-overlay .react-flow__handle-left.tanva-beta-handle {
   left: -3px !important;
 }

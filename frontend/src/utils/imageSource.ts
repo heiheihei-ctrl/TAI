@@ -271,6 +271,7 @@ const BACKEND_DEFAULT_ALLOWED_HOSTS = [
   "tencentcos.cn",
   "myqcloud.com",
   "tai-ai.tos-cn-guangzhou.volces.com",
+  "getapib.org",
 ];
 
 const getManagedAssetHosts = (): Set<string> => {

@@ -1366,12 +1366,12 @@ export class NodeConfigService {
           supportedModels: ['omni-flash-ext'],
           managedRoutes: {
             modelKey: 'omni-flash-ext',
-            defaultVendor: 'new_api',
+            defaultVendor: 'apimart',
             vendors: [
               {
-                vendorKey: 'new_api',
-                platformKey: 'new_api',
-                label: 'new-api / APIMart',
+                vendorKey: 'apimart',
+                platformKey: 'apimart',
+                label: 'APIMart',
                 provider: 'omni-flash-ext',
                 creditsPerCall: 600,
                 priceYuan: 6,
@@ -1380,8 +1380,8 @@ export class NodeConfigService {
           },
           defaultData: {
             managedModelKey: 'omni-flash-ext',
-            vendorKey: 'new_api',
-            platformKey: 'new_api',
+            vendorKey: 'apimart',
+            platformKey: 'apimart',
             provider: 'omni-flash-ext',
             videoMode: 'frame',
             duration: 6,
