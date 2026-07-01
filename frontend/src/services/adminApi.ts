@@ -94,6 +94,12 @@ export interface ApiUsageStats {
   }>;
 }
 
+export interface VolcengineMonthlyCreditStat {
+  month: string;
+  totalCredits: number;
+  totalCalls: number;
+}
+
 export interface ApiUsageRecord {
   id: string;
   userId: string;
@@ -345,6 +351,19 @@ export async function getApiUsageStats(params?: {
   if (params?.endDate) searchParams.set("endDate", params.endDate);
 
   const response = await request(`/api/admin/api-usage/stats?${searchParams}`);
+  return response.json();
+}
+
+export async function getVolcengineMonthlyCreditStats(params?: {
+  months?: number;
+}): Promise<VolcengineMonthlyCreditStat[]> {
+  const searchParams = new URLSearchParams();
+  if (params?.months) searchParams.set('months', String(params.months));
+
+  const query = searchParams.toString();
+  const response = await request(
+    `/api/admin/api-usage/volcengine-monthly${query ? `?${query}` : ''}`,
+  );
   return response.json();
 }
 

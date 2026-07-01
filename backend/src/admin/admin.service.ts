@@ -2,6 +2,11 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiResponseStatus } from '../credits/dto/credits.dto';
+import {
+  buildVolcengineMonthlySeries,
+  VOLCENGINE_API_SERVICE_TYPES,
+  VolcengineMonthlyCreditStat,
+} from './volcengine-api-usage.util';
 
 export interface ProfileDistributionItem {
   label: string;
@@ -73,6 +78,8 @@ export interface ApiUsageStats {
     callCount: number;
   }>;
 }
+
+export type { VolcengineMonthlyCreditStat };
 
 export type CreditChangeSource = 'recharge' | 'admin_add' | 'admin_deduct';
 
@@ -1052,6 +1059,55 @@ export class AdminService {
     }
 
     return result;
+  }
+
+  /**
+   * 火山引擎相关 API 月度积分消耗（Seedance / Seedream 方舟 / 视频增强）
+   */
+  async getVolcengineMonthlyCreditStats(options: {
+    months?: number;
+  } = {}): Promise<VolcengineMonthlyCreditStat[]> {
+    const months = Math.min(36, Math.max(1, options.months ?? 12));
+    const startDate = new Date();
+    startDate.setUTCDate(1);
+    startDate.setUTCHours(0, 0, 0, 0);
+    startDate.setUTCMonth(startDate.getUTCMonth() - (months - 1));
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{ month: string; totalCredits: bigint | number; totalCalls: bigint | number }>
+    >(Prisma.sql`
+      SELECT
+        to_char(date_trunc('month', "createdAt"), 'YYYY-MM') AS month,
+        COALESCE(SUM("creditsUsed"), 0) AS "totalCredits",
+        COUNT(*)::bigint AS "totalCalls"
+      FROM "ApiUsageRecord"
+      WHERE "createdAt" >= ${startDate}
+        AND (
+          "serviceType" IN (${Prisma.join(
+            VOLCENGINE_API_SERVICE_TYPES.map((type) => Prisma.sql`${type}`),
+          )})
+          AND (
+            "serviceType" <> 'doubao-seedream-5-0-260128'
+            OR COALESCE(
+              "requestParams"->>'seedream5Provider',
+              "requestParams"->>'upstreamProvider',
+              "requestParams"->>'channel',
+              'doubao'
+            ) <> 'watcha'
+          )
+        )
+      GROUP BY date_trunc('month', "createdAt")
+      ORDER BY month ASC
+    `);
+
+    return buildVolcengineMonthlySeries(
+      rows.map((row) => ({
+        month: row.month,
+        totalCredits: this.toNumber(row.totalCredits),
+        totalCalls: this.toNumber(row.totalCalls),
+      })),
+      months,
+    );
   }
 
   /**

@@ -36,6 +36,7 @@ import {
   UsersQueryDto,
   ApiUsageStatsQueryDto,
   ApiUsageRecordsQueryDto,
+  VolcengineMonthlyStatsQueryDto,
   UpdateUserStatusDto,
   UpdateUserRoleDto,
   CreditChangeRecordsQueryDto,
@@ -272,6 +273,18 @@ export class AdminController {
     return this.adminService.getApiUsageStats({
       startDate: query.startDate ? new Date(query.startDate) : undefined,
       endDate: query.endDate ? new Date(query.endDate) : undefined,
+    });
+  }
+
+  @Get('api-usage/volcengine-monthly')
+  @ApiOperation({ summary: '获取火山引擎 API 月度积分消耗' })
+  async getVolcengineMonthlyCreditStats(
+    @Request() req: AuthenticatedRequest,
+    @Query() query: VolcengineMonthlyStatsQueryDto,
+  ) {
+    this.checkAdmin(req, 'api-usage:stats');
+    return this.adminService.getVolcengineMonthlyCreditStats({
+      months: query.months,
     });
   }
 

@@ -54,6 +54,15 @@ export class ApiUsageStatsQueryDto {
   endDate?: string;
 }
 
+export class VolcengineMonthlyStatsQueryDto {
+  @ApiPropertyOptional({ description: '统计最近几个月（含当月）', default: 12 })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(36)
+  months?: number = 12;
+}
+
 export class ApiUsageRecordsQueryDto {
   @ApiPropertyOptional({ description: '页码', default: 1 })
   @IsOptional()

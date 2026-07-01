@@ -22,6 +22,7 @@ import {
   getDashboardStats,
   getUsers,
   getApiUsageStats,
+  getVolcengineMonthlyCreditStats,
   getApiUsageRecords,
   addCredits,
   deductCredits,
@@ -63,6 +64,7 @@ import {
   type DashboardStats,
   type UserWithCredits,
   type ApiUsageStats,
+  type VolcengineMonthlyCreditStat,
   type ApiUsageRecord,
   type Pagination,
   type SystemSetting,
@@ -85,6 +87,7 @@ import {
   saveEventSettingsConfig,
   type EventSettingsConfig,
 } from "@/services/adminApi";
+import VolcengineMonthlyCreditsChart from "@/components/admin/VolcengineMonthlyCreditsChart";
 import { notifyNodeConfigsUpdated } from "@/services/nodeConfigService";
 import {
   fetchTemplates,
@@ -5736,7 +5739,9 @@ function UsersTab({
 // API 使用统计 Tab
 function ApiStatsTab() {
   const [stats, setStats] = useState<ApiUsageStats[]>([]);
+  const [volcMonthlyStats, setVolcMonthlyStats] = useState<VolcengineMonthlyCreditStat[]>([]);
   const [loading, setLoading] = useState(false);
+  const [volcLoading, setVolcLoading] = useState(false);
   const [page, setPage] = useState(1);
   const pageSize = 10;
 
@@ -5752,14 +5757,37 @@ function ApiStatsTab() {
         setLoading(false);
       }
     };
-    loadStats();
+
+    const loadVolcMonthlyStats = async () => {
+      setVolcLoading(true);
+      try {
+        const result = await getVolcengineMonthlyCreditStats({ months: 12 });
+        setVolcMonthlyStats(result);
+      } catch (error) {
+        console.error("加载火山引擎月度统计失败:", error);
+      } finally {
+        setVolcLoading(false);
+      }
+    };
+
+    void loadStats();
+    void loadVolcMonthlyStats();
   }, []);
 
   const totalPages = Math.max(1, Math.ceil(stats.length / pageSize));
   const pagedStats = stats.slice((page - 1) * pageSize, page * pageSize);
 
   return (
-    <div className='bg-white rounded-lg border overflow-hidden'>
+    <div className='space-y-4'>
+      <div className='bg-white rounded-lg border p-4'>
+        {volcLoading ? (
+          <div className='py-8 text-center text-sm text-gray-500'>加载火山引擎统计中...</div>
+        ) : (
+          <VolcengineMonthlyCreditsChart data={volcMonthlyStats} />
+        )}
+      </div>
+
+      <div className='bg-white rounded-lg border overflow-hidden'>
       <div className='max-h-[1200px] overflow-auto'>
         <table className='w-full text-sm'>
           <thead className='bg-gray-50'>
@@ -5872,6 +5900,7 @@ function ApiStatsTab() {
           </Button>
         </div>
       )}
+      </div>
     </div>
   );
 }
