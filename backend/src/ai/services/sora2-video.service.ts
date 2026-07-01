@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { ModelRoutingService } from "./model-routing.service";
 import { TencentVodAigcService } from "./tencent-vod-aigc.service";
+import { UpstreamImageUrlService } from "./upstream-image-url.service";
 import { getToapisApiKey } from "../../utils/apimartHttpClient";
 import { getToapisOrigin } from "../../utils/toapisHttpClient";
 
@@ -175,6 +176,7 @@ export class Sora2VideoService {
   constructor(
     private readonly modelRoutingService: ModelRoutingService,
     private readonly tencentVodAigcService: TencentVodAigcService,
+    private readonly upstreamImageUrl: UpstreamImageUrlService,
   ) {}
 
   /**
@@ -656,7 +658,9 @@ export class Sora2VideoService {
       .filter((url): url is string => typeof url === "string" && url.trim().length > 0)
       .map((url) => url.trim());
     if (images.length) {
-      createPayload.image_urls = images;
+      createPayload.image_urls = await this.upstreamImageUrl.resolveHttpUrls(images, {
+        uploadPrefix: "ai/images/sora2-inputs",
+      });
     }
 
     this.logger.log(

@@ -25,6 +25,7 @@ import {
 } from "./ai-provider.interface";
 import { parseToolSelectionJson } from "../tool-selection-json.util";
 import { TencentVodAigcService } from "../services/tencent-vod-aigc.service";
+import { UpstreamImageUrlService } from "../services/upstream-image-url.service";
 import {
   apimartRequest,
   buildToapisUrl,
@@ -156,7 +157,8 @@ export class BananaProvider implements IAIProvider {
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
-    private readonly tencentVodAigcService: TencentVodAigcService
+    private readonly tencentVodAigcService: TencentVodAigcService,
+    private readonly upstreamImageUrl: UpstreamImageUrlService,
   ) {}
 
   async initialize(): Promise<void> {
@@ -1008,6 +1010,101 @@ export class BananaProvider implements IAIProvider {
     return String(value);
   }
 
+  private async buildApimartChatMessagesAsync(contents: any): Promise<Array<{
+    role: "system" | "user" | "assistant" | "tool";
+    content: string | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
+  }>> {
+    const normalizedContents = this.buildContents(contents);
+    const messages: Array<{
+      role: "system" | "user" | "assistant" | "tool";
+      content: string | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
+    }> = [];
+
+    for (const item of normalizedContents) {
+      const roleRaw =
+        typeof item?.role === "string" && item.role.trim()
+          ? item.role.trim().toLowerCase()
+          : "user";
+      const role =
+        roleRaw === "system" ||
+        roleRaw === "assistant" ||
+        roleRaw === "tool"
+          ? (roleRaw as "system" | "assistant" | "tool")
+          : "user";
+
+      const rawParts = Array.isArray(item?.parts) ? item.parts : [];
+      const transformedParts: Array<
+        { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }
+      > = [];
+
+      for (const part of rawParts) {
+        if (part && typeof part === "object" && typeof part.text === "string") {
+          transformedParts.push({ type: "text", text: part.text });
+          continue;
+        }
+
+        const inlineData = part && typeof part === "object" ? part.inlineData : null;
+        const data = inlineData && typeof inlineData.data === "string" ? inlineData.data.replace(/\s+/g, "") : "";
+        if (data) {
+          const mimeType =
+            inlineData && typeof inlineData.mimeType === "string"
+              ? inlineData.mimeType
+              : this.inferMimeTypeFromBase64(data);
+          const httpUrl = await this.upstreamImageUrl.resolveHttpUrl(
+            `data:${mimeType};base64,${data}`,
+            { uploadPrefix: "ai/images/banana-chat-inputs" },
+          );
+          transformedParts.push({
+            type: "image_url",
+            image_url: { url: httpUrl },
+          });
+          continue;
+        }
+
+        const fileData = part && typeof part === "object" ? part.fileData : null;
+        if (fileData && typeof fileData.uri === "string" && fileData.uri.trim()) {
+          const httpUrl = await this.upstreamImageUrl.resolveHttpUrl(fileData.uri.trim(), {
+            uploadPrefix: "ai/images/banana-chat-inputs",
+          });
+          transformedParts.push({
+            type: "image_url",
+            image_url: { url: httpUrl },
+          });
+          continue;
+        }
+
+        if (part !== null && part !== undefined) {
+          transformedParts.push({
+            type: "text",
+            text: this.normalizeTextContentValue(part),
+          });
+        }
+      }
+
+      if (!transformedParts.length) {
+        transformedParts.push({ type: "text", text: "" });
+      }
+
+      if (transformedParts.length === 1 && transformedParts[0].type === "text") {
+        messages.push({
+          role,
+          content: transformedParts[0].text,
+        });
+      } else {
+        messages.push({
+          role,
+          content: transformedParts,
+        });
+      }
+    }
+
+    if (!messages.length) {
+      messages.push({ role: "user", content: "" });
+    }
+
+    return messages;
+  }
+
   private buildApimartChatMessages(contents: any): Array<{
     role: "system" | "user" | "assistant" | "tool";
     content: string | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
@@ -1122,7 +1219,7 @@ export class BananaProvider implements IAIProvider {
     const payload = {
       model,
       stream: false,
-      messages: this.buildApimartChatMessages(contents),
+      messages: await this.buildApimartChatMessagesAsync(contents),
     };
 
     let response: {
@@ -1460,12 +1557,9 @@ export class BananaProvider implements IAIProvider {
   }
 
   private async toApimartImageUrls(sourceImages: string[]): Promise<string[]> {
-    const normalized = await Promise.all(
-      sourceImages.map((source, index) =>
-        this.normalizeFileInputAsync(source, `apimart source #${index + 1}`)
-      )
-    );
-    return normalized.map((item) => `data:${item.mimeType};base64,${item.data}`);
+    return this.upstreamImageUrl.resolveHttpUrls(sourceImages, {
+      uploadPrefix: "ai/images/banana-inputs",
+    });
   }
 
   private buildApimartError(code: string, error: unknown): AIProviderResponse<ImageResult> {
@@ -1496,7 +1590,7 @@ export class BananaProvider implements IAIProvider {
     };
 
     if (Array.isArray(request.imageUrls) && request.imageUrls.length > 0) {
-      payload.image_urls = request.imageUrls;
+      payload.image_urls = await this.toApimartImageUrls(request.imageUrls);
     }
 
     if (request.googleSearch || request.enableWebSearch) {

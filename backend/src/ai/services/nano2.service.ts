@@ -8,6 +8,7 @@ import {
   extractUpstreamImageTaskStatus,
   extractUpstreamImageUrl,
 } from '../../utils/upstreamImageTask.util';
+import { UpstreamImageUrlService } from './upstream-image-url.service';
 
 interface Nano2GenerateRequest {
   prompt: string;
@@ -46,7 +47,10 @@ export class Nano2Service {
   private readonly queryMaxRetries = 3;
   private readonly queryRetryDelayMs = [300, 800];
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly upstreamImageUrl: UpstreamImageUrlService,
+  ) {
     this.apiKey = getToapisApiKey() || '';
     if (!this.apiKey) {
       this.logger.warn('TOAPIS_TOKEN not configured');
@@ -178,8 +182,13 @@ export class Nano2Service {
       prompt: request.prompt,
       size: request.size || '1:1',
       n: request.n || 1,
-      ...(request.image_urls && { image_urls: request.image_urls }),
     };
+
+    if (Array.isArray(request.image_urls) && request.image_urls.length > 0) {
+      payload.image_urls = await this.upstreamImageUrl.resolveHttpUrls(request.image_urls, {
+        uploadPrefix: 'ai/images/nano2-inputs',
+      });
+    }
     if (typeof request.resolution === 'string' && request.resolution.trim()) {
       payload.resolution = request.resolution.trim();
     }
@@ -208,7 +217,9 @@ export class Nano2Service {
       payload.output_compression = Math.max(0, Math.min(100, Math.trunc(request.output_compression)));
     }
     if (typeof request.mask_url === 'string' && request.mask_url.trim()) {
-      payload.mask_url = request.mask_url.trim();
+      payload.mask_url = await this.upstreamImageUrl.resolveHttpUrl(request.mask_url.trim(), {
+        uploadPrefix: 'ai/images/nano2-inputs',
+      });
     }
 
     this.logger.log(
