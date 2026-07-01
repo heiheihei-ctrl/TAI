@@ -1698,7 +1698,6 @@ const HIDDEN_FLOW_NODE_TYPES = new Set<FlowNodeType>([
   "kling26Video",
   "nano2",
   "videoEnhance",
-  "videoCompose",
 ]);
 
 const FLOW_NODE_KEY_ALIASES: Record<string, FlowNodeType> = {
