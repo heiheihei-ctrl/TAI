@@ -8,6 +8,7 @@ import { MidjourneyProvider } from './providers/midjourney.provider';
 import { Nano2Provider } from './providers/nano2.provider';
 import { Seedream5Provider } from './providers/seedream5.provider';
 
+
 @Injectable()
 export class AIProviderFactory implements OnModuleInit {
   private readonly logger = new Logger(AIProviderFactory.name);
