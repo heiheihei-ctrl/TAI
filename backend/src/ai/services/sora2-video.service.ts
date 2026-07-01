@@ -6,6 +6,8 @@ import {
 } from "@nestjs/common";
 import { ModelRoutingService } from "./model-routing.service";
 import { TencentVodAigcService } from "./tencent-vod-aigc.service";
+import { getToapisApiKey } from "../../utils/apimartHttpClient";
+import { getToapisOrigin } from "../../utils/toapisHttpClient";
 
 type VideoQuality = "hd" | "sd";
 type Sora2GenerationModel = "sora-2" | "sora-2-vip" | "sora-2-pro";
@@ -159,20 +161,16 @@ export interface Sora2VideoResult {
 @Injectable()
 export class Sora2VideoService {
   private readonly logger = new Logger(Sora2VideoService.name);
-  // 旧API (普通Sora2)
+  // 旧API (普通Sora2) -> ToAPIs
   private readonly apiBase =
-    process.env.SORA2_API_ENDPOINT || "https://api1.147ai.com";
-  private readonly apiKey = process.env.SORA2_API_KEY;
+    getToapisOrigin();
+  private readonly apiKey = getToapisApiKey();
   // 新API (Sora2 Pro - newapi.megabyai.cc)
   private readonly apiBaseV2 = "https://newapi.megabyai.cc";
   private readonly apiKeyV2 = process.env.NEW_API_KEY;
-  // APIMart API（支持完整 Sora2 Pro 参数与角色管理）
-  private readonly apiBaseApimart =
-    process.env.SORA2_APIMART_API_ENDPOINT || "https://api.apimart.ai";
-  private readonly apiKeyApimart =
-    process.env.SORA2_APIMART_API_KEY ||
-    process.env.APIMART_API_KEY ||
-    process.env.NANO2_API_KEY;
+  // ToAPIs（原 APIMart / 147 Sora2 路由）
+  private readonly apiBaseApimart = getToapisOrigin();
+  private readonly apiKeyApimart = getToapisApiKey();
 
   constructor(
     private readonly modelRoutingService: ModelRoutingService,
@@ -245,7 +243,7 @@ export class Sora2VideoService {
 
   async createCharacterTask(options: CreateCharacterTaskOptions) {
     if (!this.apiKeyApimart) {
-      throw new ServiceUnavailableException("APIMart Sora2 API Key 未配置");
+      throw new ServiceUnavailableException("ToAPIs token 未配置 (TOAPIS_TOKEN)");
     }
     if (!options.url && !options.fromTask) {
       throw new BadRequestException("参数 url 和 fromTask 需二选一");
@@ -297,7 +295,7 @@ export class Sora2VideoService {
 
   async queryCharacterTask(taskId: string) {
     if (!this.apiKeyApimart) {
-      throw new ServiceUnavailableException("APIMart Sora2 API Key 未配置");
+      throw new ServiceUnavailableException("ToAPIs token 未配置 (TOAPIS_TOKEN)");
     }
     const queryController = new AbortController();
     const queryTimer = setTimeout(() => queryController.abort(), SORA2_APIMART_FETCH_TIMEOUT_MS);
@@ -345,7 +343,7 @@ export class Sora2VideoService {
     }
 
     if (!this.apiKeyApimart) {
-      throw new ServiceUnavailableException("APIMart Sora2 API Key 未配置");
+      throw new ServiceUnavailableException("ToAPIs token 未配置 (TOAPIS_TOKEN)");
     }
     if (!taskId || !taskId.trim()) {
       throw new BadRequestException("taskId 不能为空");
@@ -563,7 +561,7 @@ export class Sora2VideoService {
     options: GenerateVideoOptions
   ): Promise<Sora2VideoResult> {
     if (!this.apiKeyApimart) {
-      throw new ServiceUnavailableException("APIMart Sora2 API Key 未配置");
+      throw new ServiceUnavailableException("ToAPIs token 未配置 (TOAPIS_TOKEN)");
     }
 
     const startedAt = Date.now();
@@ -698,7 +696,7 @@ export class Sora2VideoService {
         )}, resp=${JSON.stringify(createResult).slice(0, 1200)}`
       );
       if (response.status === 401 || response.status === 403) {
-        throw new ServiceUnavailableException("APIMart 鉴权失败，请检查 NANO2_API_KEY");
+        throw new ServiceUnavailableException("ToAPIs 鉴权失败，请检查 TOAPIS_TOKEN");
       }
       if (response.status >= 500) {
         throw new ServiceUnavailableException("APIMart 服务繁忙，请稍后再试");
@@ -899,14 +897,14 @@ export class Sora2VideoService {
         );
         if (effectiveCauseCode === "ENOTFOUND") {
           throw new ServiceUnavailableException(
-            "APIMart 域名解析失败（api.apimart.ai），请检查服务器 DNS 或代理网络"
+            "ToAPIs 域名解析失败，请检查服务器 DNS 或代理网络"
           );
         }
         if (effectiveCauseCode === "ETIMEDOUT") {
           consecutiveTimeoutErrors += 1;
           if (consecutiveTimeoutErrors >= SORA2_APIMART_MAX_CONSECUTIVE_TIMEOUTS) {
             throw new ServiceUnavailableException(
-              "APIMart 网络连接连续超时，请稍后重试或检查服务器到 api.apimart.ai 的网络链路"
+              "ToAPIs 网络连接连续超时，请稍后重试或检查服务器网络链路"
             );
           }
           continue;

@@ -1,6 +1,13 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { apimartRequest, getApimartProxySummary } from '../../utils/apimartHttpClient';
+import { apimartRequest, buildToapisUrl, formatToapisHttpError, getApimartProxySummary, getToapisApiKey } from '../../utils/apimartHttpClient';
+import { getToapisApiBaseUrl } from '../../utils/toapisHttpClient';
+import {
+  buildUpstreamImageTaskQueryUrls,
+  extractUpstreamImageTaskId,
+  extractUpstreamImageTaskStatus,
+  extractUpstreamImageUrl,
+} from '../../utils/upstreamImageTask.util';
 
 interface Nano2GenerateRequest {
   prompt: string;
@@ -32,7 +39,7 @@ interface Nano2TaskResponse {
 export class Nano2Service {
   private readonly logger = new Logger(Nano2Service.name);
   private readonly apiKey: string;
-  private readonly baseUrl = 'https://api.apimart.ai/v1/images/generations';
+  private readonly baseUrl = buildToapisUrl('/images/generations');
   private readonly maxSubmitAttempts = 2;
   private readonly submitRetryDelayMs = 1200;
   private readonly timeoutMs: number;
@@ -40,12 +47,12 @@ export class Nano2Service {
   private readonly queryRetryDelayMs = [300, 800];
 
   constructor(private readonly config: ConfigService) {
-    this.apiKey = this.config.get<string>('NANO2_API_KEY') || '';
+    this.apiKey = getToapisApiKey() || '';
     if (!this.apiKey) {
-      this.logger.warn('NANO2_API_KEY not configured');
+      this.logger.warn('TOAPIS_TOKEN not configured');
     }
     this.timeoutMs = this.parsePositiveInt(this.config.get<string>('NANO2_API_TIMEOUT_MS'), 30_000);
-    this.logger.log(`Nano2Service initialized (apimartProxy=${getApimartProxySummary()})`);
+    this.logger.log(`Nano2Service initialized (toapis=${getToapisApiBaseUrl()}, proxy=${getApimartProxySummary()})`);
   }
 
   private sleep(ms: number): Promise<void> {
@@ -73,12 +80,12 @@ export class Nano2Service {
 
     if (causeCode === 'ENOTFOUND') {
       return new ServiceUnavailableException(
-        `APIMart 域名解析失败（api.apimart.ai），请检查服务器 DNS 或代理网络。${context}`,
+        `ToAPIs 域名解析失败（${getToapisApiBaseUrl()}），请检查服务器 DNS 或代理网络。${context}`,
       ) as unknown as Error;
     }
     if (causeCode === 'ETIMEDOUT' || err.name === 'AbortError') {
       return new ServiceUnavailableException(
-        `APIMart 网络连接超时，请检查服务器到 api.apimart.ai 的网络链路或代理配置。${context}`,
+        `ToAPIs 网络连接超时，请检查服务器到 ${getToapisApiBaseUrl()} 的网络链路或代理配置。${context}`,
       ) as unknown as Error;
     }
     if (
@@ -243,17 +250,18 @@ export class Nano2Service {
           this.logger.error(
             `Nano2 submit failed: ${errorMessage}. rawBody=${details.rawBody?.slice(0, 1500) || '(empty)'}`,
           );
-          throw new Error(errorMessage);
+          throw new Error(formatToapisHttpError(response.status, response.statusText, response.data));
         }
 
-        const data: Nano2TaskResponse =
+        const data: Nano2TaskResponse | Record<string, unknown> =
           typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
-        if (!Array.isArray(data?.data) || data.data.length === 0 || !data.data[0]?.task_id) {
-          throw new Error(`Nano2 submit succeeded but task_id missing. payload=${JSON.stringify(data)}`);
+        const taskId = extractUpstreamImageTaskId(data);
+        if (!taskId) {
+          throw new Error(`Nano2 submit succeeded but task id missing. payload=${JSON.stringify(data)}`);
         }
         return {
-          taskId: data.data[0].task_id,
-          status: data.data[0].status,
+          taskId,
+          status: extractUpstreamImageTaskStatus(data),
         };
       } catch (error: any) {
         lastError =
@@ -285,60 +293,63 @@ export class Nano2Service {
       throw new ServiceUnavailableException('Nano2 API key not configured');
     }
 
-    const queryUrl = `https://api.apimart.ai/v1/tasks/${taskId}`;
+    const queryUrls = buildUpstreamImageTaskQueryUrls(taskId);
     let lastError: unknown = null;
 
-    for (let attempt = 1; attempt <= this.queryMaxRetries; attempt += 1) {
-      try {
-        const response = await apimartRequest<any>({
-          url: queryUrl,
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Cache-Control': 'no-cache',
-            Pragma: 'no-cache',
-          },
-          timeout: this.timeoutMs,
-        });
+    for (const queryUrl of queryUrls) {
+      for (let attempt = 1; attempt <= this.queryMaxRetries; attempt += 1) {
+        try {
+          const response = await apimartRequest<any>({
+            url: queryUrl,
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${this.apiKey}`,
+              'Cache-Control': 'no-cache',
+              Pragma: 'no-cache',
+            },
+            timeout: this.timeoutMs,
+          });
 
-        if (response.status < 200 || response.status >= 300) {
-          throw new Error(`Failed to query task: HTTP ${response.status}`);
+          if (response.status === 404 && queryUrl !== queryUrls[queryUrls.length - 1]) {
+            break;
+          }
+
+          if (response.status < 200 || response.status >= 300) {
+            throw new Error(`Failed to query task: HTTP ${response.status}`);
+          }
+
+          const json = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
+          this.logger.log(`Nano2 task query raw response: ${JSON.stringify(json)}`);
+
+          const imageUrl = extractUpstreamImageUrl(json);
+          const status = extractUpstreamImageTaskStatus(json);
+
+          this.logger.log(`Nano2 parsed - status: ${status}, imageUrl: ${imageUrl || 'not found'}`);
+
+          return {
+            status,
+            imageUrl,
+          };
+        } catch (error: any) {
+          lastError = error;
+          if (attempt < this.queryMaxRetries && this.isRetryableApimartQueryError(error)) {
+            const delayMs =
+              this.queryRetryDelayMs[attempt - 1] ??
+              this.queryRetryDelayMs[this.queryRetryDelayMs.length - 1] ??
+              800;
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.warn(
+              `Nano2 task query retry ${attempt}/${this.queryMaxRetries} in ${delayMs}ms: task=${taskId}, url=${queryUrl}, error=${message}`,
+            );
+            await this.sleep(delayMs);
+            continue;
+          }
+
+          if (queryUrl !== queryUrls[queryUrls.length - 1]) {
+            break;
+          }
+          throw this.mapApimartNetworkError(error, 'Nano2 查询任务失败');
         }
-
-        const json = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
-        this.logger.log(`Nano2 task query raw response: ${JSON.stringify(json)}`);
-
-        const data = json.data || json;
-
-        let imageUrl: string | undefined;
-        if (data.result?.images?.[0]?.url) {
-          const urlField = data.result.images[0].url;
-          imageUrl = Array.isArray(urlField) ? urlField[0] : urlField;
-        } else {
-          imageUrl = data.image_url || data.imageUrl;
-        }
-
-        this.logger.log(`Nano2 parsed - status: ${data.status}, imageUrl: ${imageUrl || 'not found'}`);
-
-        return {
-          status: data.status || 'processing',
-          imageUrl,
-        };
-      } catch (error: any) {
-        lastError = error;
-        if (attempt < this.queryMaxRetries && this.isRetryableApimartQueryError(error)) {
-          const delayMs =
-            this.queryRetryDelayMs[attempt - 1] ??
-            this.queryRetryDelayMs[this.queryRetryDelayMs.length - 1] ??
-            800;
-          const message = error instanceof Error ? error.message : String(error);
-          this.logger.warn(
-            `Nano2 task query retry ${attempt}/${this.queryMaxRetries} in ${delayMs}ms: task=${taskId}, error=${message}`,
-          );
-          await this.sleep(delayMs);
-          continue;
-        }
-        throw this.mapApimartNetworkError(error, 'Nano2 查询任务失败');
       }
     }
 

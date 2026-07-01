@@ -1,7 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
 
 export const OMNI_FLASH_EXT_MODEL_KEY = 'omni-flash-ext';
-export const OMNI_FLASH_EXT_APIMART_MODEL = 'Omni-Flash-Ext';
+/** @deprecated 使用 OMNI_FLASH_EXT_TOAPIS_MODEL */
+export const OMNI_FLASH_EXT_APIMART_MODEL = 'gemini_omni_flash';
+export const OMNI_FLASH_EXT_TOAPIS_MODEL = 'gemini_omni_flash';
 
 export type OmniFlashExtVideoMode = 'frame' | 'reference';
 
@@ -43,15 +45,15 @@ export interface OmniFlashExtNewApiPayload {
 }
 
 export interface OmniFlashExtApimartPayload {
-  model: 'Omni-Flash-Ext';
+  model: 'gemini_omni_flash';
   prompt: string;
-  image_urls: string[];
-  video_urls?: string[];
-  generation_type: OmniFlashExtVideoMode;
+  image_urls?: string[];
   duration?: number;
   resolution: string;
   aspect_ratio: string;
 }
+
+export type OmniFlashExtToapisPayload = OmniFlashExtApimartPayload;
 
 export interface OmniFlashExtTaskQueryResult {
   status: 'processing' | 'succeeded' | 'failed';
@@ -219,6 +221,7 @@ export const parseOmniFlashExtTaskResponse = (
 
   const videoUrl = pickMediaUrl(
     [
+      data.url,
       data.video_url,
       data.videoUrl,
       data.download_url,
@@ -226,6 +229,8 @@ export const parseOmniFlashExtTaskResponse = (
       data.resource_url,
       data.videos,
       data.outputs,
+      result.url,
+      result.data,
       output,
       result.video_url,
       result.videoUrl,
@@ -308,6 +313,21 @@ const normalizeDuration = (value: unknown): number => {
   return [4, 6, 8, 10].includes(rounded) ? rounded : 6;
 };
 
+const normalizeToapisDuration = (value: unknown): number => {
+  const duration = normalizeDuration(value);
+  if (duration === 8) return 10;
+  return duration;
+};
+
+const normalizeToapisResolution = (resolution: string, aspectRatio: string): string => {
+  const normalized = asTrimmedString(resolution).toLowerCase();
+  const aspect = normalizeAspectRatio(aspectRatio);
+  if (normalized === '1080p' && aspect === '16:9') {
+    return '1080p';
+  }
+  return '720P';
+};
+
 const normalizeVideoMode = (value: unknown): OmniFlashExtVideoMode =>
   asTrimmedString(value).toLowerCase() === 'reference' ? 'reference' : 'frame';
 
@@ -364,7 +384,9 @@ export const buildOmniFlashExtNewApiPayload = (
   const requestedMode = normalizeVideoMode(input.videoMode);
   const effectiveMode: OmniFlashExtVideoMode = hasReferenceVideo
     ? 'reference'
-    : requestedMode;
+    : imageUrls.length > 1
+      ? 'reference'
+      : requestedMode;
 
   if (effectiveMode === 'frame' && imageUrls.length > 1) {
     throw new BadRequestException('单图模式只能连接 1 张图片；如需多张图片，请切换到参考模式');
@@ -394,9 +416,9 @@ export const buildOmniFlashExtNewApiPayload = (
   return payload;
 };
 
-export const buildOmniFlashExtApimartPayload = (
+export const buildOmniFlashExtToapisPayload = (
   input: OmniFlashExtBuildInput | OmniFlashExtNewApiPayload,
-): OmniFlashExtApimartPayload => {
+): OmniFlashExtToapisPayload => {
   const newApiPayload =
     (input as OmniFlashExtNewApiPayload).model === OMNI_FLASH_EXT_MODEL_KEY &&
     (input as OmniFlashExtNewApiPayload).metadata
@@ -407,25 +429,35 @@ export const buildOmniFlashExtApimartPayload = (
   const videoUrls = Array.isArray(newApiPayload.metadata.video_urls)
     ? newApiPayload.metadata.video_urls
     : [];
-  const generationType = newApiPayload.metadata.generation_type;
 
-  if (imageUrls.length >= 2 && generationType !== 'reference') {
-    throw new BadRequestException('Omni Flash Ext 2 张及以上图片必须使用 reference 模式');
+  if (videoUrls.length > 0) {
+    throw new BadRequestException(
+      'ToAPIs gemini_omni_flash 暂不支持参考视频，请改用参考图片',
+    );
   }
-  if (videoUrls.length > 0 && generationType !== 'reference') {
-    throw new BadRequestException('Omni Flash Ext 有参考视频时必须使用 reference 模式');
+  if (imageUrls.length === 2) {
+    throw new BadRequestException(
+      'ToAPIs gemini_omni_flash 不支持 2 张参考图，请使用 1 张或 3 张',
+    );
   }
 
-  return {
-    model: OMNI_FLASH_EXT_APIMART_MODEL,
+  const payload: OmniFlashExtToapisPayload = {
+    model: OMNI_FLASH_EXT_TOAPIS_MODEL,
     prompt: newApiPayload.prompt,
-    image_urls: imageUrls.slice(0, 3),
-    ...(videoUrls[0] ? { video_urls: [videoUrls[0]] } : {}),
-    generation_type: generationType,
-    ...(!videoUrls[0] && typeof newApiPayload.duration === 'number'
-      ? { duration: newApiPayload.duration }
-      : {}),
-    resolution: newApiPayload.resolution,
     aspect_ratio: newApiPayload.aspect_ratio,
+    resolution: normalizeToapisResolution(
+      newApiPayload.resolution,
+      newApiPayload.aspect_ratio,
+    ),
+    duration: normalizeToapisDuration(newApiPayload.duration),
   };
+
+  if (imageUrls.length > 0) {
+    payload.image_urls = imageUrls.slice(0, 3);
+  }
+
+  return payload;
 };
+
+/** @deprecated 使用 buildOmniFlashExtToapisPayload */
+export const buildOmniFlashExtApimartPayload = buildOmniFlashExtToapisPayload;

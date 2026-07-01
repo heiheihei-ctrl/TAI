@@ -27,8 +27,21 @@ import { parseToolSelectionJson } from "../tool-selection-json.util";
 import { TencentVodAigcService } from "../services/tencent-vod-aigc.service";
 import {
   apimartRequest,
+  buildToapisUrl,
+  formatToapisHttpError,
   getApimartProxySummary,
+  getToapisApiKey,
 } from "../../utils/apimartHttpClient";
+import { getToapisApiBaseUrl } from "../../utils/toapisHttpClient";
+import {
+  buildUpstreamImageTaskQueryUrls,
+  extractUpstreamImageTaskError,
+  extractUpstreamImageTaskId,
+  extractUpstreamImageTaskStatus,
+  extractUpstreamImageUrl,
+  isUpstreamImageTaskCompleted,
+  isUpstreamImageTaskFailed,
+} from "../../utils/upstreamImageTask.util";
 
 const DEFAULT_TOOLS = [
   "generateImage",
@@ -84,22 +97,23 @@ export type BananaTextProvider =
 export const BANANA_TEXT_PROVIDER_SETTING_KEY = "banana_text_provider";
 
 /**
- * Banana API Provider - 浣跨敤HTTP鐩存帴璋冪敤Google Gemini API鐨勪唬鐞?
- * 鏂囨。: https://147api.apifox.cn/
- * API鍦板潃: https://147ai.com/v1beta/models
+ * Banana API Provider - 经 ToAPIs OpenAI 兼容网关调用 Gemini 等模型
+ * Base URL: https://toapis.com/v1
  */
 @Injectable()
 export class BananaProvider implements IAIProvider {
   private readonly logger = new Logger(BananaProvider.name);
-  private apiKey: string | null = null; // 147 legacy key
+  private apiKey: string | null = null;
   private apimartApiKey: string | null = null;
-  private readonly apiBaseUrl = "https://api1.147ai.com/v1beta/models";
-  private readonly apimartGenerateUrl = "https://api.apimart.ai/v1/images/generations";
-  private readonly apimartTaskBaseUrl = "https://api.apimart.ai/v1/tasks";
-  private readonly apimartTextUrl = "https://api.apimart.ai/v1/chat/completions";
+  private readonly apiBaseUrl = buildToapisUrl("/chat/completions");
+  private readonly apimartGenerateUrl = buildToapisUrl("/images/generations");
+  private readonly apimartTaskBaseUrl = buildToapisUrl("/tasks");
+  private readonly apimartTextUrl = buildToapisUrl("/chat/completions");
   private readonly tencentTextUrl =
     "https://text-aigc.vod-qcloud.com/v1/chat/completions";
   private readonly DEFAULT_MODEL = "gemini-3-flash-preview";
+  /** ToAPIs /images/generations 专用默认模型（勿用文生文模型名） */
+  private readonly DEFAULT_APIMART_IMAGE_MODEL = "gemini-3-pro-image-preview";
   private readonly DEFAULT_TEXT_MODEL = "gemini-3.1-pro-preview";
   private readonly DEFAULT_APIMART_TEXT_MODEL = "gemini-3.1-pro-preview";
   private readonly DEFAULT_TENCENT_TEXT_MODEL = "gemini-3-flash-preview";
@@ -146,25 +160,26 @@ export class BananaProvider implements IAIProvider {
   ) {}
 
   async initialize(): Promise<void> {
-    this.apiKey = this.config.get<string>("BANANA_API_KEY") ?? null;
-    this.apimartApiKey = this.config.get<string>("NANO2_API_KEY") ?? null;
+    const toapisKey = getToapisApiKey();
+    this.apiKey = toapisKey;
+    this.apimartApiKey = toapisKey;
 
     const tencentReady = this.tencentVodAigcService.isAvailable();
 
-    if (!this.apiKey && !this.apimartApiKey && !tencentReady) {
-      this.logger.warn("Banana API keys not configured.");
+    if (!this.apiKey && !tencentReady) {
+      this.logger.warn("ToAPIs token not configured (TOAPIS_TOKEN).");
       return;
     }
 
     this.logger.log(
-      `Banana provider initialized (legacy=${!!this.apiKey}, apimart=${!!this.apimartApiKey}, tencent=${tencentReady}, apimartProxy=${getApimartProxySummary()})`
+      `Banana provider initialized (toapis=${!!this.apiKey}, tencent=${tencentReady}, proxy=${getApimartProxySummary()})`
     );
   }
 
   private ensureApiKey(): string {
     if (!this.apiKey) {
       throw new ServiceUnavailableException(
-        "147 API key not configured on the server."
+        "ToAPIs token not configured on the server (TOAPIS_TOKEN)."
       );
     }
     return this.apiKey;
@@ -173,7 +188,7 @@ export class BananaProvider implements IAIProvider {
   private ensureApimartApiKey(): string {
     if (!this.apimartApiKey) {
       throw new ServiceUnavailableException(
-        "Apimart API key not configured on the server."
+        "ToAPIs token not configured on the server (TOAPIS_TOKEN)."
       );
     }
     return this.apimartApiKey;
@@ -193,7 +208,7 @@ export class BananaProvider implements IAIProvider {
 
     if (causeCode === "ENOTFOUND") {
       return new ServiceUnavailableException(
-        `APIMart 域名解析失败（api.apimart.ai），请检查服务器 DNS 或代理网络。${context}`
+        `ToAPIs 域名解析失败（${getToapisApiBaseUrl()}），请检查服务器 DNS 或代理网络。${context}`
       ) as unknown as Error;
     }
     if (
@@ -203,7 +218,7 @@ export class BananaProvider implements IAIProvider {
       normalized.includes("timeout")
     ) {
       return new ServiceUnavailableException(
-        `APIMart 网络连接超时，请检查服务器到 api.apimart.ai 的网络链路或代理配置。${context}`
+        `ToAPIs 网络连接超时，请检查服务器到 ${getToapisApiBaseUrl()} 的网络链路或代理配置。${context}`
       ) as unknown as Error;
     }
     if (
@@ -213,7 +228,7 @@ export class BananaProvider implements IAIProvider {
       normalized.includes("fetch failed")
     ) {
       return new ServiceUnavailableException(
-        `APIMart 网络请求失败，请检查服务器外网出口、代理或防火墙配置。${context} ${message}`.trim()
+        `ToAPIs 网络请求失败，请检查服务器外网出口、代理或防火墙配置。${context} ${message}`.trim()
       ) as unknown as Error;
     }
     return err;
@@ -389,23 +404,27 @@ export class BananaProvider implements IAIProvider {
     const normalized = this.normalizeModelName(model);
     if (
       normalized === "gemini-2.5-flash-image" ||
-      normalized === "gemini-2.5-flash"
+      normalized === "gemini-2.5-flash" ||
+      normalized === "gemini-2.5-flash-image-preview"
     ) {
       return "gemini-2.5-flash-image-preview";
     }
     if (
       normalized === "gemini-3.1-pro" ||
       normalized === "gemini-3.1-pro-preview" ||
-      normalized === "gemini-3.1-flash-preview"
+      normalized === "gemini-3.1-flash-preview" ||
+      normalized === "gemini-3.1-flash-image-preview"
     ) {
       return "gemini-3.1-flash-image-preview";
     }
     if (
       normalized === "gemini-3-pro-preview" ||
+      normalized === "gemini-3-pro-image-preview" ||
       normalized === "gemini-3-flash-preview" ||
       normalized === "gemini-3-flash"
     ) {
-      return "gemini-3-flash-preview";
+      // gemini-3-flash-preview 是文生文模型，ToAPIs 生图需映射到 Pro 图像模型
+      return "gemini-3-pro-image-preview";
     }
     return normalized;
   }
@@ -921,89 +940,7 @@ export class BananaProvider implements IAIProvider {
     contents: any,
     config?: any
   ): Promise<{ imageBytes: string | null; textResponse: string }> {
-    const apiKey = this.ensureApiKey();
-    const url = `${this.apiBaseUrl}/${model}:generateContent`;
-
-    const headers = {
-      Authorization: this.sanitizeApiKey(apiKey),
-      "Content-Type": "application/json",
-    };
-
-    // 鏋勫缓璇锋眰浣擄紝鏇村ソ鍦版敮鎸丟emini API鏍煎紡
-    // 147 API 鍙兘涓嶆敮鎸?safetySettings锛屾殏鏃剁Щ闄?
-    const body: any = {
-      contents: this.buildContents(contents),
-    };
-
-    // 娣诲姞鐢熸垚閰嶇疆
-    if (config) {
-      // 鏋勫缓 generationConfig锛堝寘鍚?responseModalities, imageConfig, thinking_level锛?
-      const generationConfig: any = {};
-
-      if (config.responseModalities) {
-        const normalized = this.normalizeResponseModalities(
-          config.responseModalities
-        );
-        if (normalized) {
-          generationConfig.responseModalities = normalized;
-        }
-      }
-
-      if (config.imageConfig) {
-        const imageConfig: Record<string, any> = { ...config.imageConfig };
-
-        // 鍏煎锛?47 鐨?gemini-2.5-flash-image 涓嶆敮鎸?imageSize 鍙傛暟锛岄伩鍏嶇洿鎺?400
-        if (!this.supportsImageSize(model) && "imageSize" in imageConfig) {
-          this.logger.warn(
-            `[BananaProvider] Dropping unsupported imageSize for model ${model}`
-          );
-          delete imageConfig.imageSize;
-        }
-
-        if (Object.keys(imageConfig).length > 0) {
-          generationConfig.imageConfig = imageConfig;
-        }
-      }
-
-      if (config.thinking_level) {
-        if (this.supportsThinkingLevel(model)) {
-          generationConfig.thinking_level = config.thinking_level;
-        } else {
-          this.logger.warn(
-            `[BananaProvider] Dropping unsupported thinking_level for model ${model}`
-          );
-        }
-      }
-
-      // 鍙湁鍦ㄦ湁鍐呭鏃舵墠娣诲姞 generationConfig
-      if (Object.keys(generationConfig).length > 0) {
-        body.generationConfig = generationConfig;
-      }
-
-      if (config.tools) {
-        body.tools = config.tools;
-      }
-    }
-
-    // 馃攳 璇︾粏璋冭瘯鏃ュ織锛氳姹俇RL
-    this.logger.debug(`Making request to ${url}`);
-
-    const response = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.text();
-      this.logger.error(`API error response: ${errorData}`);
-      throw new Error(
-        `147 API request failed: ${response.status} ${response.statusText} - ${errorData}`
-      );
-    }
-
-    const data = await response.json();
-    return await this.parseResponse(data, "API call");
+    return this.makeApimartTextRequest(model, contents, config);
   }
 
   private async parseResponse(
@@ -1319,10 +1256,8 @@ export class BananaProvider implements IAIProvider {
     if (channel === "tencent") {
       return this.makeTencentTextRequest(model, contents, config);
     }
-    if (channel === "apimart") {
-      return this.makeApimartTextRequest(model, contents, config);
-    }
-    return this.makeRequest(model, contents, config);
+    // legacy / apimart / 147 均已统一走 ToAPIs chat/completions
+    return this.makeApimartTextRequest(model, contents, config);
   }
 
   private async submitApimartTask(payload: Record<string, any>): Promise<string> {
@@ -1356,7 +1291,7 @@ export class BananaProvider implements IAIProvider {
             normalized.includes("rate limit");
 
           const error = new Error(
-            `Apimart submit failed: ${response.status} ${response.statusText} - ${errorData}`
+            formatToapisHttpError(response.status, response.statusText, response.data),
           );
           if (!retryable || attempt >= maxAttempts) {
             throw error;
@@ -1371,9 +1306,11 @@ export class BananaProvider implements IAIProvider {
         }
 
         const data = response.data as any;
-        const taskId = data?.data?.[0]?.task_id || data?.data?.task_id;
+        const taskId = extractUpstreamImageTaskId(data);
         if (!taskId) {
-          throw new Error("Apimart submit response missing task_id");
+          throw new Error(
+            `Upstream submit response missing task id: ${JSON.stringify(data)?.slice(0, 500)}`,
+          );
         }
         return taskId;
       } catch (error) {
@@ -1398,36 +1335,11 @@ export class BananaProvider implements IAIProvider {
       }
     }
 
-    throw lastError || new Error("Apimart submit failed");
+    throw lastError || new Error("ToAPIs 生图任务提交失败");
   }
 
   private extractApimartImageUrl(taskPayload: any): string | undefined {
-    const data = taskPayload?.data ?? taskPayload;
-    const directCandidates = [
-      data?.image_url,
-      data?.imageUrl,
-      data?.result?.image_url,
-      data?.result?.imageUrl,
-    ];
-    for (const candidate of directCandidates) {
-      if (typeof candidate === "string" && candidate.trim().length > 0) {
-        return candidate.trim();
-      }
-    }
-
-    const images = data?.result?.images;
-    if (Array.isArray(images) && images.length > 0) {
-      const first = images[0];
-      const urlField = first?.url;
-      if (typeof urlField === "string" && urlField.trim().length > 0) {
-        return urlField.trim();
-      }
-      if (Array.isArray(urlField) && typeof urlField[0] === "string") {
-        return urlField[0].trim();
-      }
-    }
-
-    return undefined;
+    return extractUpstreamImageUrl(taskPayload);
   }
 
   private isRetryableApimartQueryError(error: unknown): boolean {
@@ -1452,53 +1364,63 @@ export class BananaProvider implements IAIProvider {
     );
   }
 
-  private async queryApimartTask(taskId: string): Promise<{ status: string; imageUrl?: string }> {
+  private async queryApimartTask(taskId: string): Promise<{ status: string; imageUrl?: string; errorMessage?: string }> {
     const apiKey = this.ensureApimartApiKey();
+    const queryUrls = buildUpstreamImageTaskQueryUrls(taskId);
     let lastError: unknown = null;
 
-    for (let attempt = 1; attempt <= this.APIMART_QUERY_MAX_RETRIES; attempt++) {
-      try {
-        const response = await apimartRequest<any>({
-          url: `${this.apimartTaskBaseUrl}/${taskId}`,
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-          },
-          timeout: this.APIMART_QUERY_TIMEOUT,
-        });
+    for (const queryUrl of queryUrls) {
+      for (let attempt = 1; attempt <= this.APIMART_QUERY_MAX_RETRIES; attempt++) {
+        try {
+          const response = await apimartRequest<any>({
+            url: queryUrl,
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+            },
+            timeout: this.APIMART_QUERY_TIMEOUT,
+          });
 
-        if (response.status < 200 || response.status >= 300) {
-          throw new Error(`Apimart task query failed: HTTP ${response.status}`);
-        }
+          if (response.status === 404 && queryUrl !== queryUrls[queryUrls.length - 1]) {
+            break;
+          }
 
-        const data = response.data as any;
-        const payload = data?.data ?? data;
-        const statusRaw = payload?.status ?? "processing";
-        const status = typeof statusRaw === "string" ? statusRaw.toLowerCase() : "processing";
-        const imageUrl = this.extractApimartImageUrl(data);
-        return { status, imageUrl };
-      } catch (error) {
-        lastError = error;
-        if (
-          attempt < this.APIMART_QUERY_MAX_RETRIES &&
-          this.isRetryableApimartQueryError(error)
-        ) {
-          const delayMs =
-            this.APIMART_QUERY_RETRY_DELAYS_MS[attempt - 1] ??
-            this.APIMART_QUERY_RETRY_DELAYS_MS[this.APIMART_QUERY_RETRY_DELAYS_MS.length - 1] ??
-            800;
-          const message = error instanceof Error ? error.message : String(error);
-          this.logger.warn(
-            `[Banana/Apimart] task query retry ${attempt}/${this.APIMART_QUERY_MAX_RETRIES} in ${delayMs}ms: task=${taskId}, error=${message}`
+          if (response.status < 200 || response.status >= 300) {
+            throw new Error(`Upstream task query failed: HTTP ${response.status}`);
+          }
+
+          const data = response.data as any;
+          const status = extractUpstreamImageTaskStatus(data);
+          const imageUrl = this.extractApimartImageUrl(data);
+          const errorMessage = extractUpstreamImageTaskError(data);
+          return { status, imageUrl, errorMessage };
+        } catch (error) {
+          lastError = error;
+          if (
+            attempt < this.APIMART_QUERY_MAX_RETRIES &&
+            this.isRetryableApimartQueryError(error)
+          ) {
+            const delayMs =
+              this.APIMART_QUERY_RETRY_DELAYS_MS[attempt - 1] ??
+              this.APIMART_QUERY_RETRY_DELAYS_MS[this.APIMART_QUERY_RETRY_DELAYS_MS.length - 1] ??
+              800;
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.warn(
+              `[Banana/ToAPIs] task query retry ${attempt}/${this.APIMART_QUERY_MAX_RETRIES} in ${delayMs}ms: task=${taskId}, url=${queryUrl}, error=${message}`
+            );
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+            continue;
+          }
+
+          if (queryUrl !== queryUrls[queryUrls.length - 1]) {
+            break;
+          }
+
+          throw this.wrapApimartNetworkError(
+            error,
+            `Banana 普通路线查询任务失败(task=${taskId})`
           );
-          await new Promise((resolve) => setTimeout(resolve, delayMs));
-          continue;
         }
-
-        throw this.wrapApimartNetworkError(
-          error,
-          `Banana 普通路线查询任务失败(task=${taskId})`
-        );
       }
     }
 
@@ -1517,15 +1439,16 @@ export class BananaProvider implements IAIProvider {
       const result = await this.queryApimartTask(taskId);
       const status = result.status;
 
-      if (status === "succeeded" || status === "completed" || status === "success") {
+      if (isUpstreamImageTaskCompleted(status)) {
         if (result.imageUrl) {
           return { imageUrl: result.imageUrl };
         }
-        throw new Error(`Apimart task ${taskId} completed but image url missing`);
+        throw new Error(`Upstream task ${taskId} completed but image url missing`);
       }
 
-      if (status === "failed" || status === "error" || status === "cancelled") {
-        throw new Error(`Apimart task ${taskId} failed with status: ${status}`);
+      if (isUpstreamImageTaskFailed(status)) {
+        const detail = result.errorMessage ? `: ${result.errorMessage}` : "";
+        throw new Error(`Upstream task ${taskId} failed with status: ${status}${detail}`);
       }
 
       await new Promise((resolve) =>
@@ -1560,7 +1483,9 @@ export class BananaProvider implements IAIProvider {
   private async generateImageViaApimart(
     request: ImageGenerationRequest
   ): Promise<AIProviderResponse<ImageResult>> {
-    const model = this.normalizeApimartImageModel(request.model || this.DEFAULT_MODEL);
+    const model = this.normalizeApimartImageModel(
+      request.model || this.DEFAULT_APIMART_IMAGE_MODEL,
+    );
     const resolution = this.toApimartResolution(request.imageSize);
     const payload: Record<string, any> = {
       model,
@@ -1618,7 +1543,9 @@ export class BananaProvider implements IAIProvider {
   private async editImageViaApimart(
     request: ImageEditRequest
   ): Promise<AIProviderResponse<ImageResult>> {
-    const model = this.normalizeApimartImageModel(request.model || this.DEFAULT_MODEL);
+    const model = this.normalizeApimartImageModel(
+      request.model || this.DEFAULT_APIMART_IMAGE_MODEL,
+    );
     const resolution = this.toApimartResolution(request.imageSize);
     const imageUrls = await this.toApimartImageUrls([request.sourceImage]);
     const payload: Record<string, any> = {
@@ -1655,7 +1582,9 @@ export class BananaProvider implements IAIProvider {
   private async blendImagesViaApimart(
     request: ImageBlendRequest
   ): Promise<AIProviderResponse<ImageResult>> {
-    const model = this.normalizeApimartImageModel(request.model || this.DEFAULT_MODEL);
+    const model = this.normalizeApimartImageModel(
+      request.model || this.DEFAULT_APIMART_IMAGE_MODEL,
+    );
     const resolution = this.toApimartResolution(request.imageSize);
     const imageUrls = await this.toApimartImageUrls(request.sourceImages);
     const payload: Record<string, any> = {
@@ -1705,7 +1634,7 @@ export class BananaProvider implements IAIProvider {
     sourceModel: string;
   } {
     const sourceModel = this.normalizeApimartImageModel(
-      model || this.DEFAULT_MODEL
+      model || this.DEFAULT_APIMART_IMAGE_MODEL,
     );
     const normalized = sourceModel.toLowerCase();
 
@@ -1970,135 +1899,8 @@ export class BananaProvider implements IAIProvider {
   private async generateImageViaLegacy(
     request: ImageGenerationRequest
   ): Promise<AIProviderResponse<ImageResult>> {
-    const originalModel = this.normalizeLegacyImageModel(
-      request.model || this.DEFAULT_MODEL
-    );
-    let currentModel = originalModel;
-    let usedFallback = false;
-
-    // 灏濊瘯浣跨敤涓绘ā鍨嬶紝澶辫触鍚庨檷绾?
-    for (let round = 0; round < this.MAX_MODEL_ATTEMPTS; round++) {
-      try {
-        this.logger.debug(
-          `Using model: ${currentModel}${usedFallback ? " (fallback)" : ""}`
-        );
-
-        const result = await this.withRetry(async () => {
-          return await this.withTimeout(
-            (async () => {
-              const config: any = {
-                responseModalities: request.imageOnly
-                  ? ["Image"]
-                  : ["Text", "Image"],
-              };
-
-              // 閰嶇疆 imageConfig锛坅spectRatio 鍜?imageSize锛?
-              if (request.aspectRatio || request.imageSize) {
-                config.imageConfig = {};
-                if (request.aspectRatio) {
-                  config.imageConfig.aspectRatio = request.aspectRatio;
-                }
-                const normalizedImageSize = this.normalizeImageSizeToken(
-                  request.imageSize
-                );
-                if (normalizedImageSize) {
-                  // 鏍规嵁瀹樻柟鏂囨。锛宨mageSize 蹇呴』鏄瓧绗︿覆 "0.5K"銆?1K"銆?2K" 鎴?"4K"锛堝ぇ鍐橩锛?
-                  // 涓嶉渶瑕佽浆鎹紝鐩存帴浣跨敤鍘熷鍊?
-                  config.imageConfig.imageSize = normalizedImageSize;
-                }
-              }
-
-              // 閰嶇疆 thinking_level锛圙emini 3 鐗规€э紝闄嶇骇鍚庝笉浣跨敤锛?
-              if (request.thinkingLevel && !usedFallback) {
-                config.thinking_level = request.thinkingLevel;
-              }
-
-              if (request.enableWebSearch) {
-                config.tools = [{ googleSearch: {} }];
-              }
-
-              return await this.makeRequest(
-                currentModel,
-                [{ text: request.prompt }],
-                config
-              );
-            })(),
-            this.DEFAULT_TIMEOUT,
-            "Image generation"
-          );
-        }, "Image generation");
-
-        if (usedFallback) {
-          this.logger.log(
-            `馃攧 [FALLBACK SUCCESS] Image generation succeeded with fallback model: ${currentModel}`
-          );
-        }
-
-        return {
-          success: true,
-          data: {
-            imageData: result.imageBytes || undefined,
-            textResponse: result.textResponse || "",
-            hasImage: !!result.imageBytes,
-            metadata: {
-              provider: "147",
-              channel: "legacy_147",
-              ...(usedFallback
-                ? {
-                    fallbackUsed: true,
-                    originalModel,
-                    fallbackModel: currentModel,
-                  }
-                : {}),
-              webSearchEnabled: Boolean(
-                request.enableWebSearch ||
-                request.googleSearch ||
-                request.googleImageSearch
-              ),
-              googleSearchEnabled: Boolean(
-                request.enableWebSearch || request.googleSearch
-              ),
-              googleImageSearchEnabled: Boolean(request.googleImageSearch),
-            },
-          },
-        };
-      } catch (error) {
-        const err = error instanceof Error ? error : new Error(String(error));
-
-        // 妫€鏌ユ槸鍚﹀簲璇ラ檷绾?
-        if (this.shouldFallback(err)) {
-          const fallbackModel = this.getFallbackModel(currentModel);
-          if (fallbackModel) {
-            this.logger.warn(
-              `鈿狅笍 [FALLBACK] Image generation failed with ${currentModel}, falling back to ${fallbackModel}. Error: ${err.message}`
-            );
-            currentModel = fallbackModel;
-            usedFallback = true;
-            continue; // 閲嶈瘯浣跨敤闄嶇骇妯″瀷
-          }
-        }
-
-        // 鏃犳硶闄嶇骇鎴栭檷绾у悗浠嶇劧澶辫触
-        this.logger.error("Image generation failed:", error);
-        return {
-          success: false,
-          error: {
-            code: "GENERATION_FAILED",
-            message: err.message,
-            details: error,
-          },
-        };
-      }
-    }
-
-    // 涓嶅簲璇ュ埌杈捐繖閲岋紝浣嗕负浜嗙被鍨嬪畨鍏?
-    return {
-      success: false,
-      error: {
-        code: "GENERATION_FAILED",
-        message: "Unexpected error in image generation",
-      },
-    };
+    this.logger.log("[Banana/Image] legacy channel mapped to ToAPIs");
+    return this.generateImageViaApimart(request);
   }
 
   async generateImage(
@@ -2208,131 +2010,8 @@ export class BananaProvider implements IAIProvider {
   private async editImageViaLegacy(
     request: ImageEditRequest
   ): Promise<AIProviderResponse<ImageResult>> {
-    // 浣跨敤寮傛鐗堟湰鏀寔 HTTP URL
-    const { data: imageData, mimeType } = await this.normalizeFileInputAsync(
-      request.sourceImage,
-      "edit"
-    );
-    const originalModel = this.normalizeLegacyImageModel(
-      request.model || this.DEFAULT_MODEL
-    );
-    let currentModel = originalModel;
-    let usedFallback = false;
-
-    // 灏濊瘯浣跨敤涓绘ā鍨嬶紝澶辫触鍚庨檷绾?
-    for (let round = 0; round < this.MAX_MODEL_ATTEMPTS; round++) {
-      try {
-        this.logger.debug(
-          `Using model: ${currentModel}${usedFallback ? " (fallback)" : ""}`
-        );
-
-        const result = await this.withRetry(async () => {
-          return await this.withTimeout(
-            (async () => {
-              const config: any = {
-                responseModalities: request.imageOnly
-                  ? ["Image"]
-                  : ["Text", "Image"],
-              };
-
-              // 閰嶇疆 imageConfig锛坅spectRatio 鍜?imageSize锛?
-              if (request.aspectRatio || request.imageSize) {
-                config.imageConfig = {};
-                if (request.aspectRatio) {
-                  config.imageConfig.aspectRatio = request.aspectRatio;
-                }
-                const normalizedImageSize = this.normalizeImageSizeToken(
-                  request.imageSize
-                );
-                if (normalizedImageSize) {
-                  // 鏍规嵁瀹樻柟鏂囨。锛宨mageSize 蹇呴』鏄瓧绗︿覆 "0.5K"銆?1K"銆?2K" 鎴?"4K"锛堝ぇ鍐橩锛?
-                  // 涓嶉渶瑕佽浆鎹紝鐩存帴浣跨敤鍘熷鍊?
-                  config.imageConfig.imageSize = normalizedImageSize;
-                }
-              }
-
-              // 閰嶇疆 thinking_level锛圙emini 3 鐗规€э紝闄嶇骇鍚庝笉浣跨敤锛?
-              if (request.thinkingLevel && !usedFallback) {
-                config.thinking_level = request.thinkingLevel;
-              }
-
-              return await this.makeRequest(
-                currentModel,
-                [
-                  { text: request.prompt },
-                  {
-                    inlineData: {
-                      mimeType,
-                      data: imageData,
-                    },
-                  },
-                ],
-                config
-              );
-            })(),
-            this.DEFAULT_TIMEOUT,
-            "Image edit"
-          );
-        }, "Image edit");
-
-        if (usedFallback) {
-          this.logger.log(
-            `馃攧 [FALLBACK SUCCESS] Image edit succeeded with fallback model: ${currentModel}`
-          );
-        }
-
-        return {
-          success: true,
-          data: {
-            imageData: result.imageBytes || undefined,
-            textResponse: result.textResponse || "",
-            hasImage: !!result.imageBytes,
-            metadata: usedFallback
-              ? {
-                  fallbackUsed: true,
-                  originalModel,
-                  fallbackModel: currentModel,
-                }
-              : undefined,
-          },
-        };
-      } catch (error) {
-        const err = error instanceof Error ? error : new Error(String(error));
-
-        // 妫€鏌ユ槸鍚﹀簲璇ラ檷绾?
-        if (this.shouldFallback(err)) {
-          const fallbackModel = this.getFallbackModel(currentModel);
-          if (fallbackModel) {
-            this.logger.warn(
-              `鈿狅笍 [FALLBACK] Image edit failed with ${currentModel}, falling back to ${fallbackModel}. Error: ${err.message}`
-            );
-            currentModel = fallbackModel;
-            usedFallback = true;
-            continue; // 閲嶈瘯浣跨敤闄嶇骇妯″瀷
-          }
-        }
-
-        // 鏃犳硶闄嶇骇鎴栭檷绾у悗浠嶇劧澶辫触
-        this.logger.error("Image edit failed:", error);
-        return {
-          success: false,
-          error: {
-            code: "EDIT_FAILED",
-            message: err.message,
-            details: error,
-          },
-        };
-      }
-    }
-
-    // 涓嶅簲璇ュ埌杈捐繖閲岋紝浣嗕负浜嗙被鍨嬪畨鍏?
-    return {
-      success: false,
-      error: {
-        code: "EDIT_FAILED",
-        message: "Unexpected error in image edit",
-      },
-    };
+    this.logger.log("[Banana/Edit] legacy channel mapped to ToAPIs");
+    return this.editImageViaApimart(request);
   }
 
   async editImage(
@@ -2442,132 +2121,8 @@ export class BananaProvider implements IAIProvider {
   private async blendImagesViaLegacy(
     request: ImageBlendRequest
   ): Promise<AIProviderResponse<ImageResult>> {
-    // 浣跨敤寮傛鐗堟湰鏀寔 HTTP URL
-    const normalizedImages = await Promise.all(
-      request.sourceImages.map((imageData, index) =>
-        this.normalizeFileInputAsync(imageData, `blend source #${index + 1}`)
-      )
-    );
-
-    const imageParts = normalizedImages.map((image) => ({
-      inlineData: {
-        mimeType: image.mimeType,
-        data: image.data,
-      },
-    }));
-
-    const originalModel = this.normalizeLegacyImageModel(
-      request.model || this.DEFAULT_MODEL
-    );
-    let currentModel = originalModel;
-    let usedFallback = false;
-
-    // 灏濊瘯浣跨敤涓绘ā鍨嬶紝澶辫触鍚庨檷绾?
-    for (let round = 0; round < this.MAX_MODEL_ATTEMPTS; round++) {
-      try {
-        this.logger.debug(
-          `Using model: ${currentModel}${usedFallback ? " (fallback)" : ""}`
-        );
-
-        const result = await this.withRetry(async () => {
-          return await this.withTimeout(
-            (async () => {
-              const config: any = {
-                responseModalities: request.imageOnly
-                  ? ["Image"]
-                  : ["Text", "Image"],
-              };
-
-              // 閰嶇疆 imageConfig锛坅spectRatio 鍜?imageSize锛?
-              if (request.aspectRatio || request.imageSize) {
-                config.imageConfig = {};
-                if (request.aspectRatio) {
-                  config.imageConfig.aspectRatio = request.aspectRatio;
-                }
-                const normalizedImageSize = this.normalizeImageSizeToken(
-                  request.imageSize
-                );
-                if (normalizedImageSize) {
-                  // 鏍规嵁瀹樻柟鏂囨。锛宨mageSize 蹇呴』鏄瓧绗︿覆 "0.5K"銆?1K"銆?2K" 鎴?"4K"锛堝ぇ鍐橩锛?
-                  // 涓嶉渶瑕佽浆鎹紝鐩存帴浣跨敤鍘熷鍊?
-                  config.imageConfig.imageSize = normalizedImageSize;
-                }
-              }
-
-              // 閰嶇疆 thinking_level锛圙emini 3 鐗规€э紝闄嶇骇鍚庝笉浣跨敤锛?
-              if (request.thinkingLevel && !usedFallback) {
-                config.thinking_level = request.thinkingLevel;
-              }
-
-              return await this.makeRequest(
-                currentModel,
-                [{ text: request.prompt }, ...imageParts],
-                config
-              );
-            })(),
-            this.DEFAULT_TIMEOUT,
-            "Image blend"
-          );
-        }, "Image blend");
-
-        if (usedFallback) {
-          this.logger.log(
-            `馃攧 [FALLBACK SUCCESS] Image blend succeeded with fallback model: ${currentModel}`
-          );
-        }
-
-        return {
-          success: true,
-          data: {
-            imageData: result.imageBytes || undefined,
-            textResponse: result.textResponse || "",
-            hasImage: !!result.imageBytes,
-            metadata: usedFallback
-              ? {
-                  fallbackUsed: true,
-                  originalModel,
-                  fallbackModel: currentModel,
-                }
-              : undefined,
-          },
-        };
-      } catch (error) {
-        const err = error instanceof Error ? error : new Error(String(error));
-
-        // 妫€鏌ユ槸鍚﹀簲璇ラ檷绾?
-        if (this.shouldFallback(err)) {
-          const fallbackModel = this.getFallbackModel(currentModel);
-          if (fallbackModel) {
-            this.logger.warn(
-              `鈿狅笍 [FALLBACK] Image blend failed with ${currentModel}, falling back to ${fallbackModel}. Error: ${err.message}`
-            );
-            currentModel = fallbackModel;
-            usedFallback = true;
-            continue; // 閲嶈瘯浣跨敤闄嶇骇妯″瀷
-          }
-        }
-
-        // 鏃犳硶闄嶇骇鎴栭檷绾у悗浠嶇劧澶辫触
-        this.logger.error("Image blend failed:", error);
-        return {
-          success: false,
-          error: {
-            code: "BLEND_FAILED",
-            message: err.message,
-            details: error,
-          },
-        };
-      }
-    }
-
-    // 涓嶅簲璇ュ埌杈捐繖閲岋紝浣嗕负浜嗙被鍨嬪畨鍏?
-    return {
-      success: false,
-      error: {
-        code: "BLEND_FAILED",
-        message: "Unexpected error in image blend",
-      },
-    };
+    this.logger.log("[Banana/Blend] legacy channel mapped to ToAPIs");
+    return this.blendImagesViaApimart(request);
   }
 
   async blendImages(

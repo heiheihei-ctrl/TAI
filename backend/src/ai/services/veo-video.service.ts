@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { buildToapisUrl, getToapisApiKey } from '../../utils/apimartHttpClient';
+import { getToapisApiBaseUrl } from '../../utils/toapisHttpClient';
 
 export type VeoModel = 'veo3-fast' | 'veo3-pro' | 'veo3-pro-frames';
 
@@ -26,21 +28,12 @@ export class VeoVideoService {
   private readonly apiKey: string | null;
 
   constructor(private readonly configService: ConfigService) {
-    this.apiBaseUrl =
-      (
-        this.configService.get<string>('VEO_API_ENDPOINT') ??
-        this.configService.get<string>('VEO_API_BASE_URL') ??
-        'https://api1.147ai.com'
-      ).replace(/\/$/, '');
+    this.apiBaseUrl = getToapisApiBaseUrl();
 
-    this.apiKey =
-      this.configService.get<string>('VEO_API_KEY') ??
-      this.configService.get<string>('BANANA_API_KEY') ??
-      this.configService.get<string>('SORA2_API_KEY') ??
-      null;
+    this.apiKey = getToapisApiKey();
 
     if (!this.apiKey) {
-      this.logger.warn('VEO API key not configured. Set VEO_API_KEY (or BANANA_API_KEY / SORA2_API_KEY).');
+      this.logger.warn('ToAPIs token not configured. Set TOAPIS_TOKEN.');
     }
   }
 
@@ -59,11 +52,11 @@ export class VeoVideoService {
       if (!this.apiKey) {
         return {
           success: false,
-          error: 'VEO API key not configured on the server (VEO_API_KEY).',
+          error: 'ToAPIs token not configured on the server (TOAPIS_TOKEN).',
         };
       }
 
-      const response = await fetch(`${this.apiBaseUrl}/v1/chat/completions`, {
+      const response = await fetch(buildToapisUrl('/chat/completions'), {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -115,11 +108,11 @@ export class VeoVideoService {
       if (!this.apiKey) {
         return {
           success: false,
-          error: 'VEO API key not configured on the server (VEO_API_KEY).',
+          error: 'ToAPIs token not configured on the server (TOAPIS_TOKEN).',
         };
       }
 
-      const response = await fetch(`${this.apiBaseUrl}/v1/chat/completions`, {
+      const response = await fetch(buildToapisUrl('/chat/completions'), {
         method: 'POST',
         headers: {
           'Accept': 'application/json',

@@ -27,6 +27,7 @@ import { ToolSelectionRequestDto } from './dto/tool-selection.dto';
 import { RemoveBackgroundDto } from './dto/background-removal.dto';
 import { ApplyWatermarkDto } from './dto/apply-watermark.dto';
 import { getGeminiApiKeyFromEnv } from './services/gemini-api-key.util';
+import { buildToapisUrl, getToapisApiKey } from '../utils/apimartHttpClient';
 import {
   GenerateImageDto,
   EditImageDto,
@@ -2330,29 +2331,18 @@ export class AiController {
     prompt: string;
     videoUrl: string;
   }): Promise<string> {
-    const apiKey =
-      process.env.BANANA_API_KEY ||
-      process.env.VEO_API_KEY ||
-      process.env.SORA2_API_KEY ||
-      null;
+    const apiKey = getToapisApiKey();
     if (!apiKey) {
-      throw new ServiceUnavailableException('147 API Key 未配置（BANANA_API_KEY），请检查后端环境变量');
+      throw new ServiceUnavailableException('ToAPIs token 未配置（TOAPIS_TOKEN），请检查后端环境变量');
     }
 
-    const apiBaseUrl = (
-      process.env.VEO_API_ENDPOINT ||
-      process.env.VEO_API_BASE_URL ||
-      process.env.SORA2_API_ENDPOINT ||
-      'https://api1.147ai.com'
-    ).replace(/\/+$/, '');
-
-    // 视频分析需要较长时间，设置 5 分钟超时
+    const apiBaseUrl = buildToapisUrl('/chat/completions');
     const VIDEO_ANALYSIS_TIMEOUT = 5 * 60 * 1000;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), VIDEO_ANALYSIS_TIMEOUT);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/v1/chat/completions`, {
+      const response = await fetch(apiBaseUrl, {
         method: 'POST',
         headers: {
           Accept: 'application/json',
@@ -2378,7 +2368,7 @@ export class AiController {
       if (!response.ok) {
         const text = await response.text().catch(() => '');
         throw new ServiceUnavailableException(
-          `147 /v1/chat/completions error: HTTP ${response.status} ${text}`.trim()
+          `ToAPIs /v1/chat/completions error: HTTP ${response.status} ${text}`.trim()
         );
       }
 
@@ -2393,7 +2383,7 @@ export class AiController {
         if (joined.length) return joined;
       }
 
-      throw new ServiceUnavailableException('147 AI 返回了空内容，请稍后重试');
+      throw new ServiceUnavailableException('ToAPIs 返回了空内容，请稍后重试');
     } catch (error: any) {
       if (error.name === 'AbortError') {
         throw new ServiceUnavailableException(`Video analysis timeout (${VIDEO_ANALYSIS_TIMEOUT / 1000}s)`);

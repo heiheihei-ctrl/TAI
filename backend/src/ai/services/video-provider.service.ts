@@ -27,8 +27,12 @@ import {
 } from "./omni-flash-ext.adapter";
 import {
   apimartRequest,
+  buildToapisUrl,
   getApimartProxySummary,
+  getToapisApiKey,
 } from "../../utils/apimartHttpClient";
+import { extractUpstreamImageTaskId } from "../../utils/upstreamImageTask.util";
+import { getToapisApiBaseUrl } from "../../utils/toapisHttpClient";
 
 // 默认请求超时时间（毫秒）
 const DEFAULT_FETCH_TIMEOUT = 180000; // 3分钟
@@ -216,7 +220,7 @@ export class VideoProviderService {
 
     if (causeCode === "ENOTFOUND") {
       return new ServiceUnavailableException(
-        `APIMart 域名解析失败（api.apimart.ai），请检查服务器 DNS 或代理网络。${context}`
+        `ToAPIs 域名解析失败（${getToapisApiBaseUrl()}），请检查服务器 DNS 或代理网络。${context}`
       ) as unknown as Error;
     }
     if (
@@ -226,7 +230,7 @@ export class VideoProviderService {
       normalized.includes("timeout")
     ) {
       return new ServiceUnavailableException(
-        `APIMart 网络连接超时，请检查服务器到 api.apimart.ai 的网络链路或代理配置。${context}`
+        `ToAPIs 网络连接超时，请检查服务器到 ${getToapisApiBaseUrl()} 的网络链路或代理配置。${context}`
       ) as unknown as Error;
     }
     if (
@@ -885,7 +889,7 @@ export class VideoProviderService {
     "viduq3-pro": process.env.VIDU_API_KEY || "sk-vidu-xxx",
     doubao:
       process.env.DOUBAO_API_KEY || "0ac5fae84-f299-4db4-8d7e-3f7fc355c6ac",
-    "omni-flash-ext": process.env.NANO2_API_KEY || process.env.APIMART_API_KEY || "",
+    "omni-flash-ext": getToapisApiKey() || "",
   };
 
   /**
@@ -1062,16 +1066,16 @@ export class VideoProviderService {
     const apimartPayload = buildOmniFlashExtApimartPayload(newApiPayload);
     const apiKey = this.apiKeys["omni-flash-ext"];
     if (!apiKey || apiKey.includes("xxx")) {
-      throw new ServiceUnavailableException("APIMart API Key 未配置");
+      throw new ServiceUnavailableException("ToAPIs API Key 未配置 (TOAPIS_TOKEN)");
     }
 
     this.logProviderPayload("omni-flash-ext/normalized", newApiPayload);
-    this.logProviderPayload("omni-flash-ext/apimart", apimartPayload);
+    this.logProviderPayload("omni-flash-ext/toapis", apimartPayload);
 
     let response: { status: number; data: any };
     try {
       response = await apimartRequest({
-        url: "https://api.apimart.ai/v1/videos/generations",
+        url: buildToapisUrl("/videos/generations"),
         method: "POST",
         timeout: DEFAULT_FETCH_TIMEOUT,
         headers: {
@@ -1084,7 +1088,7 @@ export class VideoProviderService {
       const wrapped = this.wrapApimartNetworkError(error, "Omni Flash Ext 提交任务失败");
       const message = this.summarizeError(wrapped);
       this.logger.error(
-        `APIMart Omni Flash Ext 请求失败: vendor=${route.vendor.vendorKey}, platform=${route.vendor.platformKey || route.vendor.vendorKey}, proxy=${getApimartProxySummary()}, message=${message}`,
+        `ToAPIs Omni Flash Ext 请求失败: vendor=${route.vendor.vendorKey}, platform=${route.vendor.platformKey || route.vendor.vendorKey}, proxy=${getApimartProxySummary()}, message=${message}`,
       );
       throw wrapped;
     }
@@ -1101,7 +1105,7 @@ export class VideoProviderService {
         : (response.data ?? {});
     const textBody =
       typeof response.data === "string" ? response.data : JSON.stringify(response.data ?? "");
-    this.logger.debug?.(`APIMart Omni Flash Ext 原始响应: ${textBody.slice(0, 500)}`);
+    this.logger.debug?.(`ToAPIs Omni Flash Ext 原始响应: ${textBody.slice(0, 500)}`);
 
     if (response.status < 200 || response.status >= 300) {
       const message =
@@ -1110,21 +1114,12 @@ export class VideoProviderService {
         textBody ||
         `HTTP ${response.status}`;
       this.logger.warn(
-        `APIMart Omni Flash Ext 创建任务失败: http=${response.status}, vendor=${route.vendor.vendorKey}, message=${String(message).slice(0, 500)}`,
+        `ToAPIs Omni Flash Ext 创建任务失败: http=${response.status}, vendor=${route.vendor.vendorKey}, message=${String(message).slice(0, 500)}`,
       );
-      throw new BadRequestException(`APIMart Omni Flash Ext 创建任务失败: ${message}`);
+      throw new BadRequestException(`ToAPIs Omni Flash Ext 创建任务失败: ${message}`);
     }
 
-    const taskId =
-      data?.id ||
-      data?.task_id ||
-      data?.taskId ||
-      data?.data?.id ||
-      data?.data?.task_id ||
-      data?.data?.taskId ||
-      data?.data?.[0]?.task_id ||
-      data?.data?.[0]?.taskId ||
-      data?.data?.[0]?.id;
+    const taskId = extractUpstreamImageTaskId(data);
     const videoUrl =
       data?.videoUrl ||
       data?.video_url ||
@@ -1137,7 +1132,7 @@ export class VideoProviderService {
       data?.data?.[0]?.url;
 
     if (!taskId && !videoUrl) {
-      throw new ServiceUnavailableException("APIMart Omni Flash Ext 未返回 taskId 或视频地址");
+      throw new ServiceUnavailableException("ToAPIs Omni Flash Ext 未返回 taskId 或视频地址");
     }
 
     return {
@@ -1149,7 +1144,7 @@ export class VideoProviderService {
         vendorKey: route.vendor.vendorKey,
         platformKey: route.vendor.platformKey || route.vendor.vendorKey,
         route: "legacy",
-        providerChannel: "apimart",
+        providerChannel: "toapis",
         routedProvider: "omni-flash-ext",
         fallbackUsed: false,
       },
@@ -1165,13 +1160,13 @@ export class VideoProviderService {
     if (!rawTaskId) return { status: "processing" };
     const apiKey = this.apiKeys["omni-flash-ext"];
     if (!apiKey || apiKey.includes("xxx")) {
-      throw new ServiceUnavailableException("APIMart API Key 未配置");
+      throw new ServiceUnavailableException("ToAPIs API Key 未配置 (TOAPIS_TOKEN)");
     }
 
     const cacheBuster = Date.now();
     const endpoints = [
-      `https://api.apimart.ai/v1/tasks/${encodeURIComponent(rawTaskId)}?language=zh&t=${cacheBuster}`,
-      `https://api.apimart.ai/v1/videos/${encodeURIComponent(rawTaskId)}?t=${cacheBuster}`,
+      buildToapisUrl(`/videos/generations/${encodeURIComponent(rawTaskId)}?t=${cacheBuster}`),
+      buildToapisUrl(`/tasks/${encodeURIComponent(rawTaskId)}?language=zh&t=${cacheBuster}`),
     ];
     let lastStatus = 0;
     let lastBody = "";

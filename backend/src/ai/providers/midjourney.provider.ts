@@ -1,6 +1,8 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OssService } from '../../oss/oss.service';
+import { getToapisApiKey } from '../../utils/apimartHttpClient';
+import { getToapisOrigin } from '../../utils/toapisHttpClient';
 import {
   AIProviderResponse,
   AnalysisResult,
@@ -97,7 +99,7 @@ export class MidjourneyProvider implements IAIProvider {
     const youchuanBaseUrl = this.config.get<string>('YOUCHUAN_API_BASE_URL')?.trim() ?? null;
 
     // 优先级: MIDJOURNEY_API_BASE_URL > SORA2_ENDPOINT > YOUCHUAN_API_BASE_URL > 默认
-    this.apiBaseUrl = midjourneyBaseUrl ?? sora2Endpoint ?? youchuanBaseUrl ?? (hasYouchuanConfig ? 'https://ali.youchuan.cn' : 'https://api1.147ai.com');
+    this.apiBaseUrl = midjourneyBaseUrl ?? sora2Endpoint ?? youchuanBaseUrl ?? (hasYouchuanConfig ? 'https://ali.youchuan.cn' : getToapisOrigin());
     this.pollIntervalMs = Number(
       this.config.get<number>('MIDJOURNEY_POLL_INTERVAL_MS') ?? 4000
     );
@@ -111,12 +113,12 @@ export class MidjourneyProvider implements IAIProvider {
     this.youchuanSecretKey = this.config.get<string>('YOUCHUAN_SECRET_KEY')?.trim() ?? null;
     this.apiKey =
       this.config.get<string>('MIDJOURNEY_API_KEY') ??
-      this.config.get<string>('BANANA_API_KEY') ??
+      getToapisApiKey() ??
       null;
 
     if (this.apiKey) {
       this.authMode = 'legacy';
-      this.logger.log(`Midjourney provider initialised with legacy 147 credentials (endpoint: ${this.apiBaseUrl}).`);
+      this.logger.log(`Midjourney provider initialised with ToAPIs credentials (endpoint: ${this.apiBaseUrl}).`);
       return;
     }
 

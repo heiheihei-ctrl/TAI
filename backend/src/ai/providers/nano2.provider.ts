@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { IAIProvider } from './ai-provider.interface';
 import { Nano2Service } from '../services/nano2.service';
 import { TencentVodAigcService } from '../services/tencent-vod-aigc.service';
+import { getToapisApiKey } from '../../utils/apimartHttpClient';
+import { isUpstreamImageTaskCompleted, isUpstreamImageTaskFailed } from '../../utils/upstreamImageTask.util';
 
 type BananaImageRoute = 'normal' | 'stable';
 type GptImage2Quality = 'auto' | 'low' | 'medium' | 'high';
@@ -25,9 +27,9 @@ export class Nano2Provider implements IAIProvider {
   ) {}
 
   async initialize(): Promise<void> {
-    const apiKey = this.config.get<string>('NANO2_API_KEY');
+    const apiKey = getToapisApiKey();
     this.available = !!apiKey;
-    this.logger.log(`Nano2 provider initialized: ${this.available ? 'available' : 'unavailable'}`);
+    this.logger.log(`Nano2 provider initialized (ToAPIs): ${this.available ? 'available' : 'unavailable'}`);
   }
 
   isAvailable(): boolean {
@@ -281,7 +283,7 @@ export class Nano2Provider implements IAIProvider {
 
       this.logger.log(`Nano2 task ${result.taskId} status: ${taskResult.status} (attempt ${attempt})`);
 
-      if (taskResult.status === 'succeeded' || taskResult.status === 'completed') {
+      if (isUpstreamImageTaskCompleted(taskResult.status)) {
         if (taskResult.imageUrl) {
           return {
             success: true,
@@ -321,7 +323,7 @@ export class Nano2Provider implements IAIProvider {
         continue;
       }
 
-      if (taskResult.status === 'failed' || taskResult.status === 'error') {
+      if (isUpstreamImageTaskFailed(taskResult.status)) {
         return {
           success: false,
           error: { message: 'Nano2 image generation failed' },
