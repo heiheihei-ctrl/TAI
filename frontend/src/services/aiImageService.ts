@@ -91,12 +91,12 @@ const resolvePersistedBananaImageRoute = (): BananaImageRoute | null => {
 
 const resolveRequestBananaImageRoute = (request: {
   providerOptions?: Record<string, any>;
-}): BananaImageRoute | null => {
+}): BananaImageRoute => {
   const routeFromRequest =
     normalizeBananaImageRoute(request.providerOptions?.banana?.imageRoute) ||
     normalizeBananaImageRoute(request.providerOptions?.bananaImageRoute);
   if (routeFromRequest) return routeFromRequest;
-  return resolvePersistedBananaImageRoute();
+  return resolvePersistedBananaImageRoute() || "normal";
 };
 
 const attachBananaRouteToProviderOptions = <T extends {
@@ -110,9 +110,6 @@ const attachBananaRouteToProviderOptions = <T extends {
   }
 
   const resolvedRoute = resolveRequestBananaImageRoute(request);
-  if (!resolvedRoute) {
-    return { request, bananaImageRoute: null };
-  }
 
   const baseOptions =
     request.providerOptions && typeof request.providerOptions === "object"

@@ -54,8 +54,7 @@ export class Nano2Provider implements IAIProvider {
     if (nested) return nested;
     const legacy = this.normalizeRoute(providerOptions?.bananaImageRoute);
     if (legacy) return legacy;
-    // GPT Image 2 默认按尊享（stable）路线走，不走普通路线
-    return 'stable';
+    return 'normal';
   }
 
   private isGptImage2Model(model: string): boolean {

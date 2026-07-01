@@ -328,14 +328,11 @@ export class BananaProvider implements IAIProvider {
       this.logger.log("[Banana/Image] userRoute=stable -> providerMode=tencent");
       return "tencent";
     }
-    if (userRoute === "normal") {
-      const normalMode = this.normalizeImageProviderForNormalRoute(configuredMode);
-      this.logger.log(
-        `[Banana/Image] userRoute=normal -> providerMode=${normalMode}`
-      );
-      return normalMode;
-    }
-    return configuredMode;
+    const normalMode = this.normalizeImageProviderForNormalRoute(configuredMode);
+    this.logger.log(
+      `[Banana/Image] userRoute=${userRoute || "unset"} -> providerMode=${normalMode}`
+    );
+    return normalMode;
   }
 
   private async getConfiguredTextProvider(
@@ -365,10 +362,7 @@ export class BananaProvider implements IAIProvider {
     if (userRoute === "stable") {
       return "tencent";
     }
-    if (userRoute === "normal") {
-      return this.normalizeTextProviderForNormalRoute(configuredMode);
-    }
-    return configuredMode;
+    return this.normalizeTextProviderForNormalRoute(configuredMode);
   }
 
   private normalizeModelName(model: string): string {
