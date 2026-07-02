@@ -22,7 +22,7 @@ if (!sharpOk) {
     '[postinstall] sharp 未就绪。请在后端目录执行：\n' +
       '  rm -rf node_modules && pnpm install\n' +
       '（.npmrc 已配置 @img 从 npmjs 官方拉取预编译包）\n' +
-      '或配置 backend/.env 的 REMOVE_BG_API_KEY 使用 remove.bg 云端抠图（不依赖 sharp）。'
+      '部署后执行: node scripts/diagnose-background-removal.js 验证本地 ONNX 抠图 worker。'
   );
 }
 

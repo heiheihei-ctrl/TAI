@@ -409,10 +409,10 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
 
-        # 超时设置
+        # 超时设置（抠图/生图等 AI 请求可能超过 60s）
         proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
+        proxy_send_timeout 180s;
+        proxy_read_timeout 180s;
     }
 
     # 健康检查

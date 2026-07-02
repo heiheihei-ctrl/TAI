@@ -90,6 +90,9 @@ import {
 import { uploadToOSS } from "@/services/ossUploadService";
 import Qrcode from "@/assets/group-erweima.jpg";
 import ProfileCompletionBanner from "@/components/profile/ProfileCompletionBanner";
+import CheckInReminderBanner from "@/components/referral/CheckInReminderBanner";
+import ReminderBannerStack from "@/components/reminder/ReminderBannerStack";
+import { REMINDER_BANNER_STACK_TOP_CLASS } from "@/components/reminder/reminderBannerLayout";
 import ProfileCompletionSettingsPanel from "@/components/profile/ProfileCompletionSettingsPanel";
 import {
   clearProfileCompletionBannerDismissCache,
@@ -101,6 +104,13 @@ import {
   takePendingSettingsSection,
   type ExtendedProfile,
 } from "@/services/extendedProfileApi";
+import {
+  getCheckInStatus,
+  isCheckInReminderBannerDismissedToday,
+  normalizeCheckInReminderBannerDismissCache,
+  shouldHideCheckInReminder,
+  type CheckInStatus,
+} from "@/services/referralApi";
 import gzhImg from "@/assets/gzh.png";
 
 // Nano Banana 闂傚倸鍊搁崐鎼佸磹妞嬪孩顐介柨鐔哄Т绾惧鏌涘☉鍗炲箻闁哄棗妫濋弻娑樷槈濮楀牆濮涘銈傛櫆閻擄繝寮诲☉銏犵婵＄偠顕ф禍楣冩⒑缁嬫鍎愰柟鎼佺畺楠炲骞橀鑲╊槹濡炪倖鎸炬慨纾嬨亹鎼淬劍鈷掑ù锝堟鐢稓绱掗鎯р枅鐎规洖缍婇獮搴ㄦ寠婢跺鈧剙顪冮妶鍡樼５闁稿鎸婚〃銉╂倷鐎电顫ч梺鐟板槻閹虫ê鐣烽妸锔剧瘈閹煎瓨绻勯弫?
@@ -607,6 +617,9 @@ const FloatingHeader: React.FC = () => {
   );
   const [extendedProfileLoaded, setExtendedProfileLoaded] = useState(false);
   const [profileBannerDismissed, setProfileBannerDismissed] = useState(false);
+  const [checkInStatus, setCheckInStatus] = useState<CheckInStatus | null>(null);
+  const [checkInStatusLoaded, setCheckInStatusLoaded] = useState(false);
+  const [checkInBannerDismissed, setCheckInBannerDismissed] = useState(false);
   // 闂傚倸鍊搁崐鐑芥嚄閸洖纾块柣銏㈩焾閻ょ偓绻濇繝鍌滃闁搞劌鍊块弻锝夊閵忊晝鍔哥紓浣哄У閼归箖鈥︾捄銊﹀磯闁惧繐婀辨导鍥╃磼妤ｅ啰鐣虹紒鐘崇墵瀵鎮㈢悰鈥充壕闁汇垺顔栭悞鎯归悩娆忓枤閻斿棝鎮峰▎蹇擃仼濠殿喖娲﹂妵鍕敇閻愭潙浠撮悗瑙勬礀閵堢鐣烽崡鐐嶆棃鍩€椤掑嫬姹查柣鏂挎啞閸欏繘鏌ㄥ┑鍡樺櫧濠⒀嶇畵閺岋紕浠﹂崜褉妲堥梺瀹狀嚙闁帮綁鐛崱妯奸檮濠㈣泛顦遍弫鏍⒑?
   useEffect(() => {
     setGridSizeInput(String(gridSize));
@@ -816,6 +829,47 @@ const FloatingHeader: React.FC = () => {
   }, [user]);
 
   useEffect(() => {
+    if (!user) {
+      setCheckInStatus(null);
+      setCheckInStatusLoaded(false);
+      setCheckInBannerDismissed(false);
+      return;
+    }
+    normalizeCheckInReminderBannerDismissCache();
+    setCheckInBannerDismissed(isCheckInReminderBannerDismissedToday());
+    let cancelled = false;
+    setCheckInStatusLoaded(false);
+    void getCheckInStatus()
+      .then((status) => {
+        if (!cancelled) {
+          setCheckInStatus(status);
+          setCheckInStatusLoaded(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCheckInStatusLoaded(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const refreshCheckInStatus = () => {
+      void getCheckInStatus()
+        .then((status) => setCheckInStatus(status))
+        .catch(() => {});
+    };
+    window.addEventListener("refresh-credits", refreshCheckInStatus);
+    return () => {
+      window.removeEventListener("refresh-credits", refreshCheckInStatus);
+    };
+  }, [user]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     const handleOpenSettingsSection = (event: Event) => {
       const detail = (event as CustomEvent<{ section?: string }>).detail;
@@ -861,6 +915,20 @@ const FloatingHeader: React.FC = () => {
     extendedProfileLoaded &&
     !extendedProfile?.isComplete &&
     !profileBannerDismissed;
+
+  const showCheckInReminderBanner =
+    Boolean(user) &&
+    checkInStatusLoaded &&
+    checkInStatus !== null &&
+    !shouldHideCheckInReminder(checkInStatus) &&
+    !checkInBannerDismissed;
+
+  const topBannerCount = Math.min(
+    2,
+    Number(showProfileCompletionBanner) + Number(showCheckInReminderBanner),
+  ) as 0 | 1 | 2;
+
+  const headerTopClass = REMINDER_BANNER_STACK_TOP_CLASS[topBannerCount];
 
   // 闂傚倸鍊搁崐椋庣矆娓氣偓楠炲鍨鹃幇浣圭稁缂傚倷鐒﹁摫闁告瑥绻橀弻鐔碱敍閿濆洣姹楅悷婊呭鐢帡鎮欐繝鍐︿簻闁瑰搫绉堕ˇ锕€霉閻樿櫕銇濇慨濠冩そ濡啫鈽夋潏鈺佸綃缂傚倷鑳舵慨鐢稿垂閸ф绠栭柨鐔哄Т閸楁娊鏌曡箛銉х？闁?Google API Key 闂傚倸鍊峰ù鍥х暦閸偅鍙忕€规洖娲ㄩ惌鍡椕归敐鍫綈婵炲懐濮撮湁闁绘ê妯婇崕鎰版煕?
   useEffect(() => {
@@ -2041,17 +2109,27 @@ const FloatingHeader: React.FC = () => {
 
   return (
     <>
-      {showProfileCompletionBanner ? (
-        <ProfileCompletionBanner
-          profile={extendedProfile}
-          onDismiss={() => setProfileBannerDismissed(true)}
-        />
+      {topBannerCount > 0 ? (
+        <ReminderBannerStack>
+          {showProfileCompletionBanner ? (
+            <ProfileCompletionBanner
+              profile={extendedProfile}
+              onDismiss={() => setProfileBannerDismissed(true)}
+            />
+          ) : null}
+          {showCheckInReminderBanner && checkInStatus ? (
+            <CheckInReminderBanner
+              status={checkInStatus}
+              onDismiss={() => setCheckInBannerDismissed(true)}
+            />
+          ) : null}
+        </ReminderBannerStack>
       ) : null}
       <div
         aria-hidden={focusMode}
         className={cn(
           "tanva-header-shell fixed left-0 right-0 z-50 px-4 flex items-center justify-between gap-4 transition-all duration-[50ms] ease-out pointer-events-none",
-          showProfileCompletionBanner ? "top-14" : "top-4",
+          headerTopClass,
           showLayerPanel ? "left-[306px]" : "left-0",
           focusMode && "hidden"
         )}

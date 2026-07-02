@@ -215,7 +215,7 @@ export class BackgroundRemovalService {
   }
 
   /**
-   * 使用本地 ONNX 模块移除背景：worker 优先，失败再回退主进程
+   * 使用本地 ONNX 模块移除背景：仅走隔离 worker，生产环境禁止主进程加载 ONNX（否则会 segfault → 502）
    */
   private async removeBackgroundLocal(imageBuffer: Buffer, mimeType: string): Promise<string> {
     if (!this.isLocalRemovalEnabled()) {
@@ -225,18 +225,27 @@ export class BackgroundRemovalService {
     }
 
     const workerPath = this.resolveLocalWorkerPath();
-    if (workerPath) {
-      try {
-        return await this.removeBackgroundLocalIsolated(imageBuffer, mimeType, workerPath);
-      } catch (workerError) {
-        const workerMessage =
-          workerError instanceof Error ? workerError.message : String(workerError);
-        this.logger.warn(
-          `⚠️ Isolated worker failed (${workerMessage}), trying in-process ONNX...`
+    if (!workerPath) {
+      const isProd = (process.env.NODE_ENV || '').toLowerCase() === 'production';
+      if (isProd) {
+        throw new Error(
+          'background-removal.worker.js not found in production. Run npm run build or configure REMOVE_BG_API_KEY.',
         );
       }
+      this.logger.warn(
+        '⚠️ background-removal.worker.js not found, falling back to in-process ONNX (dev only)',
+      );
+      return this.removeBackgroundLocalInProcess(imageBuffer, mimeType);
     }
 
+    return await this.removeBackgroundLocalIsolated(imageBuffer, mimeType, workerPath);
+  }
+
+  /** 仅开发环境使用：主进程加载 ONNX，Linux 生产环境可能 segfault */
+  private async removeBackgroundLocalInProcess(
+    imageBuffer: Buffer,
+    mimeType: string,
+  ): Promise<string> {
     const blob = new Blob([imageBuffer], { type: mimeType || 'image/png' });
     const mod = await this.getRemovalModule();
     const publicPath = this.resolveLocalModelPublicPath();
@@ -271,7 +280,7 @@ export class BackgroundRemovalService {
     const hints: string[] = [];
 
     if (!diagnostics.hasRemoveBgKey) {
-      hints.push('在 backend/.env 配置 REMOVE_BG_API_KEY');
+      hints.push('本地 ONNX 未就绪（见下方其他项）');
     }
     if (!diagnostics.moduleInstalled) {
       hints.push('在后端目录执行 npm install（需安装 @imgly/background-removal-node）');
@@ -284,12 +293,12 @@ export class BackgroundRemovalService {
     }
     if (!diagnostics.sharpLoadable) {
       hints.push(
-        'sharp 不可用：在后端执行 rm -rf node_modules && pnpm install（@img 包需从 npmjs 拉取）；或配置 REMOVE_BG_API_KEY 走云端抠图'
+        'sharp 不可用：在后端执行 rm -rf node_modules && pnpm install && node scripts/fix-sharp-install.js'
       );
     }
 
     const hintText = hints.length > 0 ? hints.join('；') : '请检查后端部署';
-    return `Background removal is unavailable: local ONNX failed and REMOVE_BG_API_KEY is not configured. ${hintText}`;
+    return `Background removal is unavailable: local ONNX is not ready. ${hintText}`;
   }
 
   private async removeBackgroundWithProviderFallback(
@@ -354,7 +363,11 @@ export class BackgroundRemovalService {
 
     const child = spawn(process.execPath, args, {
       cwd: this.resolveBackendRoot(),
-      env: process.env,
+      env: {
+        ...process.env,
+        OMP_NUM_THREADS: '1',
+        ORT_DISABLE_CPU_AFFINITY: '1',
+      },
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
     });
@@ -588,9 +601,9 @@ export class BackgroundRemovalService {
         diagnostics,
         reason: sharpReady
           ? diagnostics.workerPath
-            ? '将通过隔离子进程尝试本地 ONNX 抠图；若失败可配置 REMOVE_BG_API_KEY。'
-            : '将尝试主进程本地 ONNX 抠图；若失败可配置 REMOVE_BG_API_KEY。'
-          : `sharp 原生模块不可用：${diagnostics.sharpError ?? 'unknown'}. 请执行 pnpm rebuild sharp 或配置 REMOVE_BG_API_KEY。`,
+            ? '将通过隔离子进程使用本地 ONNX 抠图（与本地开发相同）。'
+            : '将尝试主进程本地 ONNX 抠图（开发环境）。'
+          : `sharp 原生模块不可用：${diagnostics.sharpError ?? 'unknown'}. 请执行 node scripts/fix-sharp-install.js`,
         features: sharpReady
           ? [
               'Remove background with transparency',
@@ -607,7 +620,7 @@ export class BackgroundRemovalService {
       platform: process.platform,
       diagnostics,
       reason:
-        '本地抠图依赖未就绪：请在后端执行 npm install && npm run build，或在 backend/.env 配置 REMOVE_BG_API_KEY。',
+        '本地抠图依赖未就绪：请在后端执行 npm install && npm run build，并运行 node scripts/diagnose-background-removal.js。',
       features: [],
     };
   }

@@ -295,6 +295,13 @@ const zhCN = {
       languageTitle: "界面语言",
       languageDesc: "切换中文 / English",
     },
+    checkInReminder: {
+      message: "每日签到，连续7天可额外获得",
+      messageWithStreak: "已连续签到 {{count}} 天，再坚持可额外获得",
+      creditsSuffix: "积分",
+      action: "去签到",
+      dismiss: "关闭提示",
+    },
     settings: {
       title: "设置",
       sections: {

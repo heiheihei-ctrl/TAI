@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Logger } from '@nestjs/common';
+import { Body, Controller, Get, Post, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AiPublicService } from './ai-public.service';
 import {
@@ -168,10 +168,9 @@ export class AiPublicController {
       const message = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error('❌ [PUBLIC] Background removal failed:', message);
       this.logger.error('   Error details:', error);
-      return {
-        success: false,
-        error: message,
-      };
+      throw new ServiceUnavailableException(
+        `${message}。请在服务器 backend 目录执行 node scripts/diagnose-background-removal.js 排查（与本地相同的 ONNX worker 栈）。`,
+      );
     }
   }
 

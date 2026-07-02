@@ -130,7 +130,7 @@ function main() {
   console.log('\n若第 4 步访问 npmjs 超时，可先试：');
   console.log('  export npm_config_registry=https://registry.npmjs.org/');
   console.log(`  pnpm add ${platformPkg}`);
-  console.log('\n抠图可不依赖 sharp：在 backend/.env 配置 REMOVE_BG_API_KEY');
+  console.log('\n抠图与本地开发相同：依赖 @imgly/background-removal-node + worker；部署后执行 node scripts/diagnose-background-removal.js');
 
   process.exit(1);
 }

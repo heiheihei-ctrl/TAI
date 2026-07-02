@@ -197,7 +197,7 @@ export class MembershipService {
         code: plan.code,
         name: plan.name,
         billingCycle: plan.billingCycle,
-        price: Number(plan.price),
+        price: getEffectiveMembershipPlanPrice(plan),
         monthlyQuotaCredits: plan.monthlyQuotaCredits,
         signupBonusCredits: plan.signupBonusCredits,
         totalMonthlyCredits: plan.monthlyQuotaCredits + plan.signupBonusCredits,

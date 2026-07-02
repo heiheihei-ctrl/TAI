@@ -296,6 +296,13 @@ const enUS = {
       languageTitle: "Interface Language",
       languageDesc: "Switch between Chinese and English",
     },
+    checkInReminder: {
+      message: "Check in daily — complete 7 days in a row for an extra",
+      messageWithStreak: "{{count}}-day streak — keep going for an extra",
+      creditsSuffix: "credits",
+      action: "Check in",
+      dismiss: "Dismiss reminder",
+    },
     settings: {
       title: "Settings",
       sections: {

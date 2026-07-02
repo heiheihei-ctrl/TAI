@@ -7,6 +7,12 @@ import {
   openSettingsSection,
   type ExtendedProfile,
 } from "@/services/extendedProfileApi";
+import {
+  REMINDER_BANNER_ACTIONS_CLASS,
+  REMINDER_BANNER_INNER_CLASS,
+  REMINDER_BANNER_SHELL_CLASS,
+} from "@/components/reminder/reminderBannerLayout";
+import { reminderBannerRowClassName } from "@/components/reminder/ReminderBannerStack";
 
 type Props = {
   profile: ExtendedProfile | null;
@@ -30,11 +36,13 @@ export default function ProfileCompletionBanner({ profile, onDismiss }: Props) {
   return (
     <div
       className={cn(
-        "pointer-events-auto fixed inset-x-0 top-0 z-[70] border-b border-violet-200/70",
-        "bg-gradient-to-r from-violet-50 via-white to-indigo-50/90 backdrop-blur-md",
+        REMINDER_BANNER_SHELL_CLASS,
+        reminderBannerRowClassName(
+          "border-violet-200/70 bg-gradient-to-r from-violet-50 via-white to-indigo-50/90",
+        ),
       )}
     >
-      <div className="mx-auto flex max-w-3xl items-center justify-center px-4 py-2.5">
+      <div className={REMINDER_BANNER_INNER_CLASS}>
         <div className="flex min-w-0 items-center gap-2">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-600">
             <Gift className="h-4 w-4" />
@@ -45,7 +53,7 @@ export default function ProfileCompletionBanner({ profile, onDismiss }: Props) {
             积分
           </p>
         </div>
-        <div className="ml-[200px] flex shrink-0 items-center gap-2">
+        <div className={REMINDER_BANNER_ACTIONS_CLASS}>
           <button
             type="button"
             onClick={handleGo}

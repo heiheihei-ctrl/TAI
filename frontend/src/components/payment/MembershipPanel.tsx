@@ -18,6 +18,10 @@ import {
   type PaymentMembershipPlan,
   type PaymentMethod,
 } from "@/services/adminApi";
+import {
+  getPlanDisplayPrice,
+  getYearlyPlanDisplay,
+} from "@/utils/membershipYearlyDisplay";
 
 const showToast = (message: string, type: "success" | "error" | "info" = "info") => {
   window.dispatchEvent(new CustomEvent("toast", { detail: { message, type } }));
@@ -728,12 +732,13 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                     const { main, accent } = vipFeatureLines(plan);
                     const isRecommended = isRecommendedPlan(plan);
                     const isDailyCreation = !isRecommended && isDailyCreationPlan(plan);
-                    const billingLabel =
-                      plan.billingCycle === "yearly" ? "年费套餐 · 在月付价基础上 8 折" : "月费套餐";
-                    const equivMonthly =
-                      plan.billingCycle === "yearly" && plan.price > 0
-                        ? String(Math.round((plan.price / 12) * 100) / 100)
-                        : null;
+                    const billingLabel = plan.billingCycle === "monthly" ? "月费套餐" : null;
+                    const yearlyDisplay = getYearlyPlanDisplay(plan);
+                    const displayPrice = getPlanDisplayPrice(plan);
+                    const showYearlyLimitedDiscountBadge = yearlyDisplay?.showLimitedDiscountBadge ?? false;
+                    const originalYearlyPrice = yearlyDisplay?.originalPrice ?? null;
+                    const equivMonthly = yearlyDisplay?.equivMonthly ?? null;
+                    const showTopRightBadges = isRecommended || showYearlyLimitedDiscountBadge;
                     const planTotalCredits = plan.monthlyQuotaCredits + plan.signupBonusCredits;
 
                     return (
@@ -771,18 +776,33 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                             : null,
                         )}
                       >
-                        {isRecommended ? (
-                          <div
-                            className={cn(
-                              "absolute right-3 top-3 rounded-full bg-gradient-to-r from-[#8E86F5] to-[#9aa8ef] px-2.5 py-0.5 text-[10px] font-semibold text-white shadow-lg shadow-violet-950/60",
-                            )}
-                          >
-                            最受欢迎
+                        {showTopRightBadges ? (
+                          <div className="absolute right-3 top-3 flex flex-col items-end gap-1">
+                            {showYearlyLimitedDiscountBadge ? (
+                              <div
+                                className={cn(
+                                  "rounded-full bg-gradient-to-r from-rose-500 to-red-500 px-2.5 py-0.5 text-[10px] font-semibold text-white shadow-lg",
+                                  isWhite ? "shadow-rose-200/80" : "shadow-rose-950/50",
+                                )}
+                              >
+                                限时8折专享
+                              </div>
+                            ) : null}
+                            {isRecommended ? (
+                              <div
+                                className={cn(
+                                  "rounded-full bg-gradient-to-r from-[#8E86F5] to-[#9aa8ef] px-2.5 py-0.5 text-[10px] font-semibold text-white shadow-lg shadow-violet-950/60",
+                                )}
+                              >
+                                最受欢迎
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
                         <div
                           className={cn(
-                            "pr-14 text-xl font-semibold tracking-tight xl:text-lg 2xl:text-xl",
+                            "text-xl font-semibold tracking-tight xl:text-lg 2xl:text-xl",
+                            showTopRightBadges ? "pr-16" : undefined,
                             isWhite ? "text-slate-900" : "text-zinc-100",
                           )}
                         >
@@ -798,13 +818,23 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                         ) : null}
 
                         <div className="mt-3 flex flex-wrap items-end gap-x-2 gap-y-1">
+                          {originalYearlyPrice != null ? (
+                            <span
+                              className={cn(
+                                "text-xl font-medium tabular-nums line-through decoration-1",
+                                isWhite ? "text-slate-400" : "text-zinc-500",
+                              )}
+                            >
+                              ¥{originalYearlyPrice}
+                            </span>
+                          ) : null}
                           <span
                             className={cn(
                               "text-3xl font-semibold tabular-nums tracking-tight xl:text-2xl 2xl:text-3xl",
                               isWhite ? "text-slate-900" : "text-zinc-100",
                             )}
                           >
-                            ¥{plan.price}
+                            ¥{displayPrice}
                           </span>
                           <span
                             className={cn("pb-1 text-sm", isWhite ? "text-slate-500" : "text-zinc-500")}
@@ -971,7 +1001,7 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                                   isWhite ? "text-slate-900" : "text-zinc-100",
                                 )}
                               >
-                                ¥{selectedPlan?.price ?? 0}
+                                ¥{selectedPlan ? getPlanDisplayPrice(selectedPlan) : 0}
                               </span>
                             </div>
                           </div>

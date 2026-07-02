@@ -177,6 +177,11 @@ class BackgroundRemovalService {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        if (response.status === 502) {
+          throw new Error(
+            "抠图服务网关超时(502)：服务器处理时间过长或后端进程异常。请稍后重试，或联系管理员检查 REMOVE_BG_API_KEY / sharp / Nginx 超时配置。",
+          );
+        }
         throw new Error(
           errorData.message || errorData.error || `HTTP ${response.status}`
         );

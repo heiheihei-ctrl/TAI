@@ -49,6 +49,60 @@ export interface CheckInStatus {
   rewards: number[];
 }
 
+const CHECK_IN_REMINDER_BANNER_DISMISSED_KEY =
+  "tanva-check-in-reminder-banner-dismissed-date";
+
+function getLocalDateKey(date = new Date()): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** 连续 7 天已签到并领取奖励后不再显示提醒 */
+export function shouldHideCheckInReminder(status: CheckInStatus): boolean {
+  return status.consecutiveDays >= 7 && !status.canCheckIn;
+}
+
+/** 今日是否已关闭签到提醒条 */
+export function isCheckInReminderBannerDismissedToday(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = window.localStorage.getItem(CHECK_IN_REMINDER_BANNER_DISMISSED_KEY);
+    if (!raw) return false;
+    return raw === getLocalDateKey();
+  } catch {
+    return false;
+  }
+}
+
+/** 关闭签到提醒条（仅当日有效） */
+export function dismissCheckInReminderBannerForToday(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      CHECK_IN_REMINDER_BANNER_DISMISSED_KEY,
+      getLocalDateKey(),
+    );
+  } catch {
+    // ignore
+  }
+}
+
+/** 登录时清理过期的关闭缓存 */
+export function normalizeCheckInReminderBannerDismissCache(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = window.localStorage.getItem(CHECK_IN_REMINDER_BANNER_DISMISSED_KEY);
+    if (!raw) return;
+    if (raw !== getLocalDateKey()) {
+      window.localStorage.removeItem(CHECK_IN_REMINDER_BANNER_DISMISSED_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
+
 // 签到结果
 export interface CheckInResult {
   success: boolean;
