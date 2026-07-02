@@ -24,7 +24,9 @@ export default function CheckInReminderBanner({
   onDismiss,
 }: Props) {
   const { t } = useTranslation();
-  const weeklyTotal = status.todayReward + status.weeklyBonus;
+  const weekTotalCredits =
+    status.rewards?.reduce((sum, value) => sum + value, 0) ??
+    status.todayReward * 6 + status.todayReward + status.weeklyBonus;
 
   const handleDismiss = () => {
     dismissCheckInReminderBannerForToday();
@@ -56,7 +58,7 @@ export default function CheckInReminderBanner({
                 })
               : t("workspace.checkInReminder.message")}
             <ProfileRewardCredits
-              credits={weeklyTotal}
+              credits={weekTotalCredits}
               className="text-amber-600"
             />
             {t("workspace.checkInReminder.creditsSuffix")}

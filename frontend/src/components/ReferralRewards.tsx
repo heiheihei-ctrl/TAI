@@ -131,7 +131,6 @@ export default function ReferralRewards() {
 
   const consecutiveDays = checkInStatus?.consecutiveDays || 0;
   const todayReward = checkInStatus?.todayReward ?? 0;
-  const weeklyBonus = checkInStatus?.weeklyBonus ?? 0;
 
   return (
     <div className="tanva-referral-panel space-y-6">
@@ -189,9 +188,7 @@ export default function ReferralRewards() {
         </Button>
 
         <p className="text-xs text-gray-400 mt-2 text-center">
-          {t("workspace.settings.referralTab.checkIn.weeklyBonusHint", {
-            reward: weeklyBonus,
-          })}
+          {t("workspace.settings.referralTab.checkIn.weeklyBonusHint")}
         </p>
       </div>
 

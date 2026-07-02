@@ -297,9 +297,9 @@ const enUS = {
       languageDesc: "Switch between Chinese and English",
     },
     checkInReminder: {
-      message: "Check in daily — complete 7 days in a row for an extra",
-      messageWithStreak: "{{count}}-day streak — keep going for an extra",
-      creditsSuffix: "credits",
+      message: "Check in daily for 50 credits; day 7 adds +100 extra — 450 total in 7 days",
+      messageWithStreak: "{{count}}-day streak — complete 7 days for",
+      creditsSuffix: "credits total",
       action: "Check in",
       dismiss: "Dismiss reminder",
     },
@@ -360,7 +360,7 @@ const enUS = {
       referralTab: {
         alerts: {
           checkInSuccess: "Check-in successful. You earned {{reward}} credits{{bonus}}",
-          checkInWeeklyBonus: ", including the 7-day streak bonus",
+          checkInWeeklyBonus: " (includes +100 bonus on day 7)",
           checkInFailed: "Check-in failed. Please try again later.",
         },
         timeAgo: {
@@ -374,7 +374,8 @@ const enUS = {
           checkingIn: "Checking in...",
           checkInNow: "Check in now +{{reward}}",
           checkedToday: "Checked in today",
-          weeklyBonusHint: "Get an extra {{reward}} credits for a 7-day streak.",
+          weeklyBonusHint:
+            "50 credits per day; +100 on day 7 — 450 credits in 7 days",
         },
         stats: {
           successfulInvites: "Successful Invites",

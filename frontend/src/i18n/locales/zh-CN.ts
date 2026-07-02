@@ -296,8 +296,8 @@ const zhCN = {
       languageDesc: "切换中文 / English",
     },
     checkInReminder: {
-      message: "每日签到，连续7天可额外获得",
-      messageWithStreak: "已连续签到 {{count}} 天，再坚持可额外获得",
+      message: "每日签到 50 积分，第 7 天额外 +100，连续 7 天共可得",
+      messageWithStreak: "已连续签到 {{count}} 天，完成 7 天连签共可得",
       creditsSuffix: "积分",
       action: "去签到",
       dismiss: "关闭提示",
@@ -359,7 +359,7 @@ const zhCN = {
       referralTab: {
         alerts: {
           checkInSuccess: "签到成功，获得 {{reward}} 积分{{bonus}}",
-          checkInWeeklyBonus: "，并触发连续7天额外奖励",
+          checkInWeeklyBonus: "（含第 7 天额外 100 积分）",
           checkInFailed: "签到失败，请稍后重试",
         },
         timeAgo: {
@@ -373,7 +373,8 @@ const zhCN = {
           checkingIn: "签到中...",
           checkInNow: "立即签到 +{{reward}}",
           checkedToday: "今日已签到",
-          weeklyBonusHint: "连续签到7天可额外获得 {{reward}} 积分",
+          weeklyBonusHint:
+            "每日 50 积分，第 7 天额外 +100，连续 7 天共 450 积分",
         },
         stats: {
           successfulInvites: "成功邀请",

@@ -353,4 +353,4 @@ export type ServiceType = string;
 export const DAILY_LOGIN_REWARD_CREDITS = 50;
 
 // 连续签到7天额外奖励积分
-export const CONSECUTIVE_7_DAY_BONUS_CREDITS = 150;
+export const CONSECUTIVE_7_DAY_BONUS_CREDITS = 100;
