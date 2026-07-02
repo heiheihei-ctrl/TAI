@@ -1,5 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  getPublicTemplateCategoryRank,
+  sortPublicTemplateCategories,
+} from '../../templates/template-category-order';
 import { CreateTemplateDto, UpdateTemplateDto, TemplateQueryDto } from '../dto/template.dto';
 import { OssService } from '../../oss/oss.service';
 import { sanitizeDesignJson } from '../../utils/designJsonSanitizer';
@@ -259,11 +263,7 @@ export class TemplateService {
       try {
         const list = JSON.parse(setting.value);
         if (Array.isArray(list)) {
-          const filtered = list.filter(Boolean);
-          // 将"其他"分类固定在末尾
-          const other = filtered.filter((c: string) => c === '其他');
-          const rest = filtered.filter((c: string) => c !== '其他').sort();
-          return [...rest, ...other];
+          return sortPublicTemplateCategories(list.filter(Boolean));
         }
       } catch (e) {
         // ignore parse error and fallback
@@ -277,11 +277,8 @@ export class TemplateService {
       distinct: ['category'],
     });
 
-    const cats = categories.map(c => c.category).filter(Boolean);
-    // 将"其他"分类固定在末尾
-    const other = cats.filter(c => c === '其他');
-    const rest = cats.filter(c => c !== '其他').sort();
-    return [...rest, ...other];
+    const cats = categories.map((c) => c.category).filter((c): c is string => Boolean(c));
+    return sortPublicTemplateCategories(cats);
   }
 
   async getActiveTemplatesForFrontend() {
@@ -295,10 +292,15 @@ export class TemplateService {
         tags: true,
         thumbnail: true,
         thumbnailSmall: true,
+        createdAt: true,
       },
-      orderBy: [
-        { createdAt: 'desc' },
-      ],
+    });
+
+    templates.sort((a, b) => {
+      const rankDiff =
+        getPublicTemplateCategoryRank(a.category) - getPublicTemplateCategoryRank(b.category);
+      if (rankDiff !== 0) return rankDiff;
+      return b.createdAt.getTime() - a.createdAt.getTime();
     });
 
     return templates.map(template => ({

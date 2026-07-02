@@ -3,7 +3,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { Trash2, Plus, Upload, Download, Group, Ungroup, Lock, Crown } from "lucide-react";
-import { fetchTemplateCategories } from "@/services/publicTemplateService";
+import { fetchTemplateCategories, sortPublicTemplateCategories } from "@/services/publicTemplateService";
 import { fetchWithAuth } from "@/services/authFetch";
 import SharedTemplateCard from "@/components/template/SharedTemplateCard";
 import SmartImage from "@/components/ui/SmartImage";
@@ -8137,7 +8137,9 @@ function FlowInner() {
         const cats = await fetchTemplateCategories();
         if (!cancelled && Array.isArray(cats) && cats.length) {
           setBuiltinCategories(
-            Array.from(new Set(cats.map((cat) => normalizeTemplateCategory(cat))))
+            sortPublicTemplateCategories(
+              Array.from(new Set(cats.map((cat) => normalizeTemplateCategory(cat)))),
+            ),
           );
           return;
         }
@@ -8146,7 +8148,7 @@ function FlowInner() {
           const fromTpl = (tplIndex || [])
             .map((t) => normalizeTemplateCategory(t.category))
             .filter(Boolean) as string[];
-          const uniq = Array.from(new Set(fromTpl));
+          const uniq = sortPublicTemplateCategories(Array.from(new Set(fromTpl)));
           if (uniq.length) {
             setBuiltinCategories(uniq);
           } else {
@@ -8159,7 +8161,7 @@ function FlowInner() {
           const fromTpl = (tplIndex || [])
             .map((t) => normalizeTemplateCategory(t.category))
             .filter(Boolean) as string[];
-          const uniq = Array.from(new Set(fromTpl));
+          const uniq = sortPublicTemplateCategories(Array.from(new Set(fromTpl)));
           if (uniq.length) {
             setBuiltinCategories(uniq);
           } else {

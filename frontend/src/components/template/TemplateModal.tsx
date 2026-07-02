@@ -22,6 +22,7 @@ import SharedTemplateCard from "./SharedTemplateCard";
 import {
   fetchTemplateCategories,
   fetchTemplates,
+  sortPublicTemplateCategories,
 } from "@/services/publicTemplateService";
 import { useTranslation } from "react-i18next";
 // import { useReactFlow } from 'reactflow'; // 暂时注释，因为FloatingHeader不在ReactFlow上下文中
@@ -417,10 +418,7 @@ export default function TemplateModal({
         const cats = await fetchTemplateCategories();
         if (!cancelled) {
           if (Array.isArray(cats) && cats.length) {
-            // 将"其他"分类固定在末尾
-            const otherCat = cats.filter((c) => isOtherCategory(c));
-            const restCats = cats.filter((c) => !isOtherCategory(c));
-            setBuiltinCategories([...restCats, ...otherCat]);
+            setBuiltinCategories(sortPublicTemplateCategories(cats));
           } else {
             setBuiltinCategories([otherCategory]);
           }

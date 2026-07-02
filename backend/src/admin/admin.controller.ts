@@ -20,6 +20,7 @@ import { CreditsService } from '../credits/credits.service';
 import { CreditsAnomalyService } from '../credits/credits-anomaly.service';
 import { TransactionHistoryQueryDto } from '../credits/dto/credits.dto';
 import { TemplateService } from './services/template.service';
+import { sortPublicTemplateCategories } from '../templates/template-category-order';
 import {
   NodeConfigService,
   NodeConfigDto,
@@ -588,7 +589,7 @@ export class AdminController {
       list.push(cat);
       await this.adminService.upsertSetting(key, JSON.stringify(list), req.user.id, '模板分类');
     }
-    return { success: true, categories: list.sort() };
+    return { success: true, categories: sortPublicTemplateCategories(list) };
   }
 
   @Delete('templates/categories/:category')
@@ -618,7 +619,7 @@ export class AdminController {
     }
     const newList = list.filter((c) => c !== cat);
     await this.adminService.upsertSetting(key, JSON.stringify(newList), req.user.id, '模板分类');
-    return { success: true, categories: newList.sort() };
+    return { success: true, categories: sortPublicTemplateCategories(newList) };
   }
 
   @Post('templates')

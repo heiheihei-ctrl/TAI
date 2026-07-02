@@ -9,13 +9,10 @@ type MembershipPricingPlanLike = {
 
 export type YearlyPricingView = {
   effectivePrice: number;
-  originalPrice: number | null;
   equivalentMonthly: number | null;
-  showLimitedDiscount: boolean;
 };
 
 const YEARLY_BASE_DISCOUNT = 0.8;
-const YEARLY_LIMITED_EXTRA_DISCOUNT = 0.8;
 
 function normalizeBillingCycle(value: string | null | undefined): MembershipBillingCycle | null {
   if (value === 'monthly' || value === 'yearly') return value;
@@ -68,32 +65,10 @@ export function getYearlyPricingView(plan: MembershipPricingPlanLike): YearlyPri
   const monthlyListPrice = resolveMonthlyListPrice(plan);
   if (monthlyListPrice == null) return null;
 
-  const standardYearlyPrice = computeStandardYearlyPrice(monthlyListPrice);
-
-  if (monthlyListPrice === 199) {
-    const effectivePrice = Math.round(standardYearlyPrice * YEARLY_LIMITED_EXTRA_DISCOUNT);
-    return {
-      effectivePrice,
-      originalPrice: standardYearlyPrice,
-      equivalentMonthly: roundMoney(effectivePrice / 12),
-      showLimitedDiscount: true,
-    };
-  }
-
-  if (monthlyListPrice === 69) {
-    return {
-      effectivePrice: standardYearlyPrice,
-      originalPrice: null,
-      equivalentMonthly: roundMoney((standardYearlyPrice / 12) * YEARLY_LIMITED_EXTRA_DISCOUNT),
-      showLimitedDiscount: true,
-    };
-  }
-
+  const effectivePrice = computeStandardYearlyPrice(monthlyListPrice);
   return {
-    effectivePrice: standardYearlyPrice,
-    originalPrice: null,
-    equivalentMonthly: roundMoney(standardYearlyPrice / 12),
-    showLimitedDiscount: false,
+    effectivePrice,
+    equivalentMonthly: roundMoney(effectivePrice / 12),
   };
 }
 

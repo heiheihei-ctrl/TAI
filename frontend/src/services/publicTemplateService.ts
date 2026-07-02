@@ -1,6 +1,23 @@
 import type { FlowTemplate, TemplateIndexEntry } from "@/types/template";
 import { fetchWithAuth } from "./authFetch";
 
+/** 公共模板分类：建筑设计、美育设计置顶 */
+export const PRIORITY_PUBLIC_TEMPLATE_CATEGORIES = ["建筑设计", "美育设计"] as const;
+
+export function sortPublicTemplateCategories(categories: string[]): string[] {
+  const unique = Array.from(
+    new Set(categories.map((c) => c?.trim()).filter(Boolean) as string[]),
+  );
+  const other = unique.filter((c) => c === "其他" || c === "Other");
+  const rest = unique.filter((c) => c !== "其他" && c !== "Other");
+  const priority = PRIORITY_PUBLIC_TEMPLATE_CATEGORIES.filter((c) => rest.includes(c));
+  const remaining = rest
+    .filter((c) => !PRIORITY_PUBLIC_TEMPLATE_CATEGORIES.includes(c as (typeof PRIORITY_PUBLIC_TEMPLATE_CATEGORIES)[number]))
+    .sort((a, b) => a.localeCompare(b, "zh-CN"));
+  const otherSorted = other.sort((a, b) => a.localeCompare(b, "zh-CN"));
+  return [...priority, ...remaining, ...otherSorted];
+}
+
 export interface PublicTemplate extends TemplateIndexEntry {
   templateData?: FlowTemplate;
   isActive?: boolean;

@@ -1,6 +1,11 @@
 import type { PaymentMembershipPlan } from "@/services/adminApi";
 
-const YEARLY_LIMITED_EXTRA_DISCOUNT = 0.8;
+const YEARLY_BASE_DISCOUNT = 0.8;
+const DAYS_PER_YEAR = 365;
+const WEEKS_PER_YEAR = 52;
+const DAYS_PER_MONTH = 30;
+const WEEKS_PER_MONTH = 4;
+const DEFAULT_STREAK_MULTIPLIER = 3;
 
 function normPlanCode(code: string | undefined): string {
   return (code || "").trim().toLowerCase();
@@ -11,10 +16,10 @@ function roundMoney(value: number): number {
 }
 
 function computeStandardYearlyPrice(monthlyListPrice: number): number {
-  return Math.round(monthlyListPrice * 12 * 0.8);
+  return Math.round(monthlyListPrice * 12 * YEARLY_BASE_DISCOUNT);
 }
 
-function resolveMonthlyListPrice(plan: PaymentMembershipPlan): number | null {
+export function resolveMonthlyListPrice(plan: PaymentMembershipPlan): number | null {
   const code = normPlanCode(plan.code);
   const name = (plan.name || "").trim();
 
@@ -25,12 +30,65 @@ function resolveMonthlyListPrice(plan: PaymentMembershipPlan): number | null {
   return null;
 }
 
+/** 展示用签到积分（旗舰尊享设计稿为 150/天） */
+function resolveDisplayDailyGiftCredits(plan: PaymentMembershipPlan): number {
+  if (resolveMonthlyListPrice(plan) === 599) return 150;
+  return Math.max(0, Math.trunc(plan.dailyGiftCredits || 0));
+}
+
+function resolveStreakMultiplier(plan: PaymentMembershipPlan): number {
+  const metadata =
+    plan.metadata && typeof plan.metadata === "object" && !Array.isArray(plan.metadata)
+      ? plan.metadata
+      : {};
+  const multiplierRaw = metadata.consecutive7DayRewardMultiplier;
+  if (typeof multiplierRaw === "number" && Number.isFinite(multiplierRaw) && multiplierRaw > 1) {
+    return multiplierRaw;
+  }
+  return DEFAULT_STREAK_MULTIPLIER;
+}
+
+export type PlanCreditsBreakdown = {
+  total: number;
+  packageCredits: number;
+  dailyPerDay: number;
+  dailyMultiplier: number;
+  dailyTotal: number;
+  weeklyExtraPerWeek: number;
+  weeklyMultiplier: number;
+  weeklyTotal: number;
+};
+
+function buildPlanCreditsBreakdown(
+  plan: PaymentMembershipPlan,
+  period: { days: number; weeks: number },
+): PlanCreditsBreakdown {
+  const packageCredits = plan.monthlyQuotaCredits + plan.signupBonusCredits;
+  const dailyPerDay = resolveDisplayDailyGiftCredits(plan);
+  const streakMultiplier = resolveStreakMultiplier(plan);
+  const weeklyExtraPerWeek = dailyPerDay * (streakMultiplier - 1);
+  const dailyTotal = dailyPerDay * period.days;
+  const weeklyTotal = weeklyExtraPerWeek * period.weeks;
+
+  return {
+    packageCredits,
+    dailyPerDay,
+    dailyMultiplier: period.days,
+    dailyTotal,
+    weeklyExtraPerWeek,
+    weeklyMultiplier: period.weeks,
+    weeklyTotal,
+    total: packageCredits + dailyTotal + weeklyTotal,
+  };
+}
+
 export type YearlyPlanDisplay = {
   displayPrice: number;
-  originalPrice: number | null;
   equivMonthly: number | null;
-  showLimitedDiscountBadge: boolean;
 };
+
+/** @deprecated 使用 PlanCreditsBreakdown */
+export type YearlyCreditsBreakdown = PlanCreditsBreakdown & { totalAnnual: number };
 
 export function getYearlyPlanDisplay(plan: PaymentMembershipPlan): YearlyPlanDisplay | null {
   if (plan.billingCycle !== "yearly") return null;
@@ -38,33 +96,25 @@ export function getYearlyPlanDisplay(plan: PaymentMembershipPlan): YearlyPlanDis
   const monthlyListPrice = resolveMonthlyListPrice(plan);
   if (monthlyListPrice == null) return null;
 
-  const standardYearlyPrice = computeStandardYearlyPrice(monthlyListPrice);
-
-  if (monthlyListPrice === 199) {
-    const displayPrice = Math.round(standardYearlyPrice * YEARLY_LIMITED_EXTRA_DISCOUNT);
-    return {
-      displayPrice,
-      originalPrice: standardYearlyPrice,
-      equivMonthly: roundMoney(displayPrice / 12),
-      showLimitedDiscountBadge: true,
-    };
-  }
-
-  if (monthlyListPrice === 69) {
-    return {
-      displayPrice: standardYearlyPrice,
-      originalPrice: null,
-      equivMonthly: roundMoney((standardYearlyPrice / 12) * YEARLY_LIMITED_EXTRA_DISCOUNT),
-      showLimitedDiscountBadge: true,
-    };
-  }
-
+  const displayPrice = computeStandardYearlyPrice(monthlyListPrice);
   return {
-    displayPrice: standardYearlyPrice,
-    originalPrice: null,
-    equivMonthly: roundMoney(standardYearlyPrice / 12),
-    showLimitedDiscountBadge: false,
+    displayPrice,
+    equivMonthly: roundMoney(displayPrice / 12),
   };
+}
+
+export function getMonthlyCreditsBreakdown(
+  plan: PaymentMembershipPlan,
+): PlanCreditsBreakdown | null {
+  if (plan.billingCycle !== "monthly") return null;
+  return buildPlanCreditsBreakdown(plan, { days: DAYS_PER_MONTH, weeks: WEEKS_PER_MONTH });
+}
+
+export function getYearlyCreditsBreakdown(
+  plan: PaymentMembershipPlan,
+): PlanCreditsBreakdown | null {
+  if (plan.billingCycle !== "yearly") return null;
+  return buildPlanCreditsBreakdown(plan, { days: DAYS_PER_YEAR, weeks: WEEKS_PER_YEAR });
 }
 
 export function getPlanDisplayPrice(plan: PaymentMembershipPlan): number {
