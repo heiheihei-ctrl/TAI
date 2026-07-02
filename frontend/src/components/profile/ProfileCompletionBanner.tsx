@@ -43,11 +43,11 @@ export default function ProfileCompletionBanner({ profile, onDismiss }: Props) {
       )}
     >
       <div className={REMINDER_BANNER_INNER_CLASS}>
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-start gap-2">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-600">
             <Gift className="h-4 w-4" />
           </div>
-          <p className="truncate text-sm font-medium text-slate-900">
+          <p className="min-w-0 flex-1 text-sm font-medium leading-relaxed text-slate-900">
             完善个人信息可获得
             <ProfileRewardCredits credits={profile.rewardCredits || 100} />
             积分
