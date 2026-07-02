@@ -59,9 +59,9 @@ function getLocalDateKey(date = new Date()): string {
   return `${y}-${m}-${d}`;
 }
 
-/** 连续 7 天已签到并领取奖励后不再显示提醒 */
+/** 今日已签到，或当前不可签到时，不显示提醒 */
 export function shouldHideCheckInReminder(status: CheckInStatus): boolean {
-  return status.consecutiveDays >= 7 && !status.canCheckIn;
+  return !status.canCheckIn;
 }
 
 /** 今日是否已关闭签到提醒条 */
