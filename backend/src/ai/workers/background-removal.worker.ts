@@ -98,16 +98,30 @@ async function main() {
 
     const mimeType = payload.mimeType || 'image/png';
     const blob = new Blob([Buffer.from(payload.imageBase64, 'base64')], { type: mimeType });
+
+    process.stderr.write('[bg-worker] resolving @imgly/background-removal-node…\n');
     const entryPath = resolveRemovalModuleEntry();
+    process.stderr.write(`[bg-worker] entry: ${entryPath}\n`);
+
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const mod = require(entryPath);
+    process.stderr.write('[bg-worker] module loaded, running inference…\n');
+
+    const model =
+      (process.env.BACKGROUND_REMOVAL_MODEL || 'medium').trim().toLowerCase();
+    const allowedModels = new Set(['small', 'medium', 'large']);
+    const modelSize = allowedModels.has(model) ? model : 'medium';
+
     const result = await mod.removeBackground(blob, {
       publicPath: resolveLocalModelPublicPath(),
+      model: modelSize,
       output: {
         format: 'image/png',
         quality: 0.8,
       },
     });
+
+    process.stderr.write('[bg-worker] inference done\n');
 
     const resultBuffer = Buffer.from(await result.arrayBuffer());
     process.stdout.write(

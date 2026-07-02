@@ -345,7 +345,7 @@ export class BackgroundRemovalService {
       }
 
       throw new BadRequestException(
-        `Background removal failed: ${localMessage}. Consider configuring REMOVE_BG_API_KEY for better reliability.`
+        `Background removal failed: ${localMessage}。请在服务器执行 node scripts/fix-onnxruntime-install.js 修复 ONNX 原生库（SIGBUS 多为 onnxruntime 版本/安装问题）。`,
       );
     }
   }
@@ -367,6 +367,8 @@ export class BackgroundRemovalService {
         ...process.env,
         OMP_NUM_THREADS: '1',
         ORT_DISABLE_CPU_AFFINITY: '1',
+        OPENBLAS_NUM_THREADS: '1',
+        MKL_NUM_THREADS: '1',
       },
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,

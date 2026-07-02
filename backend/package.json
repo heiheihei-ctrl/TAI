@@ -10,6 +10,7 @@
     "diagnose:sharp": "node scripts/diagnose-sharp.js",
     "diagnose:bg-removal": "node scripts/diagnose-background-removal.js",
     "fix:sharp": "node scripts/fix-sharp-install.js",
+    "fix:onnx": "node scripts/fix-onnxruntime-install.js",
     "verify:native": "node scripts/diagnose-sharp.js && node scripts/diagnose-background-removal.js",
     "dev": "npm run prisma:generate && ts-node-dev --respawn --transpile-only -r ./src/tracing.bootstrap.ts src/main.ts",
     "lint": "echo 'no lint configured'",
@@ -57,7 +58,7 @@
     "fastify": "5.6.2",
     "ioredis": "^5.8.2",
     "json-rules-engine": "^7.3.1",
-    "onnxruntime-node": "^1.17.3",
+    "onnxruntime-node": "1.17.3",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "qrcode": "^1.5.4",
@@ -73,13 +74,17 @@
     "@img/sharp-wasm32": "0.34.5"
   },
   "overrides": {
+    "onnxruntime-node": "1.17.3",
     "@imgly/background-removal-node": {
-      "sharp": "$sharp"
+      "sharp": "$sharp",
+      "onnxruntime-node": "1.17.3"
     }
   },
   "pnpm": {
     "overrides": {
-      "@imgly/background-removal-node>sharp": "$sharp"
+      "@imgly/background-removal-node>sharp": "$sharp",
+      "onnxruntime-node": "1.17.3",
+      "@imgly/background-removal-node>onnxruntime-node": "1.17.3"
     },
     "onlyBuiltDependencies": [
       "sharp",
