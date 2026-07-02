@@ -47,11 +47,14 @@ export default function CheckInReminderBanner({
       )}
     >
       <div className={REMINDER_BANNER_INNER_CLASS}>
-        <div className="flex min-w-0 flex-1 items-start gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
             <Calendar className="h-4 w-4" />
           </div>
-          <p className="min-w-0 flex-1 text-sm font-medium leading-relaxed text-slate-900">
+          <p
+            className="truncate text-sm font-medium text-slate-900"
+            title="每日签到 50 积分，第 7 天额外 +100，连续 7 天共 450 积分"
+          >
             {status.consecutiveDays > 0
               ? t("workspace.checkInReminder.messageWithStreak", {
                   count: status.consecutiveDays,

@@ -297,9 +297,9 @@ const enUS = {
       languageDesc: "Switch between Chinese and English",
     },
     checkInReminder: {
-      message: "Check in daily for 50 credits; day 7 adds +100 extra — 450 total in 7 days",
-      messageWithStreak: "{{count}}-day streak — complete 7 days for",
-      creditsSuffix: "credits total",
+      message: "Check in daily for 50 credits — 7-day streak total",
+      messageWithStreak: "{{count}}-day streak — 7-day total",
+      creditsSuffix: "credits",
       action: "Check in",
       dismiss: "Dismiss reminder",
     },

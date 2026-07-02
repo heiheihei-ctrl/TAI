@@ -296,8 +296,8 @@ const zhCN = {
       languageDesc: "切换中文 / English",
     },
     checkInReminder: {
-      message: "每日签到 50 积分，第 7 天额外 +100，连续 7 天共可得",
-      messageWithStreak: "已连续签到 {{count}} 天，完成 7 天连签共可得",
+      message: "每日签到 50 积分，连签 7 天共",
+      messageWithStreak: "已连续签到 {{count}} 天，连签 7 天共",
       creditsSuffix: "积分",
       action: "去签到",
       dismiss: "关闭提示",
