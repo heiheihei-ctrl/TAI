@@ -19,6 +19,14 @@ import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
 import { refreshTeams, useTeamStore, type TeamInfo } from '@/stores/teamStore';
 import { useProjectStore } from '@/stores/projectStore';
+import { projectApi } from '@/services/projectApi';
+import {
+  getWorkspaceProjectStorageKey,
+  localizeProjectName,
+  resolveWorkspaceProject,
+  saveWorkspaceProjectId,
+} from '@/utils/projectName';
+import type { TeamSwitchProject } from './TeamSwitchConfirmModal';
 import { TeamCreateModal } from './TeamCreateModal';
 import { TeamJoinModal } from './TeamJoinModal';
 import { TeamSwitchConfirmModal } from './TeamSwitchConfirmModal';
@@ -28,13 +36,57 @@ import { TeamInviteConfirmModal } from './TeamInviteConfirmModal';
 export default function TeamSwitcher() {
   const user = useAuthStore((s) => s.user);
   const { teams, activeTeamId, setActiveTeamId } = useTeamStore();
-  const currentProject = useProjectStore((s) => s.currentProject);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
   const [manageTeamId, setManageTeamId] = useState<string | null>(null);
   const [pendingSwitch, setPendingSwitch] = useState<TeamInfo | null>(null);
+  const [pendingProjects, setPendingProjects] = useState<TeamSwitchProject[]>([]);
+  const [pendingInitialProjectId, setPendingInitialProjectId] = useState<string | null>(null);
+  const [pendingProjectLoading, setPendingProjectLoading] = useState(false);
   const [pendingInviteCode, setPendingInviteCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!pendingSwitch || pendingSwitch.isPersonal) {
+      setPendingProjects([]);
+      setPendingInitialProjectId(null);
+      setPendingProjectLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setPendingProjectLoading(true);
+    setPendingProjects([]);
+    setPendingInitialProjectId(null);
+    const storageKey = getWorkspaceProjectStorageKey(pendingSwitch.id, false);
+
+    void projectApi
+      .list(pendingSwitch.id)
+      .then((projects) => {
+        if (cancelled) return;
+        const target = resolveWorkspaceProject(projects, storageKey);
+        setPendingProjects(
+          projects.map((p) => ({
+            id: p.id,
+            name: localizeProjectName(p.name),
+          })),
+        );
+        setPendingInitialProjectId(target?.id ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPendingProjects([]);
+          setPendingInitialProjectId(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setPendingProjectLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingSwitch]);
 
   useEffect(() => {
     if (!user) return;
@@ -53,7 +105,13 @@ export default function TeamSwitcher() {
   const sharedTeams = teams.filter((t) => !t.isPersonal);
 
   const applyTeamSwitch = useCallback(
-    async (team: TeamInfo) => {
+    async (team: TeamInfo, projectId?: string | null) => {
+      if (projectId && !team.isPersonal) {
+        saveWorkspaceProjectId(
+          getWorkspaceProjectStorageKey(team.id, false),
+          projectId,
+        );
+      }
       setActiveTeamId(team.id);
       setPendingSwitch(null);
       await useProjectStore.getState().load();
@@ -63,7 +121,7 @@ export default function TeamSwitcher() {
 
   const handleSelectTeam = (team: TeamInfo) => {
     if (team.id === activeTeamId) return;
-    if (currentProject && !team.isPersonal) {
+    if (!team.isPersonal) {
       setPendingSwitch(team);
       return;
     }
@@ -190,9 +248,11 @@ export default function TeamSwitcher() {
       {pendingSwitch && (
         <TeamSwitchConfirmModal
           teamName={pendingSwitch.name}
-          projectName={currentProject?.name}
+          projects={pendingProjects}
+          loading={pendingProjectLoading}
+          initialProjectId={pendingInitialProjectId}
           onClose={() => setPendingSwitch(null)}
-          onConfirm={() => void applyTeamSwitch(pendingSwitch)}
+          onConfirm={(projectId) => void applyTeamSwitch(pendingSwitch, projectId)}
         />
       )}
 

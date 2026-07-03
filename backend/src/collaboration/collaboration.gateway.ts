@@ -10,7 +10,12 @@ import {
 import { Logger } from '@nestjs/common';
 import type { Server, Socket } from 'socket.io';
 import { CollaborationService } from './collaboration.service';
-import type { CollaborationUserPayload } from './collaboration.types';
+import type {
+  CollaborationSelectionPayload,
+  CollaborationUserPayload,
+  CollaborationViewportPayload,
+} from './collaboration.types';
+import { UsersService } from '../users/users.service';
 
 type AuthedSocket = Socket & {
   data: {
@@ -35,7 +40,10 @@ export class CollaborationGateway
   @WebSocketServer()
   server!: Server;
 
-  constructor(private readonly collaboration: CollaborationService) {}
+  constructor(
+    private readonly collaboration: CollaborationService,
+    private readonly usersService: UsersService,
+  ) {}
 
   private extractToken(client: Socket): string | null {
     const authToken = client.handshake.auth?.token;
@@ -52,6 +60,44 @@ export class CollaborationGateway
       if (match?.[1]) return decodeURIComponent(match[1]);
     }
     return null;
+  }
+
+  private syncExistingPeerState(client: AuthedSocket, peers: ReturnType<CollaborationService['joinRoom']>['peers'], selfPeerId: string) {
+    for (const peer of peers) {
+      if (peer.peerId === selfPeerId) continue;
+
+      if (peer.x != null && peer.y != null && peer.visible !== false) {
+        client.emit('collab:cursor', {
+          peerId: peer.peerId,
+          userId: peer.userId,
+          name: peer.name,
+          color: peer.color,
+          x: peer.x,
+          y: peer.y,
+          visible: peer.visible,
+        });
+      }
+
+      if (peer.viewport) {
+        client.emit('collab:viewport', {
+          peerId: peer.peerId,
+          userId: peer.userId,
+          name: peer.name,
+          color: peer.color,
+          ...peer.viewport,
+        });
+      }
+
+      if (peer.selection) {
+        client.emit('collab:selection', {
+          peerId: peer.peerId,
+          userId: peer.userId,
+          name: peer.name,
+          color: peer.color,
+          ...peer.selection,
+        });
+      }
+    }
   }
 
   async handleConnection(client: AuthedSocket) {
@@ -98,6 +144,14 @@ export class CollaborationGateway
       return { ok: false, message: error?.message || '无权访问该项目' };
     }
 
+    const dbUser = await this.usersService.findAuthUserById(userId);
+    const enrichedUser: CollaborationUserPayload = {
+      ...user,
+      id: userId,
+      sub: userId,
+      name: dbUser?.name ?? user.name ?? null,
+    };
+
     const prevRoom = client.data.room;
     if (prevRoom) {
       const prevPeer = this.collaboration.leaveRoom(prevRoom, client.id);
@@ -111,12 +165,13 @@ export class CollaborationGateway
     }
 
     const room = this.collaboration.roomKey(projectId);
-    const { self, peers } = this.collaboration.joinRoom(room, client.id, user);
+    const { self, peers } = this.collaboration.joinRoom(room, client.id, enrichedUser);
     client.data.projectId = projectId;
     client.data.room = room;
     await client.join(room);
 
     client.to(room).emit('collab:peer-join', { peer: self });
+    this.syncExistingPeerState(client, peers, self.peerId);
 
     return {
       ok: true,
@@ -159,5 +214,102 @@ export class CollaborationGateway
       y: peer.y,
       visible: peer.visible,
     });
+  }
+
+  @SubscribeMessage('collab:viewport')
+  handleViewport(
+    @ConnectedSocket() client: AuthedSocket,
+    @MessageBody()
+    body: {
+      projectId?: string;
+      panX?: number;
+      panY?: number;
+      zoom?: number;
+    },
+  ) {
+    const room = client.data.room;
+    if (!room) return;
+    if (body?.projectId && client.data.projectId !== body.projectId) return;
+
+    const panX = Number(body?.panX);
+    const panY = Number(body?.panY);
+    const zoom = Number(body?.zoom);
+    if (!Number.isFinite(panX) || !Number.isFinite(panY) || !Number.isFinite(zoom)) return;
+
+    const viewport: CollaborationViewportPayload = { panX, panY, zoom };
+    const peer = this.collaboration.updateViewport(room, client.id, viewport);
+    if (!peer) return;
+
+    client.to(room).emit('collab:viewport', {
+      peerId: peer.peerId,
+      userId: peer.userId,
+      name: peer.name,
+      color: peer.color,
+      ...viewport,
+    });
+  }
+
+  @SubscribeMessage('collab:selection')
+  handleSelection(
+    @ConnectedSocket() client: AuthedSocket,
+    @MessageBody()
+    body: {
+      projectId?: string;
+      imageIds?: string[];
+      modelIds?: string[];
+      videoIds?: string[];
+      textIds?: string[];
+      pathBounds?: CollaborationSelectionPayload['pathBounds'];
+      marqueeBounds?: CollaborationSelectionPayload['marqueeBounds'];
+    },
+  ) {
+    const room = client.data.room;
+    if (!room) return;
+    if (body?.projectId && client.data.projectId !== body.projectId) return;
+
+    const selection: CollaborationSelectionPayload = {
+      imageIds: Array.isArray(body?.imageIds) ? body.imageIds : [],
+      modelIds: Array.isArray(body?.modelIds) ? body.modelIds : [],
+      videoIds: Array.isArray(body?.videoIds) ? body.videoIds : [],
+      textIds: Array.isArray(body?.textIds) ? body.textIds : [],
+      pathBounds: Array.isArray(body?.pathBounds) ? body.pathBounds : [],
+      marqueeBounds: body?.marqueeBounds ?? null,
+    };
+
+    const peer = this.collaboration.updateSelection(room, client.id, selection);
+    if (!peer) return;
+
+    client.to(room).emit('collab:selection', {
+      peerId: peer.peerId,
+      userId: peer.userId,
+      name: peer.name,
+      color: peer.color,
+      ...selection,
+    });
+  }
+
+  @SubscribeMessage('collab:content-update')
+  handleContentUpdate(
+    @ConnectedSocket() client: AuthedSocket,
+    @MessageBody()
+    body: {
+      projectId?: string;
+      seq?: number;
+      contentHash?: string;
+      updatedAt?: string;
+      paperJson?: string;
+      layers?: unknown[];
+      activeLayerId?: string | null;
+      assets?: unknown;
+    },
+  ) {
+    const room = client.data.room;
+    if (!room) return;
+    if (body?.projectId && client.data.projectId !== body.projectId) return;
+
+    const payload = this.collaboration.buildContentUpdate(room, client.id, body);
+    if (!payload) return;
+
+    client.to(room).emit('collab:content-update', payload);
   }
 }

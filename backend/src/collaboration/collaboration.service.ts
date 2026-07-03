@@ -3,7 +3,13 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { TeamsService } from '../teams/teams.service';
-import type { CollaborationPeer, CollaborationUserPayload } from './collaboration.types';
+import type {
+  CollaborationContentUpdatePayload,
+  CollaborationPeer,
+  CollaborationSelectionPayload,
+  CollaborationUserPayload,
+  CollaborationViewportPayload,
+} from './collaboration.types';
 
 /** Figma 风格协作色板 */
 const PEER_COLORS = [
@@ -20,6 +26,8 @@ const PEER_COLORS = [
   '#1ABCFE',
   '#0ACF83',
 ] as const;
+
+const MAX_INLINE_PAPER_JSON = 512 * 1024;
 
 @Injectable()
 export class CollaborationService {
@@ -116,19 +124,90 @@ export class CollaborationService {
     return peer;
   }
 
+  getPeer(room: string, peerId: string): CollaborationPeer | null {
+    return this.rooms.get(room)?.get(peerId) ?? null;
+  }
+
   updateCursor(
     room: string,
     peerId: string,
     payload: { x: number; y: number; visible?: boolean },
   ): CollaborationPeer | null {
-    const roomMap = this.rooms.get(room);
-    if (!roomMap) return null;
-    const peer = roomMap.get(peerId);
+    const peer = this.getPeer(room, peerId);
     if (!peer) return null;
     peer.x = payload.x;
     peer.y = payload.y;
     peer.visible = payload.visible !== false;
     return peer;
+  }
+
+  updateViewport(
+    room: string,
+    peerId: string,
+    payload: CollaborationViewportPayload,
+  ): CollaborationPeer | null {
+    const peer = this.getPeer(room, peerId);
+    if (!peer) return null;
+    peer.viewport = {
+      panX: payload.panX,
+      panY: payload.panY,
+      zoom: payload.zoom,
+    };
+    return peer;
+  }
+
+  updateSelection(
+    room: string,
+    peerId: string,
+    payload: CollaborationSelectionPayload,
+  ): CollaborationPeer | null {
+    const peer = this.getPeer(room, peerId);
+    if (!peer) return null;
+    peer.selection = payload;
+    return peer;
+  }
+
+  buildContentUpdate(
+    room: string,
+    peerId: string,
+    body: {
+      seq?: number;
+      contentHash?: string;
+      updatedAt?: string;
+      paperJson?: string;
+      layers?: unknown[];
+      activeLayerId?: string | null;
+      assets?: unknown;
+    },
+  ): CollaborationContentUpdatePayload | null {
+    const peer = this.getPeer(room, peerId);
+    if (!peer) return null;
+
+    const seq = Number(body?.seq);
+    const contentHash = typeof body?.contentHash === 'string' ? body.contentHash.trim() : '';
+    const updatedAt = typeof body?.updatedAt === 'string' ? body.updatedAt.trim() : '';
+    if (!Number.isFinite(seq) || seq <= 0 || !contentHash || !updatedAt) {
+      return null;
+    }
+
+    const paperJson =
+      typeof body.paperJson === 'string' &&
+      body.paperJson.length > 0 &&
+      body.paperJson.length <= MAX_INLINE_PAPER_JSON
+        ? body.paperJson
+        : undefined;
+
+    return {
+      peerId: peer.peerId,
+      userId: peer.userId,
+      seq,
+      contentHash,
+      updatedAt,
+      paperJson,
+      layers: body.layers,
+      activeLayerId: body.activeLayerId,
+      assets: body.assets,
+    };
   }
 
   listPeers(room: string): CollaborationPeer[] {

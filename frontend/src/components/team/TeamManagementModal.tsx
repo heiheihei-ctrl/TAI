@@ -8,6 +8,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { Button } from '@/components/ui/button';
 import { X, UserMinus, Crown, Shield, User, Mail, Copy, Check, SlidersHorizontal } from 'lucide-react';
+import { copyTextToClipboard } from '@/utils/clipboard';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -108,7 +109,7 @@ function MembersTab({
   onClose: () => void;
 }) {
   const [members, setMembers] = useState<any[]>([]);
-  const [seatCount, setSeatCount] = useState<number | null>(null);
+  const [totalSeats, setTotalSeats] = useState<number | null>(null);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
@@ -117,10 +118,18 @@ function MembersTab({
 
   useEffect(() => {
     teamApi.getMembers(teamId).then(setMembers).catch(() => {});
-    teamSeatPackageApi.listPackages(teamId).then((s: any) => {
-      if (s?.totalSeats) setSeatCount(s.totalSeats);
-    }).catch(() => {});
+    teamSeatPackageApi
+      .listPackages(teamId)
+      .then((s: any) => {
+        if (typeof s?.totalSeats === 'number') {
+          setTotalSeats(s.totalSeats);
+        }
+      })
+      .catch(() => {});
   }, [teamId]);
+
+  const usedSeats = members.length;
+  const seatTotal = totalSeats ?? Math.max(2, usedSeats);
 
   const handleInvite = async () => {
     setInviteLoading(true);
@@ -132,20 +141,27 @@ function MembersTab({
     }
   };
 
-  const handleCopyLink = () => {
+  const handleCopyLink = async () => {
     if (!inviteCode) return;
-    navigator.clipboard.writeText(`${window.location.origin}/?inviteCode=${inviteCode}`).then(() => {
-      setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 2000);
-    });
+    const link = `${window.location.origin}/?teamInvite=${encodeURIComponent(inviteCode)}`;
+    const ok = await copyTextToClipboard(link);
+    if (!ok) {
+      alert('复制失败，请手动选择链接复制');
+      return;
+    }
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  const handleCopyCode = () => {
+  const handleCopyCode = async () => {
     if (!inviteCode) return;
-    navigator.clipboard.writeText(inviteCode).then(() => {
-      setCopiedCode(true);
-      setTimeout(() => setCopiedCode(false), 2000);
-    });
+    const ok = await copyTextToClipboard(inviteCode);
+    if (!ok) {
+      alert('复制失败，请手动选择邀请码复制');
+      return;
+    }
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
   };
 
   const handleRemove = async (userId: string) => {
@@ -191,16 +207,14 @@ function MembersTab({
           <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">
             成员 · {members.length} 人
           </p>
-          {seatCount != null && (
-            <span className={cn(
+          <span className={cn(
               'text-xs font-medium px-2 py-0.5 rounded-full',
-              members.length >= seatCount
+              usedSeats >= seatTotal
                 ? 'bg-red-50 text-red-500'
                 : 'bg-slate-100 text-slate-500',
             )}>
-               {Math.max(0, seatCount - members.length)} / {seatCount} 席位
+              {usedSeats} / {seatTotal} 席位
             </span>
-          )}
         </div>
         <div className="space-y-1">
           {members.map((m) => {
@@ -313,7 +327,7 @@ function MembersTab({
                 <div className="flex-1 min-w-0">
                   <p className="text-[10px] text-slate-400 mb-0.5">邀请链接</p>
                   <p className="text-xs text-slate-500 truncate">
-                    {`${window.location.origin}/?inviteCode=${inviteCode}`}
+                    {`${window.location.origin}/?teamInvite=${encodeURIComponent(inviteCode)}`}
                   </p>
                 </div>
                 <button

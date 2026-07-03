@@ -5,6 +5,7 @@ import { flowSaveService } from '@/services/flowSaveService';
 import { useProjectContentStore } from '@/stores/projectContentStore';
 import { saveMonitor } from '@/utils/saveMonitor';
 import { refreshProjectThumbnail } from '@/services/projectThumbnailService';
+import { broadcastCollaborationContentUpdate } from '@/services/collaborationContentApply';
 import { setProjectCache } from '@/services/projectCacheStore';
 import {
   getNonRemoteImageAssetIds,
@@ -189,6 +190,7 @@ export function useProjectAutosave(projectId: string | null) {
       }).catch(() => {});
 
       lastPersistedAtRef.current = Date.now();
+      broadcastCollaborationContentUpdate('cloud-save');
       console.log(`autosave success (${attempt}/${MAX_RETRY_ATTEMPTS})`);
     } catch (err: any) {
       console.warn(`autosave failed (${attempt}/${MAX_RETRY_ATTEMPTS}):`, err);

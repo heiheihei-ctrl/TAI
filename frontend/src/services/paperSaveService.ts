@@ -8,6 +8,7 @@ import type { ImageAssetSnapshot, ModelAssetSnapshot, TextAssetSnapshot, VideoAs
 import type { Model3DData } from '@/services/model3DUploadService';
 import { imageUploadService } from '@/services/imageUploadService';
 import { saveMonitor } from '@/utils/saveMonitor';
+import { broadcastCollaborationContentUpdate } from '@/services/collaborationContentApply';
 import { createAsyncLimiter } from '@/utils/asyncLimit';
 import { proxifyRemoteAssetUrl } from '@/utils/assetProxy';
 import {
@@ -1850,6 +1851,7 @@ class PaperSaveService {
       }
 
       contentStore.updatePartial(patch, { markDirty: true });
+      broadcastCollaborationContentUpdate('paper-save');
 
     } catch (error) {
       console.error('❌ 更新Paper.js内容失败:', error);

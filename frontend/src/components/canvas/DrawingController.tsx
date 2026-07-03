@@ -3998,16 +3998,44 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
       const selectedTextIds = (simpleTextTool.textItems ?? [])
         .filter((item) => item?.isSelected)
         .map((item) => item.id);
+      const pathBounds = selectedPaths
+        .map((path) => {
+          try {
+            const bounds = path.bounds;
+            if (!bounds) return null;
+            return {
+              x: bounds.x,
+              y: bounds.y,
+              width: bounds.width,
+              height: bounds.height,
+            };
+          } catch {
+            return null;
+          }
+        })
+        .filter(
+          (
+            rect,
+          ): rect is { x: number; y: number; width: number; height: number } =>
+            !!rect && rect.width > 0 && rect.height > 0,
+        );
 
       (window as any).tanvaCanvasSelection = {
         imageIds: [...(imageTool.selectedImageIds ?? [])],
         modelIds: [...(model3DTool.selectedModel3DIds ?? [])],
+        videoIds: [...(videoTool.selectedVideoIds ?? [])],
         textIds: selectedTextIds,
         paths: selectedPaths,
       };
       window.dispatchEvent(
         new CustomEvent("tanva-canvas-selection-updated", {
           detail: {
+            imageIds: [...(imageTool.selectedImageIds ?? [])],
+            modelIds: [...(model3DTool.selectedModel3DIds ?? [])],
+            videoIds: [...(videoTool.selectedVideoIds ?? [])],
+            textIds: selectedTextIds,
+            pathBounds,
+            marqueeBounds: null,
             imageCount: (imageTool.selectedImageIds ?? []).length,
             modelCount: (model3DTool.selectedModel3DIds ?? []).length,
             pathCount: selectedPaths.length,
@@ -4025,6 +4053,7 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
   }, [
     imageTool.selectedImageIds,
     model3DTool.selectedModel3DIds,
+    videoTool.selectedVideoIds,
     selectionTool.selectedPath,
     selectionTool.selectedPaths,
     simpleTextTool.textItems,

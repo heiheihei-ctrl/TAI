@@ -1,7 +1,13 @@
 import { create } from 'zustand';
 import { projectApi, type Project } from '@/services/projectApi';
 import { deleteProjectCache } from '@/services/projectCacheStore';
-import i18n from '@/i18n';
+import {
+  getDefaultProjectName,
+  getActiveWorkspaceProjectStorageKey,
+  saveWorkspaceProjectId,
+  clearWorkspaceProjectId,
+  resolveWorkspaceProject,
+} from '@/utils/projectName';
 
 type ProjectState = {
   projects: Project[];
@@ -21,17 +27,6 @@ type ProjectState = {
   optimisticRenameLocal: (id: string, name: string) => void;
 };
 
-const LS_CURRENT_PROJECT = 'current_project_id';
-
-const getDefaultProjectName = (): string => {
-  const translated = String(
-    i18n.t('workspacePage.prompt.defaultName', {
-      defaultValue: '未命名项目',
-    }) || ''
-  ).trim();
-  return translated || '未命名项目';
-};
-
 export const useProjectStore = create<ProjectState>((set, get) => ({
   projects: [],
   currentProjectId: null,
@@ -44,30 +39,31 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const projects = await projectApi.list();
-      const savedId = localStorage.getItem(LS_CURRENT_PROJECT);
-      let current: Project | null = null;
-      if (savedId) current = projects.find((p) => p.id === savedId) || null;
+      const storageKey = getActiveWorkspaceProjectStorageKey();
+      const current = resolveWorkspaceProject(projects, storageKey);
 
       if (!current) {
         if (projects.length > 0) {
-          current = projects[0];
-          try { localStorage.setItem(LS_CURRENT_PROJECT, current.id); } catch {}
-        } else {
-          // 没有项目，自动创建一个"未命名"
+          const first = projects[0];
+          saveWorkspaceProjectId(storageKey, first.id);
+          set({ projects, currentProjectId: first.id, currentProject: first, loading: false });
+          return;
+        }
+          // 没有项目，自动创建一个默认项目
           try {
             const project = await projectApi.create({ name: getDefaultProjectName() });
             const all = [project, ...projects];
+            saveWorkspaceProjectId(storageKey, project.id);
             set({ projects: all, currentProjectId: project.id, currentProject: project, loading: false });
-            try { localStorage.setItem(LS_CURRENT_PROJECT, project.id); } catch {}
             return;
           } catch (err: any) {
             set({ projects, currentProjectId: null, currentProject: null, loading: false, error: err?.message || null, modalOpen: true });
             return;
           }
-        }
       }
 
-      set({ projects, currentProjectId: current?.id || null, currentProject: current || null, loading: false });
+      saveWorkspaceProjectId(storageKey, current.id);
+      set({ projects, currentProjectId: current.id, currentProject: current as Project, loading: false });
     } catch (e: any) {
       set({ loading: false, error: e?.message || '加载项目失败' });
     }
@@ -89,7 +85,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     if (found) {
       set({ currentProjectId: found.id, currentProject: found, modalOpen: false });
-      try { localStorage.setItem(LS_CURRENT_PROJECT, found.id); } catch {}
+      saveWorkspaceProjectId(getActiveWorkspaceProjectStorageKey(), found.id);
       return;
     }
 
@@ -108,7 +104,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             error: null // 清除任何之前的错误
           };
         });
-        try { localStorage.setItem(LS_CURRENT_PROJECT, id); } catch {}
+        try { saveWorkspaceProjectId(getActiveWorkspaceProjectStorageKey(), id); } catch {}
       } catch (e: any) {
         console.warn('Failed to load project:', e);
         set({ error: e?.message || '无法加载项目', modalOpen: true });
@@ -146,7 +142,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const removedCurrent = state.currentProjectId === id;
 
       if (removedCurrent) {
-        try { localStorage.removeItem(LS_CURRENT_PROJECT); } catch {}
+        clearWorkspaceProjectId(getActiveWorkspaceProjectStorageKey());
       }
 
       return {
@@ -168,7 +164,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           currentProject: fallback,
           modalOpen: true,
         });
-        try { localStorage.setItem(LS_CURRENT_PROJECT, fallback.id); } catch {}
+        saveWorkspaceProjectId(getActiveWorkspaceProjectStorageKey(), fallback.id);
       } catch (error) {
         console.warn('自动创建新项目失败:', error);
       }
@@ -181,9 +177,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         currentProjectId: fallback.id,
         currentProject: fallback,
       });
-      try { localStorage.setItem(LS_CURRENT_PROJECT, fallback.id); } catch {}
+      saveWorkspaceProjectId(getActiveWorkspaceProjectStorageKey(), fallback.id);
     } else if (stateAfterRemoval.currentProjectId !== id) {
-      try { localStorage.setItem(LS_CURRENT_PROJECT, stateAfterRemoval.currentProjectId); } catch {}
+      saveWorkspaceProjectId(
+        getActiveWorkspaceProjectStorageKey(),
+        stateAfterRemoval.currentProjectId,
+      );
     }
   },
   optimisticRenameLocal: (id, name) => set((s) => ({

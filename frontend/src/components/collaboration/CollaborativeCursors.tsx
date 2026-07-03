@@ -1,30 +1,35 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import paper from 'paper';
 import {
   collaborationSocket,
+  dedupePeersByUser,
   type CollaborationPeer,
 } from '@/services/collaborationSocket';
 import { clientToProject, projectToClient } from '@/utils/paperCoords';
 import { useAuthStore } from '@/stores/authStore';
 import { useProjectStore } from '@/stores/projectStore';
+import { useTeamStore } from '@/stores/teamStore';
+import { useCanvasStore } from '@/stores/canvasStore';
 
-const CURSOR_THROTTLE_MS = 40;
+const CURSOR_THROTTLE_MS = 32;
 
-function CursorArrow({ color }: { color: string }) {
+function FigmaCursorArrow({ color }: { color: string }) {
   return (
     <svg
-      width="16"
-      height="20"
-      viewBox="0 0 16 20"
+      width="17"
+      height="21"
+      viewBox="0 0 17 21"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className="drop-shadow-sm"
+      className="block drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]"
+      aria-hidden
     >
       <path
-        d="M1 1L1 16.5L5.2 12.8L8.4 19.5L10.6 18.4L7.4 11.7L13 11.7L1 1Z"
+        d="M1.5 1.5L1.5 17.2L6.1 13.2L9.5 20.4L11.9 19.1L8.5 11.9L14.5 11.9L1.5 1.5Z"
         fill={color}
         stroke="white"
-        strokeWidth="1.2"
+        strokeWidth="1.25"
         strokeLinejoin="round"
       />
     </svg>
@@ -34,9 +39,11 @@ function CursorArrow({ color }: { color: string }) {
 function RemoteCursor({
   peer,
   canvas,
+  viewportKey,
 }: {
   peer: CollaborationPeer;
   canvas: HTMLCanvasElement;
+  viewportKey: string;
 }) {
   if (peer.visible === false || peer.x == null || peer.y == null) {
     return null;
@@ -47,19 +54,22 @@ function RemoteCursor({
 
   return (
     <div
-      className="pointer-events-none fixed z-[950] will-change-transform"
+      className="pointer-events-none fixed z-[9999] will-change-transform"
       style={{
         left: 0,
         top: 0,
-        transform: `translate(${x}px, ${y}px)`,
+        transform: `translate3d(${x}px, ${y}px, 0)`,
       }}
+      data-viewport={viewportKey}
     >
-      <CursorArrow color={peer.color} />
-      <div
-        className="ml-3 -mt-1 inline-flex max-w-[160px] truncate rounded-full px-2 py-0.5 text-[11px] font-medium text-white shadow-md"
-        style={{ backgroundColor: peer.color }}
-      >
-        {peer.name}
+      <div className="relative">
+        <FigmaCursorArrow color={peer.color} />
+        <div
+          className="absolute left-[14px] top-[16px] inline-flex max-w-[180px] truncate rounded-md px-2 py-0.5 text-[11px] font-semibold leading-4 text-white shadow-[0_1px_4px_rgba(0,0,0,0.18)]"
+          style={{ backgroundColor: peer.color }}
+        >
+          {peer.name}
+        </div>
       </div>
     </div>
   );
@@ -72,36 +82,65 @@ interface Props {
 export default function CollaborativeCursors({ canvasRef }: Props) {
   const user = useAuthStore((s) => s.user);
   const projectId = useProjectStore((s) => s.currentProjectId);
+  const panX = useCanvasStore((s) => s.panX);
+  const panY = useCanvasStore((s) => s.panY);
+  const zoom = useCanvasStore((s) => s.zoom);
   const [peers, setPeers] = useState<Map<string, CollaborationPeer>>(new Map());
+  const [connected, setConnected] = useState(false);
+  const [canvasEl, setCanvasEl] = useState<HTMLCanvasElement | null>(null);
   const lastEmitRef = useRef(0);
   const rafRef = useRef<number | null>(null);
   const pendingRef = useRef<{ x: number; y: number; visible: boolean } | null>(
     null,
   );
 
+  useLayoutEffect(() => {
+    setCanvasEl(canvasRef.current);
+  }, [canvasRef, projectId, connected, peers.size]);
+
   useEffect(() => {
     if (!user || !projectId) {
       collaborationSocket.disconnect();
       setPeers(new Map());
+      setConnected(false);
+      return;
+    }
+
+    const activeTeam = useTeamStore.getState().teams.find(
+      (t) => t.id === useTeamStore.getState().activeTeamId,
+    );
+    if (!activeTeam || activeTeam.isPersonal) {
+      setPeers(new Map());
+      setConnected(false);
       return;
     }
 
     let cancelled = false;
-    void collaborationSocket.connect(projectId).catch(() => {
-      if (!cancelled) setPeers(new Map());
-    });
+    void collaborationSocket
+      .connect(projectId)
+      .then(() => {
+        if (!cancelled) setConnected(true);
+      })
+      .catch((error) => {
+        console.warn('[collaboration] connect failed:', error);
+        if (!cancelled) {
+          setPeers(new Map());
+          setConnected(false);
+        }
+      });
 
     const unsubscribe = collaborationSocket.subscribe(setPeers);
     return () => {
       cancelled = true;
       unsubscribe();
       collaborationSocket.disconnect();
+      setConnected(false);
     };
   }, [user?.id, projectId]);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !user || !projectId) return;
+    const canvas = canvasEl;
+    if (!canvas || !user || !projectId || !connected) return;
 
     const flush = () => {
       rafRef.current = null;
@@ -134,6 +173,13 @@ export default function CollaborativeCursors({ canvasRef }: Props) {
     };
 
     const handleMove = (event: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const inside =
+        event.clientX >= rect.left &&
+        event.clientX <= rect.right &&
+        event.clientY >= rect.top &&
+        event.clientY <= rect.bottom;
+      if (!inside) return;
       const world = toWorld(event.clientX, event.clientY);
       scheduleEmit(world.x, world.y, true);
     };
@@ -145,7 +191,7 @@ export default function CollaborativeCursors({ canvasRef }: Props) {
       }
     };
 
-    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mousemove', handleMove, { passive: true });
     canvas.addEventListener('mouseleave', handleLeave);
 
     return () => {
@@ -155,17 +201,37 @@ export default function CollaborativeCursors({ canvasRef }: Props) {
         window.cancelAnimationFrame(rafRef.current);
       }
     };
-  }, [canvasRef, user?.id, projectId]);
+  }, [canvasEl, connected, user?.id, projectId]);
 
-  const canvas = canvasRef.current;
-  const remotePeers = [...peers.values()].filter((peer) => peer.userId !== user?.id);
-  if (!canvas || remotePeers.length === 0) return null;
+  const selfPeerId = collaborationSocket.getSelfPeerId();
+  const remotePeers = dedupePeersByUser(
+    [...peers.values()].filter(
+      (peer) =>
+        peer.peerId !== selfPeerId &&
+        peer.userId !== user?.id &&
+        peer.visible !== false &&
+        peer.x != null &&
+        peer.y != null,
+    ),
+  );
 
-  return (
+  const viewportKey = `${panX}:${panY}:${zoom}`;
+
+  if (!canvasEl || remotePeers.length === 0 || typeof document === 'undefined') {
+    return null;
+  }
+
+  return createPortal(
     <>
       {remotePeers.map((peer) => (
-        <RemoteCursor key={peer.peerId} peer={peer} canvas={canvas} />
+        <RemoteCursor
+          key={peer.userId}
+          peer={peer}
+          canvas={canvasEl}
+          viewportKey={viewportKey}
+        />
       ))}
-    </>
+    </>,
+    document.body,
   );
 }
