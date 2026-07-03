@@ -12,6 +12,7 @@ import { VideoProviderRequestDto } from "../dto/video-provider.dto";
 import type { ReferenceImageItem } from "../dto/video-provider.dto";
 import { OssService } from "../../oss/oss.service";
 import { Readable } from "node:stream";
+import { spawn } from "node:child_process";
 import { TencentVodAigcService } from "./tencent-vod-aigc.service";
 import {
   ModelRoutingService,
@@ -126,6 +127,10 @@ const resolveSeedanceUpstreamModelId = (modelVersion: SeedanceManagedModelVersio
       return "doubao-seedance-1-5-pro-251215";
   }
 };
+
+const SEEDANCE20_REFERENCE_VIDEO_MIN_DURATION_SEC = 2;
+const SEEDANCE20_REFERENCE_VIDEO_MAX_DURATION_SEC = 15.2;
+const SEEDANCE20_REFERENCE_VIDEO_TOTAL_MAX_DURATION_SEC = 15.2;
 
 /**
  * 带超时的 fetch 请求
@@ -1558,6 +1563,90 @@ export class VideoProviderService {
       .filter((item, index, array) => !!item && array.indexOf(item) === index);
   }
 
+  private probeRemoteVideoDurationSec(videoUrl: string): Promise<number> {
+    return new Promise((resolve, reject) => {
+      const ffprobe = spawn("ffprobe", [
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        videoUrl,
+      ]);
+
+      let output = "";
+      let errorOutput = "";
+
+      ffprobe.stdout.on("data", (data) => {
+        output += data.toString();
+      });
+
+      ffprobe.stderr.on("data", (data) => {
+        errorOutput += data.toString();
+      });
+
+      ffprobe.on("close", (code) => {
+        if (code !== 0) {
+          reject(new Error(errorOutput.trim() || `ffprobe exited with code ${code}`));
+          return;
+        }
+        const duration = Number.parseFloat(output.trim());
+        if (!Number.isFinite(duration) || duration <= 0) {
+          reject(new Error("无法解析视频时长"));
+          return;
+        }
+        resolve(duration);
+      });
+
+      ffprobe.on("error", (err) => {
+        reject(err);
+      });
+    });
+  }
+
+  private async assertSeedance20ReferenceVideoLimits(
+    options: VideoProviderRequestDto,
+  ): Promise<void> {
+    const referenceVideos = this.normalizeManagedV2ReferenceVideos(options);
+    if (!referenceVideos.length) return;
+
+    const clipDurations: number[] = [];
+    for (let index = 0; index < referenceVideos.length; index += 1) {
+      const videoUrl = referenceVideos[index];
+      let duration = 0;
+      try {
+        duration = await this.probeRemoteVideoDurationSec(videoUrl);
+      } catch (error) {
+        const detail =
+          error instanceof Error && error.message ? error.message : "未知错误";
+        throw new BadRequestException(
+          `无法读取第 ${index + 1} 条参考视频时长，请确认视频可访问（${detail}）`,
+        );
+      }
+
+      clipDurations.push(duration);
+
+      if (duration < SEEDANCE20_REFERENCE_VIDEO_MIN_DURATION_SEC) {
+        throw new BadRequestException(
+          `Seedance 2.0 参考视频每条至少 ${SEEDANCE20_REFERENCE_VIDEO_MIN_DURATION_SEC} 秒，第 ${index + 1} 条约 ${duration.toFixed(1)} 秒`,
+        );
+      }
+      if (duration > SEEDANCE20_REFERENCE_VIDEO_MAX_DURATION_SEC) {
+        throw new BadRequestException(
+          `Seedance 2.0 参考视频每条不能超过 15 秒，第 ${index + 1} 条约 ${duration.toFixed(1)} 秒，请先裁剪后再生成`,
+        );
+      }
+    }
+
+    const totalDuration = clipDurations.reduce((sum, value) => sum + value, 0);
+    if (totalDuration > SEEDANCE20_REFERENCE_VIDEO_TOTAL_MAX_DURATION_SEC) {
+      throw new BadRequestException(
+        `Seedance 2.0 参考视频总时长不能超过 15 秒，当前合计约 ${totalDuration.toFixed(1)} 秒，请先裁剪后再生成`,
+      );
+    }
+  }
+
   private normalizeSeedanceApiResolution(
     modelKey: string,
     route: ResolvedManagedModelRoute,
@@ -2004,6 +2093,10 @@ export class VideoProviderService {
     const profile = this.getManagedV2RequestProfile(route);
     if (!profile?.create) {
       throw new ServiceUnavailableException(`V2 配置缺少 create 阶段: ${modelKey}`);
+    }
+
+    if (modelKey === "seedance-2.0" || modelKey === "seedance-2.0-fast") {
+      await this.assertSeedance20ReferenceVideoLimits(options);
     }
 
     const context = await this.buildManagedV2RequestContext(modelKey, options, route);
@@ -2778,6 +2871,10 @@ export class VideoProviderService {
       typeof options.prompt === "string" ? options.prompt.trim() : "";
     const isSeedance2Model = modelVersion === "2.0" || modelVersion === "2.0-fast";
     const promptText = normalizedPrompt;
+
+    if (isSeedance2Model) {
+      await this.assertSeedance20ReferenceVideoLimits(options);
+    }
 
     const content: any[] = [];
     const referenceVideos = this.normalizeManagedV2ReferenceVideos(options);

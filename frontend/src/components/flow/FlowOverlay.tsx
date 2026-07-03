@@ -1121,6 +1121,9 @@ const KLING_MAX_AUDIO_INPUTS = 2;
 const SEEDANCE20_REFERENCE_IMAGE_MAX = 9;
 const SEEDANCE20_REFERENCE_VIDEO_MAX = 3;
 const SEEDANCE20_REFERENCE_AUDIO_MAX = 3;
+const SEEDANCE20_REFERENCE_VIDEO_MIN_DURATION_SEC = 2;
+const SEEDANCE20_REFERENCE_VIDEO_MAX_DURATION_SEC = 15.2;
+const SEEDANCE20_REFERENCE_VIDEO_TOTAL_MAX_DURATION_SEC = 15.2;
 const SEEDANCE15_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12];
 const SEEDANCE20_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
 const SEEDANCE_REFERENCE_IMAGE_MAX_BYTES = 30 * 1024 * 1024; // 30MB
@@ -15814,6 +15817,74 @@ function FlowInner() {
               { once: true }
             );
           });
+        const readVideoDurationFromUrl = async (videoUrl: string): Promise<number> =>
+          await new Promise<number>((resolve, reject) => {
+            const video = document.createElement("video");
+            video.crossOrigin = "anonymous";
+            let settled = false;
+            const cleanup = () => {
+              video.removeAttribute("src");
+              video.load();
+            };
+            const timeoutId = window.setTimeout(() => {
+              if (settled) return;
+              settled = true;
+              cleanup();
+              reject(
+                new Error(
+                  lt(
+                    "无法读取视频时长，请确认视频可访问",
+                    "Unable to read video duration, please verify video URL is accessible"
+                  )
+                )
+              );
+            }, 12000);
+            video.preload = "metadata";
+            video.muted = true;
+            (video as any).playsInline = true;
+            video.src = videoUrl;
+            video.addEventListener(
+              "loadedmetadata",
+              () => {
+                if (settled) return;
+                settled = true;
+                window.clearTimeout(timeoutId);
+                const duration = Number(video.duration || 0);
+                cleanup();
+                if (Number.isFinite(duration) && duration > 0) {
+                  resolve(duration);
+                } else {
+                  reject(
+                    new Error(
+                      lt(
+                        "无法读取视频时长，请确认视频可访问",
+                        "Unable to read video duration, please verify video URL is accessible"
+                      )
+                    )
+                  );
+                }
+              },
+              { once: true }
+            );
+            video.addEventListener(
+              "error",
+              () => {
+                if (settled) return;
+                settled = true;
+                window.clearTimeout(timeoutId);
+                cleanup();
+                reject(
+                  new Error(
+                    lt(
+                      "无法读取视频时长，请确认视频可访问",
+                      "Unable to read video duration, please verify video URL is accessible"
+                    )
+                  )
+                );
+              },
+              { once: true }
+            );
+          });
         let klingAudioUrlsForAPI: string[] | undefined = undefined;
         /* 音频处理逻辑已注释
         if (provider === "kling-2.6" && (node.data as any)?.mode === "pro") {
@@ -16020,6 +16091,78 @@ function FlowInner() {
             referenceVideoUrls = referenceVideoUrls.slice(0, 1);
           }
           referenceVideoUrl = referenceVideoUrls[0];
+
+          if (isSeedanceNode && isSeedance20Request && referenceVideoUrls.length > 0) {
+            const durationHintByUrl = new Map<string, number>();
+            for (const videoEdge of videoEdges) {
+              const sourceNode = rf.getNode(videoEdge.source);
+              if (!sourceNode) continue;
+              const rawUrl =
+                (sourceNode.data as any)?.videoUrl ||
+                (sourceNode.data as any)?.url ||
+                (sourceNode.data as any)?.src;
+              if (typeof rawUrl !== "string") continue;
+              const normalized = rawUrl.trim();
+              if (!normalized) continue;
+              const hinted = Number((sourceNode.data as any)?.duration);
+              if (Number.isFinite(hinted) && hinted > 0) {
+                durationHintByUrl.set(normalized, hinted);
+              }
+            }
+
+            try {
+              const clipDurations: number[] = [];
+              for (let index = 0; index < referenceVideoUrls.length; index += 1) {
+                const url = referenceVideoUrls[index];
+                const hinted = durationHintByUrl.get(url);
+                const duration =
+                  typeof hinted === "number" && hinted > 0
+                    ? hinted
+                    : await readVideoDurationFromUrl(proxifyRemoteAssetUrl(url));
+                clipDurations.push(duration);
+
+                if (duration < SEEDANCE20_REFERENCE_VIDEO_MIN_DURATION_SEC) {
+                  failCurrentVideoNode(
+                    lt(
+                      `Seedance 2.0 参考视频每条至少 ${SEEDANCE20_REFERENCE_VIDEO_MIN_DURATION_SEC} 秒，第 ${index + 1} 条约 ${duration.toFixed(1)} 秒`,
+                      `Seedance 2.0 reference videos must be at least ${SEEDANCE20_REFERENCE_VIDEO_MIN_DURATION_SEC}s; clip ${index + 1} is ~${duration.toFixed(1)}s`
+                    )
+                  );
+                  return;
+                }
+                if (duration > SEEDANCE20_REFERENCE_VIDEO_MAX_DURATION_SEC) {
+                  failCurrentVideoNode(
+                    lt(
+                      `Seedance 2.0 参考视频每条不能超过 15 秒，第 ${index + 1} 条约 ${duration.toFixed(1)} 秒，请先裁剪后再生成`,
+                      `Seedance 2.0 reference videos must be <= 15s; clip ${index + 1} is ~${duration.toFixed(1)}s. Trim before generating.`
+                    )
+                  );
+                  return;
+                }
+              }
+
+              const totalDuration = clipDurations.reduce((sum, value) => sum + value, 0);
+              if (totalDuration > SEEDANCE20_REFERENCE_VIDEO_TOTAL_MAX_DURATION_SEC) {
+                failCurrentVideoNode(
+                  lt(
+                    `Seedance 2.0 参考视频总时长不能超过 15 秒，当前合计约 ${totalDuration.toFixed(1)} 秒，请先裁剪后再生成`,
+                    `Seedance 2.0 total reference video duration must be <= 15s; current total is ~${totalDuration.toFixed(1)}s. Trim before generating.`
+                  )
+                );
+                return;
+              }
+            } catch (error) {
+              const message =
+                error instanceof Error && error.message
+                  ? error.message
+                  : lt(
+                      "无法读取参考视频时长，请确认视频可访问后重试",
+                      "Unable to read reference video duration. Please verify the video is accessible."
+                    );
+              failCurrentVideoNode(message);
+              return;
+            }
+          }
 
           if (referenceVideoUrl) {
             console.log(
