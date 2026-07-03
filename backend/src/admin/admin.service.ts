@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, NotImplementedException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiResponseStatus } from '../credits/dto/credits.dto';
@@ -1618,5 +1618,57 @@ export class AdminService {
         totalPages,
       },
     };
+  }
+
+  // ── 团队管理（待 team 模块与数据库表落地后实现）────────────────
+
+  private teamAdminNotReady(): never {
+    throw new NotImplementedException('团队管理功能尚未启用');
+  }
+
+  async adminListTeams(_params: {
+    search?: string;
+    page: number;
+    pageSize: number;
+  }) {
+    this.teamAdminNotReady();
+  }
+
+  async adminAddTeamCredits(
+    _teamId: string,
+    _amount: number,
+    _description: string,
+    _adminUserId: string,
+  ) {
+    this.teamAdminNotReady();
+  }
+
+  async adminDeductTeamCredits(
+    _teamId: string,
+    _amount: number,
+    _description: string,
+    _adminUserId: string,
+  ) {
+    this.teamAdminNotReady();
+  }
+
+  async adminUpdateTeamSeats(_teamId: string, _maxSeats: number) {
+    this.teamAdminNotReady();
+  }
+
+  async adminUpdateTeamStatus(_teamId: string, _status: string) {
+    this.teamAdminNotReady();
+  }
+
+  async adminDeleteTeam(_teamId: string) {
+    this.teamAdminNotReady();
+  }
+
+  async adminGetTeamCreditHistory(
+    _teamId: string,
+    _page: number,
+    _pageSize: number,
+  ) {
+    this.teamAdminNotReady();
   }
 }
