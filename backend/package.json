@@ -98,6 +98,7 @@
     "@types/bcryptjs": "^2.4.2",
     "@types/node": "^20.11.30",
     "@types/passport-jwt": "^3.0.13",
+    "@types/ws": "^8.18.1",
     "prisma": "^5.18.0",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",

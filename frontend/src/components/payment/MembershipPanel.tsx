@@ -18,13 +18,6 @@ import {
   type PaymentMembershipPlan,
   type PaymentMethod,
 } from "@/services/adminApi";
-import {
-  getMonthlyCreditsBreakdown,
-  getPlanDisplayPrice,
-  getYearlyCreditsBreakdown,
-  getYearlyPlanDisplay,
-  type PlanCreditsBreakdown,
-} from "@/utils/membershipYearlyDisplay";
 
 const showToast = (message: string, type: "success" | "error" | "info" = "info") => {
   window.dispatchEvent(new CustomEvent("toast", { detail: { message, type } }));
@@ -154,44 +147,6 @@ function isRecommendedPlan(plan: PaymentMembershipPlan): boolean {
 function isDailyCreationPlan(plan: PaymentMembershipPlan): boolean {
   const name = (plan.name || "").trim().toLowerCase();
   return name.includes("日常");
-}
-
-function renderPlanCreditsBreakdown(
-  breakdown: PlanCreditsBreakdown,
-  billingCycle: "monthly" | "yearly",
-  isWhite: boolean,
-) {
-  const totalLabel = billingCycle === "yearly" ? "预计年合计积分" : "预计月合计积分";
-
-  return (
-    <>
-      <div
-        className={cn(
-          "text-xs sm:text-sm",
-          isWhite ? "text-indigo-700" : "text-violet-100",
-        )}
-      >
-        <span className={isWhite ? "text-indigo-500" : "text-violet-300"}>✦</span>{" "}
-        {breakdown.total} {totalLabel}
-      </div>
-      <div
-        className={cn(
-          "mt-2 space-y-1 text-[11px] leading-relaxed sm:text-xs",
-          isWhite ? "text-indigo-600/90" : "text-violet-200/85",
-        )}
-      >
-        <div>套餐到账: {breakdown.packageCredits} 积分</div>
-        <div>
-          每日签到: {breakdown.dailyPerDay} × {breakdown.dailyMultiplier} = {breakdown.dailyTotal}{" "}
-          积分
-        </div>
-        <div>
-          7天连签额外: {breakdown.weeklyExtraPerWeek} × {breakdown.weeklyMultiplier} ={" "}
-          {breakdown.weeklyTotal} 积分
-        </div>
-      </div>
-    </>
-  );
 }
 
 /** 套餐卡默认统一最小高度（免费 + 各档付费、选中/未选中一致，与视觉稿对齐） */
@@ -773,14 +728,13 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                     const { main, accent } = vipFeatureLines(plan);
                     const isRecommended = isRecommendedPlan(plan);
                     const isDailyCreation = !isRecommended && isDailyCreationPlan(plan);
-                    const billingLabel = plan.billingCycle === "monthly" ? "月费套餐" : null;
-                    const yearlyDisplay = getYearlyPlanDisplay(plan);
-                    const displayPrice = getPlanDisplayPrice(plan);
-                    const equivMonthly = yearlyDisplay?.equivMonthly ?? null;
-                    const creditsBreakdown =
-                      plan.billingCycle === "yearly"
-                        ? getYearlyCreditsBreakdown(plan)
-                        : getMonthlyCreditsBreakdown(plan);
+                    const billingLabel =
+                      plan.billingCycle === "yearly" ? "年费套餐 · 在月付价基础上 8 折" : "月费套餐";
+                    const equivMonthly =
+                      plan.billingCycle === "yearly" && plan.price > 0
+                        ? String(Math.round((plan.price / 12) * 100) / 100)
+                        : null;
+                    const planTotalCredits = plan.monthlyQuotaCredits + plan.signupBonusCredits;
 
                     return (
                       <div
@@ -818,21 +772,17 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                         )}
                       >
                         {isRecommended ? (
-                          <div className="absolute right-3 top-3">
-                            <div
-                              className={cn(
-                                "rounded-full bg-red-500 px-2.5 py-0.5 text-[10px] font-semibold text-white shadow-lg",
-                                isWhite ? "shadow-red-200/80" : "shadow-red-950/50",
-                              )}
-                            >
-                              最受欢迎
-                            </div>
+                          <div
+                            className={cn(
+                              "absolute right-3 top-3 rounded-full bg-gradient-to-r from-[#8E86F5] to-[#9aa8ef] px-2.5 py-0.5 text-[10px] font-semibold text-white shadow-lg shadow-violet-950/60",
+                            )}
+                          >
+                            最受欢迎
                           </div>
                         ) : null}
                         <div
                           className={cn(
-                            "text-xl font-semibold tracking-tight xl:text-lg 2xl:text-xl",
-                            isRecommended ? "pr-16" : undefined,
+                            "pr-14 text-xl font-semibold tracking-tight xl:text-lg 2xl:text-xl",
                             isWhite ? "text-slate-900" : "text-zinc-100",
                           )}
                         >
@@ -854,7 +804,7 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                               isWhite ? "text-slate-900" : "text-zinc-100",
                             )}
                           >
-                            ¥{displayPrice}
+                            ¥{plan.price}
                           </span>
                           <span
                             className={cn("pb-1 text-sm", isWhite ? "text-slate-500" : "text-zinc-500")}
@@ -878,23 +828,15 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                               : "border-violet-500/25 bg-gradient-to-br from-violet-950/50 to-[#12121a]",
                           )}
                         >
-                          {creditsBreakdown ? (
-                            renderPlanCreditsBreakdown(
-                              creditsBreakdown,
-                              plan.billingCycle,
-                              isWhite,
-                            )
-                          ) : (
-                            <div
-                              className={cn(
-                                "text-xs sm:text-sm",
-                                isWhite ? "text-indigo-700" : "text-violet-100",
-                              )}
-                            >
-                              <span className={isWhite ? "text-indigo-500" : "text-violet-300"}>✦</span>{" "}
-                              {plan.monthlyQuotaCredits + plan.signupBonusCredits} 合计积分
-                            </div>
-                          )}
+                          <div
+                            className={cn(
+                              "text-xs font-medium sm:text-sm",
+                              isWhite ? "text-indigo-700" : "text-violet-100",
+                            )}
+                          >
+                            <span className={isWhite ? "text-indigo-500" : "text-violet-300"}>✦</span>{" "}
+                            {planTotalCredits} 合计积分
+                          </div>
                         </div>
 
                         {!publicBrowse ? (
@@ -1029,7 +971,7 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                                   isWhite ? "text-slate-900" : "text-zinc-100",
                                 )}
                               >
-                                ¥{selectedPlan ? getPlanDisplayPrice(selectedPlan) : 0}
+                                ¥{selectedPlan?.price ?? 0}
                               </span>
                             </div>
                           </div>

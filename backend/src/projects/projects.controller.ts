@@ -15,12 +15,14 @@ export class ProjectsController {
 
   @Get()
   async list(@Req() req: any) {
-    return this.projects.list(req.user.sub);
+    const userId = req.user?.sub ?? req.user?.id;
+    return this.projects.list(userId);
   }
 
   @Post()
   async create(@Req() req: any, @Body() dto: CreateProjectDto) {
-    return this.projects.create(req.user.sub, dto.name);
+    const userId = req.user?.sub ?? req.user?.id;
+    return this.projects.create(userId, dto.name);
   }
 
   @Get(':id')

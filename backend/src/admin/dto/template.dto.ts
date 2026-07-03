@@ -115,6 +115,11 @@ export class UpdateTemplateDto {
   @IsString()
   thumbnail?: string;
 
+  @ApiPropertyOptional({ description: "小缩略图 (40x40) URL" })
+  @IsOptional()
+  @IsString()
+  thumbnailSmall?: string;
+
   @ApiPropertyOptional({ description: "模板数据" })
   @IsOptional()
   templateData?: any;

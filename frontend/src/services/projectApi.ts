@@ -8,8 +8,6 @@ import { fetchWithAuth } from "./authFetch";
 export type Project = {
   id: string;
   name: string;
-  ossPrefix: string;
-  mainKey: string;
   contentVersion: number;
   createdAt: string;
   updatedAt: string;

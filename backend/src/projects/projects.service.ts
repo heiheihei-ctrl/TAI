@@ -22,30 +22,78 @@ export class ProjectsService {
 
   constructor(private prisma: PrismaService, private oss: OssService) {}
 
-  private readonly projectMetadataSelect = {
-    id: true,
-    userId: true,
-    name: true,
-    ossPrefix: true,
-    mainKey: true,
-    thumbnailUrl: true,
-    contentVersion: true,
-    createdAt: true,
-    updatedAt: true,
-  };
+  private buildProjectMetadataSelect(
+    supportsThumbnailColumn: boolean,
+    includeContentJson = false,
+  ) {
+    const base = {
+      id: true,
+      userId: true,
+      name: true,
+      ossPrefix: true,
+      mainKey: true,
+      contentVersion: true,
+      createdAt: true,
+      updatedAt: true,
+    } as const;
 
-  async list(userId: string) {
-    await this.ensureThumbnailColumn();
-    const projects = await this.prisma.project.findMany({
+    if (supportsThumbnailColumn) {
+      return { ...base, thumbnailUrl: true };
+    }
+    if (includeContentJson) {
+      return { ...base, contentJson: true };
+    }
+    return base;
+  }
+
+  private toPublicProjectSummary(project: {
+    id: string;
+    name: string;
+    mainKey?: string | null;
+    contentVersion?: number | null;
+    createdAt: Date;
+    updatedAt: Date;
+    thumbnailUrl?: string | null;
+    contentJson?: Prisma.JsonValue | null;
+  }) {
+    return {
+      id: project.id,
+      name: project.name,
+      contentVersion: project.contentVersion ?? 1,
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt,
+      mainUrl: project.mainKey ? this.oss.publicUrl(project.mainKey) : undefined,
+      thumbnailUrl: this.extractThumbnail(project) || undefined,
+    };
+  }
+
+  private async findProjectsForUser(userId: string, supportsThumbnailColumn: boolean) {
+    return this.prisma.project.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
-      select: this.projectMetadataSelect,
+      select: this.buildProjectMetadataSelect(supportsThumbnailColumn, !supportsThumbnailColumn),
     });
-    return projects.map((p) => ({
-      ...p,
-      mainUrl: p.mainKey ? this.oss.publicUrl(p.mainKey) : undefined,
-      thumbnailUrl: this.extractThumbnail(p) || undefined,
-    }));
+  }
+
+  async list(userId: string) {
+    if (!userId) {
+      throw new BadRequestException('用户未登录');
+    }
+
+    await this.ensureThumbnailColumn();
+    const supportsThumbnailColumn = await this.supportsThumbnailColumn();
+
+    try {
+      const projects = await this.findProjectsForUser(userId, supportsThumbnailColumn);
+      return projects.map((p) => this.toPublicProjectSummary(p));
+    } catch (error) {
+      if (!this.shouldDowngradeThumbnailColumn(error)) {
+        throw error;
+      }
+      await this.disableThumbnailColumn();
+      const projects = await this.findProjectsForUser(userId, false);
+      return projects.map((p) => this.toPublicProjectSummary(p));
+    }
   }
 
   async create(userId: string, name?: string) {
@@ -83,21 +131,22 @@ export class ProjectsService {
       console.warn('DB update with contentJson failed, falling back:', e);
       updated = await this.prisma.project.update({ where: { id: project.id }, data: { ossPrefix: prefix, mainKey } });
     }
-    return { ...updated, mainUrl: this.oss.publicUrl(mainKey), thumbnailUrl: this.extractThumbnail(updated) || undefined };
+    return this.toPublicProjectSummary({
+      ...updated,
+      mainKey,
+    });
   }
 
   async get(userId: string, id: string) {
     await this.ensureThumbnailColumn();
+    const supportsThumbnailColumn = await this.supportsThumbnailColumn();
     const p = await this.prisma.project.findUnique({
       where: { id },
-      select: {
-        ...this.projectMetadataSelect,
-        contentJson: !(await this.supportsThumbnailColumn()), // 只有在不支持 thumbnailUrl 列时才查询 contentJson
-      },
+      select: this.buildProjectMetadataSelect(supportsThumbnailColumn, !supportsThumbnailColumn),
     });
     if (!p) throw new NotFoundException('项目不存在');
     if (p.userId !== userId) throw new NotFoundException('项目不存在');
-    return { ...p, mainUrl: this.oss.publicUrl(p.mainKey), thumbnailUrl: this.extractThumbnail(p) || undefined };
+    return this.toPublicProjectSummary(p);
   }
 
   async update(userId: string, id: string, payload: { name?: string; thumbnailUrl?: string | null }) {
@@ -105,10 +154,7 @@ export class ProjectsService {
     const supportsThumbnailColumn = await this.supportsThumbnailColumn();
     const p = await this.prisma.project.findUnique({
       where: { id },
-      select: {
-        ...this.projectMetadataSelect,
-        contentJson: !supportsThumbnailColumn, // 只有在不支持 thumbnailUrl 列时才查询 contentJson
-      },
+      select: this.buildProjectMetadataSelect(supportsThumbnailColumn, !supportsThumbnailColumn),
     });
     if (!p) throw new NotFoundException('项目不存在');
     if (p.userId !== userId) throw new NotFoundException('项目不存在');
@@ -129,12 +175,12 @@ export class ProjectsService {
     }
 
     if (Object.keys(data).length === 0) {
-      return { ...p, mainUrl: this.oss.publicUrl(p.mainKey), thumbnailUrl: this.extractThumbnail(p) || undefined };
+      return this.toPublicProjectSummary(p);
     }
 
     try {
       const updated = await this.prisma.project.update({ where: { id }, data });
-      return { ...updated, mainUrl: this.oss.publicUrl(updated.mainKey), thumbnailUrl: this.extractThumbnail(updated) || undefined };
+      return this.toPublicProjectSummary(updated);
     } catch (error: any) {
       if (this.shouldDowngradeThumbnailColumn(error)) {
         await this.disableThumbnailColumn();
@@ -148,7 +194,7 @@ export class ProjectsService {
             ) as Prisma.InputJsonValue,
           },
         });
-        return { ...downgraded, mainUrl: this.oss.publicUrl(downgraded.mainKey), thumbnailUrl: this.extractThumbnail(downgraded) || undefined };
+        return this.toPublicProjectSummary(downgraded);
       }
       throw error;
     }
@@ -214,10 +260,7 @@ export class ProjectsService {
     const supportsThumbnailColumn = await this.supportsThumbnailColumn();
     const project = await this.prisma.project.findUnique({
       where: { id },
-      select: {
-        ...this.projectMetadataSelect,
-        contentJson: !supportsThumbnailColumn,
-      },
+      select: this.buildProjectMetadataSelect(supportsThumbnailColumn, !supportsThumbnailColumn),
     });
     if (!project) throw new NotFoundException('项目不存在');
     if (project.userId !== userId) throw new NotFoundException('项目不存在');

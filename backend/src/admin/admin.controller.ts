@@ -66,7 +66,11 @@ type AdminPermission =
   | 'api-usage:stats'
   | 'api-usage:records'
   | 'templates:manage'
-  | 'watermark-whitelist:manage';
+  | 'watermark-whitelist:manage'
+  | 'teams:list'
+  | 'teams:credits:add'
+  | 'teams:credits:deduct'
+  | 'teams:delete';
 
 const FULL_ADMIN_ROLE = 'admin';
 const NORMAL_ADMIN_ROLE = 'normal_admin';
@@ -80,6 +84,7 @@ const NORMAL_ADMIN_ALLOWED_PERMISSIONS = new Set<AdminPermission>([
   'api-usage:records',
   'templates:manage',
   'watermark-whitelist:manage',
+  'teams:list',
 ]);
 
 @ApiTags('管理后台')
@@ -854,5 +859,89 @@ export class AdminController {
   ) {
     this.checkAdmin(req);
     return this.volcAssetService.cleanupGroupByDate(body?.date);
+  }
+
+  // ── 团队管理 ─────────────────────────────────────────────────────
+
+  @Get('teams')
+  @ApiOperation({ summary: '获取所有团队列表（管理员）' })
+  async adminListTeams(
+    @Request() req: AuthenticatedRequest,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    this.checkAdmin(req, 'teams:list');
+    return this.adminService.adminListTeams({
+      search,
+      page: page ? Number(page) : 1,
+      pageSize: pageSize ? Number(pageSize) : 20,
+    });
+  }
+
+  @Post('teams/:teamId/credits/add')
+  @ApiOperation({ summary: '为团队添加积分（管理员）' })
+  async adminAddTeamCredits(
+    @Request() req: AuthenticatedRequest,
+    @Param('teamId') teamId: string,
+    @Body() dto: { amount: number; description: string },
+  ) {
+    this.checkAdmin(req, 'teams:credits:add');
+    return this.adminService.adminAddTeamCredits(teamId, dto.amount, dto.description, req.user.id);
+  }
+
+  @Post('teams/:teamId/credits/deduct')
+  @ApiOperation({ summary: '扣除团队积分（管理员）' })
+  async adminDeductTeamCredits(
+    @Request() req: AuthenticatedRequest,
+    @Param('teamId') teamId: string,
+    @Body() dto: { amount: number; description: string },
+  ) {
+    this.checkAdmin(req, 'teams:credits:deduct');
+    return this.adminService.adminDeductTeamCredits(teamId, dto.amount, dto.description, req.user.id);
+  }
+
+  @Patch('teams/:teamId/seats')
+  @ApiOperation({ summary: '修改团队席位数（管理员）' })
+  async adminUpdateTeamSeats(
+    @Request() req: AuthenticatedRequest,
+    @Param('teamId') teamId: string,
+    @Body() dto: { maxSeats: number },
+  ) {
+    this.checkAdmin(req, 'teams:list');
+    return this.adminService.adminUpdateTeamSeats(teamId, dto.maxSeats);
+  }
+
+  @Patch('teams/:teamId/status')
+  @ApiOperation({ summary: '修改团队状态（管理员）' })
+  async adminUpdateTeamStatus(
+    @Request() req: AuthenticatedRequest,
+    @Param('teamId') teamId: string,
+    @Body() dto: { status: string },
+  ) {
+    this.checkAdmin(req, 'teams:list');
+    return this.adminService.adminUpdateTeamStatus(teamId, dto.status);
+  }
+
+  @Delete('teams/:teamId')
+  @ApiOperation({ summary: '删除团队（管理员）' })
+  async adminDeleteTeam(
+    @Request() req: AuthenticatedRequest,
+    @Param('teamId') teamId: string,
+  ) {
+    this.checkAdmin(req, 'teams:delete');
+    return this.adminService.adminDeleteTeam(teamId);
+  }
+
+  @Get('teams/:teamId/credits/history')
+  @ApiOperation({ summary: '获取团队积分历史（管理员）' })
+  async adminGetTeamCreditHistory(
+    @Request() req: AuthenticatedRequest,
+    @Param('teamId') teamId: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    this.checkAdmin(req, 'teams:list');
+    return this.adminService.adminGetTeamCreditHistory(teamId, page ? Number(page) : 1, pageSize ? Number(pageSize) : 30);
   }
 }
