@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, Length } from 'class-validator';
+import { IsOptional, IsString, Length, IsUUID } from 'class-validator';
 
 export class CreateProjectDto {
   @ApiProperty({ required: false })
@@ -7,5 +7,10 @@ export class CreateProjectDto {
   @IsString()
   @Length(1, 80)
   name?: string;
+
+  @ApiProperty({ required: false, description: '团队项目所属 teamId' })
+  @IsOptional()
+  @IsUUID()
+  teamId?: string;
 }
 

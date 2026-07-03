@@ -4,6 +4,7 @@ import {
   type ProjectContentSnapshot,
 } from "@/types/project";
 import { fetchWithAuth } from "./authFetch";
+import { getActiveWorkspaceTeamId } from "@/stores/teamStore";
 
 export type Project = {
   id: string;
@@ -63,15 +64,23 @@ type ProjectContentResponse = {
 const inFlightGetContent = new Map<string, Promise<ProjectContentResponse>>();
 
 export const projectApi = {
-  async list(): Promise<Project[]> {
-    const res = await fetchWithAuth(`${base}/api/projects`);
+  async list(teamId?: string): Promise<Project[]> {
+    const workspaceTeamId = teamId ?? getActiveWorkspaceTeamId();
+    const query = workspaceTeamId
+      ? `?teamId=${encodeURIComponent(workspaceTeamId)}`
+      : "";
+    const res = await fetchWithAuth(`${base}/api/projects${query}`);
     return json<Project[]>(res);
   },
-  async create(payload: { name?: string }): Promise<Project> {
+  async create(payload: { name?: string; teamId?: string }): Promise<Project> {
+    const workspaceTeamId = payload.teamId ?? getActiveWorkspaceTeamId();
     const res = await fetchWithAuth(`${base}/api/projects`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        name: payload.name,
+        ...(workspaceTeamId ? { teamId: workspaceTeamId } : {}),
+      }),
     });
     return json<Project>(res);
   },

@@ -18,6 +18,7 @@ import PrivacyPolicy from '@/pages/legal/PrivacyPolicy';
 import CommunityGuidelines from '@/pages/legal/CommunityGuidelines';
 import { useAuthStore } from '@/stores/authStore';
 import { useProjectStore } from '@/stores/projectStore';
+import { refreshTeams } from '@/stores/teamStore';
 import Workspace from '@/pages/Workspace';
 import { initializeRuntimeStability } from '@/bootstrap/runtimeStability';
 
@@ -26,7 +27,12 @@ function RootRoutes() {
   const loadProjects = useProjectStore((s) => s.load);
   // Lazy init is triggered by protected routes/login flow to avoid auto /api/auth/me on every load.
   useEffect(() => {
-    if (user) loadProjects();
+    if (!user) return;
+    void refreshTeams()
+      .catch(() => {})
+      .finally(() => {
+        void loadProjects();
+      });
   }, [user, loadProjects]);
 
   return (

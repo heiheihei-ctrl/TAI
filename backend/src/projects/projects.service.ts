@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { OssService } from '../oss/oss.service';
+import { TeamsService } from '../teams/teams.service';
 import { sanitizeDesignJson } from '../utils/designJsonSanitizer';
 
 @Injectable()
@@ -20,7 +21,24 @@ export class ProjectsService {
   private readonly projectContentFingerprintTtlMs = 30 * 60 * 1000;
   private readonly projectContentFingerprintMaxEntries = 1000;
 
-  constructor(private prisma: PrismaService, private oss: OssService) {}
+  constructor(
+    private prisma: PrismaService,
+    private oss: OssService,
+    private teams: TeamsService,
+  ) {}
+
+  private async assertProjectAccess(
+    userId: string,
+    project: { userId: string; teamId: string | null },
+  ) {
+    if (project.teamId) {
+      await this.teams.assertTeamMember(project.teamId, userId);
+      return;
+    }
+    if (project.userId !== userId) {
+      throw new NotFoundException('项目不存在');
+    }
+  }
 
   private buildProjectMetadataSelect(
     supportsThumbnailColumn: boolean,
@@ -29,6 +47,7 @@ export class ProjectsService {
     const base = {
       id: true,
       userId: true,
+      teamId: true,
       name: true,
       ossPrefix: true,
       mainKey: true,
@@ -67,15 +86,34 @@ export class ProjectsService {
     };
   }
 
-  private async findProjectsForUser(userId: string, supportsThumbnailColumn: boolean) {
+  private async findProjectsForUser(
+    userId: string,
+    supportsThumbnailColumn: boolean,
+    teamId?: string,
+  ) {
+    if (teamId) {
+      await this.teams.assertTeamMember(teamId, userId);
+      return this.prisma.project.findMany({
+        where: { teamId },
+        orderBy: { createdAt: 'desc' },
+        select: this.buildProjectMetadataSelect(supportsThumbnailColumn, !supportsThumbnailColumn),
+      });
+    }
+
+    const personalTeamId = await this.teams.resolvePersonalTeamId(userId);
     return this.prisma.project.findMany({
-      where: { userId },
+      where: {
+        OR: [
+          { userId, teamId: null },
+          { teamId: personalTeamId },
+        ],
+      },
       orderBy: { createdAt: 'desc' },
       select: this.buildProjectMetadataSelect(supportsThumbnailColumn, !supportsThumbnailColumn),
     });
   }
 
-  async list(userId: string) {
+  async list(userId: string, teamId?: string) {
     if (!userId) {
       throw new BadRequestException('用户未登录');
     }
@@ -84,21 +122,36 @@ export class ProjectsService {
     const supportsThumbnailColumn = await this.supportsThumbnailColumn();
 
     try {
-      const projects = await this.findProjectsForUser(userId, supportsThumbnailColumn);
+      const projects = await this.findProjectsForUser(userId, supportsThumbnailColumn, teamId);
       return projects.map((p) => this.toPublicProjectSummary(p));
     } catch (error) {
       if (!this.shouldDowngradeThumbnailColumn(error)) {
         throw error;
       }
       await this.disableThumbnailColumn();
-      const projects = await this.findProjectsForUser(userId, false);
+      const projects = await this.findProjectsForUser(userId, false, teamId);
       return projects.map((p) => this.toPublicProjectSummary(p));
     }
   }
 
-  async create(userId: string, name?: string) {
+  async create(userId: string, name?: string, teamId?: string) {
+    if (teamId) {
+      const membership = await this.teams.assertTeamMember(teamId, userId);
+      if (membership.team.isPersonal) {
+        teamId = undefined;
+      }
+    }
+
     await this.ensureThumbnailColumn();
-    const project = await this.prisma.project.create({ data: { userId, name: name || '未命名项目', ossPrefix: '', mainKey: '' } });
+    const project = await this.prisma.project.create({
+      data: {
+        userId,
+        teamId: teamId || null,
+        name: name || '未命名项目',
+        ossPrefix: '',
+        mainKey: '',
+      },
+    });
     const prefix = `projects/${userId}/${project.id}/`;
     const mainKey = `${prefix}project.json`;
     const payload = {
@@ -145,7 +198,7 @@ export class ProjectsService {
       select: this.buildProjectMetadataSelect(supportsThumbnailColumn, !supportsThumbnailColumn),
     });
     if (!p) throw new NotFoundException('项目不存在');
-    if (p.userId !== userId) throw new NotFoundException('项目不存在');
+    await this.assertProjectAccess(userId, p);
     return this.toPublicProjectSummary(p);
   }
 
@@ -157,7 +210,7 @@ export class ProjectsService {
       select: this.buildProjectMetadataSelect(supportsThumbnailColumn, !supportsThumbnailColumn),
     });
     if (!p) throw new NotFoundException('项目不存在');
-    if (p.userId !== userId) throw new NotFoundException('项目不存在');
+    await this.assertProjectAccess(userId, p);
 
     const data: (Prisma.ProjectUpdateInput & Record<string, any>) = {};
     if (payload.name !== undefined) {
@@ -203,7 +256,7 @@ export class ProjectsService {
   async remove(userId: string, id: string) {
     const p = await this.prisma.project.findUnique({ where: { id } });
     if (!p) throw new NotFoundException('项目不存在');
-    if (p.userId !== userId) throw new NotFoundException('项目不存在');
+    await this.assertProjectAccess(userId, p);
     await this.prisma.project.delete({ where: { id } });
     return { ok: true };
   }
@@ -212,7 +265,7 @@ export class ProjectsService {
     await this.ensureThumbnailColumn();
     const project = await this.prisma.project.findUnique({ where: { id } });
     if (!project) throw new NotFoundException('项目不存在');
-    if (project.userId !== userId) throw new NotFoundException('项目不存在');
+    await this.assertProjectAccess(userId, project);
 
     if (!project.mainKey) {
       return {
@@ -263,7 +316,7 @@ export class ProjectsService {
       select: this.buildProjectMetadataSelect(supportsThumbnailColumn, !supportsThumbnailColumn),
     });
     if (!project) throw new NotFoundException('项目不存在');
-    if (project.userId !== userId) throw new NotFoundException('项目不存在');
+    await this.assertProjectAccess(userId, project);
     const prefix = project.ossPrefix || `projects/${userId}/${project.id}/`;
     const mainKey = project.mainKey || `${prefix}project.json`;
     const sanitizedContent = sanitizeDesignJson(content);
@@ -353,9 +406,12 @@ export class ProjectsService {
   }
 
   async listWorkflowHistory(userId: string, projectId: string, limit?: string) {
-    const project = await this.prisma.project.findUnique({ where: { id: projectId }, select: { userId: true } });
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { userId: true, teamId: true },
+    });
     if (!project) throw new NotFoundException('项目不存在');
-    if (project.userId !== userId) throw new NotFoundException('项目不存在');
+    await this.assertProjectAccess(userId, project);
 
     const parsedLimit = Math.min(Math.max(Number.parseInt((limit || '').trim(), 10) || 30, 1), 200);
 
@@ -397,9 +453,12 @@ export class ProjectsService {
   }
 
   async getWorkflowHistory(userId: string, projectId: string, updatedAtRaw: string) {
-    const project = await this.prisma.project.findUnique({ where: { id: projectId }, select: { userId: true } });
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { userId: true, teamId: true },
+    });
     if (!project) throw new NotFoundException('项目不存在');
-    if (project.userId !== userId) throw new NotFoundException('项目不存在');
+    await this.assertProjectAccess(userId, project);
 
     const updatedAt = new Date(updatedAtRaw);
     if (Number.isNaN(updatedAt.getTime())) {

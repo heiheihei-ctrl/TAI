@@ -14,6 +14,7 @@ import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { ConfigService } from "@nestjs/config";
 import { AppModule } from "./app.module";
 import { OpenObserveTelemetryService } from "./telemetry/openobserve-telemetry.service";
+import { IoAdapter } from "@nestjs/platform-socket.io";
 import { EnvHttpProxyAgent, setGlobalDispatcher } from "undici";
 
 // 配置 undici ProxyAgent 以支持代理（修复 Node.js 20+ 中 @google/genai 的代理问题）
@@ -100,6 +101,7 @@ async function bootstrap() {
       bodyLimit: 200 * 1024 * 1024, // 200MB，放宽项目内容请求体大小
     })
   );
+  app.useWebSocketAdapter(new IoAdapter(app));
 
   const configService = app.get(ConfigService);
   const telemetryService = app.get(OpenObserveTelemetryService);

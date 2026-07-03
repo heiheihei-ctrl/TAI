@@ -52,6 +52,20 @@ export const useTeamStore = create<TeamStore>()(
 /** 从服务端重新拉取团队列表并写入 store */
 export async function refreshTeams(): Promise<TeamInfo[]> {
   const teams = await teamApi.getMyTeams();
-  useTeamStore.getState().setTeams(teams);
+  const store = useTeamStore.getState();
+  store.setTeams(teams);
+  if (!store.activeTeamId || !teams.some((t) => t.id === store.activeTeamId)) {
+    const personal = teams.find((t) => t.isPersonal);
+    if (personal) store.setActiveTeamId(personal.id);
+  }
   return teams;
+}
+
+/** 当前工作区对应的 teamId（共享团队）或 undefined（个人） */
+export function getActiveWorkspaceTeamId(): string | undefined {
+  const { activeTeamId, teams } = useTeamStore.getState();
+  if (!activeTeamId) return undefined;
+  const team = teams.find((t) => t.id === activeTeamId);
+  if (!team || team.isPersonal) return undefined;
+  return team.id;
 }

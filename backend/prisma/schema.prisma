@@ -50,6 +50,9 @@ model User {
   workflowHistory            WorkflowHistory[]
   refreshTokens              RefreshToken[]
   wechatLoginSessions        WechatLoginSession[]
+  ownedTeams                 Team[]                 @relation("TeamOwner")
+  teamMemberships            TeamMember[]
+  teamInvitesCreated         TeamInvite[]           @relation("TeamInviteCreator")
   invitedBy                  User?                  @relation("UserInvitedBy", fields: [invitedById], references: [id])
   invites                    User[]                 @relation("UserInvitedBy")
 
@@ -121,6 +124,7 @@ model RefreshToken {
 model Project {
   id             String   @id @default(uuid())
   userId         String
+  teamId         String?
   name           String
   ossPrefix      String
   mainKey        String
@@ -130,12 +134,98 @@ model Project {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   user           User     @relation(fields: [userId], references: [id])
+  team           Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
   workflowHistory WorkflowHistory[]
 
   // 索引优化：加速项目列表查询
   @@index([userId, createdAt])     // 用户项目列表，按创建时间倒序
   @@index([userId, updatedAt])     // 用户项目列表，按更新时间倒序
+  @@index([teamId, updatedAt])     // 团队项目列表
   @@index([createdAt])             // 全局项目统计
+}
+
+model Team {
+  id          String   @id @default(uuid())
+  name        String
+  isPersonal  Boolean  @default(false)
+  status      String   @default("active")
+  maxSeats    Int      @default(2)
+  ownerId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner         User               @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members       TeamMember[]
+  invites       TeamInvite[]
+  projects      Project[]
+  creditAccount TeamCreditAccount?
+
+  @@index([ownerId])
+  @@index([status])
+}
+
+model TeamMember {
+  id                  String    @id @default(uuid())
+  teamId              String
+  userId              String
+  role                String    @default("member")
+  creditQuotaMonthly  Int?
+  creditQuotaTotal    Int?
+  creditUsedThisCycle Int       @default(0)
+  creditUsedTotal     Int       @default(0)
+  quotaCycleStart     DateTime?
+  joinedAt            DateTime  @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId])
+}
+
+model TeamInvite {
+  id        String    @id @default(uuid())
+  teamId    String
+  code      String    @unique
+  createdBy String
+  expiresAt DateTime
+  usedAt    DateTime?
+  usedBy    String?
+  createdAt DateTime  @default(now())
+
+  team    Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  creator User @relation("TeamInviteCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+  @@index([expiresAt])
+}
+
+model TeamCreditAccount {
+  id        String   @id @default(uuid())
+  teamId    String   @unique
+  balance   Int      @default(0)
+  reserved  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team   Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  ledger TeamCreditLedger[]
+}
+
+model TeamCreditLedger {
+  id          String   @id @default(uuid())
+  accountId   String
+  entryType   String
+  amount      Int
+  actorUserId String?
+  note        String?
+  taskId      String?
+  taskKind    String?
+  createdAt   DateTime @default(now())
+
+  account TeamCreditAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, createdAt])
 }
 
 model WorkflowHistory {

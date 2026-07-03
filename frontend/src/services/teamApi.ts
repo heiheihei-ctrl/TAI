@@ -52,6 +52,14 @@ export interface TeamInvite {
 }
 
 export const teamApi = {
+  async createTeam(name: string): Promise<TeamInfo> {
+    return json<TeamInfo>("/api/teams", {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ name }),
+    });
+  },
+
   async getMyTeams(): Promise<TeamInfo[]> {
     return json<TeamInfo[]>("/api/teams");
   },

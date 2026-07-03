@@ -14,15 +14,15 @@ export class ProjectsController {
   constructor(private readonly projects: ProjectsService) {}
 
   @Get()
-  async list(@Req() req: any) {
+  async list(@Req() req: any, @Query('teamId') teamId?: string) {
     const userId = req.user?.sub ?? req.user?.id;
-    return this.projects.list(userId);
+    return this.projects.list(userId, teamId);
   }
 
   @Post()
   async create(@Req() req: any, @Body() dto: CreateProjectDto) {
     const userId = req.user?.sub ?? req.user?.id;
-    return this.projects.create(userId, dto.name);
+    return this.projects.create(userId, dto.name, dto.teamId);
   }
 
   @Get(':id')

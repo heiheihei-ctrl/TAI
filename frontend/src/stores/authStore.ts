@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { authApi, type UserInfo } from '@/services/authApi';
 import { clearTokens } from '@/services/authTokenStorage';
+import { useTeamStore } from '@/stores/teamStore';
 
 type AuthState = {
   user: UserInfo | null;
@@ -89,6 +90,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ loading: true, error: null });
     try {
       await authApi.logout();
+      useTeamStore.getState().setTeams([]);
+      useTeamStore.getState().setActiveTeamId(null);
       set({ user: null, loading: false, connection: null });
     } catch (e: any) {
       set({ loading: false, error: e?.message || '登出失败' });

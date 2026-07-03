@@ -10,8 +10,11 @@ import KeyboardShortcuts from '@/components/KeyboardShortcuts';
 import LoginModal from '@/components/auth/LoginModal';
 import EventSettingsModalHost from '@/components/home/EventSettingsModalHost';
 import ExportWatermarkModalHost from '@/components/export/ExportWatermarkModalHost';
+import { TeamInviteConfirmModal } from '@/components/team/TeamInviteConfirmModal';
 import { tokenRefreshManager } from '@/services/tokenRefreshManager';
 import { useAuthStore } from '@/stores/authStore';
+import { refreshTeams, useTeamStore } from '@/stores/teamStore';
+import { isTeamInviteQueryParam } from '@/utils/teamInvite';
 import { AppLoadingIndicator } from '@/components/AppLoadingIndicator';
 import { useTranslation } from 'react-i18next';
 
@@ -80,13 +83,35 @@ const App: React.FC = () => {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const paramProjectId = searchParams.get('projectId');
+  const inviteCodeParam =
+    searchParams.get('inviteCode') ||
+    searchParams.get('teamInvite') ||
+    searchParams.get('team_invite');
+  const teamInviteCode = isTeamInviteQueryParam(inviteCodeParam)
+    ? inviteCodeParam
+    : null;
+  const [teamInviteOpen, setTeamInviteOpen] = useState(false);
   const currentProjectId = useProjectStore((state) => state.currentProjectId);
+  const setActiveTeamId = useTeamStore((s) => s.setActiveTeamId);
 
   // 获取认证状态用于显示加载指示器
   const { user, loading: authLoading } = useAuthStore();
 
   // 记录上一次打开的项目ID，避免重复打开
   const lastOpenedProjectIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!user || !teamInviteCode) return;
+    setTeamInviteOpen(true);
+  }, [user, teamInviteCode]);
+
+  const clearTeamInviteQuery = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('inviteCode');
+    next.delete('teamInvite');
+    next.delete('team_invite');
+    setSearchParams(next, { replace: true });
+  };
 
   // 初始化 TokenRefreshManager
   useEffect(() => {
@@ -188,6 +213,23 @@ const App: React.FC = () => {
       <LoginModal />
       <EventSettingsModalHost />
       <ExportWatermarkModalHost />
+
+      {teamInviteOpen && teamInviteCode && user && (
+        <TeamInviteConfirmModal
+          code={teamInviteCode}
+          onClose={() => {
+            setTeamInviteOpen(false);
+            clearTeamInviteQuery();
+          }}
+          onJoined={async (teamId) => {
+            setTeamInviteOpen(false);
+            clearTeamInviteQuery();
+            await refreshTeams();
+            setActiveTeamId(teamId);
+            await useProjectStore.getState().load();
+          }}
+        />
+      )}
 
       {/* 认证初始化加载指示器 */}
       {authLoading && !user && (

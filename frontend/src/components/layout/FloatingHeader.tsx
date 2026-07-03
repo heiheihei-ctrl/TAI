@@ -78,6 +78,7 @@ import { authApi, type GoogleApiKeyInfo } from "@/services/authApi";
 import ReferralRewards from "@/components/ReferralRewards";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import MembershipPanel from "@/components/payment/MembershipPanel";
+import TeamSwitcher from "@/components/team/TeamSwitcher";
 import PricingCatalogModal from "@/components/layout/PricingCatalogModal";
 import { useTranslation } from "react-i18next";
 import {
@@ -2375,6 +2376,8 @@ const FloatingHeader: React.FC = () => {
               </Button>
             )}
 
+            <TeamSwitcher />
+
             <Button
               variant='ghost'
               size='sm'
@@ -2604,7 +2607,7 @@ const FloatingHeader: React.FC = () => {
               </Button>
             </div>
 
-            {/* 闂傚倸鍊峰ù鍥х暦閸偅鍙忕€规洖娲ㄩ惌鍡椕归敐鍫綈婵炲懐濮撮湁闁绘ê妯婇崕鎰版煕鐎ｅ吀閭柡灞剧洴閸╁嫰宕橀浣诡潔缂傚倷鑳舵慨闈涱熆濮椻偓閳ワ箓宕稿Δ浣告疂闂傚倸鐗婄粙鎴︼綖瀹ュ鐓?*/}
+            {/* 闂傚倸鍊峰ù鍥х暦閸?*/}
             <Button
               variant='ghost'
               size='sm'

@@ -21,6 +21,8 @@ import { UserTemplatesModule } from './user-templates/user-templates.module';
 import { MembershipModule } from './membership/membership.module';
 import { VolcAssetModule } from './volc-asset/volc-asset.module';
 import { BioAuthModule } from './bio-auth/bio-auth.module';
+import { TeamsModule } from './teams/teams.module';
+import { CollaborationModule } from './collaboration/collaboration.module';
 
 @Module({
   imports: [
@@ -50,6 +52,8 @@ import { BioAuthModule } from './bio-auth/bio-auth.module';
     UserTemplatesModule,
     VolcAssetModule,
     BioAuthModule,
+    TeamsModule,
+    CollaborationModule,
   ],
 })
 export class AppModule {}
