@@ -266,6 +266,64 @@ export class TeamsService {
     }));
   }
 
+  /** 当前用户在团队内的个人可用配额（受分配上限与团队积分池余额双重约束） */
+  async getMyQuota(teamId: string, userId: string) {
+    const membership = await this.getMembership(teamId, userId);
+    if (!membership) throw new NotFoundException('团队不存在');
+    if (membership.team.isPersonal) {
+      return {
+        available: null,
+        unlimited: true,
+        teamBalance: null,
+        quotaRemaining: null,
+        creditQuotaMonthly: null,
+        creditQuotaTotal: null,
+        creditUsedThisCycle: 0,
+        creditUsedTotal: 0,
+      };
+    }
+
+    const teamBalance = Math.max(
+      0,
+      membership.team.creditAccount?.balance ?? 0,
+    );
+    const monthly = membership.creditQuotaMonthly;
+    const total = membership.creditQuotaTotal;
+    const usedCycle = membership.creditUsedThisCycle ?? 0;
+    const usedTotal = membership.creditUsedTotal ?? 0;
+    const unlimited = monthly == null && total == null;
+
+    const monthlyRemaining =
+      monthly != null ? Math.max(0, monthly - usedCycle) : null;
+    const totalRemaining =
+      total != null ? Math.max(0, total - usedTotal) : null;
+
+    let quotaRemaining: number | null = null;
+    if (!unlimited) {
+      const parts = [monthlyRemaining, totalRemaining].filter(
+        (v): v is number => v != null,
+      );
+      quotaRemaining = parts.length > 0 ? Math.min(...parts) : 0;
+    }
+
+    // 实际可用 = min(个人分配剩余, 团队积分池余额)；无个人上限时仅受团队池约束
+    const available =
+      quotaRemaining != null
+        ? Math.min(quotaRemaining, teamBalance)
+        : teamBalance;
+
+    return {
+      available,
+      unlimited,
+      teamBalance,
+      quotaRemaining,
+      creditQuotaMonthly: monthly,
+      creditQuotaTotal: total,
+      creditUsedThisCycle: usedCycle,
+      creditUsedTotal: usedTotal,
+    };
+  }
+
   async createInvite(teamId: string, userId: string, expiresInDays = 7) {
     await this.assertCanManage(teamId, userId);
 

@@ -81,6 +81,19 @@ export const teamApi = {
     return json<TeamMember[]>(`/api/teams/${encodeURIComponent(teamId)}/members`);
   },
 
+  async getMyQuota(teamId: string): Promise<{
+    available: number | null;
+    unlimited: boolean;
+    teamBalance: number | null;
+    quotaRemaining: number | null;
+    creditQuotaMonthly: number | null;
+    creditQuotaTotal: number | null;
+    creditUsedThisCycle: number;
+    creditUsedTotal: number;
+  }> {
+    return json(`/api/teams/${encodeURIComponent(teamId)}/me/quota`);
+  },
+
   async createInvite(
     teamId: string,
     body: { expiresInDays?: number }

@@ -3,7 +3,6 @@ import { collaborationSocket, dedupeByUserId } from '@/services/collaborationSoc
 import type { CollaborationSelectionState } from '@/services/collaborationSocket';
 import {
   applyRemoteContentUpdate,
-  isApplyingRemoteContent,
   resetCollaborationContentState,
 } from '@/services/collaborationContentApply';
 import { useAuthStore } from '@/stores/authStore';
@@ -35,6 +34,15 @@ export default function CollaborationSyncManager({ canvasRef }: Props) {
     setCanvasEl(canvasRef.current);
   }, [canvasRef, projectId, connected]);
 
+  // 团队会话：对齐 Tanva useTeamRealtime，仅在离开团队模式时断连
+  useEffect(() => {
+    if (!user || !isTeamProject) return;
+    return () => {
+      collaborationSocket.disconnect();
+    };
+  }, [user?.id, isTeamProject]);
+
+  // 项目房间：切换项目只 join 新 room，不 hardDisconnect（对齐 Tanva setContext projectId）
   useEffect(() => {
     if (!user || !projectId || !isTeamProject) {
       setConnected(false);
@@ -45,17 +53,26 @@ export default function CollaborationSyncManager({ canvasRef }: Props) {
 
     let cancelled = false;
 
-    const ensureConnection = async () => {
-      try {
-        await collaborationSocket.connect(projectId);
-        if (!cancelled) setConnected(true);
-      } catch (error) {
-        console.warn('[collaboration] sync connect failed:', error);
-        if (!cancelled) setConnected(false);
-      }
+    const refreshConnected = () => {
+      if (cancelled) return;
+      setConnected(collaborationSocket.isReadyForProject(projectId));
     };
 
-    void ensureConnection();
+    void collaborationSocket
+      .connect(projectId)
+      .then(refreshConnected)
+      .catch((error) => {
+        console.warn('[collaboration] sync connect failed:', error);
+        if (!cancelled) setConnected(false);
+      });
+
+    const unsubConn = collaborationSocket.subscribeConnection(
+      ({ connected: ok, projectId: activeProjectId }) => {
+        if (!cancelled) {
+          setConnected(ok && activeProjectId === projectId);
+        }
+      },
+    );
 
     const unsubSelections = collaborationSocket.subscribeSelections((map) => {
       const selfUserId = collaborationSocket.getSelfUserId();
@@ -78,11 +95,9 @@ export default function CollaborationSyncManager({ canvasRef }: Props) {
 
     return () => {
       cancelled = true;
+      unsubConn();
       unsubSelections();
       unsubContent();
-      setConnected(false);
-      setRemoteSelections([]);
-      resetCollaborationContentState();
       if (contentPullTimerRef.current != null) {
         window.clearTimeout(contentPullTimerRef.current);
       }
@@ -93,6 +108,7 @@ export default function CollaborationSyncManager({ canvasRef }: Props) {
 
   useEffect(() => {
     if (!connected || !projectId || !isTeamProject) return;
+    if (!collaborationSocket.isReadyForProject(projectId)) return;
 
     const handleSelectionUpdated = (event: Event) => {
       const detail = (event as CustomEvent).detail as {

@@ -18,7 +18,11 @@ type ProjectContentState = {
   lastError: string | null;
   lastWarning: string | null;
   hydrated: boolean;
+  /** 正在切换/加载项目内容（用于全屏 loading） */
+  switching: boolean;
   setProject: (projectId: string | null) => void;
+  beginSwitch: () => void;
+  completeSwitch: () => void;
   hydrate: (content: ProjectContentSnapshot, version: number, savedAt?: string | null) => void;
   updatePartial: (partial: Partial<ProjectContentSnapshot>, options?: UpdateOptions) => void;
   setSaving: (saving: boolean) => void;
@@ -30,7 +34,7 @@ type ProjectContentState = {
 };
 
 const createInitialState = (): Omit<ProjectContentState,
-  'setProject' | 'hydrate' | 'updatePartial' | 'setSaving' | 'setManualSaving' | 'markSaved' | 'setError' | 'setWarning' | 'reset'> => ({
+  'setProject' | 'beginSwitch' | 'completeSwitch' | 'hydrate' | 'updatePartial' | 'setSaving' | 'setManualSaving' | 'markSaved' | 'setError' | 'setWarning' | 'reset'> => ({
   projectId: null,
   content: null,
   version: 1,
@@ -43,6 +47,7 @@ const createInitialState = (): Omit<ProjectContentState,
   lastError: null,
   lastWarning: null,
   hydrated: false,
+  switching: false,
 });
 
 export const useProjectContentStore = create<ProjectContentState>((set) => ({
@@ -51,8 +56,11 @@ export const useProjectContentStore = create<ProjectContentState>((set) => ({
     set(() => ({
       ...createInitialState(),
       projectId,
+      switching: !!projectId,
     }));
   },
+  beginSwitch: () => set({ switching: true, hydrated: false }),
+  completeSwitch: () => set({ switching: false }),
   hydrate: (content, version, savedAt) => {
     set((state) => ({
       ...state,

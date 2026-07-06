@@ -114,12 +114,22 @@ export default function TeamSwitcher() {
       }
       setActiveTeamId(team.id);
       setPendingSwitch(null);
+      if (projectId) {
+        useProjectStore.getState().open(projectId);
+      }
       await useProjectStore.getState().load();
+      if (projectId) {
+        useProjectStore.getState().open(projectId);
+      }
     },
     [setActiveTeamId],
   );
 
   const handleSelectTeam = (team: TeamInfo) => {
+    if (team.id === activeTeamId && !team.isPersonal) {
+      setPendingSwitch(team);
+      return;
+    }
     if (team.id === activeTeamId) return;
     if (!team.isPersonal) {
       setPendingSwitch(team);

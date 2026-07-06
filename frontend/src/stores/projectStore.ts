@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { projectApi, type Project } from '@/services/projectApi';
 import { deleteProjectCache } from '@/services/projectCacheStore';
+import { useProjectContentStore } from '@/stores/projectContentStore';
 import {
   getDefaultProjectName,
   getActiveWorkspaceProjectStorageKey,
@@ -81,9 +82,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   open: (id: string) => {
+    const prevId = get().currentProjectId;
     const found = get().projects.find((x) => x.id === id) || null;
 
     if (found) {
+      if (prevId !== found.id) {
+        useProjectContentStore.getState().beginSwitch();
+      }
       set({ currentProjectId: found.id, currentProject: found, modalOpen: false });
       saveWorkspaceProjectId(getActiveWorkspaceProjectStorageKey(), found.id);
       return;
@@ -96,6 +101,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         set((s) => {
           const exists = s.projects.some((p) => p.id === proj.id);
           const projects = exists ? s.projects.map((p) => p.id === proj.id ? proj : p) : [proj, ...s.projects];
+          if (s.currentProjectId !== proj.id) {
+            useProjectContentStore.getState().beginSwitch();
+          }
           return {
             projects,
             currentProjectId: proj.id,
@@ -107,6 +115,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         try { saveWorkspaceProjectId(getActiveWorkspaceProjectStorageKey(), id); } catch {}
       } catch (e: any) {
         console.warn('Failed to load project:', e);
+        useProjectContentStore.getState().completeSwitch();
         set({ error: e?.message || '无法加载项目', modalOpen: true });
       }
     })();

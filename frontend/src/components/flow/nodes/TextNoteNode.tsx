@@ -20,7 +20,6 @@ function TextNoteNodeInner({ id, data, selected }: Props) {
   const boxShadow = selected
     ? '0 0 0 2px rgba(37,99,235,0.12)'
     : '0 1px 2px rgba(0,0,0,0.04)';
-  const height = data.boxH || 140;
   const editorRef = React.useRef<HTMLDivElement | null>(null);
   const [isEditing, setIsEditing] = React.useState(false);
   const isComposing = React.useRef(false);
@@ -119,6 +118,7 @@ function TextNoteNodeInner({ id, data, selected }: Props) {
       defaultHeight={140}
       minWidth={160}
       minHeight={96}
+      heightMode="fixed"
       className="tanva-textnote"
       style={{
         padding: '12px 14px',
@@ -126,15 +126,15 @@ function TextNoteNodeInner({ id, data, selected }: Props) {
         border: `1px solid ${borderColor}`,
         borderRadius: 14,
         boxShadow,
-        alignItems: 'center',
-        justifyContent: 'center',
+        alignItems: 'stretch',
+        justifyContent: 'flex-start',
         boxSizing: 'border-box',
         transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
       }}
     >
       <div
         ref={editorRef}
-        className={`tanva-textnote-editor nowheel${isEditing ? ' nodrag' : ''}`}
+        className={`tanva-textnote-editor tanva-textnote-editor--scroll flow-node-fill-region nowheel${isEditing ? ' nodrag' : ''}`}
         contentEditable={isEditing}
         suppressContentEditableWarning
         data-placeholder={lt("输入文本", "Enter text")}
@@ -148,13 +148,12 @@ function TextNoteNodeInner({ id, data, selected }: Props) {
         onDoubleClick={startEditing}
         style={{
           width: '100%',
-          minHeight: Math.max(60, height - 24),
           borderRadius: 10,
           background: isDarkTheme && isEditing ? '#171717' : noteBackground,
           fontSize: 14,
           fontWeight: 400,
           color: isDarkTheme ? '#ffffff' : '#111827',
-          textAlign: 'center',
+          textAlign: 'left',
           outline: 'none',
           lineHeight: 1.4,
           padding: '8px 12px',

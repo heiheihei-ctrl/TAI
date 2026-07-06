@@ -14,6 +14,7 @@ import type {
   CollaborationSelectionPayload,
   CollaborationUserPayload,
   CollaborationViewportPayload,
+  FlowPatchPayload,
 } from './collaboration.types';
 import { UsersService } from '../users/users.service';
 
@@ -261,6 +262,7 @@ export class CollaborationGateway
       textIds?: string[];
       pathBounds?: CollaborationSelectionPayload['pathBounds'];
       marqueeBounds?: CollaborationSelectionPayload['marqueeBounds'];
+      flowNodeIds?: string[];
     },
   ) {
     const room = client.data.room;
@@ -274,6 +276,7 @@ export class CollaborationGateway
       textIds: Array.isArray(body?.textIds) ? body.textIds : [],
       pathBounds: Array.isArray(body?.pathBounds) ? body.pathBounds : [],
       marqueeBounds: body?.marqueeBounds ?? null,
+      flowNodeIds: Array.isArray(body?.flowNodeIds) ? body.flowNodeIds : [],
     };
 
     const peer = this.collaboration.updateSelection(room, client.id, selection);
@@ -311,5 +314,24 @@ export class CollaborationGateway
     if (!payload) return;
 
     client.to(room).emit('collab:content-update', payload);
+  }
+
+  @SubscribeMessage('collab:flow-patch')
+  handleFlowPatch(
+    @ConnectedSocket() client: AuthedSocket,
+    @MessageBody()
+    body: { projectId?: string; patch?: FlowPatchPayload },
+  ) {
+    const user = client.data.user;
+    const room = client.data.room;
+    if (!user || !room) return;
+    if (body?.projectId && client.data.projectId !== body.projectId) return;
+    if (!body?.patch || typeof body.patch !== 'object') return;
+
+    client.to(room).emit('collab:flow-patch', {
+      peerId: client.id,
+      userId: user.id || user.sub,
+      patch: body.patch,
+    });
   }
 }

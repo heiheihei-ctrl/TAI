@@ -113,6 +113,9 @@ import {
 } from "@/stores/flowStore";
 import { useShallow } from "zustand/react/shallow";
 import { useProjectContentStore } from "@/stores/projectContentStore";
+import { useTeamStore } from "@/stores/teamStore";
+import { useFlowCollabIntegration } from "@/hooks/useFlowCollabIntegration";
+import RemoteFlowSelectionOverlays from "@/components/collaboration/RemoteFlowSelectionOverlays";
 import { useImageHistoryStore } from "@/stores/imageHistoryStore";
 import { useUIStore } from "@/stores";
 import {
@@ -3716,6 +3719,29 @@ function FlowInner() {
   React.useEffect(() => {
     edgesRef.current = edges as Edge[];
   }, [edges]);
+
+  const projectIdForCollab = useProjectContentStore((s) => s.projectId);
+  const activeTeamForCollab = useTeamStore((s) => {
+    const team = s.teams.find((t) => t.id === s.activeTeamId);
+    return team && !team.isPersonal ? team : null;
+  });
+  const knownFlowNodeTypes = React.useMemo(
+    () => new Set(Object.keys(nodeTypes)),
+    []
+  );
+  const flowCollab = useFlowCollabIntegration({
+    projectId: projectIdForCollab,
+    enabled: !!activeTeamForCollab && !!projectIdForCollab,
+    setNodes,
+    setEdges,
+    normalizeNodeType: normalizeFlowNodeType,
+    knownNodeTypes: knownFlowNodeTypes,
+  });
+  const flowCollabRef = React.useRef(flowCollab);
+  React.useEffect(() => {
+    flowCollabRef.current = flowCollab;
+  }, [flowCollab]);
+
   // Alt+拖拽复制相关状态（在 onNodesChange 中做位置重映射，让“副本在动、原节点不动”）
   const altDragStartRef = React.useRef<any>(null);
   const aiProvider = useAIChatStore((state) => state.aiProvider);
@@ -4313,7 +4339,7 @@ function FlowInner() {
 
   const onNodesChangeWithHistory = React.useCallback(
     (changes: any) => {
-      let processedChanges = changes;
+      let processedChanges = flowCollabRef.current.filterNodeChangesForLocks(changes);
       const altState = altDragStartRef.current;
       const isAltDragCloning =
         !!altState?.altPressed &&
@@ -4462,6 +4488,10 @@ function FlowInner() {
       }
 
       processedChanges = applyFlowSnappingToChanges(processedChanges);
+
+      try {
+        flowCollabRef.current.broadcastNodeChanges(processedChanges);
+      } catch {}
 
       onNodesChange(processedChanges);
       try {
@@ -4984,6 +5014,9 @@ function FlowInner() {
           }
         }
       }
+      try {
+        flowCollabRef.current.broadcastEdgeChanges(changes);
+      } catch {}
       onEdgesChange(changes);
       try {
         const needCommit =
@@ -10405,6 +10438,7 @@ function FlowInner() {
       }
       closeConnectQuickMenu({ resetSource: true });
 
+      let collabNewEdge: Edge | null = null;
       setEdges((eds) => {
         let next = eds;
         const tgt = rf.getNode(params.target!);
@@ -10869,8 +10903,15 @@ function FlowInner() {
           }
         }
         const out = addEdge({ ...params, type: "default" }, next);
+        const prevIds = new Set((next as Edge[]).map((e) => e.id));
+        collabNewEdge = (out as Edge[]).find((e) => !prevIds.has(e.id)) ?? null;
         return out;
       });
+      try {
+        if (collabNewEdge) {
+          flowCollabRef.current.sendFlowPatch({ upsertEdges: [collabNewEdge] });
+        }
+      } catch {}
       try {
         historyService.commit("flow-connect").catch(() => {});
       } catch {}
@@ -21308,9 +21349,45 @@ function FlowInner() {
     ]
   );
 
+  const selectedFlowSignature = React.useMemo(
+    () =>
+      nodes
+        .filter((node) => node.selected)
+        .map((node) => node.id)
+        .sort()
+        .join(","),
+    [nodes],
+  );
+
+  React.useEffect(() => {
+    if (!activeTeamForCollab || !projectIdForCollab) return;
+    const ids = selectedFlowSignature
+      ? selectedFlowSignature.split(",")
+      : [];
+    flowCollab.broadcastFlowSelection(ids);
+  }, [
+    activeTeamForCollab,
+    projectIdForCollab,
+    selectedFlowSignature,
+    flowCollab.broadcastFlowSelection,
+  ]);
+
+  const localSelectedFlowNodeIds = React.useMemo(
+    () => (selectedFlowSignature ? selectedFlowSignature.split(",") : []),
+    [selectedFlowSignature],
+  );
+
   const nodesForRender = React.useMemo(
     () =>
       nodesWithHandlers.map((node) => {
+        if (flowCollab.lockedNodeIds.has(node.id)) {
+          return {
+            ...node,
+            selected: false,
+            selectable: false,
+            draggable: false,
+          };
+        }
         if (!collapsedChildNodeIds.has(node.id)) return node;
         return {
           ...node,
@@ -21320,7 +21397,7 @@ function FlowInner() {
           selectable: false,
         };
       }),
-    [nodesWithHandlers, collapsedChildNodeIds]
+    [nodesWithHandlers, collapsedChildNodeIds, flowCollab.lockedNodeIds],
   );
 
   const edgesForRender = React.useMemo(
@@ -22700,6 +22777,8 @@ function FlowInner() {
         className={`tanva-flow-overlay absolute inset-0 ${
           isFlowBlackTheme ? "tanva-flow-theme-mono-dark" : ""
         } ${
+          activeTeamForCollab ? "team-collab-enabled" : ""
+        } ${
           isPointerMode ? "pointer-mode" : ""
         } ${isMarqueeMode ? "marquee-mode" : ""} ${
           effectiveFlowLowDetailMode ? "low-detail-mode" : ""
@@ -22919,6 +22998,13 @@ function FlowInner() {
             {/* 将画布上的图片以绿色块显示在 MiniMap 内；大图时关闭该叠加层以减负 */}
             {!isLargeGraphForMiniMapImageOverlay && (
               <MiniMapImageOverlay viewportContainerRef={containerRef} />
+            )}
+            {activeTeamForCollab && (
+              <RemoteFlowSelectionOverlays
+                nodes={nodes as RFNode[]}
+                remoteSelections={flowCollab.remoteFlowSelections}
+                localSelectedNodeIds={localSelectedFlowNodeIds}
+              />
             )}
           </>
         )}

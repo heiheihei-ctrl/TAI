@@ -64,6 +64,13 @@ export class TeamsController {
     return this.teams.listMembers(teamId, this.userId(req));
   }
 
+  @Get(':teamId/me/quota')
+  @ApiCookieAuth('access_token')
+  @UseGuards(JwtAuthGuard)
+  getMyQuota(@Req() req: any, @Param('teamId') teamId: string) {
+    return this.teams.getMyQuota(teamId, this.userId(req));
+  }
+
   @Post(':teamId/invites')
   @ApiCookieAuth('access_token')
   @UseGuards(JwtAuthGuard)

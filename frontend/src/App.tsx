@@ -6,6 +6,7 @@ import Sora2Test from '@/pages/Sora2Test';
 import ProjectAutosaveManager from '@/components/autosave/ProjectAutosaveManager';
 import SaveDebugPanel from '@/components/autosave/SaveDebugPanel';
 import { useProjectStore } from '@/stores/projectStore';
+import { useProjectContentStore } from '@/stores/projectContentStore';
 import KeyboardShortcuts from '@/components/KeyboardShortcuts';
 import LoginModal from '@/components/auth/LoginModal';
 import EventSettingsModalHost from '@/components/home/EventSettingsModalHost';
@@ -92,6 +93,7 @@ const App: React.FC = () => {
     : null;
   const [teamInviteOpen, setTeamInviteOpen] = useState(false);
   const currentProjectId = useProjectStore((state) => state.currentProjectId);
+  const projectSwitching = useProjectContentStore((state) => state.switching);
   const setActiveTeamId = useTeamStore((s) => s.setActiveTeamId);
 
   // 获取认证状态用于显示加载指示器
@@ -234,6 +236,11 @@ const App: React.FC = () => {
       {/* 认证初始化加载指示器 */}
       {authLoading && !user && (
         <AppLoadingIndicator message={t('app.authChecking')} />
+      )}
+
+      {/* 切换/加载项目内容 */}
+      {projectSwitching && user && (
+        <AppLoadingIndicator message={t('app.projectSwitching', '切换项目中...')} />
       )}
 
       <SaveDebugPanel />

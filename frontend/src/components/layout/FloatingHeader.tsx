@@ -79,6 +79,7 @@ import ReferralRewards from "@/components/ReferralRewards";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import MembershipPanel from "@/components/payment/MembershipPanel";
 import TeamSwitcher from "@/components/team/TeamSwitcher";
+import TeamQuotaBadge from "@/components/team/TeamQuotaBadge";
 import PricingCatalogModal from "@/components/layout/PricingCatalogModal";
 import { useTranslation } from "react-i18next";
 import {
@@ -2377,6 +2378,7 @@ const FloatingHeader: React.FC = () => {
             )}
 
             <TeamSwitcher />
+            <TeamQuotaBadge />
 
             <Button
               variant='ghost'

@@ -79,6 +79,34 @@ body.tanva-flow-multi-resizing .tanva-flow-overlay .react-flow__pane {
   overflow: visible;
 }
 
+.flow-resizable-node--fixed-height .flow-resizable-node__body--fixed {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tanva-textnote-editor--scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.tanva-textnote-editor--scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.tanva-textnote-editor--scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.55);
+  border-radius: 999px;
+}
+
+.tanva-textnote-editor--scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 .flow-node-fill-region {
   flex: 1;
   min-height: 0;
@@ -263,8 +291,14 @@ input[type="text"],
   user-select: text !important;
 }
 
-/* 去除节点被选中时的蓝色外框/阴影 */
-.tanva-flow-overlay .react-flow__node.selected {
+/* 去除节点被选中时的蓝色外框/阴影（非协同模式） */
+.tanva-flow-overlay:not(.team-collab-enabled) .react-flow__node.selected {
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* 协同模式下由 RemoteFlowSelectionOverlays 绘制虚线选区 */
+.tanva-flow-overlay.team-collab-enabled .react-flow__node.selected > div {
   box-shadow: none !important;
   outline: none !important;
 }

@@ -210,6 +210,7 @@ function TextPromptNodeInner({ id, data, selected }: Props) {
       defaultHeight={104}
       minWidth={180}
       minHeight={88}
+      heightMode="fixed"
       style={{
         padding: 8,
         background: '#fff',
@@ -219,7 +220,7 @@ function TextPromptNodeInner({ id, data, selected }: Props) {
         transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
       }}
     >
-      <div style={{ fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+      <div style={{ fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexShrink: 0 }}>
         {isEditingTitle ? (
           <input
             ref={titleInputRef}
@@ -288,6 +289,7 @@ function TextPromptNodeInner({ id, data, selected }: Props) {
           flexDirection: 'column',
           flex: 1,
           minHeight: 0,
+          overflow: 'hidden',
         }}
         onWheelCapture={(event) => {
           if (isInlineMentionInteractiveTarget(event.target)) return;
@@ -312,6 +314,8 @@ function TextPromptNodeInner({ id, data, selected }: Props) {
           minHeight: 0,
           maxHeight: '100%',
           overflowY: 'auto',
+          overflowX: 'hidden',
+          overscrollBehavior: 'contain',
           fontSize: 12,
           lineHeight: 1.4,
           border: '1px solid #e5e7eb',

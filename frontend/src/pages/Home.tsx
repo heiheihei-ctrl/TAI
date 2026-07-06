@@ -49,7 +49,7 @@ const FEATURE_CARD_IMAGES = [
 const TOOLBOX_IMAGES = [InfiniteCanvas, Chatbot, SmartNode, AIAssistant];
 
 type SceneFilterKey =
-  | "all"
+  | "all" 
   | "architecture"
   | "education"
   | "career"

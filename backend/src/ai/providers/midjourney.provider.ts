@@ -181,6 +181,49 @@ export class MidjourneyProvider implements IAIProvider {
     ].some((s) => text.includes(s));
   }
 
+  /** 147 AI / ToAPIs 线路不可用（渠道缺失、授权过期等）时，可回退到悠船 */
+  private isLegacyMjFallbackEligible(error: unknown): boolean {
+    if (this.isLegacyMjChannelUnavailable(error)) {
+      return true;
+    }
+    const msg = error instanceof Error ? error.message : String(error);
+    const text = msg.toLowerCase();
+    return [
+      '授权已过期',
+      '授权失败',
+      '授权无效',
+      'unauthorized',
+      'invalid token',
+      'token expired',
+      'access denied',
+      'authentication',
+      '鉴权',
+      'api key',
+      'apikey',
+      'forbidden',
+      'http 401',
+      'http 403',
+      'quota_not_enough',
+      '余额不足',
+      '配额不足',
+    ].some((s) => text.includes(s.toLowerCase()));
+  }
+
+  private formatMidjourneyUserError(message: string): string {
+    if (message.includes('授权已过期')) {
+      if (this.hasYouchuanCredentials()) {
+        return 'Midjourney 147 AI 账号授权已过期，且悠船线路也未能完成生成，请稍后重试或联系管理员。';
+      }
+      return 'Midjourney 147 AI 账号授权已过期，请联系管理员更新 TOAPIS_TOKEN / MIDJOURNEY_API_KEY，或配置悠船账号（YOUCHUAN_APP_ID / YOUCHUAN_SECRET_KEY）。';
+    }
+    return message;
+  }
+
+  private wrapMidjourneyError(error: unknown): Error {
+    const raw = error instanceof Error ? error.message : String(error);
+    return new Error(this.formatMidjourneyUserError(raw));
+  }
+
   private isClassicMidjourneyModel(input?: string): boolean {
     const model = (input || '').trim().toLowerCase();
     return !model || LEGACY_MJ_MODELS.has(model);
@@ -1155,13 +1198,11 @@ export class MidjourneyProvider implements IAIProvider {
             route: 'legacy-imagine',
           }, ossUrls);
         } catch (error) {
-          if (!this.isLegacyMjChannelUnavailable(error)) {
-            throw error;
+          if (!this.isLegacyMjFallbackEligible(error) || !this.hasYouchuanCredentials()) {
+            throw this.wrapMidjourneyError(error);
           }
           this.logger.warn(
-            `[Midjourney] classic MJ legacy imagine unavailable, falling back to managed path: ${
-              error instanceof Error ? error.message : String(error)
-            }`
+            `[Midjourney] classic MJ legacy imagine unavailable (${error instanceof Error ? error.message : String(error)}), falling back to Youchuan`
           );
         }
       }
@@ -1206,7 +1247,9 @@ export class MidjourneyProvider implements IAIProvider {
         managedModel: normalizedModel,
       }, ossUrls);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = this.formatMidjourneyUserError(
+        error instanceof Error ? error.message : String(error),
+      );
       return {
         success: false,
         error: {
@@ -1260,9 +1303,12 @@ export class MidjourneyProvider implements IAIProvider {
         const taskId = await this.submitTask('/mj/submit/imagine', payload, 'editImage', requestMode);
         task = await this.pollTask(taskId, 'editImage', requestMode);
       } catch (error) {
-        if (!this.isLegacyMjChannelUnavailable(error)) {
-          throw error;
+        if (!this.isLegacyMjFallbackEligible(error) || !this.hasYouchuanCredentials()) {
+          throw this.wrapMidjourneyError(error);
         }
+        this.logger.warn(
+          `[Midjourney] legacy edit imagine unavailable (${error instanceof Error ? error.message : String(error)}), falling back to Youchuan`
+        );
 
         const managedResult = await this.runManagedMidjourney({
           model: this.normalizeMidjourneyModel(request.model),
@@ -1288,7 +1334,9 @@ export class MidjourneyProvider implements IAIProvider {
 
       return this.buildSuccessImageResponse(task, imageData, ossUrl);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = this.formatMidjourneyUserError(
+        error instanceof Error ? error.message : String(error),
+      );
       return {
         success: false,
         error: {
@@ -1335,7 +1383,9 @@ export class MidjourneyProvider implements IAIProvider {
 
       return this.buildSuccessImageResponse(task, imageData, ossUrl);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = this.formatMidjourneyUserError(
+        error instanceof Error ? error.message : String(error),
+      );
       return {
         success: false,
         error: {

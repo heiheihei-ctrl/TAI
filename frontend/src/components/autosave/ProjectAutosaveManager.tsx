@@ -23,6 +23,7 @@ export default function ProjectAutosaveManager({ projectId }: ProjectAutosaveMan
   const setProject = useProjectContentStore((state) => state.setProject);
   const hydrate = useProjectContentStore((state) => state.hydrate);
   const setError = useProjectContentStore((state) => state.setError);
+  const completeSwitch = useProjectContentStore((state) => state.completeSwitch);
 
   const hydrationReadyRef = useRef(false);
 
@@ -293,6 +294,10 @@ export default function ProjectAutosaveManager({ projectId }: ProjectAutosaveMan
           } catch {}
         }
         hydrationReadyRef.current = true;
+      } finally {
+        if (!cancelled && useProjectContentStore.getState().projectId === projectId) {
+          completeSwitch();
+        }
       }
     })();
 
@@ -301,7 +306,7 @@ export default function ProjectAutosaveManager({ projectId }: ProjectAutosaveMan
       hydrationReadyRef.current = false;
       try { (window as any).tanvaPaperRestored = false; } catch {}
     };
-  }, [projectId, setProject, hydrate, setError]);
+  }, [projectId, setProject, hydrate, setError, completeSwitch]);
 
   useEffect(() => {
     if (!projectId) return undefined;

@@ -26,6 +26,8 @@ type FlowResizableNodeShellProps = {
   minHeight?: number;
   /** true=始终可拖；selected=仅选中时可拖 */
   resizerVisible?: boolean | 'selected';
+  /** grow=内容可撑高（默认）；fixed=锁定 boxH，内容区内部滚动 */
+  heightMode?: 'grow' | 'fixed';
   widthKey?: 'boxW' | 'boxWidth';
   heightKey?: 'boxH' | 'boxHeight';
   className?: string;
@@ -38,7 +40,7 @@ type FlowResizableNodeShellProps = {
 
 /**
  * 统一节点外框缩放：四角 + 上下边拖拽，持久化 boxW/boxH。
- * boxH 作为用户设定的最小高度；内容超出时由 DOM 自然撑高，避免字段和错误信息被裁切。
+ * grow：boxH 为最小高度，内容可撑高；fixed：锁定 boxH，超出部分在节点内滚动。
  */
 export function FlowResizableNodeShell({
   id,
@@ -50,6 +52,7 @@ export function FlowResizableNodeShell({
   minWidth = 180,
   minHeight = 120,
   resizerVisible = true,
+  heightMode = 'grow',
   widthKey = 'boxW',
   heightKey = 'boxH',
   className,
@@ -91,9 +94,11 @@ export function FlowResizableNodeShell({
   useNodeInternalsSync(id, rootRef, [boxW, boxH]);
 
   const showResizer = resizerVisible === 'selected' ? !!selected : !!resizerVisible;
+  const isFixedHeight = heightMode === 'fixed';
   const shellClassName = [
     'flow-resizable-node',
     isResizing ? 'flow-resizable-node--resizing' : '',
+    isFixedHeight ? 'flow-resizable-node--fixed-height' : '',
     className,
   ]
     .filter(Boolean)
@@ -105,12 +110,13 @@ export function FlowResizableNodeShell({
       className={shellClassName}
       style={{
         width: boxW,
-        minHeight: boxH,
+        ...(isFixedHeight
+          ? { height: boxH, overflow: 'hidden' }
+          : { minHeight: boxH, overflow: 'visible' }),
         position: 'relative',
         display: 'flex',
         flexDirection: 'column',
         boxSizing: 'border-box',
-        overflow: 'visible',
         ...style,
       }}
     >
@@ -122,7 +128,16 @@ export function FlowResizableNodeShell({
         onResize={handleResize}
         onResizeEnd={handleResizeEnd}
       />
-      <div className="flow-resizable-node__body">{children}</div>
+      <div
+        className={[
+          'flow-resizable-node__body',
+          isFixedHeight ? 'flow-resizable-node__body--fixed' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        {children}
+      </div>
     </div>
   );
 }

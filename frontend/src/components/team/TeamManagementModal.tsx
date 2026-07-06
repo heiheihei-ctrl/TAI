@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { X, UserMinus, Crown, Shield, User, Mail, Copy, Check, SlidersHorizontal } from 'lucide-react';
 import { copyTextToClipboard } from '@/utils/clipboard';
 import { cn } from '@/lib/utils';
+import { computeMemberEffectiveAvailable } from '@/utils/teamQuotaDisplay';
 
 interface Props {
   teamId: string;
@@ -19,13 +20,32 @@ interface Props {
 
 type Tab = 'members' | 'subscription' | 'topup' | 'ledger';
 
+const ALL_TABS: Tab[] = ['members', 'subscription', 'topup', 'ledger'];
+const MEMBER_TABS: Tab[] = ['members', 'ledger'];
+
+const TAB_LABEL: Record<Tab, string> = {
+  members: '成员',
+  subscription: '套餐',
+  topup: '积分充值',
+  ledger: '记录',
+};
+
 export function TeamManagementModal({ teamId, onClose, initialTab }: Props) {
   const { teams } = useTeamStore();
   const currentUser = useAuthStore((s) => s.user);
   const team = teams.find((t) => t.id === teamId);
-  const [tab, setTab] = useState<Tab>(initialTab ?? 'members');
   const myRole = team?.myRole;
   const canManage = myRole === 'owner' || myRole === 'admin';
+  const visibleTabs = canManage ? ALL_TABS : MEMBER_TABS;
+  const resolvedInitialTab =
+    initialTab && visibleTabs.includes(initialTab) ? initialTab : 'members';
+  const [tab, setTab] = useState<Tab>(resolvedInitialTab);
+
+  useEffect(() => {
+    if (!visibleTabs.includes(tab)) {
+      setTab('members');
+    }
+  }, [tab, visibleTabs]);
 
   return createPortal(
     <div
@@ -39,7 +59,12 @@ export function TeamManagementModal({ teamId, onClose, initialTab }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div>
-            <h2 className="text-base font-semibold text-slate-800">{team?.name ?? '团队管理'}</h2>
+            <h2 className="text-base font-semibold text-slate-800">
+              {team?.name ?? '团队管理'}
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {canManage ? '成员管理 / 配额设置' : '成员与配额'}
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -51,7 +76,7 @@ export function TeamManagementModal({ teamId, onClose, initialTab }: Props) {
 
         {/* Tabs */}
         <div className="flex px-6 border-b border-slate-100 gap-4">
-          {(['members', 'subscription', 'topup', 'ledger'] as Tab[]).map((t) => (
+          {visibleTabs.map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -62,7 +87,7 @@ export function TeamManagementModal({ teamId, onClose, initialTab }: Props) {
                   : 'border-transparent text-slate-400 hover:text-slate-600',
               )}
             >
-              {t === 'members' ? '成员' : t === 'subscription' ? '套餐' : t === 'topup' ? '积分充值' : '记录'}
+              {TAB_LABEL[t]}
             </button>
           ))}
         </div>
@@ -111,13 +136,19 @@ function MembersTab({
   const [members, setMembers] = useState<any[]>([]);
   const [totalSeats, setTotalSeats] = useState<number | null>(null);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
   const [quotaExpandedUserId, setQuotaExpandedUserId] = useState<string | null>(null);
+  const [teamBalance, setTeamBalance] = useState(0);
 
   useEffect(() => {
     teamApi.getMembers(teamId).then(setMembers).catch(() => {});
+    teamCreditsApi
+      .getAccount(teamId)
+      .then((acc) => setTeamBalance(Math.max(0, acc?.balance ?? 0)))
+      .catch(() => setTeamBalance(0));
     teamSeatPackageApi
       .listPackages(teamId)
       .then((s: any) => {
@@ -133,9 +164,12 @@ function MembersTab({
 
   const handleInvite = async () => {
     setInviteLoading(true);
+    setInviteError(null);
     try {
       const inv = await teamApi.createInvite(teamId, { expiresInDays: 7 });
       setInviteCode(inv.code);
+    } catch (e: any) {
+      setInviteError(e?.message || '生成邀请失败，请重试');
     } finally {
       setInviteLoading(false);
     }
@@ -276,26 +310,13 @@ function MembersTab({
                   </div>
                 </div>
 
-                {/* 配额摘要行（已设置时展示）*/}
-                {!isQuotaExpanded && (m.creditQuotaMonthly != null || m.creditQuotaTotal != null) && (
-                  <div className="px-2 pb-1.5 flex gap-3">
-                    {m.creditQuotaMonthly != null && (
-                      <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
-                        月度
-                        <span className="text-slate-600 font-medium mx-0.5">{m.creditUsedThisCycle?.toLocaleString() ?? 0}</span>
-                        /
-                        <span className="text-slate-500 mx-0.5">{m.creditQuotaMonthly.toLocaleString()}</span>
-                      </span>
-                    )}
-                    {m.creditQuotaTotal != null && (
-                      <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
-                        总量
-                        <span className="text-slate-600 font-medium mx-0.5">{m.creditUsedTotal?.toLocaleString() ?? 0}</span>
-                        /
-                        <span className="text-slate-500 mx-0.5">{m.creditQuotaTotal.toLocaleString()}</span>
-                      </span>
-                    )}
-                  </div>
+                {/* 配额摘要行 */}
+                {!isQuotaExpanded && (
+                  <MemberQuotaSummary
+                    member={m}
+                    canManage={canManage}
+                    teamBalance={teamBalance}
+                  />
                 )}
 
                 {/* 内联配额编辑器 */}
@@ -355,21 +376,32 @@ function MembersTab({
               </div>
               <p className="text-xs text-slate-400">
                 链接或邀请码 7 天内有效。
-                <button onClick={() => setInviteCode(null)} className="ml-1 text-blue-500 hover:underline">
+                <button
+                  onClick={() => {
+                    setInviteCode(null);
+                    setInviteError(null);
+                  }}
+                  className="ml-1 text-blue-500 hover:underline"
+                >
                   重新生成
                 </button>
               </p>
             </div>
           ) : (
-            <Button
-              size="sm"
-              onClick={handleInvite}
-              disabled={inviteLoading}
-              variant="outline"
-              className="rounded-xl"
-            >
-              {inviteLoading ? '生成中…' : '生成邀请链接 / 邀请码'}
-            </Button>
+            <div className="space-y-2">
+              <Button
+                size="sm"
+                onClick={handleInvite}
+                disabled={inviteLoading}
+                variant="outline"
+                className="rounded-xl"
+              >
+                {inviteLoading ? '生成中…' : '生成邀请链接 / 邀请码'}
+              </Button>
+              {inviteError && (
+                <p className="text-xs text-red-500">{inviteError}</p>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -388,6 +420,97 @@ function MembersTab({
         </div>
       )}
     </>
+  );
+}
+
+function MemberQuotaSummary({
+  member,
+  canManage = false,
+  teamBalance = 0,
+}: {
+  member: {
+    creditQuotaMonthly?: number | null;
+    creditQuotaTotal?: number | null;
+    creditUsedThisCycle?: number;
+    creditUsedTotal?: number;
+  };
+  canManage?: boolean;
+  teamBalance?: number;
+}) {
+  const hasMonthly = member.creditQuotaMonthly != null;
+  const hasTotal = member.creditQuotaTotal != null;
+  const unlimited = !hasMonthly && !hasTotal;
+  const effectiveAvailable = computeMemberEffectiveAvailable(member, teamBalance);
+
+  if (unlimited) {
+    if (canManage) {
+      return (
+        <div className="px-2 pb-1.5 flex flex-wrap gap-3 text-[10px] text-slate-400">
+          <span>个人分配：不限</span>
+          <span>
+            可用{' '}
+            <span className="text-slate-600 font-medium">
+              {effectiveAvailable.toLocaleString()}
+            </span>
+            （团队池 {teamBalance.toLocaleString()}）
+          </span>
+        </div>
+      );
+    }
+    return (
+      <div className="px-2 pb-1.5 flex flex-wrap gap-3 text-[10px] text-slate-400">
+        <span>个人分配：不限</span>
+        <span>
+          可用{' '}
+          <span className="text-slate-600 font-medium">
+            {effectiveAvailable.toLocaleString()}
+          </span>
+        </span>
+      </div>
+    );
+  }
+
+  const monthlyUsed = member.creditUsedThisCycle ?? 0;
+  const totalUsed = member.creditUsedTotal ?? 0;
+  const monthlyRemaining = Math.max(0, (member.creditQuotaMonthly ?? 0) - monthlyUsed);
+  const totalRemaining = Math.max(0, (member.creditQuotaTotal ?? 0) - totalUsed);
+
+  return (
+    <div className="px-2 pb-1.5 flex flex-wrap gap-3 text-[10px] text-slate-400">
+      <span>
+        可用{' '}
+        <span className="text-slate-700 font-semibold">
+          {effectiveAvailable.toLocaleString()}
+        </span>
+      </span>
+      {hasMonthly && (
+        <span className="flex items-center gap-0.5">
+          {canManage ? '月度分配' : '月度剩余'}
+          <span className="text-slate-600 font-medium mx-0.5">
+            {(canManage ? monthlyUsed : monthlyRemaining).toLocaleString()}
+          </span>
+          /
+          <span className="text-slate-500 mx-0.5">
+            {member.creditQuotaMonthly!.toLocaleString()}
+          </span>
+        </span>
+      )}
+      {hasTotal && (
+        <span className="flex items-center gap-0.5">
+          {canManage ? '总量分配' : '总量剩余'}
+          <span className="text-slate-600 font-medium mx-0.5">
+            {(canManage ? totalUsed : totalRemaining).toLocaleString()}
+          </span>
+          /
+          <span className="text-slate-500 mx-0.5">
+            {member.creditQuotaTotal!.toLocaleString()}
+          </span>
+        </span>
+      )}
+      {canManage && (
+        <span>团队池 {teamBalance.toLocaleString()}</span>
+      )}
+    </div>
   );
 }
 
