@@ -78,7 +78,7 @@ import { authApi, type GoogleApiKeyInfo } from "@/services/authApi";
 import ReferralRewards from "@/components/ReferralRewards";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import MembershipPanel from "@/components/payment/MembershipPanel";
-import TeamSwitcher from "@/components/team/TeamSwitcher";
+// import TeamSwitcher from "@/components/team/TeamSwitcher";
 import TeamQuotaBadge from "@/components/team/TeamQuotaBadge";
 import PricingCatalogModal from "@/components/layout/PricingCatalogModal";
 import { useTranslation } from "react-i18next";
@@ -2377,7 +2377,8 @@ const FloatingHeader: React.FC = () => {
               </Button>
             )}
 
-            <TeamSwitcher />
+            {/* 个人账户/团队切换下拉 — 暂时隐藏 */}
+            {/* <TeamSwitcher /> */}
             <TeamQuotaBadge />
 
             <Button

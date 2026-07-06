@@ -45,12 +45,12 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({ children, open: cont
               onClick: composedOnClick
             });
           }
-          // if (child.type === DropdownMenuContent) {
-          //   return React.cloneElement(child as React.ReactElement, {
-          //     isOpen,
-          //     onClose: handleClose
-          //   });
-          // }
+          if (child.type === DropdownMenuContent) {
+            return React.cloneElement(child as React.ReactElement, {
+              isOpen,
+              onClose: handleClose
+            });
+          }
         }
         return child;
       })}
