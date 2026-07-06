@@ -26,36 +26,36 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({ children, open: cont
   const handleToggle = () => setIsOpen(!isOpen);
   const handleClose = () => setIsOpen(false);
   
-  // return (
-  //   <div className="relative dropdown-menu-root" {...props}>
-  //     {React.Children.map(children, (child) => {
-  //       if (React.isValidElement(child)) {
-  //         // Identify components by type instead of role.
-  //         if (child.type === DropdownMenuTrigger) {
-  //           const originalOnClick = child.props?.onClick;
-  //           const composedOnClick = (event: React.MouseEvent<HTMLButtonElement>) => {
-  //             if (typeof originalOnClick === 'function') {
-  //               originalOnClick(event);
-  //             }
-  //             if (!event.defaultPrevented) {
-  //               handleToggle();
-  //             }
-  //           };
-  //           return React.cloneElement(child as React.ReactElement, {
-  //             onClick: composedOnClick
-  //           });
-  //         }
-  //         if (child.type === DropdownMenuContent) {
-  //           return React.cloneElement(child as React.ReactElement, {
-  //             isOpen,
-  //             onClose: handleClose
-  //           });
-  //         }
-  //       }
-  //       return child;
-  //     })}
-  //   </div>
-  // );
+  return (
+    <div className="relative dropdown-menu-root" {...props}>
+      {React.Children.map(children, (child) => {
+        if (React.isValidElement(child)) {
+          // Identify components by type instead of role.
+          if (child.type === DropdownMenuTrigger) {
+            const originalOnClick = child.props?.onClick;
+            const composedOnClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+              if (typeof originalOnClick === 'function') {
+                originalOnClick(event);
+              }
+              if (!event.defaultPrevented) {
+                handleToggle();
+              }
+            };
+            return React.cloneElement(child as React.ReactElement, {
+              onClick: composedOnClick
+            });
+          }
+          // if (child.type === DropdownMenuContent) {
+          //   return React.cloneElement(child as React.ReactElement, {
+          //     isOpen,
+          //     onClose: handleClose
+          //   });
+          // }
+        }
+        return child;
+      })}
+    </div>
+  );
 };
 
 export interface DropdownMenuTriggerProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
