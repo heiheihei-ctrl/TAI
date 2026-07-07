@@ -11,6 +11,7 @@ import { useFlowImageAssetUrl } from "@/hooks/useFlowImageAssetUrl";
 import { toRenderableImageSrc } from "@/utils/imageSource";
 import { useAIChatStore } from "@/stores/aiChatStore";
 import { useLocaleText } from "@/utils/localeText";
+import { useFlowOnboardingStore } from "@/stores/flowOnboardingStore";
 import { flowImagePreviewWell, flowLetterboxBackground } from "./flowNodeDarkTheme";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "../../ui/dropdown-menu";
 import RunCreditBadge from "./RunCreditBadge";
@@ -515,6 +516,10 @@ function InputImageThumb({
 
 function GenerateNodeInner({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
+  const onboardingActive = useFlowOnboardingStore((s) => s.active);
+  const onboardingGenerateId = useFlowOnboardingStore((s) => s.generateNodeId);
+  const isOnboardingRunTarget =
+    onboardingActive && onboardingGenerateId === id;
   const { status, error } = data;
   const aiProvider = useAIChatStore((state) => state.aiProvider);
   const bananaImageRoute = useAIChatStore((state) => state.bananaImageRoute);
@@ -946,6 +951,9 @@ function GenerateNodeInner({ id, data, selected }: Props) {
             onClick={onRun}
             disabled={status === "running"}
             className='run-btn-with-credit'
+            data-flow-onboarding={
+              isOnboardingRunTarget ? "generate-run-button" : undefined
+            }
             style={{
               fontSize: 12,
               display: "inline-flex",

@@ -29,6 +29,7 @@ import { useCanvasStore } from "@/stores";
 import { useToolStore } from "@/stores";
 import "reactflow/dist/style.css";
 import "./flow.css";
+import "./flow-onboarding.css";
 import type {
   FlowTemplate,
   TemplateIndexEntry,
@@ -46,6 +47,11 @@ import {
 } from "@/services/templateStore";
 
 import TextPromptNode from "./nodes/TextPromptNode";
+import FlowOnboardingGuide from "./FlowOnboardingGuide";
+import {
+  isFlowOnboardingCompleted,
+  useFlowOnboardingStore,
+} from "@/stores/flowOnboardingStore";
 import TextPromptProNode from "./nodes/TextPromptProNode";
 import TextChatNode from "./nodes/TextChatNode";
 import ImageNode from "./nodes/ImageNode";
@@ -3170,6 +3176,7 @@ const NodePaletteButton: React.FC<{
   isDarkTheme?: boolean;
   showZh?: boolean;
   vipOnly?: boolean;
+  onboardingTarget?: string;
   onClick: () => void;
 }> = ({
   zh,
@@ -3182,6 +3189,7 @@ const NodePaletteButton: React.FC<{
   isDarkTheme = false,
   showZh = true,
   vipOnly = false,
+  onboardingTarget,
   onClick,
 }) => {
   const creditsDisplay =
@@ -3234,6 +3242,7 @@ const NodePaletteButton: React.FC<{
   return (
     <button
       type='button'
+      data-flow-onboarding-target={onboardingTarget}
       onClick={disabled || isVipLocked ? undefined : onClick}
       style={buttonStyle}
       onMouseEnter={(e) =>
@@ -3709,6 +3718,7 @@ function useFlowViewport() {
 
 function FlowInner() {
   const { lt, isZh } = useLocaleText();
+  const flowUIEnabled = useUIStore((s) => s.flowUIEnabled);
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const nodesRef = React.useRef<RFNode[]>([]);
@@ -3719,6 +3729,27 @@ function FlowInner() {
   React.useEffect(() => {
     edgesRef.current = edges as Edge[];
   }, [edges]);
+
+  React.useEffect(() => {
+    if (!flowUIEnabled) return;
+    if (isFlowOnboardingCompleted()) return;
+    const timer = window.setTimeout(() => {
+      const state = useFlowOnboardingStore.getState();
+      if (state.active) return;
+      state.start(nodesRef.current.map((node) => node.id));
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [flowUIEnabled]);
+
+  React.useEffect(() => {
+    const handler = () => {
+      useFlowOnboardingStore
+        .getState()
+        .start(nodesRef.current.map((node) => node.id));
+    };
+    window.addEventListener("flow:start-onboarding", handler);
+    return () => window.removeEventListener("flow:start-onboarding", handler);
+  }, []);
 
   const projectIdForCollab = useProjectContentStore((s) => s.projectId);
   const activeTeamForCollab = useTeamStore((s) => {
@@ -21799,7 +21830,6 @@ function FlowInner() {
   );
 
   const showFlowPanel = useUIStore((s) => s.showFlowPanel);
-  const flowUIEnabled = useUIStore((s) => s.flowUIEnabled);
 
   const selectedNonGroupNodeCount = React.useMemo(
     () =>
@@ -23194,7 +23224,7 @@ function FlowInner() {
       )}
 
       {/* 添加面板（双击空白处出现） */}
-      <div ref={addPanelRef} style={addPanelStyle} className='tanva-add-panel'>
+      <div ref={addPanelRef} style={addPanelStyle} className='tanva-add-panel' data-flow-onboarding="add-panel">
         {addPanel.visible && (
           <div
             style={{
@@ -23519,6 +23549,12 @@ function FlowInner() {
                               isDarkTheme={isFlowBlackTheme}
                               showZh={isZh}
                               vipOnly={isVipLocked}
+                              onboardingTarget={
+                                config.nodeKey === "textPrompt" ||
+                                config.nodeKey === "generate"
+                                  ? config.nodeKey
+                                  : undefined
+                              }
                               onClick={() =>
                                 createNodeAtWorldCenter(
                                   resolveFlowNodeTypeFromConfig(config),
@@ -23995,6 +24031,11 @@ function FlowInner() {
         />
         </div>
       </div>
+      <FlowOnboardingGuide
+        addPanelVisible={addPanel.visible}
+        nodes={nodes}
+        edges={edges}
+      />
     </FlowRenderModeProvider>
   );
 }

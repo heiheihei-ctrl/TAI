@@ -1,0 +1,121 @@
+.flow-onboarding-root {
+  position: fixed;
+  inset: 0;
+  z-index: 12050;
+  pointer-events: none;
+}
+
+.flow-onboarding-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.flow-onboarding-spotlight {
+  position: absolute;
+  border-radius: 12px;
+  box-shadow:
+    0 0 0 9999px rgba(15, 23, 42, 0.45),
+    0 0 0 2px rgba(34, 197, 94, 0.95),
+    0 10px 30px rgba(34, 197, 94, 0.25);
+  pointer-events: none;
+  transition:
+    top 0.2s ease,
+    left 0.2s ease,
+    width 0.2s ease,
+    height 0.2s ease;
+}
+
+.flow-onboarding-card {
+  position: fixed;
+  width: min(340px, calc(100vw - 32px));
+  padding: 14px 16px 16px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+  pointer-events: auto;
+}
+
+.flow-onboarding-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.flow-onboarding-step-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: #16a34a;
+}
+
+.flow-onboarding-skip {
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.flow-onboarding-skip:hover {
+  color: #111827;
+}
+
+.flow-onboarding-text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #111827;
+  font-weight: 600;
+}
+
+.flow-onboarding-hint {
+  margin-top: 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #374151;
+}
+
+.flow-onboarding-hint-muted {
+  color: #6b7280;
+}
+
+.flow-onboarding-spotlight-center {
+  border-radius: 16px;
+  box-shadow:
+    0 0 0 9999px rgba(15, 23, 42, 0.45),
+    0 0 0 2px rgba(34, 197, 94, 0.95),
+    0 0 0 10px rgba(34, 197, 94, 0.12),
+    0 12px 36px rgba(34, 197, 94, 0.22);
+}
+
+.flow-onboarding-color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+[data-flow-onboarding-target="textPrompt"].flow-onboarding-pulse,
+[data-flow-onboarding-target="generate"].flow-onboarding-pulse,
+[data-flow-onboarding="text-prompt-input"].flow-onboarding-pulse,
+[data-flow-onboarding="generate-run-button"].flow-onboarding-pulse {
+  animation: flow-onboarding-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes flow-onboarding-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.12);
+  }
+}

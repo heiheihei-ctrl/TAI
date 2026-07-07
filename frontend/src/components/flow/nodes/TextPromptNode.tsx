@@ -3,6 +3,7 @@ import { Handle, Position, useReactFlow, useStore, useUpdateNodeInternals, type 
 import { resolveTextFromSourceNode } from '../utils/textSource';
 import { collectPromptNodeImageMentionItems } from '../utils/imageMentionCandidates';
 import { useLocaleText } from '@/utils/localeText';
+import { useFlowOnboardingStore } from '@/stores/flowOnboardingStore';
 import { useCanvasStore } from '@/stores';
 import FlowResizableNodeShell from './FlowResizableNodeShell';
 import InlineImageMentionEditor from '@/components/common/InlineImageMentionEditor';
@@ -17,6 +18,8 @@ const DEFAULT_TITLE = 'Prompt';
 
 function TextPromptNodeInner({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
+  const onboardingActive = useFlowOnboardingStore((s) => s.active);
+  const onboardingTextId = useFlowOnboardingStore((s) => s.textPromptNodeId);
   const rf = useReactFlow();
   const edges = useStore((state: ReactFlowState) => state.edges);
   const [value, setValue] = React.useState<string>(data.text || '');
@@ -277,6 +280,14 @@ function TextPromptNodeInner({ id, data, selected }: Props) {
           </div>
         )}
       </div>
+      <div
+        data-flow-onboarding={
+          onboardingActive && onboardingTextId === id
+            ? 'text-prompt-input'
+            : undefined
+        }
+        style={{ display: 'flex', flex: 1, minHeight: 0 }}
+      >
       <InlineImageMentionEditor
         value={value}
         items={imageMentionItems}
@@ -327,6 +338,7 @@ function TextPromptNodeInner({ id, data, selected }: Props) {
           cursor: 'text'
         }}
       />
+      </div>
       <Handle
         type="target"
         position={Position.Left}

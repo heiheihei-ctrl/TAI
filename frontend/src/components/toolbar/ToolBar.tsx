@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
-import { Eraser, Square, Trash2, Box, Image, Layers, Sparkles, Type, GitBranch, MousePointer2, LayoutTemplate, FolderOpen } from 'lucide-react';
+import { Eraser, Square, Trash2, Box, Image, Layers, Sparkles, Type, GitBranch, MousePointer2, LayoutTemplate, FolderOpen, HelpCircle } from 'lucide-react';
 import TextStylePanel from './TextStylePanel';
 import ColorPicker from './ColorPicker';
 import AbrBrushPicker from './AbrBrushPicker';
@@ -17,6 +17,7 @@ import { isRaster } from '@/utils/paperCoords';
 import { canvasToDataUrl } from '@/utils/imageConcurrency';
 import { isRemoteUrl, normalizePersistableImageRef } from '@/utils/imageSource';
 import { useLocaleText } from '@/utils/localeText';
+import { useFlowOnboardingStore } from '@/stores/flowOnboardingStore';
 
 // 统一画板：移除 Node 模式专属按钮组件
 
@@ -348,6 +349,7 @@ const VerticalSlider: React.FC<{
 
 const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
   const { lt } = useLocaleText();
+  const flowOnboardingActive = useFlowOnboardingStore((state) => state.active);
   // 使用 Zustand store
   const {
     drawMode,
@@ -1311,6 +1313,30 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
           </Button>
         </TooltipTrigger>
         <TooltipContent side="right">{lt('公共模板', 'Public Templates')}</TooltipContent>
+      </Tooltip>
+
+      {/* 新手引导：始终可见，跳过后不再自动弹出，但可随时手动重开 */}
+      <Tooltip open={isSubMenuOpen ? false : undefined}>
+        <TooltipTrigger asChild>
+          <Button
+            variant={flowOnboardingActive ? 'default' : 'outline'}
+            size="sm"
+            className={cn(
+              "p-0 h-8 w-8 rounded-full",
+              getActiveButtonStyle(flowOnboardingActive)
+            )}
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('flow:start-onboarding'));
+            }}
+          >
+            <HelpCircle className="w-4 h-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="right">
+          {flowOnboardingActive
+            ? lt('新手引导进行中', 'Onboarding in progress')
+            : lt('新手引导', 'Onboarding guide')}
+        </TooltipContent>
       </Tooltip>
 
       {/* 自动对齐开关已移至设置面板的视图外观中 */}
