@@ -15,6 +15,7 @@ type Rect = {
 };
 
 const PADDING = 10;
+const CONNECT_NODES_PADDING = 72;
 const TEXT_HANDLE_COLOR = '#22c55e';
 const CANVAS_CENTER_COVERAGE = 0.8;
 
@@ -106,7 +107,7 @@ function getTargetRect(
         if (rect) rects.push(rect);
       }
       const merged = mergeRects(rects);
-      return merged ? inflateRect(merged, PADDING) : null;
+      return merged ? inflateRect(merged, CONNECT_NODES_PADDING) : null;
     }
     case 'generate-run-button':
       return getElementRect('[data-flow-onboarding="generate-run-button"]');
@@ -208,6 +209,8 @@ export default function FlowOnboardingGuide({
   const currentStep = FLOW_ONBOARDING_STEPS[step];
   const stepTarget = currentStep?.target ?? 'canvas-center';
   const isCanvasCenterStep = stepTarget === 'canvas-center';
+  const skipExtraSpotlightPadding =
+    isCanvasCenterStep || stepTarget === 'connect-nodes';
 
   React.useEffect(() => {
     if (!active) return;
@@ -276,7 +279,9 @@ export default function FlowOnboardingGuide({
 
     const updateRect = () => {
       const rect = getTargetRect(stepTarget, textPromptNodeId, generateNodeId);
-      setSpotRect(rect ? inflateRect(rect, isCanvasCenterStep ? 0 : PADDING) : null);
+      setSpotRect(
+        rect ? inflateRect(rect, skipExtraSpotlightPadding ? 0 : PADDING) : null
+      );
     };
 
     updateRect();
@@ -300,7 +305,7 @@ export default function FlowOnboardingGuide({
       observer.disconnect();
       window.clearInterval(interval);
     };
-  }, [active, generateNodeId, isCanvasCenterStep, stepTarget, textPromptNodeId]);
+  }, [active, generateNodeId, skipExtraSpotlightPadding, stepTarget, textPromptNodeId]);
 
   React.useEffect(() => {
     if (!active || step !== 6) return;
