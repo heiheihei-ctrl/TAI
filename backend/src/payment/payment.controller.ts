@@ -27,7 +27,7 @@ export class PaymentController {
     @Request() req: any,
     @Body() dto: CreateOrderDto,
   ) {
-    return this.paymentService.createOrder(req.user.sub, dto);
+    return this.paymentService.createOrder(req.user.sub, dto, req.user?.role);
   }
 
   /**

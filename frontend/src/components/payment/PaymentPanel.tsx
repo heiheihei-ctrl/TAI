@@ -10,6 +10,7 @@ import React, {
 import { cn } from "@/lib/utils";
 import { ArrowLeft, FileText, CheckCircle, Clock, XCircle, Loader2, RefreshCw, Pencil } from "lucide-react";
 import { useAIChatStore } from "@/stores/aiChatStore";
+import { useAuthStore } from "@/stores/authStore";
 import {
   createPaymentOrder,
   getPaymentStatus,
@@ -31,7 +32,8 @@ const showToast = (message: string, type: "success" | "error" | "info" = "info")
   );
 };
 
-const MIN_CUSTOM_RECHARGE_CREDITS = 1;
+const MIN_CUSTOM_RECHARGE_AMOUNT = 200;
+const MIN_CUSTOM_RECHARGE_CREDITS_ADMIN = 1;
 type TimerHandle = ReturnType<typeof setInterval>;
 
 export type PaymentPanelHandle = {
@@ -73,6 +75,11 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
   const orderRequestIdRef = useRef(0);
 
   const isWhite = useAIChatStore((s) => s.chatTheme === "white");
+  const userRole = useAuthStore((s) => s.user?.role);
+  const isAdmin = useMemo(() => {
+    const normalized = (userRole || "").trim().toLowerCase();
+    return normalized === "admin" || normalized === "normal_admin";
+  }, [userRole]);
   const [customAmountMode, setCustomAmountMode] = useState(false);
   const [customCreditsInput, setCustomCreditsInput] = useState("");
   const [paymentSuccessMessage, setPaymentSuccessMessage] = useState<string | null>(null);
@@ -100,12 +107,17 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
     }
     return { amount: 0, credits: 0 };
   }, [selectedPackage, packages, customAmountMode, customCreditsInput, creditsPerYuan]);
-  const minCustomRechargeCredits = MIN_CUSTOM_RECHARGE_CREDITS;
+  const minCustomRechargeAmount = isAdmin ? 0.01 : MIN_CUSTOM_RECHARGE_AMOUNT;
+  const minCustomRechargeCredits = isAdmin
+    ? MIN_CUSTOM_RECHARGE_CREDITS_ADMIN
+    : Math.round(MIN_CUSTOM_RECHARGE_AMOUNT * creditsPerYuan);
   const isCustomCreditsBelowMinimum =
     customAmountMode && currentPayInfo.credits > 0 && currentPayInfo.credits < minCustomRechargeCredits;
   const isCustomAmountInvalid =
     customAmountMode &&
-    (currentPayInfo.credits < minCustomRechargeCredits || currentPayInfo.amount <= 0);
+    (currentPayInfo.credits < minCustomRechargeCredits ||
+      currentPayInfo.amount < minCustomRechargeAmount ||
+      currentPayInfo.amount <= 0);
 
   // 筛选后的订单列表
   const filteredOrders = useMemo(() => {
@@ -681,10 +693,15 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
                     </span>
                   </div>
                   <div className={cn("mt-2 text-xs", isWhite ? "text-slate-500" : "text-zinc-400")}>
-                    {lt(
-                      `自定义充值最低 ${minCustomRechargeCredits} 积分`,
-                      `Custom top-up minimum is ${minCustomRechargeCredits} credit(s)`,
-                    )}
+                    {isAdmin
+                      ? lt(
+                          `管理员自定义充值最低 ${minCustomRechargeCredits} 积分`,
+                          `Admin custom top-up minimum is ${minCustomRechargeCredits} credit(s)`,
+                        )
+                      : lt(
+                          `自定义充值最低为 ${minCustomRechargeCredits} 积分（¥${MIN_CUSTOM_RECHARGE_AMOUNT}）`,
+                          `Custom top-up minimum is ${minCustomRechargeCredits} credits (¥${MIN_CUSTOM_RECHARGE_AMOUNT})`,
+                        )}
                   </div>
                 </div>
               ) : (
@@ -767,10 +784,15 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
                   ? parseCustomCredits(customCreditsInput) < 1
                     ? lt("请输入积分数量", "Please enter credits")
                     : isCustomCreditsBelowMinimum
-                    ? lt(
-                        `自定义充值最低 ${minCustomRechargeCredits} 积分`,
-                        `Custom top-up minimum is ${minCustomRechargeCredits} credit(s)`,
-                      )
+                    ? isAdmin
+                      ? lt(
+                          `自定义充值最低 ${minCustomRechargeCredits} 积分`,
+                          `Custom top-up minimum is ${minCustomRechargeCredits} credit(s)`,
+                        )
+                      : lt(
+                          `自定义充值最低 ${minCustomRechargeCredits} 积分（¥${MIN_CUSTOM_RECHARGE_AMOUNT}）`,
+                          `Custom top-up minimum is ${minCustomRechargeCredits} credits (¥${MIN_CUSTOM_RECHARGE_AMOUNT})`,
+                        )
                     : lt("正在生成二维码…", "Generating QR code...")
                   : lt("选择套餐生成二维码", "Select a package to generate QR code")}
               </span>

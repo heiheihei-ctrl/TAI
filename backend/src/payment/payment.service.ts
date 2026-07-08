@@ -264,6 +264,11 @@ export class PaymentService implements OnModuleInit {
     return Math.round(amount * 100) / 100;
   }
 
+  private isPrivilegedAdminRole(role?: string | null): boolean {
+    const normalized = String(role || '').trim().toLowerCase();
+    return normalized === 'admin' || normalized === 'normal_admin';
+  }
+
   private getRechargePackageByAmount(amount: number) {
     return RECHARGE_PACKAGES.find(
       (item) => Math.abs(item.price - amount) < 0.0001,
@@ -343,7 +348,11 @@ export class PaymentService implements OnModuleInit {
     });
   }
 
-  async createOrder(userId: string, dto: CreateOrderDto): Promise<PaymentOrderResponse> {
+  async createOrder(
+    userId: string,
+    dto: CreateOrderDto,
+    userRole?: string | null,
+  ): Promise<PaymentOrderResponse> {
     const { paymentMethod } = dto;
     let orderAmount = dto.amount;
     let orderCredits = dto.credits;
@@ -401,7 +410,11 @@ export class PaymentService implements OnModuleInit {
       }
       orderAmount = normalizedAmount;
       const packageConfig = this.getRechargePackageByAmount(orderAmount);
-      if (!packageConfig && orderAmount < MIN_CUSTOM_RECHARGE_AMOUNT) {
+      if (
+        !packageConfig &&
+        orderAmount < MIN_CUSTOM_RECHARGE_AMOUNT &&
+        !this.isPrivilegedAdminRole(userRole)
+      ) {
         throw new BadRequestException(`自定义充值最低金额为 ¥${MIN_CUSTOM_RECHARGE_AMOUNT}`);
       }
       orderCredits = this.resolveRechargeOrderCredits(orderAmount);

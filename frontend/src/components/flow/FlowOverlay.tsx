@@ -48,6 +48,7 @@ import {
 
 import TextPromptNode from "./nodes/TextPromptNode";
 import FlowOnboardingGuide from "./FlowOnboardingGuide";
+import FlowOnboardingAutoStepBridge from "./FlowOnboardingAutoStepBridge";
 import {
   isFlowOnboardingCompleted,
   useFlowOnboardingStore,
@@ -120,6 +121,7 @@ import {
 import { useShallow } from "zustand/react/shallow";
 import { useProjectContentStore } from "@/stores/projectContentStore";
 import { useTeamStore } from "@/stores/teamStore";
+import { SHOW_TEAM_COLLABORATION } from "@/config/featureFlags";
 import { useFlowCollabIntegration } from "@/hooks/useFlowCollabIntegration";
 import RemoteFlowSelectionOverlays from "@/components/collaboration/RemoteFlowSelectionOverlays";
 import { useImageHistoryStore } from "@/stores/imageHistoryStore";
@@ -3762,7 +3764,7 @@ function FlowInner() {
   );
   const flowCollab = useFlowCollabIntegration({
     projectId: projectIdForCollab,
-    enabled: !!activeTeamForCollab && !!projectIdForCollab,
+    enabled: SHOW_TEAM_COLLABORATION && !!activeTeamForCollab && !!projectIdForCollab,
     setNodes,
     setEdges,
     normalizeNodeType: normalizeFlowNodeType,
@@ -6966,6 +6968,33 @@ function FlowInner() {
       openAddPanelAt(centerX, centerY, opts);
     },
     [openAddPanelAt]
+  );
+
+  const scrollOnboardingNodesIntoView = React.useCallback(
+    async (nodeIds: string[]) => {
+      const validIds = nodeIds.filter((id) => Boolean(rf.getNode(id)));
+      if (!validIds.length) return;
+      try {
+        await rf.fitView({
+          nodes: validIds.map((id) => ({ id })),
+          padding: 0.22,
+          duration: 300,
+          maxZoom: 1,
+          minZoom: 0.15,
+        });
+        const vp = rf.getViewport();
+        const dpr =
+          typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+        useCanvasStore.getState().setZoom(vp.zoom);
+        useCanvasStore.getState().setPan(
+          (vp.x * dpr) / vp.zoom,
+          (vp.y * dpr) / vp.zoom
+        );
+      } catch {
+        /* noop */
+      }
+    },
+    [rf]
   );
 
   // 允许外部（如工具栏按钮）打开添加/模板面板
@@ -22807,7 +22836,7 @@ function FlowInner() {
         className={`tanva-flow-overlay absolute inset-0 ${
           isFlowBlackTheme ? "tanva-flow-theme-mono-dark" : ""
         } ${
-          activeTeamForCollab ? "team-collab-enabled" : ""
+          SHOW_TEAM_COLLABORATION && activeTeamForCollab ? "team-collab-enabled" : ""
         } ${
           isPointerMode ? "pointer-mode" : ""
         } ${isMarqueeMode ? "marquee-mode" : ""} ${
@@ -23029,7 +23058,7 @@ function FlowInner() {
             {!isLargeGraphForMiniMapImageOverlay && (
               <MiniMapImageOverlay viewportContainerRef={containerRef} />
             )}
-            {activeTeamForCollab && (
+            {SHOW_TEAM_COLLABORATION && activeTeamForCollab && (
               <RemoteFlowSelectionOverlays
                 nodes={nodes as RFNode[]}
                 remoteSelections={flowCollab.remoteFlowSelections}
@@ -23551,7 +23580,10 @@ function FlowInner() {
                               vipOnly={isVipLocked}
                               onboardingTarget={
                                 config.nodeKey === "textPrompt" ||
-                                config.nodeKey === "generate"
+                                config.nodeKey === "generate" ||
+                                config.nodeKey === "image" ||
+                                config.nodeKey === "generateRef" ||
+                                config.nodeKey === "klingVideo"
                                   ? config.nodeKey
                                   : undefined
                               }
@@ -24031,10 +24063,18 @@ function FlowInner() {
         />
         </div>
       </div>
+      <FlowOnboardingAutoStepBridge
+        containerRef={containerRef}
+        openAddPanelAtContainerCenter={openAddPanelAtContainerCenter}
+        createNodeAtWorldCenter={createNodeAtWorldCenter}
+        onConnect={onConnect}
+        rf={rf}
+      />
       <FlowOnboardingGuide
         addPanelVisible={addPanel.visible}
         nodes={nodes}
         edges={edges}
+        scrollNodesIntoView={scrollOnboardingNodesIntoView}
       />
     </FlowRenderModeProvider>
   );
