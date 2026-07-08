@@ -64,4 +64,5 @@ export const RECHARGE_PACKAGES = [
 
 // 积分兑换比例：1元 = 100积分
 export const CREDITS_PER_YUAN = 100;
-export const MIN_CUSTOM_RECHARGE_AMOUNT = 200;
+/** 自定义充值最低金额（元），与支付渠道最低 0.01 元对齐 */
+export const MIN_CUSTOM_RECHARGE_AMOUNT = 0.01;

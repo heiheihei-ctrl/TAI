@@ -31,7 +31,7 @@ const showToast = (message: string, type: "success" | "error" | "info" = "info")
   );
 };
 
-const MIN_CUSTOM_RECHARGE_AMOUNT = 200;
+const MIN_CUSTOM_RECHARGE_CREDITS = 1;
 type TimerHandle = ReturnType<typeof setInterval>;
 
 export type PaymentPanelHandle = {
@@ -100,10 +100,12 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
     }
     return { amount: 0, credits: 0 };
   }, [selectedPackage, packages, customAmountMode, customCreditsInput, creditsPerYuan]);
-  // const minCustomRechargeCredits = Math.round(MIN_CUSTOM_RECHARGE_AMOUNT * creditsPerYuan);
-  const minCustomRechargeCredits = 1;
+  const minCustomRechargeCredits = MIN_CUSTOM_RECHARGE_CREDITS;
   const isCustomCreditsBelowMinimum =
     customAmountMode && currentPayInfo.credits > 0 && currentPayInfo.credits < minCustomRechargeCredits;
+  const isCustomAmountInvalid =
+    customAmountMode &&
+    (currentPayInfo.credits < minCustomRechargeCredits || currentPayInfo.amount <= 0);
 
   // 筛选后的订单列表
   const filteredOrders = useMemo(() => {
@@ -245,7 +247,7 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
     if (!customAmountMode || !customCreditsInput) return;
     const credits = parseCustomCredits(customCreditsInput);
     const amount = Math.round((credits / creditsPerYuan) * 100) / 100;
-    if (credits < minCustomRechargeCredits || amount < MIN_CUSTOM_RECHARGE_AMOUNT) {
+    if (isCustomAmountInvalid) {
       setQrCodeUrl(null);
       setCurrentOrderNo(null);
       setIsExpired(false);
@@ -278,7 +280,7 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [customAmountMode, customCreditsInput, creditsPerYuan, minCustomRechargeCredits, paymentMethod, lt]);
+  }, [customAmountMode, customCreditsInput, creditsPerYuan, isCustomAmountInvalid, paymentMethod, lt]);
 
   // 仅在套餐列表首次加载完成时自动下单，避免与 handlePackageSelect 在切换套餐时重复请求
   useEffect(() => {
@@ -680,8 +682,8 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
                   </div>
                   <div className={cn("mt-2 text-xs", isWhite ? "text-slate-500" : "text-zinc-400")}>
                     {lt(
-                      `自定义充值最低为 ${minCustomRechargeCredits} 积分（¥${MIN_CUSTOM_RECHARGE_AMOUNT}）`,
-                      `Custom top-up minimum is ${minCustomRechargeCredits} credits (¥${MIN_CUSTOM_RECHARGE_AMOUNT})`,
+                      `自定义充值最低 ${minCustomRechargeCredits} 积分`,
+                      `Custom top-up minimum is ${minCustomRechargeCredits} credit(s)`,
                     )}
                   </div>
                 </div>
@@ -766,8 +768,8 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
                     ? lt("请输入积分数量", "Please enter credits")
                     : isCustomCreditsBelowMinimum
                     ? lt(
-                        `自定义充值最低 ${minCustomRechargeCredits} 积分（¥${MIN_CUSTOM_RECHARGE_AMOUNT}）`,
-                        `Custom top-up minimum is ${minCustomRechargeCredits} credits (¥${MIN_CUSTOM_RECHARGE_AMOUNT})`
+                        `自定义充值最低 ${minCustomRechargeCredits} 积分`,
+                        `Custom top-up minimum is ${minCustomRechargeCredits} credit(s)`,
                       )
                     : lt("正在生成二维码…", "Generating QR code...")
                   : lt("选择套餐生成二维码", "Select a package to generate QR code")}
