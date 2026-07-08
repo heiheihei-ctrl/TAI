@@ -35,6 +35,7 @@ import {
 import { blobToDataUrl, canvasToBlob, createImageBitmapLimited } from "@/utils/imageConcurrency";
 import { shallow } from "zustand/shallow";
 import { useLocaleText } from "@/utils/localeText";
+import { useFlowOnboardingStore } from "@/stores/flowOnboardingStore";
 import { resolveFlowNodeSendAnchorClient } from "../utils/flowNodeSendAnchor";
 import { useFlowRenderMode } from "../FlowRenderModeContext";
 import { flowLetterboxBackground, useFlowNodeDarkTheme } from "./flowNodeDarkTheme";
@@ -441,6 +442,10 @@ const ImageContent = React.memo(({ displaySrc, canvasCrop, isResizing, uploading
 
 function ImageNodeInner({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
+  const onboardingActive = useFlowOnboardingStore((s) => s.active);
+  const onboardingImageId = useFlowOnboardingStore((s) => s.imageNodeId);
+  const isOnboardingPreviewTarget =
+    onboardingActive && onboardingImageId === id;
   const isFlowDark = useFlowNodeDarkTheme();
   const rf = useReactFlow();
   const normalizedNodeLabel =
@@ -1645,6 +1650,9 @@ function ImageNodeInner({ id, data, selected }: Props) {
       <div
         onPaste={onPaste}
         tabIndex={0}
+        data-flow-onboarding={
+          isOnboardingPreviewTarget ? "image-node-preview" : undefined
+        }
         style={{
           display: "flex",
           flexDirection: "column",

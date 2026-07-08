@@ -8,6 +8,7 @@ import { uploadAudioToOSS } from "@/stores/aiChatStore";
 import { useProjectContentStore } from "@/stores/projectContentStore";
 import { proxifyRemoteAssetUrl } from "@/utils/assetProxy";
 import { useLocaleText } from "@/utils/localeText";
+import { useFlowOnboardingStore } from "@/stores/flowOnboardingStore";
 import RunCreditBadge from "./RunCreditBadge";
 import NodeSelect from "./NodeSelect";
 import FlowResizableNodeShell from "./FlowResizableNodeShell";
@@ -331,6 +332,17 @@ const isSupportedAudioFile = (file: File): boolean => {
 
 function GenericVideoNodeInner({ id, data, selected }: Props) {
   const { lt, isZh } = useLocaleText();
+  const onboardingActive = useFlowOnboardingStore((s) => s.active);
+  const onboardingTargetId = useFlowOnboardingStore((s) => s.targetNodeId);
+  const onboardingTrack = useFlowOnboardingStore((s) => s.track);
+  const isOnboardingKlingRunTarget =
+    onboardingActive &&
+    onboardingTargetId === id &&
+    onboardingTrack === "img2video" &&
+    (data.provider === "kling" ||
+      data.provider === "kling-2.6" ||
+      data.provider === "kling-o3" ||
+      !data.provider);
   const { setEdges } = useReactFlow();
   const borderColor = selected ? "#2563eb" : "#e5e7eb";
   const boxShadow = selected
@@ -2299,6 +2311,9 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
             onClick={onRun}
             onMouseDown={handleButtonMouseDown}
             disabled={data.status === "running"}
+            data-flow-onboarding={
+              isOnboardingKlingRunTarget ? "kling-run-button" : undefined
+            }
             style={{
               width: showRunCredits ? "auto" : 36,
               minWidth: showRunCredits ? 64 : 36,

@@ -11,6 +11,7 @@ import { parseFlowImageAssetRef } from "@/services/flowImageAssetStore";
 import { useFlowImageAssetUrl } from "@/hooks/useFlowImageAssetUrl";
 import { toRenderableImageSrc } from "@/utils/imageSource";
 import { useLocaleText } from "@/utils/localeText";
+import { useFlowOnboardingStore } from "@/stores/flowOnboardingStore";
 import { flowImagePreviewWell, flowLetterboxBackground, useFlowNodeDarkTheme } from "./flowNodeDarkTheme";
 import { explainGenerateReferenceImageError } from "@/utils/flowGenerateRefErrors";
 import RunCreditBadge from "./RunCreditBadge";
@@ -49,6 +50,13 @@ const buildImageSrc = (value?: string): string | undefined => {
 
 function GenerateReferenceNodeInner({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
+  const onboardingActive = useFlowOnboardingStore((s) => s.active);
+  const onboardingTargetId = useFlowOnboardingStore((s) => s.targetNodeId);
+  const onboardingTrack = useFlowOnboardingStore((s) => s.track);
+  const isOnboardingRunTarget =
+    onboardingActive &&
+    onboardingTargetId === id &&
+    onboardingTrack === "img2img";
   const { status, error } = data;
   const aiProvider = useAIChatStore((state) => state.aiProvider);
   const bananaImageRoute = useAIChatStore((state) => state.bananaImageRoute);
@@ -208,6 +216,9 @@ function GenerateReferenceNodeInner({ id, data, selected }: Props) {
             onClick={onRun}
             disabled={status === "running"}
             className='run-btn-with-credit'
+            data-flow-onboarding={
+              isOnboardingRunTarget ? "generate-run-button" : undefined
+            }
             style={{
               fontSize: 12,
               padding: "4px 8px",

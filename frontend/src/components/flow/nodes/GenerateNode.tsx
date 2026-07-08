@@ -517,9 +517,12 @@ function InputImageThumb({
 function GenerateNodeInner({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
   const onboardingActive = useFlowOnboardingStore((s) => s.active);
-  const onboardingGenerateId = useFlowOnboardingStore((s) => s.generateNodeId);
+  const onboardingTargetId = useFlowOnboardingStore((s) => s.targetNodeId);
+  const onboardingTrack = useFlowOnboardingStore((s) => s.track);
   const isOnboardingRunTarget =
-    onboardingActive && onboardingGenerateId === id;
+    onboardingActive &&
+    onboardingTargetId === id &&
+    onboardingTrack === 'text2img';
   const { status, error } = data;
   const aiProvider = useAIChatStore((state) => state.aiProvider);
   const bananaImageRoute = useAIChatStore((state) => state.bananaImageRoute);
