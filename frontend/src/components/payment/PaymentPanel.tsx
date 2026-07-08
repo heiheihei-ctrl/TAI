@@ -100,7 +100,8 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
     }
     return { amount: 0, credits: 0 };
   }, [selectedPackage, packages, customAmountMode, customCreditsInput, creditsPerYuan]);
-  const minCustomRechargeCredits = Math.round(MIN_CUSTOM_RECHARGE_AMOUNT * creditsPerYuan);
+  // const minCustomRechargeCredits = Math.round(MIN_CUSTOM_RECHARGE_AMOUNT * creditsPerYuan);
+  const minCustomRechargeCredits = 1;
   const isCustomCreditsBelowMinimum =
     customAmountMode && currentPayInfo.credits > 0 && currentPayInfo.credits < minCustomRechargeCredits;
 
