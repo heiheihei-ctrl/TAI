@@ -78,6 +78,7 @@ import { authApi, type GoogleApiKeyInfo } from "@/services/authApi";
 import ReferralRewards from "@/components/ReferralRewards";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import MembershipPanel from "@/components/payment/MembershipPanel";
+import { SHOW_TEAM_COLLABORATION } from "@/config/featureFlags";
 import TeamSwitcher from "@/components/team/TeamSwitcher";
 import TeamQuotaBadge from "@/components/team/TeamQuotaBadge";
 import PricingCatalogModal from "@/components/layout/PricingCatalogModal";
@@ -2377,8 +2378,12 @@ const FloatingHeader: React.FC = () => {
               </Button>
             )}
 
-            <TeamSwitcher />
-            <TeamQuotaBadge />
+            {SHOW_TEAM_COLLABORATION && (
+              <>
+                <TeamSwitcher />
+                <TeamQuotaBadge />
+              </>
+            )}
 
             <Button
               variant='ghost'

@@ -11,6 +11,7 @@ import KeyboardShortcuts from '@/components/KeyboardShortcuts';
 import LoginModal from '@/components/auth/LoginModal';
 import EventSettingsModalHost from '@/components/home/EventSettingsModalHost';
 import ExportWatermarkModalHost from '@/components/export/ExportWatermarkModalHost';
+import { SHOW_TEAM_COLLABORATION } from '@/config/featureFlags';
 import { TeamInviteConfirmModal } from '@/components/team/TeamInviteConfirmModal';
 import { tokenRefreshManager } from '@/services/tokenRefreshManager';
 import { useAuthStore } from '@/stores/authStore';
@@ -103,7 +104,7 @@ const App: React.FC = () => {
   const lastOpenedProjectIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!user || !teamInviteCode) return;
+    if (!SHOW_TEAM_COLLABORATION || !user || !teamInviteCode) return;
     setTeamInviteOpen(true);
   }, [user, teamInviteCode]);
 
@@ -216,7 +217,7 @@ const App: React.FC = () => {
       <EventSettingsModalHost />
       <ExportWatermarkModalHost />
 
-      {teamInviteOpen && teamInviteCode && user && (
+      {SHOW_TEAM_COLLABORATION && teamInviteOpen && teamInviteCode && user && (
         <TeamInviteConfirmModal
           code={teamInviteCode}
           onClose={() => {

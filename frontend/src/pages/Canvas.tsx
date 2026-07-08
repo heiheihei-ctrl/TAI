@@ -19,6 +19,7 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { useToolStore } from '@/stores/toolStore';
 // import CachedImageDebug from '@/components/debug/CachedImageDebug';
 import FlowOverlay from '@/components/flow/FlowOverlay';
+import { SHOW_TEAM_COLLABORATION } from '@/config/featureFlags';
 import CollaborativeCursors from '@/components/collaboration/CollaborativeCursors';
 import CollaborationSyncManager from '@/components/collaboration/CollaborationSyncManager';
 import { migrateImageHistoryToRemote } from '@/services/imageHistoryService';
@@ -128,9 +129,12 @@ const Canvas: React.FC = () => {
             {/* Flow canvas overlay */}
             <FlowOverlay />
 
-            {/* 协作者实时光标（Figma 风格） */}
-            <CollaborativeCursors canvasRef={canvasRef} />
-            <CollaborationSyncManager canvasRef={canvasRef} />
+            {SHOW_TEAM_COLLABORATION && (
+              <>
+                <CollaborativeCursors canvasRef={canvasRef} />
+                <CollaborationSyncManager canvasRef={canvasRef} />
+              </>
+            )}
 
             {/* Selection box overlay (above Flow nodes) */}
             <SelectionBoxOverlay />
