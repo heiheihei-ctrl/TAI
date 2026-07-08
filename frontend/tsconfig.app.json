@@ -27,7 +27,11 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
-    "useUnknownInCatchVariables": false
+    "useUnknownInCatchVariables": false,
+
+    /* 仅显式加载 vite 全局类型，避免 tsc 扫描 node_modules/@types 下
+       由 reactflow / vite 等传递依赖引入、在 pnpm 环境下可能未正确 hoist 的包 */
+    "types": ["vite/client"]
   },
   "include": ["src"]
 }
