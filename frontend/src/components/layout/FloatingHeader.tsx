@@ -77,6 +77,7 @@ import { useProjectContentStore } from "@/stores/projectContentStore";
 import { authApi, type GoogleApiKeyInfo } from "@/services/authApi";
 import ReferralRewards from "@/components/ReferralRewards";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { useGlobalPaymentPoll } from "@/hooks/useGlobalPaymentPoll";
 import MembershipPanel from "@/components/payment/MembershipPanel";
 import { SHOW_TEAM_COLLABORATION } from "@/config/featureFlags";
 import TeamSwitcher from "@/components/team/TeamSwitcher";
@@ -797,6 +798,7 @@ const FloatingHeader: React.FC = () => {
   };
 
   const { user, logout, loading, connection, updateProfile } = useAuthStore();
+  useGlobalPaymentPoll(Boolean(user));
 
   useEffect(() => {
     if (!user) {

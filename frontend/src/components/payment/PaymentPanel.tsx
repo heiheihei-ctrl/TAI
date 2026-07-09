@@ -20,6 +20,7 @@ import {
   type PaymentOrderRecord,
   type RechargePackage,
 } from "@/services/adminApi";
+import { trackPendingPaymentOrder } from "@/services/pendingPaymentTracker";
 import { useLocaleText } from "@/utils/localeText";
 import PaymentSuccessView from "@/components/payment/PaymentSuccessView";
 
@@ -59,7 +60,7 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
   const [creditsPerYuan, setCreditsPerYuan] = useState<number>(100);
   const [packagesLoading, setPackagesLoading] = useState(true);
   const [selectedPackage, setSelectedPackage] = useState<number | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("alipay");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("wechat");
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
   const [currentOrderNo, setCurrentOrderNo] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -173,6 +174,7 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
         clearInterval(pollingRef.current);
         pollingRef.current = null;
       }
+      trackPendingPaymentOrder(null);
       window.dispatchEvent(new CustomEvent("refresh-credits"));
       setPaymentSuccessMessage(
         lt(`已获得 ${credits.toLocaleString()} 积分`, `You received ${credits.toLocaleString()} credits`),
@@ -346,6 +348,10 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
       }
     };
   }, [currentOrderNo, paymentMethod, pollPaymentStatus]);
+
+  useEffect(() => {
+    trackPendingPaymentOrder(currentOrderNo);
+  }, [currentOrderNo]);
 
   // 切换支付方式时重新创建订单
   const handlePaymentMethodChange = async (method: PaymentMethod) => {
@@ -736,21 +742,6 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
           {/* 支付方式切换 */}
           <div className="mb-3 flex items-center gap-2">
             <button
-              onClick={() => handlePaymentMethodChange("alipay")}
-              className={cn(
-                "flex-1 rounded-lg border-2 py-2 text-sm transition-all",
-                paymentMethod === "alipay"
-                  ? isWhite
-                    ? "border-blue-400 bg-blue-50 text-blue-600"
-                    : "border-[#8E86F5]/70 bg-violet-500/15 text-violet-100"
-                  : isWhite
-                    ? "border-slate-200 text-slate-500 hover:border-slate-300"
-                    : "border-zinc-700 text-zinc-500 hover:border-zinc-600",
-              )}
-            >
-              {lt("支付宝", "Alipay")}
-            </button>
-            <button
               onClick={() => handlePaymentMethodChange("wechat")}
               className={cn(
                 "flex-1 rounded-lg border-2 py-2 text-sm transition-all",
@@ -764,6 +755,21 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
               )}
             >
               {lt("微信", "WeChat")}
+            </button>
+            <button
+              onClick={() => handlePaymentMethodChange("alipay")}
+              className={cn(
+                "flex-1 rounded-lg border-2 py-2 text-sm transition-all",
+                paymentMethod === "alipay"
+                  ? isWhite
+                    ? "border-blue-400 bg-blue-50 text-blue-600"
+                    : "border-[#8E86F5]/70 bg-violet-500/15 text-violet-100"
+                  : isWhite
+                    ? "border-slate-200 text-slate-500 hover:border-slate-300"
+                    : "border-zinc-700 text-zinc-500 hover:border-zinc-600",
+              )}
+            >
+              {lt("支付宝", "Alipay")}
             </button>
           </div>
 

@@ -22,6 +22,7 @@ import {
   type PaymentMembershipPlan,
   type PaymentMethod,
 } from "@/services/adminApi";
+import { trackPendingPaymentOrder } from "@/services/pendingPaymentTracker";
 
 const showToast = (message: string, type: "success" | "error" | "info" = "info") => {
   window.dispatchEvent(new CustomEvent("toast", { detail: { message, type } }));
@@ -160,7 +161,7 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
   /** 用户主动点选后为 true；切换计费周期/页面初始化时保持 false */
   const [userConfirmedPlan, setUserConfirmedPlan] = useState(false);
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("monthly");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("alipay");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("wechat");
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
   const [currentOrderNo, setCurrentOrderNo] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(300);
@@ -277,6 +278,7 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
       clearInterval(pollingRef.current);
       pollingRef.current = null;
     }
+    trackPendingPaymentOrder(null);
     await loadData();
     window.dispatchEvent(new CustomEvent("refresh-credits"));
     setMembershipPaymentSuccess(true);
@@ -316,6 +318,10 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
       }
     };
   }, [currentOrderNo, pollPaymentStatus]);
+
+  useEffect(() => {
+    trackPendingPaymentOrder(currentOrderNo);
+  }, [currentOrderNo]);
 
   const createOrderForPlan = useCallback(async (planCode: string, method: PaymentMethod) => {
     if (!canPurchase) {
@@ -942,8 +948,8 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
 
                         <div className="mb-5 grid grid-cols-2 gap-2">
                           {[
-                            { value: "alipay" as const, label: "支付宝" },
                             { value: "wechat" as const, label: "微信支付" },
+                            { value: "alipay" as const, label: "支付宝" },
                           ].map((item) => (
                             <button
                               key={item.value}

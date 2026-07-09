@@ -817,11 +817,20 @@ export class PaymentService implements OnModuleInit {
   
   private async syncPendingOrdersForUser(userId: string, limit = 10): Promise<void> {
     const safeLimit = Math.max(1, Math.min(limit, 20));
+    const recentCutoff = new Date(Date.now() - 72 * 60 * 60 * 1000);
     const pendingOrders = await this.prisma.paymentOrder.findMany({
       where: {
         userId,
-        status: PaymentStatus.PENDING,
-        expiredAt: { gt: new Date() },
+        OR: [
+          {
+            status: PaymentStatus.PENDING,
+            expiredAt: { gt: new Date() },
+          },
+          {
+            status: { in: [PaymentStatus.PENDING, PaymentStatus.EXPIRED, PaymentStatus.CANCELLED] },
+            createdAt: { gte: recentCutoff },
+          },
+        ],
       },
       orderBy: { createdAt: 'desc' },
       take: safeLimit,
