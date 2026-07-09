@@ -522,7 +522,7 @@ function GenerateNodeInner({ id, data, selected }: Props) {
   const isOnboardingRunTarget =
     onboardingActive &&
     onboardingTargetId === id &&
-    onboardingTrack === 'text2img';
+    (onboardingTrack === 'text2img' || onboardingTrack === 'img2img');
   const { status, error } = data;
   const aiProvider = useAIChatStore((state) => state.aiProvider);
   const bananaImageRoute = useAIChatStore((state) => state.bananaImageRoute);

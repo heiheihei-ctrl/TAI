@@ -49,6 +49,8 @@ import {
   TemplateQueryDto,
 } from './dto/template.dto';
 import { MODEL_PROVIDER_MAPPING_SETTING_KEY } from '../ai/services/model-routing.service';
+import { WechatCustomMenuService } from './services/wechat-custom-menu.service';
+import type { WechatCustomMenuDraft } from '../wechat-official/wechat-custom-menu.types';
 
 interface AuthenticatedUser {
   id: string;
@@ -102,6 +104,7 @@ export class AdminController {
     private readonly membershipService: MembershipService,
     private readonly volcAssetService: VolcAssetService,
     private readonly usersService: UsersService,
+    private readonly wechatCustomMenuService: WechatCustomMenuService,
   ) {}
 
   /**
@@ -372,6 +375,42 @@ export class AdminController {
     }
 
     return setting;
+  }
+
+  @Get('wechat-custom-menu')
+  @ApiOperation({ summary: '获取微信公众号自定义菜单草稿与线上菜单' })
+  async getWechatCustomMenu(@Request() req: AuthenticatedRequest) {
+    this.checkAdmin(req);
+    const [draft, remoteMenu] = await Promise.all([
+      this.wechatCustomMenuService.getDraft(),
+      this.wechatCustomMenuService.getRemoteMenu().catch(() => null),
+    ]);
+    return { draft, remoteMenu };
+  }
+
+  @Post('wechat-custom-menu')
+  @ApiOperation({ summary: '保存微信公众号自定义菜单草稿' })
+  async saveWechatCustomMenu(
+    @Request() req: AuthenticatedRequest,
+    @Body() dto: WechatCustomMenuDraft,
+  ) {
+    this.checkAdmin(req);
+    const draft = await this.wechatCustomMenuService.saveDraft(dto, req.user.id);
+    return { draft };
+  }
+
+  @Post('wechat-custom-menu/publish')
+  @ApiOperation({ summary: '发布微信公众号自定义菜单' })
+  async publishWechatCustomMenu(@Request() req: AuthenticatedRequest) {
+    this.checkAdmin(req);
+    return this.wechatCustomMenuService.publishDraft(req.user.id);
+  }
+
+  @Delete('wechat-custom-menu/remote')
+  @ApiOperation({ summary: '删除微信公众号线上自定义菜单' })
+  async deleteWechatCustomMenu(@Request() req: AuthenticatedRequest) {
+    this.checkAdmin(req);
+    return this.wechatCustomMenuService.deleteRemoteMenu();
   }
 
   @Get('membership-credit-policy')

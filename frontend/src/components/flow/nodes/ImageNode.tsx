@@ -331,7 +331,7 @@ const CanvasCropPreview = React.memo(({
   );
 });
 
-const ImageContent = React.memo(({ displaySrc, canvasCrop, isResizing, uploading, uploadError, onDrop, onDragOver, onDoubleClick, isFlowDark, lt }: {
+const ImageContent = React.memo(({ displaySrc, canvasCrop, isResizing, uploading, uploadError, onDrop, onDragOver, onDoubleClick, isFlowDark, lt, onboardingMarker }: {
   displaySrc?: string;
   isResizing?: boolean;
   uploading?: boolean;
@@ -347,12 +347,14 @@ const ImageContent = React.memo(({ displaySrc, canvasCrop, isResizing, uploading
   onDoubleClick: () => void;
   isFlowDark: boolean;
   lt: (zhText: string, enText: string) => string;
+  onboardingMarker?: string;
 }) => (
   <div
     onDrop={onDrop}
     onDragOver={onDragOver}
     onDoubleClick={onDoubleClick}
     onClick={() => {}}
+    data-flow-onboarding={onboardingMarker}
     style={{
       flex: 1,
       minHeight: 120,
@@ -444,8 +446,16 @@ function ImageNodeInner({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
   const onboardingActive = useFlowOnboardingStore((s) => s.active);
   const onboardingImageId = useFlowOnboardingStore((s) => s.imageNodeId);
-  const isOnboardingPreviewTarget =
+  const onboardingStep = useFlowOnboardingStore((s) => s.step);
+  const onboardingTrack = useFlowOnboardingStore((s) => s.track);
+  const isOnboardingImageTarget =
     onboardingActive && onboardingImageId === id;
+  const isImageUploadGuideTrack =
+    onboardingTrack === 'img2img' || onboardingTrack === 'img2video';
+  const onboardingMarker =
+    isOnboardingImageTarget && isImageUploadGuideTrack && onboardingStep === 2
+      ? 'image-node-upload'
+      : undefined;
   const isFlowDark = useFlowNodeDarkTheme();
   const rf = useReactFlow();
   const normalizedNodeLabel =
@@ -1650,9 +1660,6 @@ function ImageNodeInner({ id, data, selected }: Props) {
       <div
         onPaste={onPaste}
         tabIndex={0}
-        data-flow-onboarding={
-          isOnboardingPreviewTarget ? "image-node-preview" : undefined
-        }
         style={{
           display: "flex",
           flexDirection: "column",
@@ -1930,6 +1937,7 @@ function ImageNodeInner({ id, data, selected }: Props) {
         onDoubleClick={handleDoubleClick}
         isFlowDark={isFlowDark}
         lt={lt}
+        onboardingMarker={onboardingMarker}
       />
 
       {/* 兼容历史连线：旧项目可能使用 targetHandle=image */}

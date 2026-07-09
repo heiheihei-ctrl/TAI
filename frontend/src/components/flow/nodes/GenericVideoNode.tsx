@@ -339,7 +339,8 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
     onboardingActive &&
     onboardingTargetId === id &&
     onboardingTrack === "img2video" &&
-    (data.provider === "kling" ||
+    (data.provider === "doubao" ||
+      data.provider === "kling" ||
       data.provider === "kling-2.6" ||
       data.provider === "kling-o3" ||
       !data.provider);

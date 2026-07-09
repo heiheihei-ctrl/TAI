@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { EventDateTimeFields } from "@/components/admin/EventDateTimeFields";
+import WeChatCustomMenuTab from "@/components/admin/WeChatCustomMenuTab";
 import { fetchWithAuth } from "@/services/authFetch";
 import {
   getDashboardStats,
@@ -13437,6 +13438,7 @@ export default function Admin() {
     | "unified-model-management"
     | "volc-review"
     | "event-settings"
+    | "wechat-custom-menu"
   >("system");
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -13732,6 +13734,7 @@ export default function Admin() {
                   { key: "model-management", label: "视频模型管理" },
                   { key: "volc-review", label: "审核素材组" },
                   { key: "event-settings", label: "赛事设置" },
+                  { key: "wechat-custom-menu", label: "自定义菜单" },
                 ].map((tab) => (
                   <button
                     key={tab.key}
@@ -13744,6 +13747,7 @@ export default function Admin() {
                           | "unified-model-management"
                           | "volc-review"
                           | "event-settings"
+                          | "wechat-custom-menu"
                       )
                     }
                     className={`rounded-md px-4 py-2 text-sm font-medium transition ${
@@ -13764,6 +13768,7 @@ export default function Admin() {
             {settingsSubTab === "model-management" && <ModelManagementTab />}
             {settingsSubTab === "volc-review" && <VolcReviewTab />}
             {settingsSubTab === "event-settings" && <EventSettingsTab />}
+            {settingsSubTab === "wechat-custom-menu" && <WeChatCustomMenuTab />}
           </div>
         )}
       </main>

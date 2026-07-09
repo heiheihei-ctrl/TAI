@@ -11,12 +11,14 @@ import { UsersModule } from '../users/users.module';
 import { TemplateService } from './services/template.service';
 import { NodeConfigService } from './services/node-config.service';
 import { VolcAssetModule } from '../volc-asset/volc-asset.module';
+import { WechatOfficialModule } from '../wechat-official/wechat-official.module';
+import { WechatCustomMenuService } from './services/wechat-custom-menu.service';
 
 @Module({
-  imports: [PrismaModule, CreditsModule, OssModule, BusinessPolicyModule, MembershipModule, VolcAssetModule, UsersModule],
+  imports: [PrismaModule, CreditsModule, OssModule, BusinessPolicyModule, MembershipModule, VolcAssetModule, UsersModule, WechatOfficialModule],
   controllers: [AdminController, SettingsPublicController],
-  providers: [AdminService, TemplateService, NodeConfigService],
-  exports: [AdminService, TemplateService, NodeConfigService],
+  providers: [AdminService, TemplateService, NodeConfigService, WechatCustomMenuService],
+  exports: [AdminService, TemplateService, NodeConfigService, WechatCustomMenuService],
 })
 export class AdminModule implements OnModuleInit {
   private readonly logger = new Logger(AdminModule.name);

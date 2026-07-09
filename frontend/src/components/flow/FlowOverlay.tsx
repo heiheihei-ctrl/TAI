@@ -6971,14 +6971,28 @@ function FlowInner() {
   );
 
   const scrollOnboardingNodesIntoView = React.useCallback(
-    async (nodeIds: string[]) => {
+    async (
+      nodeIds: string[],
+      options?: { reserveBottom?: number }
+    ) => {
       const validIds = nodeIds.filter((id) => Boolean(rf.getNode(id)));
       if (!validIds.length) return;
       try {
+        const container = containerRef.current;
+        const viewH = container?.clientHeight ?? window.innerHeight;
+        const bottomRatio = Math.min(
+          0.45,
+          (options?.reserveBottom ?? 0) / Math.max(viewH, 1)
+        );
         await rf.fitView({
           nodes: validIds.map((id) => ({ id })),
-          padding: 0.22,
-          duration: 300,
+          padding: {
+            top: 0.14,
+            right: 0.14,
+            bottom: 0.14 + bottomRatio,
+            left: 0.14,
+          },
+          duration: 320,
           maxZoom: 1,
           minZoom: 0.15,
         });
@@ -23583,7 +23597,8 @@ function FlowInner() {
                                 config.nodeKey === "generate" ||
                                 config.nodeKey === "image" ||
                                 config.nodeKey === "generateRef" ||
-                                config.nodeKey === "klingVideo"
+                                config.nodeKey === "klingVideo" ||
+                                config.nodeKey === "doubaoVideo"
                                   ? config.nodeKey
                                   : undefined
                               }

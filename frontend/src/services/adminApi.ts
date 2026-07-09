@@ -831,6 +831,69 @@ export async function upsertSetting(data: {
   return response.json();
 }
 
+export type WechatMenuLeafType = "click" | "view" | "miniprogram";
+
+export type WechatMenuLeafButton = {
+  type: WechatMenuLeafType;
+  name: string;
+  key?: string;
+  url?: string;
+  appid?: string;
+  pagepath?: string;
+};
+
+export type WechatMenuTopButton = {
+  name: string;
+  type?: WechatMenuLeafType;
+  key?: string;
+  url?: string;
+  appid?: string;
+  pagepath?: string;
+  sub_button?: WechatMenuLeafButton[];
+};
+
+export type WechatCustomMenuDraft = {
+  button: WechatMenuTopButton[];
+};
+
+export async function getWechatCustomMenu(): Promise<{
+  draft: WechatCustomMenuDraft;
+  remoteMenu: Record<string, unknown> | null;
+}> {
+  const response = await request("/api/admin/wechat-custom-menu");
+  return response.json();
+}
+
+export async function saveWechatCustomMenu(
+  draft: WechatCustomMenuDraft,
+): Promise<{ draft: WechatCustomMenuDraft }> {
+  const response = await request("/api/admin/wechat-custom-menu", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(draft),
+  });
+  return response.json();
+}
+
+export async function publishWechatCustomMenu(): Promise<{
+  draft: WechatCustomMenuDraft;
+  result: Record<string, unknown>;
+}> {
+  const response = await request("/api/admin/wechat-custom-menu/publish", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({}),
+  });
+  return response.json();
+}
+
+export async function deleteRemoteWechatCustomMenu(): Promise<Record<string, unknown>> {
+  const response = await request("/api/admin/wechat-custom-menu/remote", {
+    method: "DELETE",
+  });
+  return response.json();
+}
+
 export const EVENT_SETTINGS_KEY = "event_settings";
 
 export type EventSettingsConfig = {

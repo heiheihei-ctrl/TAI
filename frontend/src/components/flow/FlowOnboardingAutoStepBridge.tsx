@@ -3,6 +3,8 @@ import type { Connection } from 'reactflow';
 import { useReactFlow } from 'reactflow';
 import {
   FLOW_ONBOARDING_EXAMPLE_IMAGE_URL,
+  FLOW_ONBOARDING_PROMPTS,
+  FLOW_ONBOARDING_TEXT2IMG_DESC,
   advanceOnboardingWhenNodeVisible,
   type FlowOnboardingTrack,
   useFlowOnboardingStore,
@@ -10,6 +12,35 @@ import {
 import { getFlowNodeDefaultSize } from './constants/flowNodeDefaults';
 
 type WorldPoint = { x: number; y: number };
+
+/** 节点边缘之间的最小间距 */
+const ONBOARDING_NODE_GAP = 120;
+/** 图生图等多节点流程的列间距 */
+const ONBOARDING_COLUMN_GAP = 200;
+
+function getNodeSize(
+  node: { type?: string | null; data?: unknown } | null | undefined
+): { w: number; h: number } {
+  if (!node) return getFlowNodeDefaultSize(null);
+  const data = node.data as { boxW?: number; boxH?: number } | undefined;
+  const fallback = getFlowNodeDefaultSize(String(node.type || ''));
+  return {
+    w: Number(data?.boxW) || fallback.w,
+    h: Number(data?.boxH) || fallback.h,
+  };
+}
+
+function getNodeCenter(node: {
+  position: { x: number; y: number };
+  type?: string | null;
+  data?: unknown;
+}): WorldPoint {
+  const size = getNodeSize(node);
+  return {
+    x: node.position.x + size.w / 2,
+    y: node.position.y + size.h / 2,
+  };
+}
 
 type Props = {
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -72,21 +103,58 @@ export default function FlowOnboardingAutoStepBridge({
         return rf.screenToFlowPosition({ x: centerX, y: centerY });
       };
 
-      const placeTargetRightOf = (
+      const placeTargetBelow = (
         sourceId: string | null,
+        targetType: string,
         fallback: WorldPoint,
-        gap = 96
+        gap = ONBOARDING_NODE_GAP
       ): WorldPoint => {
         if (!sourceId) return fallback;
         const sourceNode = rf.getNode(sourceId);
         if (!sourceNode?.position) return fallback;
-        const nodeData = sourceNode.data as { boxW?: number } | undefined;
-        const sourceType = String(sourceNode.type || 'textPrompt');
-        const sourceW =
-          Number(nodeData?.boxW) || getFlowNodeDefaultSize(sourceType as any).w;
+        const sourceSize = getNodeSize(sourceNode);
+        const targetSize = getFlowNodeDefaultSize(targetType);
+        const sourceCenter = getNodeCenter(sourceNode);
         return {
-          x: sourceNode.position.x + sourceW + gap,
-          y: sourceNode.position.y,
+          x: sourceCenter.x,
+          y:
+            sourceCenter.y +
+            sourceSize.h / 2 +
+            gap +
+            targetSize.h / 2,
+        };
+      };
+
+      const placeTargetRightOfNodes = (
+        sourceIds: Array<string | null>,
+        targetType: string,
+        fallback: WorldPoint,
+        gap = ONBOARDING_COLUMN_GAP
+      ): WorldPoint => {
+        const rects = sourceIds
+          .filter((id): id is string => Boolean(id))
+          .map((id) => rf.getNode(id))
+          .filter(Boolean)
+          .map((node) => {
+            const size = getNodeSize(node);
+            return {
+              right: node!.position.x + size.w,
+              top: node!.position.y,
+              bottom: node!.position.y + size.h,
+              centerY: node!.position.y + size.h / 2,
+            };
+          });
+
+        if (!rects.length) return fallback;
+
+        const maxRight = Math.max(...rects.map((r) => r.right));
+        const minTop = Math.min(...rects.map((r) => r.top));
+        const maxBottom = Math.max(...rects.map((r) => r.bottom));
+        const targetSize = getFlowNodeDefaultSize(targetType);
+
+        return {
+          x: maxRight + gap + targetSize.w / 2,
+          y: (minTop + maxBottom) / 2,
         };
       };
 
@@ -98,17 +166,21 @@ export default function FlowOnboardingAutoStepBridge({
         store.nextStep();
       };
 
-      const createTextPromptNode = () => {
+      const createTextPromptNode = (targetStep: number, sourceId?: string | null) => {
         const center = getWorldCenter();
-        const id = createNodeAtWorldCenter('textPrompt', {
-          x: center.x - 220,
+        const fallback = {
+          x: center.x - ONBOARDING_COLUMN_GAP,
           y: center.y,
-        });
+        };
+        const world = sourceId
+          ? placeTargetBelow(sourceId, 'textPrompt', fallback)
+          : fallback;
+        const id = createNodeAtWorldCenter('textPrompt', world);
         if (id) {
           store.setTextPromptNodeId(id);
-          advanceOnboardingWhenNodeVisible(id, 2);
+          advanceOnboardingWhenNodeVisible(id, targetStep);
         } else {
-          store.setStep(2);
+          store.setStep(targetStep);
         }
       };
 
@@ -116,7 +188,10 @@ export default function FlowOnboardingAutoStepBridge({
         const center = getWorldCenter();
         const id = createNodeAtWorldCenter(
           'image',
-          { x: center.x - 220, y: center.y },
+          {
+            x: center.x - ONBOARDING_COLUMN_GAP,
+            y: center.y - 80,
+          },
           EXAMPLE_IMAGE_PATCH
         );
         if (id) {
@@ -128,49 +203,59 @@ export default function FlowOnboardingAutoStepBridge({
         }
       };
 
-      const createGenerateNode = () => {
+      const createGenerateNode = (targetStep: number) => {
         const center = getWorldCenter();
-        const world = placeTargetRightOf(store.textPromptNodeId, {
-          x: center.x + 220,
+        const sourceIds =
+          track === 'img2img'
+            ? [store.imageNodeId, store.textPromptNodeId]
+            : [store.textPromptNodeId];
+        const world = placeTargetRightOfNodes(sourceIds, 'generate', {
+          x: center.x + ONBOARDING_COLUMN_GAP,
           y: center.y,
         });
         const id = createNodeAtWorldCenter('generate', world);
         if (id) {
           store.setTargetNodeId(id);
-          advanceOnboardingWhenNodeVisible(id, 5);
+          advanceOnboardingWhenNodeVisible(id, targetStep);
         } else {
-          store.setStep(5);
+          store.setStep(targetStep);
         }
       };
 
-      const createGenerateRefNode = () => {
+      const createSeedanceNode = (targetStep: number) => {
         const center = getWorldCenter();
-        const world = placeTargetRightOf(store.imageNodeId, {
-          x: center.x + 220,
+        const sourceIds = [store.imageNodeId, store.textPromptNodeId];
+        const world = placeTargetRightOfNodes(sourceIds, 'doubaoVideo', {
+          x: center.x + ONBOARDING_COLUMN_GAP,
           y: center.y,
         });
-        const id = createNodeAtWorldCenter('generateRef', world);
+        const id = createNodeAtWorldCenter('doubaoVideo', world);
         if (id) {
           store.setTargetNodeId(id);
-          advanceOnboardingWhenNodeVisible(id, 5);
+          advanceOnboardingWhenNodeVisible(id, targetStep);
         } else {
-          store.setStep(5);
+          store.setStep(targetStep);
         }
       };
 
-      const createKlingNode = () => {
-        const center = getWorldCenter();
-        const world = placeTargetRightOf(store.imageNodeId, {
-          x: center.x + 220,
-          y: center.y,
-        });
-        const id = createNodeAtWorldCenter('klingVideo', world);
-        if (id) {
-          store.setTargetNodeId(id);
-          advanceOnboardingWhenNodeVisible(id, 5);
-        } else {
-          store.setStep(5);
+      const connectImageAndTextToVideo = () => {
+        if (store.imageNodeId && store.targetNodeId) {
+          onConnect({
+            source: store.imageNodeId,
+            sourceHandle: 'img',
+            target: store.targetNodeId,
+            targetHandle: 'image',
+          });
         }
+        if (store.textPromptNodeId && store.targetNodeId) {
+          onConnect({
+            source: store.textPromptNodeId,
+            sourceHandle: 'text',
+            target: store.targetNodeId,
+            targetHandle: 'text',
+          });
+        }
+        store.nextStep();
       };
 
       const connectTextToTarget = () => {
@@ -185,18 +270,15 @@ export default function FlowOnboardingAutoStepBridge({
         store.nextStep();
       };
 
-      const connectImageToTarget = (trackKind: FlowOnboardingTrack) => {
-        if (!store.imageNodeId || !store.targetNodeId) {
-          store.nextStep();
-          return;
+      const connectImageToGenerate = () => {
+        if (store.imageNodeId && store.targetNodeId) {
+          onConnect({
+            source: store.imageNodeId,
+            sourceHandle: 'img',
+            target: store.targetNodeId,
+            targetHandle: 'img',
+          });
         }
-        onConnect({
-          source: store.imageNodeId,
-          sourceHandle: 'img',
-          target: store.targetNodeId,
-          targetHandle: trackKind === 'img2img' ? 'image1' : 'image',
-        });
-        store.nextStep();
       };
 
       const runText2ImgStep = (step: number) => {
@@ -205,11 +287,11 @@ export default function FlowOnboardingAutoStepBridge({
             openNodePanel();
             break;
           case 1:
-            createTextPromptNode();
+            createTextPromptNode(2);
             break;
           case 2:
             if (store.textPromptNodeId) {
-              patchTextPrompt(store.textPromptNodeId, '一只猫');
+              patchTextPrompt(store.textPromptNodeId, FLOW_ONBOARDING_TEXT2IMG_DESC);
             }
             store.nextStep();
             break;
@@ -217,7 +299,7 @@ export default function FlowOnboardingAutoStepBridge({
             openNodePanel();
             break;
           case 4:
-            createGenerateNode();
+            createGenerateNode(5);
             break;
           case 5:
             connectTextToTarget();
@@ -227,7 +309,7 @@ export default function FlowOnboardingAutoStepBridge({
         }
       };
 
-      const runImageTrackStep = (step: number, trackKind: 'img2img' | 'img2video') => {
+      const runImg2ImgStep = (step: number) => {
         switch (step) {
           case 0:
             openNodePanel();
@@ -243,11 +325,69 @@ export default function FlowOnboardingAutoStepBridge({
             openNodePanel();
             break;
           case 4:
-            if (trackKind === 'img2img') createGenerateRefNode();
-            else createKlingNode();
+            createTextPromptNode(5, store.imageNodeId);
             break;
           case 5:
-            connectImageToTarget(trackKind);
+            if (store.textPromptNodeId) {
+              patchTextPrompt(store.textPromptNodeId, FLOW_ONBOARDING_PROMPTS.img2img);
+            }
+            store.nextStep();
+            break;
+          case 6:
+            openNodePanel();
+            break;
+          case 7:
+            createGenerateNode(8);
+            break;
+          case 8:
+            connectImageToGenerate();
+            if (store.textPromptNodeId && store.targetNodeId) {
+              onConnect({
+                source: store.textPromptNodeId,
+                sourceHandle: 'text',
+                target: store.targetNodeId,
+                targetHandle: 'text',
+              });
+            }
+            store.nextStep();
+            break;
+          default:
+            break;
+        }
+      };
+
+      const runImg2VideoStep = (step: number) => {
+        switch (step) {
+          case 0:
+            openNodePanel();
+            break;
+          case 1:
+            createImageNode(2);
+            break;
+          case 2:
+            if (store.imageNodeId) patchImageNode(store.imageNodeId);
+            store.nextStep();
+            break;
+          case 3:
+            openNodePanel();
+            break;
+          case 4:
+            createTextPromptNode(5, store.imageNodeId);
+            break;
+          case 5:
+            if (store.textPromptNodeId) {
+              patchTextPrompt(store.textPromptNodeId, FLOW_ONBOARDING_PROMPTS.img2video);
+            }
+            store.nextStep();
+            break;
+          case 6:
+            openNodePanel();
+            break;
+          case 7:
+            createSeedanceNode(8);
+            break;
+          case 8:
+            connectImageAndTextToVideo();
             break;
           default:
             break;
@@ -255,8 +395,8 @@ export default function FlowOnboardingAutoStepBridge({
       };
 
       if (track === 'text2img') runText2ImgStep(currentStep);
-      else if (track === 'img2img') runImageTrackStep(currentStep, 'img2img');
-      else if (track === 'img2video') runImageTrackStep(currentStep, 'img2video');
+      else if (track === 'img2img') runImg2ImgStep(currentStep);
+      else if (track === 'img2video') runImg2VideoStep(currentStep);
     };
 
     window.addEventListener('flow:onboarding-auto-step', handleAutoStep as EventListener);
