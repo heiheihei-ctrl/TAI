@@ -26,7 +26,12 @@ export class AuthController {
     phone?: string;
     avatarUrl?: string | null;
     role?: string;
+    createdAt?: Date | string;
   }) {
+    const createdAt =
+      user.createdAt instanceof Date
+        ? user.createdAt.toISOString()
+        : user.createdAt ?? null;
     return {
       id: user.id,
       email: user.email ?? null,
@@ -34,6 +39,7 @@ export class AuthController {
       phone: user.phone,
       avatarUrl: user.avatarUrl ?? null,
       role: user.role,
+      createdAt,
     };
   }
 

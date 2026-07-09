@@ -50,9 +50,11 @@ import TextPromptNode from "./nodes/TextPromptNode";
 import FlowOnboardingGuide from "./FlowOnboardingGuide";
 import FlowOnboardingAutoStepBridge from "./FlowOnboardingAutoStepBridge";
 import {
-  isFlowOnboardingCompleted,
+  shouldAutoStartFlowOnboarding,
   useFlowOnboardingStore,
 } from "@/stores/flowOnboardingStore";
+import { SHOW_FLOW_ONBOARDING_TOOLBAR } from "@/config/featureFlags";
+import { useAuthStore } from "@/stores/authStore";
 import TextPromptProNode from "./nodes/TextPromptProNode";
 import TextChatNode from "./nodes/TextChatNode";
 import ImageNode from "./nodes/ImageNode";
@@ -3721,6 +3723,8 @@ function useFlowViewport() {
 function FlowInner() {
   const { lt, isZh } = useLocaleText();
   const flowUIEnabled = useUIStore((s) => s.flowUIEnabled);
+  const authUser = useAuthStore((s) => s.user);
+  const authInitializing = useAuthStore((s) => s.initializing);
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const nodesRef = React.useRef<RFNode[]>([]);
@@ -3733,15 +3737,20 @@ function FlowInner() {
   }, [edges]);
 
   React.useEffect(() => {
+    if (!SHOW_FLOW_ONBOARDING_TOOLBAR) return;
     if (!flowUIEnabled) return;
-    if (isFlowOnboardingCompleted()) return;
+    if (authInitializing) return;
+    if (!shouldAutoStartFlowOnboarding(authUser)) return;
     const timer = window.setTimeout(() => {
       const state = useFlowOnboardingStore.getState();
       if (state.active) return;
-      state.start(nodesRef.current.map((node) => node.id));
+      state.start(
+        nodesRef.current.map((node) => node.id),
+        { hideSkipButton: true }
+      );
     }, 1000);
     return () => window.clearTimeout(timer);
-  }, [flowUIEnabled]);
+  }, [flowUIEnabled, authUser?.id, authUser?.createdAt, authInitializing]);
 
   React.useEffect(() => {
     const handler = () => {

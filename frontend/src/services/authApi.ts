@@ -13,6 +13,7 @@ export type UserInfo = {
   role?: string;
   phone?: string;
   avatarUrl?: string | null;
+  createdAt?: string | null;
 };
 
 export type GoogleApiKeyInfo = {

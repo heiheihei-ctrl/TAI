@@ -363,7 +363,14 @@ const FloatingHeader: React.FC = () => {
   const [dailyRewardClaiming, setDailyRewardClaiming] = useState(false);
   const [isHelpMenuOpen, setIsHelpMenuOpen] = useState(false);
   const [isPricingCatalogOpen, setIsPricingCatalogOpen] = useState(false);
-  const [isWechatQrOpen, setIsWechatQrOpen] = useState(false);
+  const [isWechatQrOpen, setIsWechatQrOpen] = useState(true);
+  const [wechatQrFading, setWechatQrFading] = useState(false);
+  const wechatQrAutoHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const wechatQrFadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
   const [wechatQrCodes, setWechatQrCodes] = useState<{
     officialAccount: string;
     wechatGroup: string;
@@ -372,9 +379,34 @@ const FloatingHeader: React.FC = () => {
     wechatGroup: "/group-erweima.jpg",
   });
 
-  useEffect(() => {
-    setIsWechatQrOpen(true);
+  const clearWechatQrAutoHideTimers = useCallback(() => {
+    if (wechatQrAutoHideTimerRef.current) {
+      clearTimeout(wechatQrAutoHideTimerRef.current);
+      wechatQrAutoHideTimerRef.current = null;
+    }
+    if (wechatQrFadeTimerRef.current) {
+      clearTimeout(wechatQrFadeTimerRef.current);
+      wechatQrFadeTimerRef.current = null;
+    }
   }, []);
+
+  const closeWechatQrPanel = useCallback(() => {
+    clearWechatQrAutoHideTimers();
+    setWechatQrFading(false);
+    setIsWechatQrOpen(false);
+  }, [clearWechatQrAutoHideTimers]);
+
+  useEffect(() => {
+    wechatQrAutoHideTimerRef.current = setTimeout(() => {
+      setWechatQrFading(true);
+      wechatQrFadeTimerRef.current = setTimeout(() => {
+        setIsWechatQrOpen(false);
+        setWechatQrFading(false);
+      }, 800);
+    }, 10_000);
+
+    return clearWechatQrAutoHideTimers;
+  }, [clearWechatQrAutoHideTimers]);
 
   useEffect(() => {
     const fetchQrCodes = async () => {
@@ -2570,7 +2602,14 @@ const FloatingHeader: React.FC = () => {
 
             <div className='relative'>
               {isWechatQrOpen && (
-                <div className='absolute top-full right-0 z-[100] mt-2 animate-in fade-in slide-in-from-top-2 rounded-2xl border border-white/10 bg-black/80 p-4 shadow-2xl backdrop-blur-md duration-200'>
+                <div
+                  className={cn(
+                    "absolute top-full right-0 z-[100] mt-2 rounded-2xl border border-white/10 bg-black/80 p-4 shadow-2xl backdrop-blur-md transition-all duration-700 ease-out",
+                    wechatQrFading
+                      ? "pointer-events-none translate-y-1 opacity-0"
+                      : "translate-y-0 opacity-100"
+                  )}
+                >
                   <div className='mb-3 flex items-center justify-between gap-3'>
                     <span className='text-sm font-medium text-white/90'>
                       {t("home.footer.contact")}
@@ -2579,7 +2618,7 @@ const FloatingHeader: React.FC = () => {
                       type='button'
                       aria-label={t("home.eventModal.close")}
                       className='flex h-6 w-6 items-center justify-center rounded-full text-white/60 transition-colors hover:bg-white/10 hover:text-white'
-                      onClick={() => setIsWechatQrOpen(false)}
+                      onClick={closeWechatQrPanel}
                     >
                       <X className='h-3.5 w-3.5' />
                     </button>
@@ -2624,7 +2663,11 @@ const FloatingHeader: React.FC = () => {
                 size='sm'
                 className='h-7 w-7 rounded-full border border-liquid-glass-light bg-liquid-glass-light p-0 text-gray-600 backdrop-blur-minimal transition-all duration-200 hover:bg-liquid-glass-hover'
                 title={t("home.footer.contact")}
-                onClick={() => setIsWechatQrOpen((prev) => !prev)}
+                onClick={() => {
+                  clearWechatQrAutoHideTimers();
+                  setWechatQrFading(false);
+                  setIsWechatQrOpen((prev) => !prev);
+                }}
               >
                 <MessageCircle className='w-4 h-4' />
               </Button>

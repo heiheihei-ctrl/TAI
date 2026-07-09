@@ -459,6 +459,7 @@ export default function FlowOnboardingGuide({
   const selectTrack = useFlowOnboardingStore((s) => s.selectTrack);
   const skip = useFlowOnboardingStore((s) => s.skip);
   const complete = useFlowOnboardingStore((s) => s.complete);
+  const hideSkipButton = useFlowOnboardingStore((s) => s.hideSkipButton);
 
   const [spotRect, setSpotRect] = React.useState<Rect | null>(null);
   const [connectVisual, setConnectVisual] = React.useState<ConnectGuideVisual | null>(
@@ -968,9 +969,11 @@ export default function FlowOnboardingGuide({
             <h3 className="flow-onboarding-picker-title">
               {lt('选择新手引导', 'Choose a guide')}
             </h3>
-            <button type="button" className="flow-onboarding-skip" onClick={skip}>
-              {lt('跳过', 'Skip')}
-            </button>
+            {!hideSkipButton ? (
+              <button type="button" className="flow-onboarding-skip" onClick={skip}>
+                {lt('跳过', 'Skip')}
+              </button>
+            ) : null}
           </div>
           <p className="flow-onboarding-picker-desc">
             {lt('请选择一种创作流程开始学习', 'Pick a workflow to get started')}
@@ -1068,9 +1071,11 @@ export default function FlowOnboardingGuide({
               ? `${lt(FLOW_ONBOARDING_TRACK_META[track].zh, FLOW_ONBOARDING_TRACK_META[track].en)} · ${step + 1}/${steps.length}`
               : `${lt('新手引导', 'Guide')} ${step + 1}/${steps.length}`}
           </span>
-          <button type="button" className="flow-onboarding-skip" onClick={skip}>
-            {lt('跳过', 'Skip')}
-          </button>
+          {!hideSkipButton ? (
+            <button type="button" className="flow-onboarding-skip" onClick={skip}>
+              {lt('跳过', 'Skip')}
+            </button>
+          ) : null}
         </div>
         <p className="flow-onboarding-text">{lt(currentStep.zh, currentStep.en)}</p>
         {currentStep.hintZh && !isConnectStep ? (

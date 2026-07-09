@@ -1,7 +1,12 @@
 import { create } from 'zustand';
 import flowOnboardingExampleImage from '@/assets/flow_1783419642525.png';
+import type { UserInfo } from '@/services/authApi';
+import { useAuthStore } from '@/stores/authStore';
 
 export const FLOW_ONBOARDING_STORAGE_KEY = 'tanva-flow-onboarding-v1-completed';
+
+/** 注册后多少天内视为新用户（用于自动弹出新手引导） */
+export const FLOW_ONBOARDING_NEW_USER_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 export const FLOW_ONBOARDING_EXAMPLE_IMAGE_URL = flowOnboardingExampleImage;
 
@@ -247,7 +252,11 @@ interface FlowOnboardingState {
   textPromptNodeId: string | null;
   imageNodeId: string | null;
   targetNodeId: string | null;
-  start: (existingNodeIds?: Iterable<string>) => void;
+  hideSkipButton: boolean;
+  start: (
+    existingNodeIds?: Iterable<string>,
+    options?: { hideSkipButton?: boolean }
+  ) => void;
   skip: () => void;
   complete: () => void;
   selectTrack: (track: FlowOnboardingTrack) => void;
@@ -264,14 +273,35 @@ const resetGuideNodes = {
   targetNodeId: null,
 };
 
-const persistCompleted = () => {
+const flowOnboardingStorageKeyForUser = (userId: string) =>
+  `${FLOW_ONBOARDING_STORAGE_KEY}:${userId}`;
+
+const persistCompleted = (userId?: string | null) => {
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.setItem(FLOW_ONBOARDING_STORAGE_KEY, '1');
+    if (userId) {
+      window.localStorage.setItem(flowOnboardingStorageKeyForUser(userId), '1');
+    }
   } catch {
     // ignore
   }
 };
+
+export function isNewUserAccount(user: UserInfo | null | undefined): boolean {
+  if (!user?.createdAt) return false;
+  const createdAt = Date.parse(user.createdAt);
+  if (!Number.isFinite(createdAt)) return false;
+  return Date.now() - createdAt <= FLOW_ONBOARDING_NEW_USER_WINDOW_MS;
+}
+
+export function shouldAutoStartFlowOnboarding(
+  user: UserInfo | null | undefined
+): boolean {
+  if (!user?.id) return false;
+  if (isFlowOnboardingCompleted(user.id)) return false;
+  return isNewUserAccount(user);
+}
 
 export const useFlowOnboardingStore = create<FlowOnboardingState>((set) => ({
   active: false,
@@ -282,32 +312,36 @@ export const useFlowOnboardingStore = create<FlowOnboardingState>((set) => ({
   textPromptNodeId: null,
   imageNodeId: null,
   targetNodeId: null,
-  start: (existingNodeIds) =>
+  hideSkipButton: false,
+  start: (existingNodeIds, options) =>
     set({
       active: true,
       phase: 'select',
       track: null,
       step: 0,
       initialNodeIds: new Set(existingNodeIds ?? []),
+      hideSkipButton: options?.hideSkipButton ?? false,
       ...resetGuideNodes,
     }),
   skip: () => {
-    persistCompleted();
+    persistCompleted(useAuthStore.getState().user?.id);
     set({
       active: false,
       phase: 'select',
       track: null,
       step: 0,
+      hideSkipButton: false,
       ...resetGuideNodes,
     });
   },
   complete: () => {
-    persistCompleted();
+    persistCompleted(useAuthStore.getState().user?.id);
     set({
       active: false,
       phase: 'select',
       track: null,
       step: 0,
+      hideSkipButton: false,
       ...resetGuideNodes,
     });
   },
@@ -331,9 +365,12 @@ export const useFlowOnboardingStore = create<FlowOnboardingState>((set) => ({
   setTargetNodeId: (id) => set({ targetNodeId: id }),
 }));
 
-export function isFlowOnboardingCompleted(): boolean {
+export function isFlowOnboardingCompleted(userId?: string | null): boolean {
   if (typeof window === 'undefined') return true;
   try {
+    if (userId && window.localStorage.getItem(flowOnboardingStorageKeyForUser(userId)) === '1') {
+      return true;
+    }
     return window.localStorage.getItem(FLOW_ONBOARDING_STORAGE_KEY) === '1';
   } catch {
     return true;

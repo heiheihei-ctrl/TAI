@@ -49,6 +49,7 @@ const AUTH_USER_SELECT = {
   avatarUrl: true,
   role: true,
   status: true,
+  createdAt: true,
 } as const;
 
 @Injectable()
