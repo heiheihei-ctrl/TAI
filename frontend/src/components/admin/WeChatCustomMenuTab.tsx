@@ -116,6 +116,7 @@ export default function WeChatCustomMenuTab() {
 
   const handleAddSubButton = () => {
     if (!currentTop || subButtons.length >= MAX_SUB) return;
+    const nextSubIndex = subButtons.length;
     updateDraft((prev) => {
       const next = cloneDraft(prev);
       const top = next.button[selectedTopIndex];
@@ -129,7 +130,7 @@ export default function WeChatCustomMenuTab() {
       delete top.pagepath;
       return next;
     });
-    setSelectedSubIndex(subButtons.length);
+    setSelectedSubIndex(nextSubIndex);
   };
 
   const handleDeleteCurrent = () => {
@@ -364,33 +365,31 @@ export default function WeChatCustomMenuTab() {
                   菜单预览：{previewTitle}
                 </div>
 
-                {hasSubMenu ? (
-                  <div className="absolute bottom-[52px] left-1/2 w-[220px] -translate-x-1/2 overflow-hidden rounded-md border border-gray-200 bg-white shadow">
-                    {subButtons.map((sub, index) => (
-                      <button
-                        key={`${sub.name}-${index}`}
-                        type="button"
-                        onClick={() => setSelectedSubIndex(index)}
-                        className={`block w-full border-b px-4 py-3 text-left text-sm last:border-b-0 ${
-                          selectedSubIndex === index
-                            ? "bg-green-50 text-green-700"
-                            : "text-gray-700 hover:bg-gray-50"
-                        }`}
-                      >
-                        {sub.name || "子菜单"}
-                      </button>
-                    ))}
-                    {subButtons.length < MAX_SUB ? (
-                      <button
-                        type="button"
-                        onClick={handleAddSubButton}
-                        className="block w-full px-4 py-3 text-left text-sm text-gray-500 hover:bg-gray-50"
-                      >
-                        + 添加
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
+                <div className="absolute bottom-[52px] left-1/2 w-[220px] -translate-x-1/2 overflow-hidden rounded-md border border-gray-200 bg-white shadow">
+                  {subButtons.map((sub, index) => (
+                    <button
+                      key={`${sub.name}-${index}`}
+                      type="button"
+                      onClick={() => setSelectedSubIndex(index)}
+                      className={`block w-full border-b px-4 py-3 text-left text-sm last:border-b-0 ${
+                        selectedSubIndex === index
+                          ? "bg-green-50 text-green-700"
+                          : "text-gray-700 hover:bg-gray-50"
+                      }`}
+                    >
+                      {sub.name || "子菜单"}
+                    </button>
+                  ))}
+                  {subButtons.length < MAX_SUB ? (
+                    <button
+                      type="button"
+                      onClick={handleAddSubButton}
+                      className="block w-full px-4 py-3 text-left text-sm text-gray-500 hover:bg-gray-50"
+                    >
+                      + 添加
+                    </button>
+                  ) : null}
+                </div>
 
                 <div className="absolute bottom-0 left-0 right-0 flex border-t border-gray-200 bg-[#fafafa]">
                   <div className="flex w-[52px] items-center justify-center border-r border-gray-200 text-lg text-gray-500">
@@ -439,7 +438,7 @@ export default function WeChatCustomMenuTab() {
                       : "正在编辑一级菜单"}
                 </p>
               </div>
-              {hasSubMenu && selectedSubIndex === null ? (
+              {selectedSubIndex === null && subButtons.length < MAX_SUB ? (
                 <Button variant="outline" size="sm" onClick={handleAddSubButton}>
                   添加子菜单
                 </Button>
@@ -456,7 +455,7 @@ export default function WeChatCustomMenuTab() {
                     onChange={(e) => patchCurrentTop({ name: e.target.value })}
                   />
                   <p className="text-xs text-muted-foreground">
-                    仅支持中英文和数字，字数不超过 4 个汉字。
+                    已添加子菜单，仅可设置菜单名称。仅支持中英文和数字，字数不超过 4 个汉字。
                   </p>
                 </div>
               </div>
