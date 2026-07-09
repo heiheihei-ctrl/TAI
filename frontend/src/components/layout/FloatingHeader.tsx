@@ -373,6 +373,10 @@ const FloatingHeader: React.FC = () => {
   });
 
   useEffect(() => {
+    setIsWechatQrOpen(true);
+  }, []);
+
+  useEffect(() => {
     const fetchQrCodes = async () => {
       try {
         const apiBase =
@@ -2564,41 +2568,50 @@ const FloatingHeader: React.FC = () => {
               </Button>
             </div>
 
-            <div
-              className='relative'
-              onMouseEnter={() => setIsWechatQrOpen(true)}
-              onMouseLeave={() => setIsWechatQrOpen(false)}
-            >
+            <div className='relative'>
               {isWechatQrOpen && (
-                <div className='absolute top-full right-0 mt-2 p-4 rounded-2xl bg-black/80 backdrop-blur-md border border-white/10 shadow-2xl z-[100] animate-in fade-in slide-in-from-top-2 duration-200'>
+                <div className='absolute top-full right-0 z-[100] mt-2 animate-in fade-in slide-in-from-top-2 rounded-2xl border border-white/10 bg-black/80 p-4 shadow-2xl backdrop-blur-md duration-200'>
+                  <div className='mb-3 flex items-center justify-between gap-3'>
+                    <span className='text-sm font-medium text-white/90'>
+                      {t("home.footer.contact")}
+                    </span>
+                    <button
+                      type='button'
+                      aria-label={t("home.eventModal.close")}
+                      className='flex h-6 w-6 items-center justify-center rounded-full text-white/60 transition-colors hover:bg-white/10 hover:text-white'
+                      onClick={() => setIsWechatQrOpen(false)}
+                    >
+                      <X className='h-3.5 w-3.5' />
+                    </button>
+                  </div>
                   <div className='flex gap-4'>
                     <div className='flex flex-col items-center'>
-                      <div className='w-28 h-28 bg-white rounded-lg p-2 mb-2'>
+                      <div className='mb-2 h-28 w-28 rounded-lg bg-white p-2'>
                         <img
-                          src={gzhImg}
+                          src={wechatQrCodes.officialAccount || gzhImg}
                           alt={t("home.wechat.taiOfficialAccount")}
-                          className='w-full h-full object-contain'
+                          className='h-full w-full object-contain'
                           onError={(event) => {
-                            (event.target as HTMLImageElement).src = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%23f0f0f0" width="100" height="100"/><text x="50" y="55" text-anchor="middle" fill="%23999" font-size="12">${encodeURIComponent(t("home.wechat.noImage"))}</text></svg>`;
+                            (event.target as HTMLImageElement).src = gzhImg;
                           }}
                         />
                       </div>
-                      <span className='text-xs text-white/80 whitespace-nowrap'>
+                      <span className='whitespace-nowrap text-xs text-white/80'>
                         {t("home.wechat.taiOfficialAccount")}
                       </span>
                     </div>
                     <div className='flex flex-col items-center'>
-                      <div className='w-28 h-28 bg-white rounded-lg p-2 mb-2'>
+                      <div className='mb-2 h-28 w-28 rounded-lg bg-white p-2'>
                         <img
-                          src={Qrcode}
+                          src={wechatQrCodes.wechatGroup || Qrcode}
                           alt={t("home.wechat.taiLearningGroup")}
-                          className='w-full h-full object-contain'
+                          className='h-full w-full object-contain'
                           onError={(event) => {
-                            (event.target as HTMLImageElement).src = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%23f0f0f0" width="100" height="100"/><text x="50" y="55" text-anchor="middle" fill="%23999" font-size="12">${encodeURIComponent(t("home.wechat.noImage"))}</text></svg>`;
+                            (event.target as HTMLImageElement).src = Qrcode;
                           }}
                         />
                       </div>
-                      <span className='text-xs text-white/80 whitespace-nowrap'>
+                      <span className='whitespace-nowrap text-xs text-white/80'>
                         {t("home.wechat.taiLearningGroup")}
                       </span>
                     </div>
@@ -2609,8 +2622,9 @@ const FloatingHeader: React.FC = () => {
               <Button
                 variant='ghost'
                 size='sm'
-                className='p-0 text-gray-600 transition-all duration-200 border rounded-full h-7 w-7 bg-liquid-glass-light backdrop-blur-minimal border-liquid-glass-light hover:bg-liquid-glass-hover'
-                title='WeChat'
+                className='h-7 w-7 rounded-full border border-liquid-glass-light bg-liquid-glass-light p-0 text-gray-600 backdrop-blur-minimal transition-all duration-200 hover:bg-liquid-glass-hover'
+                title={t("home.footer.contact")}
+                onClick={() => setIsWechatQrOpen((prev) => !prev)}
               >
                 <MessageCircle className='w-4 h-4' />
               </Button>

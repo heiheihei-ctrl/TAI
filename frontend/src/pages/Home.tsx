@@ -223,7 +223,7 @@ const WeChatFloatingButton = () => {
       onMouseLeave={() => setIsOpen(false)}
     >
       {isOpen && (
-        <div className="absolute bottom-16 right-0 rounded-2xl border border-white/10 bg-black/80 p-4 shadow-2xl backdrop-blur-md duration-300 animate-in fade-in slide-in-from-bottom-4">
+        <div className="absolute bottom-[calc(100%+12px)] right-0 rounded-2xl border border-white/10 bg-black/80 p-4 shadow-2xl backdrop-blur-md duration-300 animate-in fade-in slide-in-from-bottom-4">
           <div className="flex gap-4">
             <div className="flex flex-col items-center">
               <div className="mb-2 h-32 w-32 rounded-lg bg-white p-2">
@@ -261,12 +261,12 @@ const WeChatFloatingButton = () => {
         </div>
       )}
 
-      <button
-        type="button"
-        className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-black/60 shadow-lg backdrop-blur-md transition-all duration-300 hover:scale-110 hover:bg-black/80"
-      >
-        <MessageCircle className="h-6 w-6 text-white" />
-      </button>
+      <div className="flex cursor-default items-center gap-2.5 rounded-full border border-white/10 bg-black/60 py-2 pl-4 pr-3 shadow-lg backdrop-blur-md transition-all duration-300 hover:bg-black/80">
+        <span className="select-none text-sm text-white/85 transition-colors duration-200">
+          {t("home.footer.contact")}
+        </span>
+        <MessageCircle className="h-5 w-5 shrink-0 text-white" aria-hidden />
+      </div>
     </div>
   );
 };
