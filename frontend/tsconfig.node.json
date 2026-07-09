@@ -19,7 +19,10 @@
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
+    "noUncheckedSideEffectImports": true,
+
+    /* 与 tsconfig.app.json 一致：避免 pnpm 下传递 @types 未 hoist 导致 TS2688 */
+    "types": ["node"]
   },
   "include": ["vite.config.ts"]
 }

@@ -11,6 +11,7 @@ import { useProjectStore } from '@/stores/projectStore';
 import { useTeamStore } from '@/stores/teamStore';
 import { useCanvasStore } from '@/stores/canvasStore';
 import CollaborationPresenceBar from './CollaborationPresenceBar';
+import { SHOW_TEAM_COLLABORATION } from '@/config/featureFlags';
 
 const CURSOR_THROTTLE_MS = 32;
 const CURSOR_STALE_MS = 5_000;
@@ -223,6 +224,7 @@ export default function CollaborativeCursors({ canvasRef }: Props) {
   );
 
   const showCollaboration =
+    SHOW_TEAM_COLLABORATION &&
     isTeamProject &&
     !!projectId &&
     (connected || peers.size > 0 || collaborationSocket.isConnected());

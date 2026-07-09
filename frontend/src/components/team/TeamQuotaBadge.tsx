@@ -8,6 +8,7 @@ import {
   type PersonalTeamQuota,
 } from '@/utils/teamQuotaDisplay';
 import { TeamManagementModal } from './TeamManagementModal';
+import { SHOW_TEAM_COLLABORATION } from '@/config/featureFlags';
 
 export default function TeamQuotaBadge() {
   const activeTeam = useTeamStore((s) => {
@@ -56,7 +57,7 @@ export default function TeamQuotaBadge() {
     return formatPersonalQuotaBadge(quota);
   }, [activeTeam, loading, quota]);
 
-  if (!activeTeam || !display) return null;
+  if (!SHOW_TEAM_COLLABORATION || !activeTeam || !display) return null;
 
   return (
     <>

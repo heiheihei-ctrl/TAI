@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { useTeamStore } from '@/stores/teamStore';
 import RemoteSelectionOverlays from './RemoteSelectionOverlays';
+import { SHOW_TEAM_COLLABORATION } from '@/config/featureFlags';
 
 interface Props {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
@@ -142,6 +143,10 @@ export default function CollaborationSyncManager({ canvasRef }: Props) {
       );
     };
   }, [connected, projectId, isTeamProject]);
+
+  if (!SHOW_TEAM_COLLABORATION) {
+    return null;
+  }
 
   return (
     <RemoteSelectionOverlays canvas={canvasEl} selections={remoteSelections} />

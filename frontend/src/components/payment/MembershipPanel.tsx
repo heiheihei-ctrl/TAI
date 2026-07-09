@@ -3,6 +3,10 @@ import { ArrowLeft, Check, CheckCircle, Clock, Crown, FileText, Loader2, Refresh
 import { cn } from "@/lib/utils";
 import PaymentPanel from "@/components/payment/PaymentPanel";
 import PaymentSuccessView from "@/components/payment/PaymentSuccessView";
+import {
+  getPlanCreditsBreakdownForDisplay,
+  resolvePlanDisplayTitle,
+} from "@/utils/membershipYearlyDisplay";
 import { useAIChatStore } from "@/stores/aiChatStore";
 import { useAuthStore } from "@/stores/authStore";
 import { fetchPublicMembershipPlans } from "@/services/settingsApi";
@@ -71,14 +75,9 @@ function splitBenefitText(value: unknown): string[] {
     .filter(Boolean);
 }
 
-function buildPlanCreditsSummary(plan: PaymentMembershipPlan): string {
-  const total = plan.monthlyQuotaCredits + plan.signupBonusCredits;
-  return `套餐积分合计到账 ${total} `;
-}
-
 function vipFeatureLines(plan: PaymentMembershipPlan): { main: string[]; accent: string[] } {
   const metadata = getPlanMetadataObject(plan.metadata);
-  const main = [buildPlanCreditsSummary(plan), ...splitBenefitText(metadata.coreBenefits)];
+  const main = [...splitBenefitText(metadata.coreBenefits)];
   const accent: string[] = [];
 
   if (metadata.seedance2Access === "enabled") {
@@ -110,10 +109,6 @@ function vipFeatureLines(plan: PaymentMembershipPlan): { main: string[]; accent:
     accent.push(`支持：${metadata.supportLevel.trim()}`);
   }
 
-  if (typeof plan.dailyGiftCredits === "number" && plan.dailyGiftCredits > 0) {
-    accent.push(`每日赠送：${plan.dailyGiftCredits} 积分`);
-  }
-
   if (metadata.pauseGiftDecay === true) {
     accent.push("赠送积分：不衰减");
   }
@@ -133,9 +128,7 @@ const TIER_SERIF_LABEL: Record<string, string> = {
 };
 
 function checkoutPlanDisplayTitle(plan: PaymentMembershipPlan): string {
-  const nm = (plan.name || "").trim();
-  if (nm) return nm;
-  return plan.code || "—";
+  return resolvePlanDisplayTitle(plan);
 }
 
 function isRecommendedPlan(plan: PaymentMembershipPlan): boolean {
@@ -724,7 +717,7 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                   {filteredPlans.map((plan) => {
                     const active = plan.code === selectedPlanCode;
                     const confirmedActive = active && userConfirmedPlan;
-                    const tierTitle = plan.name;
+                    const tierTitle = resolvePlanDisplayTitle(plan);
                     const { main, accent } = vipFeatureLines(plan);
                     const isRecommended = isRecommendedPlan(plan);
                     const isDailyCreation = !isRecommended && isDailyCreationPlan(plan);
@@ -734,7 +727,8 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                       plan.billingCycle === "yearly" && plan.price > 0
                         ? String(Math.round((plan.price / 12) * 100) / 100)
                         : null;
-                    const planTotalCredits = plan.monthlyQuotaCredits + plan.signupBonusCredits;
+                    const creditsBreakdown = getPlanCreditsBreakdownForDisplay(plan);
+                    const periodLabel = plan.billingCycle === "yearly" ? "年" : "月";
 
                     return (
                       <div
@@ -835,8 +829,23 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                             )}
                           >
                             <span className={isWhite ? "text-indigo-500" : "text-violet-300"}>✦</span>{" "}
-                            {planTotalCredits} 合计积分
+                            {creditsBreakdown?.total ?? "—"} 预计{periodLabel}合计积分
                           </div>
+                          {creditsBreakdown ? (
+                            <ul
+                              className="mt-2 space-y-1 text-[11px] leading-relaxed text-[#4f46e5cc] sm:text-xs"
+                            >
+                              <li>套餐到账 {creditsBreakdown.packageCredits}积分</li>
+                              <li>
+                                每日签到 {creditsBreakdown.dailyPerDay} × {creditsBreakdown.dailyMultiplier} ={" "}
+                                {creditsBreakdown.dailyTotal}积分
+                              </li>
+                              <li>
+                                7日连签奖励 {creditsBreakdown.weeklyExtraPerWeek} ×{" "}
+                                {creditsBreakdown.weeklyMultiplier} = {creditsBreakdown.weeklyTotal}积分
+                              </li>
+                            </ul>
+                          ) : null}
                         </div>
 
                         {!publicBrowse ? (
@@ -975,11 +984,15 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                               </span>
                             </div>
                           </div>
-                          {selectedPlan ? (
-                            <div className={cn("mt-2 text-xs", isWhite ? "text-slate-500" : "text-zinc-500")}>
-                              {buildPlanCreditsSummary(selectedPlan)}
-                            </div>
-                          ) : null}
+                          {selectedPlan ? (() => {
+                            const breakdown = getPlanCreditsBreakdownForDisplay(selectedPlan);
+                            if (!breakdown) return null;
+                            return (
+                              <div className={cn("mt-2 text-xs", isWhite ? "text-slate-500" : "text-zinc-500")}>
+                                {breakdown.total} 预计{selectedPlan.billingCycle === "yearly" ? "年" : "月"}合计积分
+                              </div>
+                            );
+                          })() : null}
                         </div>
 
                         <div

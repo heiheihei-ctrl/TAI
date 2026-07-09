@@ -32,6 +32,7 @@ import { TeamJoinModal } from './TeamJoinModal';
 import { TeamSwitchConfirmModal } from './TeamSwitchConfirmModal';
 import { TeamManagementModal } from './TeamManagementModal';
 import { TeamInviteConfirmModal } from './TeamInviteConfirmModal';
+import { SHOW_TEAM_COLLABORATION } from '@/config/featureFlags';
 
 export default function TeamSwitcher() {
   const user = useAuthStore((s) => s.user);
@@ -89,7 +90,7 @@ export default function TeamSwitcher() {
   }, [pendingSwitch]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!SHOW_TEAM_COLLABORATION || !user) return;
     void refreshTeams().catch(() => {});
   }, [user?.id]);
 
@@ -138,7 +139,7 @@ export default function TeamSwitcher() {
     void applyTeamSwitch(team);
   };
 
-  if (!user) return null;
+  if (!SHOW_TEAM_COLLABORATION || !user) return null;
 
   return (
     <>

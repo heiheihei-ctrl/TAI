@@ -117,6 +117,25 @@ export function getYearlyCreditsBreakdown(
   return buildPlanCreditsBreakdown(plan, { days: DAYS_PER_YEAR, weeks: WEEKS_PER_YEAR });
 }
 
+export function resolvePlanDisplayTitle(plan: PaymentMembershipPlan): string {
+  const code = normPlanCode(plan.code);
+  const name = (plan.name || "").trim();
+
+  if (code.includes("69") || name.includes("日常")) return "日常创作";
+  if (code.includes("199") || name.includes("专业")) return "专业进阶";
+  if (code.includes("599") || name.includes("旗舰")) return "旗舰尊享";
+
+  return name || plan.code;
+}
+
+export function getPlanCreditsBreakdownForDisplay(
+  plan: PaymentMembershipPlan,
+): PlanCreditsBreakdown | null {
+  if (plan.billingCycle === "yearly") return getYearlyCreditsBreakdown(plan);
+  if (plan.billingCycle === "monthly") return getMonthlyCreditsBreakdown(plan);
+  return null;
+}
+
 export function getPlanDisplayPrice(plan: PaymentMembershipPlan): number {
   const yearly = getYearlyPlanDisplay(plan);
   if (yearly) return yearly.displayPrice;
