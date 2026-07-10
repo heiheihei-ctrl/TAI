@@ -52,6 +52,8 @@ const zhCN = {
       logoAlt: "探索创作之境",
       subtitle: "TAI 新一代智能聚合创意平台，深耕建筑与教育领域，用AI理解行业、释放创造力。",
       startNow: "灵感开启",
+      architectureIndustry: "建筑行业",
+      otherIndustry: "其他行业",
     },
     features: {
       title: "强大的创作工具",

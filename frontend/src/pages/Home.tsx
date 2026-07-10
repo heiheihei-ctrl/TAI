@@ -15,6 +15,7 @@ import WelcomeShaderBackground from "@/components/background/WelcomeShaderBackgr
 import EventSettingsModalHost from "@/components/home/EventSettingsModalHost";
 import MembershipModal from "@/components/home/MembershipModal";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { setStoredTemplateParentCategory } from "@/services/publicTemplateService";
 import titleImage from "@/assets/title.png";
 import logoImage from "@/assets/logo.png";
 import leftIconImage from "@/assets/left-icon.png";
@@ -181,6 +182,12 @@ const BTN_LOGIN_CLASS =
 const CTA_BTN_CLASS =
   "group inline-flex items-center justify-center rounded-full border border-sky-300/35 bg-gradient-to-r from-[rgba(33,75,157,0.1)] to-[rgba(33,75,157,1)] text-white w-[120px] h-[40px] text-[16px]";
 
+const BTN_ARCHITECTURE_INDUSTRY_CLASS =
+  "inline-flex min-w-[120px] items-center justify-center rounded-full border border-[#c9954a]/85 bg-[#08101f] px-5 py-2 text-[13px] font-medium text-[#d4a056] shadow-[inset_0_0_24px_rgba(201,149,74,0.08)] transition-all duration-200 hover:border-[#e8b86d] hover:text-[#f0c078]";
+
+const BTN_OTHER_INDUSTRY_CLASS =
+  "inline-flex min-w-[120px] items-center justify-center rounded-full border border-sky-400/75 bg-[#08101f] px-5 py-2 text-[13px] font-medium text-sky-300 shadow-[inset_0_0_28px_rgba(56,189,248,0.1)] transition-all duration-200 hover:border-sky-300 hover:text-sky-200";
+
 const WeChatFloatingButton = () => {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
@@ -345,6 +352,14 @@ export default function Home() {
   const [membershipModalOpen, setMembershipModalOpen] = useState(false);
   const [activeSceneFilter, setActiveSceneFilter] =
     useState<SceneFilterKey>("all");
+
+  const openTemplatesWithParent = useCallback(
+    (parentCategory: "建筑" | "其他") => {
+      setStoredTemplateParentCategory(parentCategory);
+      navigate("/app");
+    },
+    [navigate],
+  );
 
   const featureCards = useMemo(
     () =>
@@ -628,13 +643,22 @@ export default function Home() {
             {t("home.hero.subtitle")}
           </p>
 
-          <button
-            type="button"
-            onClick={() => navigate("/app")}
-            className={CTA_BTN_CLASS}
-          >
-            <span>{t("home.hero.startNow")}</span>
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => openTemplatesWithParent("建筑")}
+              className={BTN_ARCHITECTURE_INDUSTRY_CLASS}
+            >
+              {t("home.hero.architectureIndustry")}
+            </button>
+            <button
+              type="button"
+              onClick={() => openTemplatesWithParent("其他")}
+              className={BTN_OTHER_INDUSTRY_CLASS}
+            >
+              {t("home.hero.otherIndustry")}
+            </button>
+          </div>
         </div>
 
         <div className="relative z-10 mx-auto w-full max-w-[1200px] px-4 pb-10 md:pb-12">
@@ -1009,13 +1033,22 @@ export default function Home() {
           <p className="text-[14px] text-white/80 mt-[10px]">
             {t("home.ctaBanner.tagline")}
           </p>
-          <button
-            type="button"
-            onClick={() => navigate("/app")}
-            className={cn(CTA_BTN_CLASS, "mt-[22px]")}
-          >
-            <span>{t("home.hero.startNow")}</span>
-          </button>
+          <div className="mt-[22px] flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => openTemplatesWithParent("建筑")}
+              className={BTN_ARCHITECTURE_INDUSTRY_CLASS}
+            >
+              {t("home.hero.architectureIndustry")}
+            </button>
+            <button
+              type="button"
+              onClick={() => openTemplatesWithParent("其他")}
+              className={BTN_OTHER_INDUSTRY_CLASS}
+            >
+              {t("home.hero.otherIndustry")}
+            </button>
+          </div>
         </div>
       </section>
 

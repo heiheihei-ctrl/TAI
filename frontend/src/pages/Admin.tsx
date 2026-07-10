@@ -96,9 +96,10 @@ import {
   createTemplate,
   updateTemplate,
   deleteTemplate,
-  fetchTemplateCategories,
+  fetchAdminTemplateCategoryGroups,
+  isArchitectureSecondaryCategory,
 } from "@/services/publicTemplateService";
-import type { PublicTemplate } from "@/services/publicTemplateService";
+import type { PublicTemplate, TemplateCategoryGroups } from "@/services/publicTemplateService";
 import { OpenObserveLogButton } from "@/components/admin/OpenObserveLogButton";
 import DashboardTrendChart from "@/components/admin/DashboardTrendChart";
 import UserProfileDemographicsPanel from "@/components/admin/UserProfileDemographicsPanel";
@@ -6474,8 +6475,14 @@ function TemplatesTab() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
+  const [parentCategory, setParentCategory] = useState<"" | "建筑" | "其他">("");
   const [isActive, setIsActive] = useState<boolean | undefined>(undefined);
   const [categories, setCategories] = useState<string[]>([]);
+  const [categoryGroups, setCategoryGroups] = useState<TemplateCategoryGroups>({
+    建筑: [],
+    其他: [],
+  });
+  const [newCategoryParent, setNewCategoryParent] = useState<"建筑" | "其他">("建筑");
 
   // 创建/编辑模态框状态
   const [modalOpen, setModalOpen] = useState(false);
@@ -6507,6 +6514,7 @@ function TemplatesTab() {
         page,
         pageSize: 10,
         category: category || undefined,
+        parentCategory: parentCategory || undefined,
         isActive,
         search: search || undefined,
       });
@@ -6521,15 +6529,9 @@ function TemplatesTab() {
 
   const loadCategories = async () => {
     try {
-      const result = await fetchTemplateCategories();
-      // 将"其他"分类固定在末尾
-      if (Array.isArray(result)) {
-        const otherCat = result.filter((c) => c === "其他");
-        const restCats = result.filter((c) => c !== "其他");
-        setCategories([...restCats, ...otherCat]);
-      } else {
-        setCategories(result);
-      }
+      const groups = await fetchAdminTemplateCategoryGroups();
+      setCategoryGroups(groups);
+      setCategories([...groups.建筑, ...groups.其他]);
     } catch (error) {
       console.error("加载分类失败:", error);
     }
@@ -6538,7 +6540,7 @@ function TemplatesTab() {
   useEffect(() => {
     loadTemplates();
     loadCategories();
-  }, [page, category, isActive, search]);
+  }, [page, category, parentCategory, isActive, search]);
 
   const handleCreate = () => {
     setEditingTemplate(null);
@@ -6764,6 +6766,30 @@ function TemplatesTab() {
 
   return (
     <div>
+      <div className='mb-4 grid gap-3 md:grid-cols-2'>
+        {(["建筑", "其他"] as const).map((parent) => (
+          <div key={parent} className='rounded-lg border bg-white p-4'>
+            <div className='mb-2 text-sm font-medium text-gray-700'>
+              一级分类：{parent}
+            </div>
+            <div className='flex flex-wrap gap-2'>
+              {categoryGroups[parent].length ? (
+                categoryGroups[parent].map((cat) => (
+                  <span
+                    key={`${parent}-${cat}`}
+                    className='rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700'
+                  >
+                    {cat}
+                  </span>
+                ))
+              ) : (
+                <span className='text-xs text-gray-400'>暂无二级分类</span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
       <div className='mb-4 flex gap-2 flex-wrap'>
         <Input
           placeholder='搜索模板名称/描述'
@@ -6772,12 +6798,28 @@ function TemplatesTab() {
           className='max-w-xs'
         />
         <select
+          value={parentCategory}
+          onChange={(e) => {
+            setParentCategory(e.target.value as "" | "建筑" | "其他");
+            setCategory("");
+            setPage(1);
+          }}
+          className='border rounded px-3 py-2 text-sm'
+        >
+          <option value=''>全部一级分类</option>
+          <option value='建筑'>建筑</option>
+          <option value='其他'>其他</option>
+        </select>
+        <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
           className='border rounded px-3 py-2 text-sm'
         >
-          <option value=''>全部分类</option>
-          {categories.map((cat) => (
+          <option value=''>全部二级分类</option>
+          {(parentCategory
+            ? categoryGroups[parentCategory]
+            : categories
+          ).map((cat) => (
             <option key={cat} value={cat}>
               {cat}
             </option>
@@ -6948,7 +6990,7 @@ function TemplatesTab() {
                 </div>
               <div>
                 <label className='block text-sm text-gray-600 mb-1'>
-                  分类
+                  二级分类
                 </label>
                   <select
                     value={formData.category}
@@ -6957,19 +6999,38 @@ function TemplatesTab() {
                     }
                     className='w-full border rounded px-3 py-2'
                   >
-                    <option value=''>请选择分类</option>
-                    {categories.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
+                    <option value=''>请选择二级分类</option>
+                    <optgroup label='建筑'>
+                      {categoryGroups.建筑.map((cat) => (
+                        <option key={`arch-${cat}`} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label='其他'>
+                      {categoryGroups.其他.map((cat) => (
+                        <option key={`other-${cat}`} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                    </optgroup>
                   </select>
-                  <div className='flex gap-2 mt-2'>
+                  <div className='flex gap-2 mt-2 items-center flex-wrap'>
+                    <select
+                      value={newCategoryParent}
+                      onChange={(e) =>
+                        setNewCategoryParent(e.target.value as "建筑" | "其他")
+                      }
+                      className='border rounded px-3 py-2 text-sm'
+                    >
+                      <option value='建筑'>建筑</option>
+                      <option value='其他'>其他</option>
+                    </select>
                     <input
                       type='text'
                       id='new-category-input'
-                      className='flex-1 border rounded px-3 py-2 text-sm'
-                      placeholder='输入新分类名称'
+                      className='flex-1 min-w-[160px] border rounded px-3 py-2 text-sm'
+                      placeholder='输入新二级分类名称'
                     />
                     <button
                       type='button'
@@ -6985,13 +7046,23 @@ function TemplatesTab() {
                           alert('该分类已存在');
                           return;
                         }
+                        if (
+                          newCategoryParent === "建筑" &&
+                          !isArchitectureSecondaryCategory(newCat)
+                        ) {
+                          alert('仅「建筑设计」「空间设计」可归属建筑一级分类');
+                          return;
+                        }
                         try {
                           const res = await fetchWithAuth(
                             "/api/admin/templates/categories",
                             {
                               method: "POST",
                               headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ category: newCat }),
+                              body: JSON.stringify({
+                                category: newCat,
+                                parentCategory: newCategoryParent,
+                              }),
                             }
                           );
                           if (!res.ok) throw new Error("添加分类失败");

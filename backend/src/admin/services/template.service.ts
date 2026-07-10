@@ -4,6 +4,19 @@ import {
   getPublicTemplateCategoryRank,
   sortPublicTemplateCategories,
 } from '../../templates/template-category-order';
+import {
+  buildDefaultCategoryParentGroups,
+  flattenSecondaryCategories,
+  getSecondaryCategoriesForParent,
+  isArchitectureSecondaryCategory,
+  isTemplateParentCategory,
+  normalizeCategoryParentGroups,
+  reconcileCategoryParentGroups,
+  TEMPLATE_CATEGORIES_KEY,
+  TEMPLATE_CATEGORY_PARENT_GROUPS_KEY,
+  TEMPLATE_PARENT_CATEGORIES,
+  type TemplateParentCategory,
+} from '../../templates/template-category-groups';
 import { CreateTemplateDto, UpdateTemplateDto, TemplateQueryDto } from '../dto/template.dto';
 import { OssService } from '../../oss/oss.service';
 import { sanitizeDesignJson } from '../../utils/designJsonSanitizer';
@@ -164,13 +177,20 @@ export class TemplateService {
   }
 
   async getTemplates(query: TemplateQueryDto) {
-    const { page = 1, pageSize = 10, category, isActive, search } = query;
+    const { page = 1, pageSize = 10, category, parentCategory, isActive, search } = query;
     const skip = (page - 1) * pageSize;
 
     const where: any = {};
 
     if (category) {
       where.category = category;
+    } else if (parentCategory && isTemplateParentCategory(parentCategory)) {
+      const groups = await this.getCategoryParentGroups();
+      const secondary = getSecondaryCategoriesForParent(groups, parentCategory) ?? [];
+      if (secondary.length === 0) {
+        return { items: [], total: 0, page, pageSize, totalPages: 0 };
+      }
+      where.category = { in: secondary };
     }
 
     if (typeof isActive === 'boolean') {
@@ -256,34 +276,186 @@ export class TemplateService {
     return { success: true };
   }
 
-  async getTemplateCategories() {
-    // 优先从系统设置中读取持久化的分类列表
-    const setting = await this.prisma.systemSetting.findUnique({ where: { key: 'template_categories' } });
-    if (setting && setting.value) {
+  private async readSecondaryCategoriesSetting(): Promise<string[]> {
+    const setting = await this.prisma.systemSetting.findUnique({
+      where: { key: TEMPLATE_CATEGORIES_KEY },
+    });
+    if (setting?.value) {
       try {
         const list = JSON.parse(setting.value);
         if (Array.isArray(list)) {
-          return sortPublicTemplateCategories(list.filter(Boolean));
+          return list
+            .map((item) => (typeof item === 'string' ? item.trim() : ''))
+            .filter(Boolean)
+            .filter((item) => !isTemplateParentCategory(item));
         }
-      } catch (e) {
-        // ignore parse error and fallback
+      } catch {
+        // ignore
       }
     }
 
-    // fallback: 从现有模板中收集分类
     const categories = await this.prisma.publicTemplate.findMany({
-      where: { isActive: true },
       select: { category: true },
       distinct: ['category'],
     });
-
-    const cats = categories.map((c) => c.category).filter((c): c is string => Boolean(c));
-    return sortPublicTemplateCategories(cats);
+    return categories
+      .map((item) => item.category)
+      .filter((item): item is string => Boolean(item))
+      .filter((item) => !isTemplateParentCategory(item));
   }
 
-  async getActiveTemplatesForFrontend() {
+  private async persistSecondaryCategories(list: string[]): Promise<string[]> {
+    const normalized = sortPublicTemplateCategories(
+      Array.from(
+        new Set(
+          list
+            .map((item) => item?.trim())
+            .filter(Boolean)
+            .filter((item) => !isTemplateParentCategory(item)),
+        ),
+      ),
+    );
+    await this.prisma.systemSetting.upsert({
+      where: { key: TEMPLATE_CATEGORIES_KEY },
+      create: {
+        key: TEMPLATE_CATEGORIES_KEY,
+        value: JSON.stringify(normalized),
+        description: '模板二级分类',
+      },
+      update: {
+        value: JSON.stringify(normalized),
+      },
+    });
+    return normalized;
+  }
+
+  private async persistCategoryParentGroups(
+    groups: Record<TemplateParentCategory, string[]>,
+  ): Promise<Record<TemplateParentCategory, string[]>> {
+    const normalized = normalizeCategoryParentGroups(groups);
+    await this.prisma.systemSetting.upsert({
+      where: { key: TEMPLATE_CATEGORY_PARENT_GROUPS_KEY },
+      create: {
+        key: TEMPLATE_CATEGORY_PARENT_GROUPS_KEY,
+        value: JSON.stringify(normalized),
+        description: '模板一级/二级分类映射',
+      },
+      update: {
+        value: JSON.stringify(normalized),
+      },
+    });
+    await this.persistSecondaryCategories(flattenSecondaryCategories(normalized));
+    return normalized;
+  }
+
+  async getCategoryParentGroups(): Promise<Record<TemplateParentCategory, string[]>> {
+    const secondary = await this.readSecondaryCategoriesSetting();
+
+    const setting = await this.prisma.systemSetting.findUnique({
+      where: { key: TEMPLATE_CATEGORY_PARENT_GROUPS_KEY },
+    });
+
+    let allSecondary = [...secondary];
+    if (setting?.value) {
+      try {
+        const parsed = normalizeCategoryParentGroups(JSON.parse(setting.value));
+        allSecondary = Array.from(
+          new Set([...allSecondary, ...flattenSecondaryCategories(parsed)]),
+        );
+      } catch {
+        // ignore
+      }
+    }
+
+    const reconciled = reconcileCategoryParentGroups(allSecondary);
+
+    if (setting?.value) {
+      try {
+        const stored = normalizeCategoryParentGroups(JSON.parse(setting.value));
+        const storedFlat = sortPublicTemplateCategories(flattenSecondaryCategories(stored));
+        const reconciledFlat = sortPublicTemplateCategories(flattenSecondaryCategories(reconciled));
+        const sameGroups =
+          sortPublicTemplateCategories(stored.建筑).join('\0') ===
+            sortPublicTemplateCategories(reconciled.建筑).join('\0') &&
+          sortPublicTemplateCategories(stored.其他).join('\0') ===
+            sortPublicTemplateCategories(reconciled.其他).join('\0') &&
+          storedFlat.join('\0') === reconciledFlat.join('\0');
+        if (sameGroups) {
+          return stored;
+        }
+      } catch {
+        // fall through to persist reconciled
+      }
+    }
+
+    if (reconciled.建筑.length || reconciled.其他.length) {
+      return this.persistCategoryParentGroups(reconciled);
+    }
+
+    const defaults = buildDefaultCategoryParentGroups(secondary);
+    return this.persistCategoryParentGroups(defaults);
+  }
+
+  async addTemplateCategory(category: string, parentCategory: TemplateParentCategory) {
+    const trimmed = category?.trim();
+    if (!trimmed) {
+      throw new Error('分类不能为空');
+    }
+    if (isTemplateParentCategory(trimmed)) {
+      throw new Error('二级分类名称不能与一级分类重名');
+    }
+    if (parentCategory === '建筑' && !isArchitectureSecondaryCategory(trimmed)) {
+      throw new Error('仅「建筑设计」「空间设计」可归属建筑一级分类');
+    }
+
+    const groups = await this.getCategoryParentGroups();
+    for (const parent of TEMPLATE_PARENT_CATEGORIES) {
+      groups[parent] = groups[parent].filter((item) => item !== trimmed);
+    }
+    groups[parentCategory] = sortPublicTemplateCategories([
+      ...groups[parentCategory],
+      trimmed,
+    ]);
+    return this.persistCategoryParentGroups(groups);
+  }
+
+  async deleteTemplateCategory(category: string) {
+    const trimmed = category?.trim();
+    if (!trimmed) {
+      throw new Error('分类不能为空');
+    }
+    if (trimmed === '其他') {
+      throw new Error('"其他"分类不能删除');
+    }
+
+    const groups = await this.getCategoryParentGroups();
+    for (const parent of TEMPLATE_PARENT_CATEGORIES) {
+      groups[parent] = groups[parent].filter((item) => item !== trimmed);
+    }
+    return this.persistCategoryParentGroups(groups);
+  }
+
+  async getTemplateCategories(parentCategory?: string) {
+    const groups = await this.getCategoryParentGroups();
+    if (parentCategory && isTemplateParentCategory(parentCategory)) {
+      return sortPublicTemplateCategories(groups[parentCategory]);
+    }
+    return sortPublicTemplateCategories(flattenSecondaryCategories(groups));
+  }
+
+  async getActiveTemplatesForFrontend(parentCategory?: string) {
+    const where: { isActive: boolean; category?: { in: string[] } } = { isActive: true };
+    if (parentCategory && isTemplateParentCategory(parentCategory)) {
+      const groups = await this.getCategoryParentGroups();
+      const secondary = getSecondaryCategoriesForParent(groups, parentCategory) ?? [];
+      if (secondary.length === 0) {
+        return [];
+      }
+      where.category = { in: secondary };
+    }
+
     const templates = await this.prisma.publicTemplate.findMany({
-      where: { isActive: true },
+      where,
       select: {
         id: true,
         name: true,
@@ -303,7 +475,7 @@ export class TemplateService {
       return b.createdAt.getTime() - a.createdAt.getTime();
     });
 
-    return templates.map(template => ({
+    return templates.map((template) => ({
       id: template.id,
       name: template.name,
       category: template.category,

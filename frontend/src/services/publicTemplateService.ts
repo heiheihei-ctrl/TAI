@@ -1,12 +1,52 @@
 import type { FlowTemplate, TemplateIndexEntry } from "@/types/template";
 import { fetchWithAuth } from "./authFetch";
 
-/** 公共模板分类：建筑设计、美育设计置顶 */
+/** 公共模板一级分类 */
+export const TEMPLATE_PARENT_CATEGORIES = ["建筑", "其他"] as const;
+export type TemplateParentCategory = (typeof TEMPLATE_PARENT_CATEGORIES)[number];
+
+export function isTemplateParentCategory(value: unknown): value is TemplateParentCategory {
+  return typeof value === "string" && (TEMPLATE_PARENT_CATEGORIES as readonly string[]).includes(value);
+}
+
+export const TEMPLATE_PARENT_CATEGORY_STORAGE_KEY = "tanva:template-parent-category";
+
+export function getStoredTemplateParentCategory(): TemplateParentCategory | null {
+  try {
+    const stored = localStorage.getItem(TEMPLATE_PARENT_CATEGORY_STORAGE_KEY);
+    return isTemplateParentCategory(stored) ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredTemplateParentCategory(category: TemplateParentCategory): void {
+  try {
+    localStorage.setItem(TEMPLATE_PARENT_CATEGORY_STORAGE_KEY, category);
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+/** 归属「建筑」一级分类的二级分类 */
+export const ARCHITECTURE_SECONDARY_CATEGORIES = ["建筑设计", "空间设计"] as const;
+
+export function isArchitectureSecondaryCategory(category: string): boolean {
+  const trimmed = typeof category === "string" ? category.trim() : "";
+  return (ARCHITECTURE_SECONDARY_CATEGORIES as readonly string[]).includes(trimmed);
+}
+
+/** 公共模板二级分类：建筑设计、美育设计置顶 */
 export const PRIORITY_PUBLIC_TEMPLATE_CATEGORIES = ["建筑设计", "美育设计"] as const;
 
 export function sortPublicTemplateCategories(categories: string[]): string[] {
   const unique = Array.from(
-    new Set(categories.map((c) => c?.trim()).filter(Boolean) as string[]),
+    new Set(
+      categories
+        .map((c) => c?.trim())
+        .filter(Boolean)
+        .filter((c) => !isTemplateParentCategory(c)) as string[],
+    ),
   );
   const other = unique.filter((c) => c === "其他" || c === "Other");
   const rest = unique.filter((c) => c !== "其他" && c !== "Other");
@@ -46,11 +86,14 @@ export function buildAuthHeaders(contentType?: string): Record<string, string> {
 }
 
 // 获取公共模板索引
-export async function fetchPublicTemplateIndex(): Promise<
-  TemplateIndexEntry[]
-> {
+export async function fetchPublicTemplateIndex(
+  parentCategory?: TemplateParentCategory,
+): Promise<TemplateIndexEntry[]> {
   try {
-    const response = await fetchWithAuth(`${API_BASE}/api/templates/index`);
+    const query = parentCategory
+      ? `?parentCategory=${encodeURIComponent(parentCategory)}`
+      : "";
+    const response = await fetchWithAuth(`${API_BASE}/api/templates/index${query}`);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -111,9 +154,12 @@ export interface TemplateQueryParams {
   page?: number;
   pageSize?: number;
   category?: string;
+  parentCategory?: TemplateParentCategory;
   isActive?: boolean;
   search?: string;
 }
+
+export type TemplateCategoryGroups = Record<TemplateParentCategory, string[]>;
 
 export interface TemplateListResponse {
   items: PublicTemplate[];
@@ -149,6 +195,7 @@ export async function fetchTemplates(
   if (params.page) searchParams.set("page", params.page.toString());
   if (params.pageSize) searchParams.set("pageSize", params.pageSize.toString());
   if (params.category) searchParams.set("category", params.category);
+  if (params.parentCategory) searchParams.set("parentCategory", params.parentCategory);
   if (params.isActive !== undefined)
     searchParams.set("isActive", params.isActive.toString());
   if (params.search) searchParams.set("search", params.search);
@@ -214,10 +261,15 @@ export async function deleteTemplate(id: string): Promise<void> {
   }
 }
 
-// 获取模板分类
-export async function fetchTemplateCategories(): Promise<string[]> {
+// 获取模板二级分类
+export async function fetchTemplateCategories(
+  parentCategory?: TemplateParentCategory,
+): Promise<string[]> {
   const headers = buildAuthHeaders();
-  const response = await fetchWithAuth(`${API_BASE}/api/templates/categories`, {
+  const query = parentCategory
+    ? `?parentCategory=${encodeURIComponent(parentCategory)}`
+    : "";
+  const response = await fetchWithAuth(`${API_BASE}/api/templates/categories${query}`, {
     headers,
   });
 
@@ -226,4 +278,38 @@ export async function fetchTemplateCategories(): Promise<string[]> {
   }
 
   return response.json();
+}
+
+export async function fetchTemplateCategoryGroups(): Promise<TemplateCategoryGroups> {
+  const headers = buildAuthHeaders();
+  const response = await fetchWithAuth(`${API_BASE}/api/templates/category-groups`, {
+    headers,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch category groups: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return {
+    建筑: Array.isArray(data?.建筑) ? data.建筑 : [],
+    其他: Array.isArray(data?.其他) ? data.其他 : [],
+  };
+}
+
+export async function fetchAdminTemplateCategoryGroups(): Promise<TemplateCategoryGroups> {
+  const headers = buildAuthHeaders();
+  const response = await fetchWithAuth(`${API_BASE}/api/admin/templates/category-groups`, {
+    headers,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch admin category groups: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return {
+    建筑: Array.isArray(data?.建筑) ? data.建筑 : [],
+    其他: Array.isArray(data?.其他) ? data.其他 : [],
+  };
 }

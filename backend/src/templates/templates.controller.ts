@@ -1,4 +1,4 @@
-import { Controller, Get, Param, NotFoundException, ForbiddenException, Request, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, NotFoundException, ForbiddenException, Request, UseGuards, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { FastifyRequest } from 'fastify';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
@@ -17,14 +17,20 @@ export class TemplatesController {
 
   @Get('index')
   @ApiOperation({ summary: '获取公共模板索引（前端使用）' })
-  async getTemplateIndex() {
-    return this.templateService.getActiveTemplatesForFrontend();
+  async getTemplateIndex(@Query('parentCategory') parentCategory?: string) {
+    return this.templateService.getActiveTemplatesForFrontend(parentCategory);
+  }
+
+  @Get('category-groups')
+  @ApiOperation({ summary: '获取公共模板一级/二级分类映射' })
+  async getCategoryGroups() {
+    return this.templateService.getCategoryParentGroups();
   }
 
   @Get('categories')
-  @ApiOperation({ summary: '获取公共模板分类（前端使用）' })
-  async getCategories() {
-    return this.templateService.getTemplateCategories();
+  @ApiOperation({ summary: '获取公共模板二级分类（前端使用）' })
+  async getCategories(@Query('parentCategory') parentCategory?: string) {
+    return this.templateService.getTemplateCategories(parentCategory);
   }
 
   @Get(':id')

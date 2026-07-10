@@ -36,6 +36,11 @@ export class TemplateQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @ApiPropertyOptional({ description: "一级分类（建筑/其他）" })
+  @IsOptional()
+  @IsString()
+  parentCategory?: string;
 }
 
 export class CreateTemplateDto {

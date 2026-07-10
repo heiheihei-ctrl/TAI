@@ -599,45 +599,54 @@ export class AdminController {
   // ==================== 公共模板管理 ====================
 
   // 注意：categories 路由必须放在 :id 路由之前，否则 'categories' 会被当作 id 参数
-  @Get('templates/categories')
-  @ApiOperation({ summary: '获取所有模板分类' })
-  async getTemplateCategories(@Request() req: AuthenticatedRequest) {
+  @Get('templates/category-groups')
+  @ApiOperation({ summary: '获取模板一级/二级分类映射' })
+  async getTemplateCategoryGroups(@Request() req: AuthenticatedRequest) {
     this.checkAdmin(req, 'templates:manage');
-    return this.templateService.getTemplateCategories();
+    return this.templateService.getCategoryParentGroups();
+  }
+
+  @Get('templates/categories')
+  @ApiOperation({ summary: '获取所有模板二级分类' })
+  async getTemplateCategories(
+    @Request() req: AuthenticatedRequest,
+    @Query('parentCategory') parentCategory?: string,
+  ) {
+    this.checkAdmin(req, 'templates:manage');
+    return this.templateService.getTemplateCategories(parentCategory);
   }
 
   @Post('templates/categories')
-  @ApiOperation({ summary: '添加新的模板分类' })
+  @ApiOperation({ summary: '添加新的模板二级分类' })
   async addTemplateCategory(
     @Request() req: AuthenticatedRequest,
-    @Body() dto: { category: string },
+    @Body() dto: { category: string; parentCategory?: string },
   ) {
     this.checkAdmin(req, 'templates:manage');
-    const key = 'template_categories';
-    // 读取现有设置
-    const existing = await this.adminService.getSetting(key);
-    let list: string[] = [];
-    if (existing && existing.value) {
-      try {
-        const parsed = JSON.parse(existing.value);
-        if (Array.isArray(parsed)) list = parsed;
-      } catch (e) {
-        // ignore
-      }
-    }
     if (!dto?.category || !dto.category.trim()) {
       return { success: false, message: '分类不能为空' };
     }
-    const cat = dto.category.trim();
-    if (!list.includes(cat)) {
-      list.push(cat);
-      await this.adminService.upsertSetting(key, JSON.stringify(list), req.user.id, '模板分类');
+    const parentCategory = dto.parentCategory?.trim() === '建筑' ? '建筑' : '其他';
+    try {
+      const groups = await this.templateService.addTemplateCategory(
+        dto.category.trim(),
+        parentCategory,
+      );
+      return {
+        success: true,
+        groups,
+        categories: sortPublicTemplateCategories([
+          ...groups.建筑,
+          ...groups.其他,
+        ]),
+      };
+    } catch (error: any) {
+      return { success: false, message: error?.message || '添加分类失败' };
     }
-    return { success: true, categories: sortPublicTemplateCategories(list) };
   }
 
   @Delete('templates/categories/:category')
-  @ApiOperation({ summary: '删除模板分类' })
+  @ApiOperation({ summary: '删除模板二级分类' })
   async deleteTemplateCategory(
     @Request() req: AuthenticatedRequest,
     @Param('category') category: string,
@@ -647,23 +656,19 @@ export class AdminController {
     if (!cat) {
       return { success: false, message: '分类不能为空' };
     }
-    if (cat === '其他') {
-      return { success: false, message: '"其他"分类不能删除' };
+    try {
+      const groups = await this.templateService.deleteTemplateCategory(cat);
+      return {
+        success: true,
+        groups,
+        categories: sortPublicTemplateCategories([
+          ...groups.建筑,
+          ...groups.其他,
+        ]),
+      };
+    } catch (error: any) {
+      return { success: false, message: error?.message || '删除分类失败' };
     }
-    const key = 'template_categories';
-    const existing = await this.adminService.getSetting(key);
-    let list: string[] = [];
-    if (existing && existing.value) {
-      try {
-        const parsed = JSON.parse(existing.value);
-        if (Array.isArray(parsed)) list = parsed;
-      } catch (e) {
-        // ignore
-      }
-    }
-    const newList = list.filter((c) => c !== cat);
-    await this.adminService.upsertSetting(key, JSON.stringify(newList), req.user.id, '模板分类');
-    return { success: true, categories: sortPublicTemplateCategories(newList) };
   }
 
   @Post('templates')
