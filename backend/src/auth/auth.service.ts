@@ -425,18 +425,72 @@ export class AuthService {
     return redirectUrl.toString();
   }
 
-  private getWechatOfficialH5Config(requireCredentials = true) {
-    const official = this.getWechatOfficialConfig(requireCredentials);
-    const apiBase = (
-      this.config.get<string>("API_PUBLIC_BASE_URL") ||
-      this.config.get<string>("PUBLIC_API_BASE_URL") ||
-      "http://localhost:4000"
-    ).trim();
-    const frontendBaseUrl = (
+  private resolvePublicApiBaseUrl(): string {
+    const explicit = [
+      this.config.get<string>("API_PUBLIC_BASE_URL"),
+      this.config.get<string>("PUBLIC_API_BASE_URL"),
+    ]
+      .map((value) => value?.trim())
+      .find(Boolean);
+    if (explicit) {
+      return explicit.replace(/\/+$/, "");
+    }
+
+    const h5Redirect = this.config.get<string>("WECHAT_OFFICIAL_H5_REDIRECT_URI")?.trim();
+    if (h5Redirect) {
+      try {
+        return new URL(h5Redirect).origin;
+      } catch {
+        // ignore invalid URL
+      }
+    }
+
+    const watchaRedirect = this.config.get<string>("WATCHA_OAUTH_REDIRECT_URI")?.trim();
+    if (watchaRedirect) {
+      try {
+        return new URL(watchaRedirect).origin;
+      } catch {
+        // ignore invalid URL
+      }
+    }
+
+    const wechatNotify = this.config.get<string>("WECHAT_NOTIFY_URL")?.trim();
+    if (wechatNotify) {
+      try {
+        return new URL(wechatNotify).origin;
+      } catch {
+        // ignore invalid URL
+      }
+    }
+
+    const frontendBase = (
       this.config.get<string>("FRONTEND_BASE_URL") ||
       this.config.get<string>("WATCHA_OAUTH_FRONTEND_BASE_URL") ||
-      "http://localhost:5173"
+      ""
     ).trim();
+    if (frontendBase) {
+      return frontendBase.replace(/\/+$/, "");
+    }
+
+    return "http://localhost:4000";
+  }
+
+  private resolveFrontendBaseUrl(): string {
+    const explicit = (
+      this.config.get<string>("FRONTEND_BASE_URL") ||
+      this.config.get<string>("WATCHA_OAUTH_FRONTEND_BASE_URL") ||
+      ""
+    ).trim();
+    if (explicit) {
+      return explicit.replace(/\/+$/, "");
+    }
+    return this.resolvePublicApiBaseUrl().replace(/\/+$/, "") || "http://localhost:5173";
+  }
+
+  private getWechatOfficialH5Config(requireCredentials = true) {
+    const official = this.getWechatOfficialConfig(requireCredentials);
+    const apiBase = this.resolvePublicApiBaseUrl();
+    const frontendBaseUrl = this.resolveFrontendBaseUrl();
     const redirectUri = (
       this.config.get<string>("WECHAT_OFFICIAL_H5_REDIRECT_URI") ||
       `${apiBase.replace(/\/+$/, "")}/api/auth/wechat-official/h5/callback`
@@ -489,14 +543,8 @@ export class AuthService {
   async buildWechatOfficialH5AuthorizeUrl(returnTo?: string) {
     const config = this.getWechatOfficialH5Config();
     const state = await this.createWechatOfficialH5State(returnTo);
-    const params = new URLSearchParams({
-      appid: config.appId,
-      redirect_uri: config.redirectUri,
-      response_type: "code",
-      scope: "snsapi_userinfo",
-      state,
-    });
-    return `https://open.weixin.qq.com/connect/oauth2/authorize?${params.toString()}#wechat_redirect`;
+    const redirectUri = encodeURIComponent(config.redirectUri);
+    return `https://open.weixin.qq.com/connect/oauth2/authorize?appid=${config.appId}&redirect_uri=${redirectUri}&response_type=code&scope=snsapi_userinfo&state=${encodeURIComponent(state)}#wechat_redirect`;
   }
 
   buildWechatOfficialH5FailureRedirect(message?: string) {
