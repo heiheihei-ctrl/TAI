@@ -186,6 +186,52 @@ export class AuthController {
     };
   }
 
+  @Get('wechat-official/h5/authorize')
+  async wechatOfficialH5Authorize(
+    @Query('returnTo') returnTo: string | undefined,
+    @Res() res: any,
+  ) {
+    const authorizeUrl = await this.auth.buildWechatOfficialH5AuthorizeUrl(returnTo);
+    res.status(HttpStatus.FOUND);
+    return res.redirect(authorizeUrl);
+  }
+
+  @Get('wechat-official/h5/callback')
+  async wechatOfficialH5Callback(
+    @Query('code') code: string | undefined,
+    @Query('state') state: string | undefined,
+    @Query('error') error: string | undefined,
+    @Query('error_description') errorDescription: string | undefined,
+    @Req() req: any,
+    @Res() res: any,
+  ) {
+    try {
+      const result = await this.auth.handleWechatOfficialH5OauthCallback(
+        {
+          code,
+          state,
+          error,
+          error_description: errorDescription,
+        },
+        {
+          ip: req.ip,
+          ua: req.headers['user-agent'],
+        },
+      );
+      if (result.tokens) {
+        this.auth.setAuthCookies(res, result.tokens, req);
+      }
+      res.status(HttpStatus.FOUND);
+      return res.redirect(result.redirectUrl);
+    } catch (e: any) {
+      const redirectUrl = this.auth.buildWechatOfficialH5FailureRedirect(
+        e?.message || '微信授权失败',
+      );
+      res.status(HttpStatus.FOUND);
+      return res.redirect(redirectUrl);
+    }
+  }
+
   @Get('wechat-official/callback')
   async verifyWechatOfficialCallback(
     @Query('signature') signature: string | undefined,

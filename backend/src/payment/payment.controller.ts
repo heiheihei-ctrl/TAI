@@ -81,6 +81,33 @@ export class PaymentController {
     return this.paymentService.getRechargePackages(userId);
   }
 
+  /**
+   * 公众号 H5 充值套餐（公开）
+   */
+  @Get('h5/packages')
+  async getH5Packages() {
+    return this.paymentService.getRechargePackages('');
+  }
+
+  /**
+   * 公众号 H5 JSAPI 充值下单
+   */
+  @Post('h5/order')
+  @UseGuards(JwtAuthGuard)
+  async createH5Order(
+    @Request() req: any,
+    @Body() dto: { amount: number; credits: number },
+  ) {
+    return this.paymentService.createH5JsapiOrder(
+      req.user.sub,
+      {
+        amount: dto.amount,
+        credits: dto.credits,
+      },
+      req.user?.role,
+    );
+  }
+
   @Get('membership-plans')
   async getMembershipPlans() {
     return this.paymentService.getMembershipPlans();

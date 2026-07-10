@@ -13,6 +13,7 @@ import {
   CREDITS_PER_YUAN,
   MIN_CUSTOM_RECHARGE_AMOUNT,
   type PaymentOrderType,
+  type WechatJsapiPayParams,
 } from './dto/payment.dto';
 import { TransactionType } from '../credits/dto/credits.dto';
 import { ReferralService } from '../referral/referral.service';
@@ -457,9 +458,134 @@ export class PaymentService implements OnModuleInit {
       orderType: order.orderType as PaymentOrderType,
       businessCode: order.businessCode,
       status: order.status as PaymentStatus, qrCodeUrl: order.qrCodeUrl,
+      jsapiPayParams: null,
       expiredAt: order.expiredAt, createdAt: order.createdAt,
       membershipPlanId: order.membershipPlanId,
     };
+  }
+
+  async createH5JsapiOrder(
+    userId: string,
+    dto: Pick<CreateOrderDto, 'amount' | 'credits'>,
+    userRole?: string | null,
+  ): Promise<PaymentOrderResponse> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { wechatOfficialOpenId: true },
+    });
+    const openId = user?.wechatOfficialOpenId?.trim();
+    if (!openId) {
+      throw new BadRequestException('未找到微信身份，请重新授权登录后再支付');
+    }
+
+    const orderAmount = dto.amount;
+    const orderCredits = dto.credits;
+    if (!Number.isFinite(orderAmount) || orderAmount <= 0) {
+      throw new BadRequestException('Invalid recharge amount');
+    }
+    const normalizedAmount = this.normalizeMoneyAmount(orderAmount);
+    const packageConfig = this.getRechargePackageByAmount(normalizedAmount);
+    if (
+      !packageConfig &&
+      normalizedAmount < MIN_CUSTOM_RECHARGE_AMOUNT &&
+      !this.isPrivilegedAdminRole(userRole)
+    ) {
+      throw new BadRequestException(`自定义充值最低金额为 ¥${MIN_CUSTOM_RECHARGE_AMOUNT}`);
+    }
+    const resolvedCredits = this.resolveRechargeOrderCredits(normalizedAmount);
+    if (orderCredits !== resolvedCredits) {
+      throw new BadRequestException('充值积分与金额不匹配');
+    }
+
+    await this.prisma.paymentOrder.updateMany({
+      where: { userId, status: PaymentStatus.PENDING },
+      data: { status: PaymentStatus.CANCELLED },
+    });
+
+    const orderNo = this.generateOrderNo();
+    const expiredAt = new Date(Date.now() + 5 * 60 * 1000);
+    const jsapiPayParams = await this.generateWechatJsapiPayParams(
+      orderNo,
+      normalizedAmount,
+      openId,
+    );
+
+    const order = await this.prisma.paymentOrder.create({
+      data: {
+        orderNo,
+        userId,
+        orderType: 'recharge',
+        amount: normalizedAmount,
+        credits: resolvedCredits,
+        paymentMethod: PaymentMethod.WECHAT,
+        status: PaymentStatus.PENDING,
+        qrCodeUrl: null,
+        expiredAt,
+        metadata: {
+          channel: 'wechat_h5_jsapi',
+          openId,
+        } as Prisma.InputJsonValue,
+      },
+    });
+
+    return {
+      orderId: order.id,
+      orderNo: order.orderNo,
+      amount: Number(order.amount),
+      credits: order.credits,
+      paymentMethod: order.paymentMethod as PaymentMethod,
+      orderType: order.orderType as PaymentOrderType,
+      businessCode: order.businessCode,
+      status: order.status as PaymentStatus,
+      qrCodeUrl: null,
+      jsapiPayParams,
+      expiredAt: order.expiredAt,
+      createdAt: order.createdAt,
+      membershipPlanId: order.membershipPlanId,
+    };
+  }
+
+  private async generateWechatJsapiPayParams(
+    orderNo: string,
+    amount: number,
+    openId: string,
+  ): Promise<WechatJsapiPayParams> {
+    if (!this.wechatPay) {
+      throw new BadRequestException('微信支付SDK未初始化');
+    }
+
+    try {
+      const params = {
+        description: `积分充值 - ${amount}元`,
+        out_trade_no: orderNo,
+        notify_url: process.env.WECHAT_NOTIFY_URL || 'https://tgtai.com/api/payment/wechat-notify',
+        amount: {
+          total: Math.round(amount * 100),
+          currency: 'CNY',
+        },
+        payer: {
+          openid: openId,
+        },
+      };
+
+      const result = await this.wechatPay.transactions_jsapi(params);
+      const payData = result?.data;
+      if (result?.status !== 200 || !payData?.paySign) {
+        throw new BadRequestException('未获取到微信支付参数');
+      }
+
+      return {
+        appId: payData.appId,
+        timeStamp: payData.timeStamp,
+        nonceStr: payData.nonceStr,
+        package: payData.package,
+        signType: payData.signType || 'RSA',
+        paySign: payData.paySign,
+      };
+    } catch (error: any) {
+      console.error('生成微信 JSAPI 支付参数失败:', error);
+      throw new BadRequestException(error.message || '生成微信支付参数失败');
+    }
   }
 
   private async generateAlipayQrCode(orderNo: string, amount: number): Promise<string> {

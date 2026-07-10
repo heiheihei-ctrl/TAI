@@ -26,6 +26,15 @@ export interface CreateOrderDto {
 }
 
 // 订单响应
+export interface WechatJsapiPayParams {
+  appId: string;
+  timeStamp: string;
+  nonceStr: string;
+  package: string;
+  signType: string;
+  paySign: string;
+}
+
 export interface PaymentOrderResponse {
   orderId: string;
   orderNo: string;
@@ -36,6 +45,7 @@ export interface PaymentOrderResponse {
   businessCode?: string | null;
   status: PaymentStatus;
   qrCodeUrl: string | null;
+  jsapiPayParams?: WechatJsapiPayParams | null;
   expiredAt: Date;
   createdAt: Date;
   membershipPlanId?: string | null;

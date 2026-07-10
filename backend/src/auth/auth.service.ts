@@ -425,6 +425,231 @@ export class AuthService {
     return redirectUrl.toString();
   }
 
+  private getWechatOfficialH5Config(requireCredentials = true) {
+    const official = this.getWechatOfficialConfig(requireCredentials);
+    const apiBase = (
+      this.config.get<string>("API_PUBLIC_BASE_URL") ||
+      this.config.get<string>("PUBLIC_API_BASE_URL") ||
+      "http://localhost:4000"
+    ).trim();
+    const frontendBaseUrl = (
+      this.config.get<string>("FRONTEND_BASE_URL") ||
+      this.config.get<string>("WATCHA_OAUTH_FRONTEND_BASE_URL") ||
+      "http://localhost:5173"
+    ).trim();
+    const redirectUri = (
+      this.config.get<string>("WECHAT_OFFICIAL_H5_REDIRECT_URI") ||
+      `${apiBase.replace(/\/+$/, "")}/api/auth/wechat-official/h5/callback`
+    ).trim();
+    const stateSecret = (
+      this.config.get<string>("WECHAT_OFFICIAL_H5_STATE_SECRET") ||
+      this.config.get<string>("JWT_ACCESS_SECRET") ||
+      "wechat-h5-state-secret"
+    ).trim();
+    const defaultReturnTo = (
+      this.config.get<string>("WECHAT_OFFICIAL_H5_RETURN_PATH") ||
+      "/wechat-recharge.html"
+    ).trim();
+
+    return {
+      ...official,
+      frontendBaseUrl,
+      redirectUri,
+      stateSecret,
+      defaultReturnTo: this.sanitizeReturnTo(defaultReturnTo),
+      failurePath: (
+        this.config.get<string>("WECHAT_OFFICIAL_H5_FAILURE_PATH") ||
+        "/wechat-recharge.html"
+      ).trim(),
+    };
+  }
+
+  private async createWechatOfficialH5State(returnTo?: string) {
+    const { stateSecret, defaultReturnTo } = this.getWechatOfficialH5Config(false);
+    return this.jwt.signAsync(
+      {
+        type: "wechat_official_h5_oauth",
+        returnTo: this.sanitizeReturnTo(returnTo || defaultReturnTo),
+      },
+      { secret: stateSecret, expiresIn: "15m" },
+    );
+  }
+
+  private async parseWechatOfficialH5State(state: string): Promise<{ returnTo: string }> {
+    const { stateSecret } = this.getWechatOfficialH5Config(false);
+    const decoded = await this.jwt.verifyAsync<{ type?: string; returnTo?: string }>(state, {
+      secret: stateSecret,
+    });
+    if (!decoded || decoded.type !== "wechat_official_h5_oauth") {
+      throw new UnauthorizedException("微信授权状态已失效，请重新进入页面");
+    }
+    return { returnTo: this.sanitizeReturnTo(decoded.returnTo) };
+  }
+
+  async buildWechatOfficialH5AuthorizeUrl(returnTo?: string) {
+    const config = this.getWechatOfficialH5Config();
+    const state = await this.createWechatOfficialH5State(returnTo);
+    const params = new URLSearchParams({
+      appid: config.appId,
+      redirect_uri: config.redirectUri,
+      response_type: "code",
+      scope: "snsapi_userinfo",
+      state,
+    });
+    return `https://open.weixin.qq.com/connect/oauth2/authorize?${params.toString()}#wechat_redirect`;
+  }
+
+  buildWechatOfficialH5FailureRedirect(message?: string) {
+    const config = this.getWechatOfficialH5Config(false);
+    return this.buildFrontendRedirect(config.frontendBaseUrl, config.failurePath, {
+      wx_error: message || "微信授权失败",
+    });
+  }
+
+  private async exchangeWechatOfficialOauthCode(code: string) {
+    const { appId, appSecret } = this.getWechatOfficialH5Config();
+    const url = new URL("https://api.weixin.qq.com/sns/oauth2/access_token");
+    url.searchParams.set("appid", appId);
+    url.searchParams.set("secret", appSecret);
+    url.searchParams.set("code", code);
+    url.searchParams.set("grant_type", "authorization_code");
+
+    const res = await fetch(url.toString());
+    const data = (await res.json().catch(() => null)) as
+      | {
+          errcode?: number;
+          errmsg?: string;
+          access_token?: string;
+          openid?: string;
+          unionid?: string;
+        }
+      | null;
+
+    if (!res.ok || !data?.access_token || !data.openid || data.errcode) {
+      const msg = data?.errmsg || `HTTP ${res.status}`;
+      throw new UnauthorizedException(`微信授权失败: ${msg}`);
+    }
+
+    return {
+      accessToken: data.access_token,
+      openId: data.openid,
+      unionId: this.normalizeWechatUnionId(data.unionid),
+    };
+  }
+
+  private async fetchWechatOfficialOauthUserInfo(accessToken: string, openId: string) {
+    const url = new URL("https://api.weixin.qq.com/sns/userinfo");
+    url.searchParams.set("access_token", accessToken);
+    url.searchParams.set("openid", openId);
+    url.searchParams.set("lang", "zh_CN");
+
+    const res = await fetch(url.toString());
+    const data = (await res.json().catch(() => null)) as
+      | {
+          errcode?: number;
+          errmsg?: string;
+          openid?: string;
+          unionid?: string;
+          nickname?: string;
+          headimgurl?: string;
+        }
+      | null;
+
+    if (!res.ok || !data || data.errcode || !data.openid) {
+      return null;
+    }
+
+    return {
+      openId: data.openid,
+      unionId: this.normalizeWechatUnionId(data.unionid),
+      nickname: this.normalizeName(data.nickname),
+      avatarUrl: data.headimgurl || null,
+    };
+  }
+
+  async handleWechatOfficialH5OauthCallback(
+    params: {
+      code?: string;
+      state?: string;
+      error?: string;
+      error_description?: string;
+    },
+    meta?: { ip?: string; ua?: string },
+  ): Promise<{
+    user?: AuthenticatedUserProfile;
+    tokens?: TokenPair;
+    redirectUrl: string;
+  }> {
+    const config = this.getWechatOfficialH5Config();
+
+    if (params.error) {
+      throw new UnauthorizedException(params.error_description || params.error);
+    }
+    if (!params.code || !params.state) {
+      throw new BadRequestException("缺少微信授权参数");
+    }
+
+    const { returnTo } = await this.parseWechatOfficialH5State(params.state);
+    const oauth = await this.exchangeWechatOfficialOauthCode(params.code);
+    const oauthProfile =
+      (await this.fetchWechatOfficialOauthUserInfo(oauth.accessToken, oauth.openId)) || {
+        openId: oauth.openId,
+        unionId: oauth.unionId,
+        nickname: null,
+        avatarUrl: null,
+      };
+
+    const profile: WechatOfficialLoginProfile = {
+      openId: oauthProfile.openId,
+      unionId: oauthProfile.unionId,
+      nickname: oauthProfile.nickname,
+      avatarUrl: oauthProfile.avatarUrl,
+    };
+
+    const linkedUser = await this.prisma.$transaction(async (tx) => {
+      const user = await this.findWechatOfficialUserByIdentity(tx, profile);
+      if (!user) return null;
+      if (!this.isPrimaryPhone(user.phone)) return null;
+      return this.attachWechatIdentityToUser(tx, user.id, profile);
+    });
+
+    if (linkedUser) {
+      const tokens = await this.login(
+        { id: linkedUser.id, email: linkedUser.email || "", role: linkedUser.role },
+        meta,
+      );
+      return {
+        user: linkedUser,
+        tokens,
+        redirectUrl: this.buildFrontendRedirect(config.frontendBaseUrl, returnTo, {
+          authed: "1",
+        }),
+      };
+    }
+
+    const sceneKey = `wxh5_${randomBytes(12).toString("hex")}`;
+    const session = await this.prisma.wechatLoginSession.create({
+      data: {
+        sceneKey,
+        status: "needs_phone_bind",
+        returnTo,
+        openId: profile.openId,
+        unionId: profile.unionId,
+        nickname: profile.nickname,
+        avatarUrl: profile.avatarUrl,
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      },
+      select: { id: true },
+    });
+
+    return {
+      redirectUrl: this.buildFrontendRedirect(config.frontendBaseUrl, returnTo, {
+        sessionId: session.id,
+        step: "bind",
+      }),
+    };
+  }
+
   private async createWatchaState(returnTo?: string) {
     const { stateSecret } = this.getWatchaConfig(false);
     return this.jwt.signAsync(
