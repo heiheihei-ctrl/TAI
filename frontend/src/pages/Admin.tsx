@@ -4093,7 +4093,7 @@ const MANAGED_MODEL_SUPPORTED_MODELS_MAP: Record<string, string[]> = {
   "gemini-2.5-image-edit": ["gemini-2.5-flash-image-preview"],
   "gemini-2.5-image-blend": ["gemini-2.5-flash-image-preview"],
   "gemini-2.5-image-analyze": ["gemini-2.5-flash-image-preview"],
-  "gemini-3.1-image-analyze": ["gemini-3.1-flash-image-preview"],
+  "gemini-3.1-image-analyze": ["gemini-3.1-pro-preview-official"],
   "seedream5": ["doubao-seedream-5-0-260128"],
   "midjourney": ["midjourney-fast"],
   "wan-2.6": ["wan2.6-t2v", "wan2.6-i2v"],

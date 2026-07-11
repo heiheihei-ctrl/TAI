@@ -564,6 +564,8 @@ const BANANA_25_IMAGE_MODEL = "gemini-2.5-flash-image-preview";
 const BANANA_25_TEXT_MODEL = "gemini-2.5-flash";
 const BANANA_31_TEXT_MODEL = "gemini-3.1-pro-preview";
 const BANANA_31_IMAGE_MODEL = "gemini-3.1-flash-image-preview";
+/** Ultra 图像分析走 ToAPIs 官方通道多模态模型 */
+const BANANA_31_ANALYZE_MODEL = "gemini-3.1-pro-preview-official";
 const SEEDREAM5_IMAGE_MODEL = "doubao-seedream-5-0-260128";
 export const SORA2_VIDEO_MODELS = {
   hd: "sora-2-pro-reverse",
@@ -922,7 +924,7 @@ export const getAnalyzeModelForProvider = (
   provider: AIProviderType
 ): string => {
   if (provider === "banana-2.5") return BANANA_25_IMAGE_MODEL;
-  if (provider === "banana-3.1" || provider === "nano2") return BANANA_31_IMAGE_MODEL;
+  if (provider === "banana-3.1" || provider === "nano2") return BANANA_31_ANALYZE_MODEL;
   if (provider === "banana") return GEMINI_PRO_IMAGE_MODEL;
   return getImageModelForProvider(provider);
 };

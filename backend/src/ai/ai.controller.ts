@@ -128,10 +128,10 @@ export class AiController {
     'gemini-pro': 'gemini-3.1-pro',
     banana: 'gemini-2.5-flash-image-preview',
     'banana-2.5': 'gemini-2.5-flash-image-preview',
-    'banana-3.1': 'gemini-3.1-flash-image-preview',
+    'banana-3.1': 'gemini-3.1-pro-preview-official',
     runninghub: 'gemini-3.1-pro',
     midjourney: 'gemini-3.1-pro',
-    nano2: 'gemini-3.1-flash-image-preview',
+    nano2: 'gemini-3.1-pro-preview-official',
     seedream5: 'gemini-3.1-pro',
   };
 
@@ -4285,7 +4285,9 @@ export class AiController {
             text,
           };
         }
-        throw new Error(result.error?.message || 'Failed to analyze image');
+        throw new ServiceUnavailableException(
+          result.error?.message || 'Failed to analyze image',
+        );
       }
 
       // gemini 和 gemini-pro 都使用默认的 Gemini 服务

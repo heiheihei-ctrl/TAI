@@ -117,6 +117,9 @@ export class BananaProvider implements IAIProvider {
   private readonly DEFAULT_APIMART_IMAGE_MODEL = "gemini-3-pro-image-preview";
   private readonly DEFAULT_TEXT_MODEL = "gemini-3.1-pro-preview";
   private readonly DEFAULT_APIMART_TEXT_MODEL = "gemini-3.1-pro-preview";
+  /** Ultra 图像分析：ToAPIs 官方多模态通道 */
+  private readonly DEFAULT_APIMART_ANALYZE_ULTRA_MODEL =
+    "gemini-3.1-pro-preview-official";
   private readonly DEFAULT_TENCENT_TEXT_MODEL = "gemini-3-flash-preview";
   private readonly TENCENT_TEXT_FALLBACK_MODELS: Record<string, string> = {
     "gemini-3-pro-preview": "gemini-3-flash-preview",
@@ -125,6 +128,8 @@ export class BananaProvider implements IAIProvider {
     "banana-gemini-3-pro-preview": "gemini-3-flash-preview",
     "banana-gemini-3.1-pro-preview": "gemini-3-flash-preview",
     "banana-gemini-3.1-pro": "gemini-3-flash-preview",
+    "gemini-3.1-pro-preview-official": "gemini-3-flash-preview",
+    "banana-gemini-3.1-pro-preview-official": "gemini-3-flash-preview",
   };
   private readonly DEFAULT_TIMEOUT = 900000; // 15鍒嗛挓
   private readonly TEXT_TIMEOUT = 45000; // 鏂囨湰鎺ュ彛鏇村揩澶辫触锛屼究浜庨€氶亾蹇€熷垏鎹?
@@ -145,6 +150,8 @@ export class BananaProvider implements IAIProvider {
     "banana-gemini-3.1-pro": "gemini-3-flash-preview",
     "gemini-3.1-pro-preview": "gemini-3-flash-preview",
     "banana-gemini-3.1-pro-preview": "gemini-3-flash-preview",
+    "gemini-3.1-pro-preview-official": "gemini-3-flash-preview",
+    "banana-gemini-3.1-pro-preview-official": "gemini-3-flash-preview",
     "gemini-3-pro-image-preview": "gemini-2.5-flash-image",
     "gemini-3.1-flash-image-preview": "gemini-3-flash-preview",
     "banana-gemini-3.1-flash-image-preview": "gemini-3-flash-preview",
@@ -461,7 +468,8 @@ export class BananaProvider implements IAIProvider {
     if (
       normalized === "gemini-3-pro-preview" ||
       normalized === "gemini-3.1-pro-preview" ||
-      normalized === "gemini-3.1-pro"
+      normalized === "gemini-3.1-pro" ||
+      normalized === "gemini-3.1-pro-preview-official"
     ) {
       return "gemini-3-flash-preview";
     }
@@ -565,6 +573,26 @@ export class BananaProvider implements IAIProvider {
       return `147 channel model is unavailable: ${currentModel} (model_not_found). Please check 147 API key and model access.`;
     }
     return error.message;
+  }
+
+  /** Ultra 图像分析：普通/legacy 走 ToAPIs official；腾讯 stable 降级为 flash */
+  private resolveAnalyzeUltraModel(
+    modelName: string,
+    channel: "legacy" | "apimart" | "tencent"
+  ): string {
+    const normalized = this.normalizeModelName(modelName);
+    const isUltraAnalyzeModel =
+      normalized.includes("3.1") ||
+      normalized === "gemini-3.1-pro-preview-official" ||
+      normalized === "gemini-3.1-pro-preview" ||
+      normalized === "gemini-3.1-flash-image-preview";
+    if (!isUltraAnalyzeModel) {
+      return modelName;
+    }
+    if (channel === "tencent") {
+      return "gemini-3-flash-preview";
+    }
+    return this.DEFAULT_APIMART_ANALYZE_ULTRA_MODEL;
   }
 
   /**
@@ -2376,9 +2404,13 @@ export class BananaProvider implements IAIProvider {
         modelName.includes("2.5") || modelName.includes("gemini-2.5");
       const defaultModel = isFastModel
         ? "gemini-2.5-flash"
-        : "gemini-3.1-pro-preview";
-      const originalModel = this.resolveTextModelForChannel(
+        : this.DEFAULT_APIMART_ANALYZE_ULTRA_MODEL;
+      const visionModel = this.resolveAnalyzeUltraModel(
         modelName || defaultModel,
+        channel
+      );
+      const originalModel = this.resolveTextModelForChannel(
+        visionModel,
         channel
       );
       let currentModel = originalModel;
