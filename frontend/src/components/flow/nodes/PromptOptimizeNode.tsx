@@ -36,6 +36,7 @@ function PromptOptimizeNodeInner({ id, data, selected }: Props) {
   const [upstreamText, setUpstreamText] = React.useState<string>('');
   const [hover, setHover] = React.useState<string | null>(null);
   const [expandedText, setExpandedText] = React.useState<string>(data.expandedText || '');
+  const isTextareaFocusedRef = React.useRef(false);
   const borderColor = selected ? '#2563eb' : '#e5e7eb';
   const boxShadow = selected ? '0 0 0 2px rgba(37,99,235,0.12)' : 'none';
 
@@ -116,15 +117,17 @@ function PromptOptimizeNodeInner({ id, data, selected }: Props) {
   }, [id]);
 
   React.useEffect(() => {
-    if ((data.expandedText || '') !== expandedText) setExpandedText(data.expandedText || '');
-  }, [data.expandedText, expandedText]);
+    if (isTextareaFocusedRef.current) return;
+    const nextValue = data.expandedText || '';
+    setExpandedText((prev) => (prev === nextValue ? prev : nextValue));
+  }, [data.expandedText]);
 
   React.useEffect(() => {
-    if (result?.optimizedPrompt) {
-      setExpandedText(result.optimizedPrompt);
-      updateNodeData({ expandedText: result.optimizedPrompt, text: result.optimizedPrompt });
-    }
-  }, [result, updateNodeData]);
+    if (!result?.optimizedPrompt) return;
+    const next = result.optimizedPrompt;
+    setExpandedText(next);
+    updateNodeData({ expandedText: next, text: next });
+  }, [result?.optimizedPrompt, updateNodeData]);
   const stopNodeDrag = React.useCallback((event: React.SyntheticEvent) => {
     event.stopPropagation();
     const native = (event as React.SyntheticEvent<unknown, Event>).nativeEvent as Event & {
@@ -375,6 +378,12 @@ function PromptOptimizeNodeInner({ id, data, selected }: Props) {
               setExpandedText(v);
               // 编辑即生效：向右输出编辑后的文本
               updateNodeData({ expandedText: v, text: v });
+            }}
+            onFocus={() => {
+              isTextareaFocusedRef.current = true;
+            }}
+            onBlur={() => {
+              isTextareaFocusedRef.current = false;
             }}
             onPointerDownCapture={(event) => {
               event.stopPropagation();
