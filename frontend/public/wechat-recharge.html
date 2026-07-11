@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="description" content="天宫 TAI 公众号积分充值 — 微信登录、绑定账号、快捷购买积分。" />
-  <title>天宫 TAI · 积分充值</title>
+  <meta name="description" content="天宫 TAI 公众号 — 微信登录、绑定账号、积分充值与会员订阅。" />
+  <title>天宫 TAI · 充值与订阅</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -14,8 +14,8 @@
   <div class="wrap">
     <section class="hero">
       <div class="hero-badge">天宫 TAI · 公众号专享</div>
-      <h1>积分充值</h1>
-      <p>微信登录并绑定账号后，可直接购买积分。支付完成后请添加私域微信，获取专属服务。</p>
+      <h1>充值与订阅</h1>
+      <p>微信登录并绑定账号后，可购买积分或订阅会员套餐。支付完成后请添加私域微信。</p>
     </section>
 
     <section id="section-loading" class="card">
@@ -30,7 +30,7 @@
 
     <section id="section-bind" class="card hidden">
       <h2 class="card-title">绑定手机号</h2>
-      <p class="status" style="padding-top: 0; padding-bottom: 16px;">首次使用需绑定手机号，用于账号识别与积分到账。</p>
+      <p class="status bind-tip">首次使用需绑定手机号，用于账号识别与权益到账。</p>
       <div class="field">
         <label for="bind-phone">手机号</label>
         <input id="bind-phone" type="tel" maxlength="11" placeholder="请输入手机号" autocomplete="tel" />
@@ -46,20 +46,33 @@
     </section>
 
     <section id="section-recharge" class="card hidden">
-      <h2 class="card-title">选择充值档位</h2>
+      <h2 class="card-title">选择购买内容</h2>
       <div class="user-chip">
         <div>
           <strong id="user-name">微信用户</strong>
           <span id="user-phone">已绑定账号</span>
         </div>
       </div>
-      <div id="package-list" class="packages"></div>
-      <button id="pay-btn" class="btn btn-primary" type="button" style="margin-top: 16px;">立即支付</button>
+
+      <div class="tab-bar" role="tablist">
+        <button id="tab-credits" class="tab-btn active" type="button" role="tab" aria-selected="true">积分充值</button>
+        <button id="tab-membership" class="tab-btn" type="button" role="tab" aria-selected="false">订阅套餐</button>
+      </div>
+
+      <div id="panel-credits" class="tab-panel">
+        <div id="package-list" class="packages"></div>
+      </div>
+
+      <div id="panel-membership" class="tab-panel hidden">
+        <div id="membership-list" class="membership-list"></div>
+      </div>
+
+      <button id="pay-btn" class="btn btn-primary pay-btn" type="button">立即支付</button>
     </section>
 
     <section id="section-success" class="card hidden">
       <p class="success-title">支付成功</p>
-      <p class="status" style="padding-top: 0;">积分已充值到您的账号，请添加下方私域微信。</p>
+      <p id="success-desc" class="status success-desc">权益已到账，请添加下方私域微信。</p>
       <div class="qr-wrap">
         <img id="success-qr" alt="私域微信二维码" />
       </div>
@@ -72,7 +85,7 @@
       <button id="retry-btn" class="btn btn-primary" type="button">重新授权</button>
     </section>
 
-    <p class="footer-note">支付完成后积分自动到账。如有问题，请联系天宫 TAI 客服。</p>
+    <p class="footer-note">支付完成后权益自动到账。如有问题，请联系天宫 TAI 客服。</p>
   </div>
 
   <script src="/wechat-recharge.js"></script>

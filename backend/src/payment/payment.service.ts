@@ -464,11 +464,7 @@ export class PaymentService implements OnModuleInit {
     };
   }
 
-  async createH5JsapiOrder(
-    userId: string,
-    dto: Pick<CreateOrderDto, 'amount' | 'credits'>,
-    userRole?: string | null,
-  ): Promise<PaymentOrderResponse> {
+  private async requireWechatOfficialOpenId(userId: string): Promise<string> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { wechatOfficialOpenId: true },
@@ -477,6 +473,15 @@ export class PaymentService implements OnModuleInit {
     if (!openId) {
       throw new BadRequestException('未找到微信身份，请重新授权登录后再支付');
     }
+    return openId;
+  }
+
+  async createH5JsapiOrder(
+    userId: string,
+    dto: Pick<CreateOrderDto, 'amount' | 'credits'>,
+    userRole?: string | null,
+  ): Promise<PaymentOrderResponse> {
+    const openId = await this.requireWechatOfficialOpenId(userId);
 
     const orderAmount = dto.amount;
     const orderCredits = dto.credits;
@@ -545,10 +550,107 @@ export class PaymentService implements OnModuleInit {
     };
   }
 
+  async createH5MembershipJsapiOrder(
+    userId: string,
+    planCode: string,
+  ): Promise<PaymentOrderResponse> {
+    const trimmedPlanCode = planCode?.trim();
+    if (!trimmedPlanCode) {
+      throw new BadRequestException('请选择订阅套餐');
+    }
+
+    const preview = await this.membershipService.getUserTransitionPreview(userId, trimmedPlanCode);
+    const plan = await this.prisma.membershipPlan.findFirst({
+      where: { code: trimmedPlanCode, isActive: true },
+    });
+    if (!plan) {
+      throw new NotFoundException('会员套餐不存在');
+    }
+    if (preview.actionType === 'downgrade') {
+      throw new BadRequestException('降级套餐请在下周期生效，暂不支持在此支付');
+    }
+
+    const openId = await this.requireWechatOfficialOpenId(userId);
+    const payableAmount = this.normalizeMoneyAmount(preview.payableAmount);
+    if (!Number.isFinite(payableAmount) || payableAmount <= 0) {
+      throw new BadRequestException('会员订单金额无效');
+    }
+
+    await this.prisma.paymentOrder.updateMany({
+      where: { userId, status: PaymentStatus.PENDING },
+      data: { status: PaymentStatus.CANCELLED },
+    });
+
+    const orderNo = this.generateOrderNo();
+    const expiredAt = new Date(Date.now() + 5 * 60 * 1000);
+    const jsapiPayParams = await this.generateWechatJsapiPayParams(
+      orderNo,
+      payableAmount,
+      openId,
+      `会员订阅 - ${plan.name}`,
+    );
+
+    const planSnapshot = {
+      id: plan.id,
+      code: plan.code,
+      name: plan.name,
+      billingCycle: plan.billingCycle,
+      price: payableAmount.toFixed(2),
+      monthlyQuotaCredits: plan.monthlyQuotaCredits,
+      signupBonusCredits: plan.signupBonusCredits,
+      dailyGiftCredits: plan.dailyGiftCredits,
+      metadata: plan.metadata,
+    } as Prisma.InputJsonValue;
+
+    const order = await this.prisma.paymentOrder.create({
+      data: {
+        orderNo,
+        userId,
+        orderType: 'membership',
+        businessCode: plan.code,
+        amount: payableAmount,
+        credits: 0,
+        paymentMethod: PaymentMethod.WECHAT,
+        status: PaymentStatus.PENDING,
+        qrCodeUrl: null,
+        expiredAt,
+        membershipPlanId: plan.id,
+        planSnapshot,
+        metadata: {
+          channel: 'wechat_h5_jsapi',
+          openId,
+          membershipTransitionType: preview.actionType,
+          membershipEffectiveMode: preview.effectiveMode,
+          immediateCreditDelta: preview.immediateCreditDelta,
+          remainingRatio: preview.remainingRatio,
+          currentPlanCode: preview.currentPlan?.code ?? null,
+          targetPlanCode: preview.targetPlan.code,
+        } as Prisma.InputJsonValue,
+      },
+    });
+
+    return {
+      orderId: order.id,
+      orderNo: order.orderNo,
+      amount: Number(order.amount),
+      credits: order.credits,
+      paymentMethod: order.paymentMethod as PaymentMethod,
+      orderType: order.orderType as PaymentOrderType,
+      businessCode: order.businessCode,
+      status: order.status as PaymentStatus,
+      qrCodeUrl: null,
+      jsapiPayParams,
+      expiredAt: order.expiredAt,
+      createdAt: order.createdAt,
+      membershipPlanId: order.membershipPlanId,
+    };
+  }
+
   private async generateWechatJsapiPayParams(
     orderNo: string,
     amount: number,
     openId: string,
+    description = '积分充值',
   ): Promise<WechatJsapiPayParams> {
     if (!this.wechatPay) {
       throw new BadRequestException('微信支付SDK未初始化');
@@ -556,7 +658,7 @@ export class PaymentService implements OnModuleInit {
 
     try {
       const params = {
-        description: `积分充值 - ${amount}元`,
+        description: `${description} - ${amount}元`,
         out_trade_no: orderNo,
         notify_url: process.env.WECHAT_NOTIFY_URL || 'https://tgtai.com/api/payment/wechat-notify',
         amount: {

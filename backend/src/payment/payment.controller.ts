@@ -108,6 +108,21 @@ export class PaymentController {
     );
   }
 
+  /**
+   * 公众号 H5 JSAPI 会员订阅下单
+   */
+  @Post('h5/membership-order')
+  @UseGuards(JwtAuthGuard)
+  async createH5MembershipOrder(
+    @Request() req: any,
+    @Body() dto: { planCode: string },
+  ) {
+    return this.paymentService.createH5MembershipJsapiOrder(
+      req.user.sub,
+      dto.planCode,
+    );
+  }
+
   @Get('membership-plans')
   async getMembershipPlans() {
     return this.paymentService.getMembershipPlans();

@@ -12,8 +12,12 @@
   const state = {
     sessionId: null,
     user: null,
+    activeTab: "credits",
     packages: [],
+    membershipPlans: [],
     selectedPackage: null,
+    selectedMembershipPlan: null,
+    lastOrderType: "recharge",
     paying: false,
   };
 
@@ -77,6 +81,38 @@
     $("user-phone").textContent = phone;
   }
 
+  function formatBillingCycle(cycle) {
+    if (cycle === "yearly") return "按年订阅";
+    if (cycle === "monthly") return "按月订阅";
+    return "订阅套餐";
+  }
+
+  function formatPlanMeta(plan) {
+    const parts = [];
+    if (plan.monthlyQuotaCredits) {
+      parts.push(`月额度 ${Number(plan.monthlyQuotaCredits).toLocaleString()} 积分`);
+    }
+    if (plan.signupBonusCredits) {
+      parts.push(`开通赠送 ${Number(plan.signupBonusCredits).toLocaleString()} 积分`);
+    }
+    if (plan.dailyGiftCredits) {
+      parts.push(`每日赠送 ${Number(plan.dailyGiftCredits).toLocaleString()} 积分`);
+    }
+    return parts.join(" · ") || "会员专属权益";
+  }
+
+  function setActiveTab(tab) {
+    state.activeTab = tab;
+    const isCredits = tab === "credits";
+    $("tab-credits").classList.toggle("active", isCredits);
+    $("tab-membership").classList.toggle("active", !isCredits);
+    $("tab-credits").setAttribute("aria-selected", isCredits ? "true" : "false");
+    $("tab-membership").setAttribute("aria-selected", !isCredits ? "true" : "false");
+    $("panel-credits").classList.toggle("hidden", !isCredits);
+    $("panel-membership").classList.toggle("hidden", isCredits);
+    $("pay-btn").textContent = isCredits ? "立即支付" : "立即订阅";
+  }
+
   function renderPackages() {
     const container = $("package-list");
     container.innerHTML = "";
@@ -88,12 +124,47 @@
         btn.classList.add("active");
       }
       btn.innerHTML = `
-        <div class="package-price">¥${pkg.price}<small></small></div>
+        <div class="package-price">¥${pkg.price}</div>
         <div class="package-credits">${pkg.credits.toLocaleString()} 积分</div>
       `;
       btn.addEventListener("click", () => {
         state.selectedPackage = pkg;
         renderPackages();
+      });
+      container.appendChild(btn);
+    });
+  }
+
+  function renderMembershipPlans() {
+    const container = $("membership-list");
+    container.innerHTML = "";
+    if (!state.membershipPlans.length) {
+      container.innerHTML = '<p class="status" style="padding: 12px 0;">暂无可订阅套餐</p>';
+      return;
+    }
+
+    state.membershipPlans.forEach((plan) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      const isRecommended = Boolean(plan.metadata && plan.metadata.isRecommended) || plan.sortOrder === 10;
+      btn.className = `membership-card${isRecommended ? " recommended" : ""}`;
+      if (state.selectedMembershipPlan && state.selectedMembershipPlan.code === plan.code) {
+        btn.classList.add("active");
+      }
+
+      btn.innerHTML = `
+        ${isRecommended ? '<span class="membership-badge">推荐</span>' : ""}
+        <div class="membership-card-head">
+          <div class="membership-card-name">${plan.name}</div>
+          <div class="membership-card-price">¥${plan.price}</div>
+        </div>
+        <div class="membership-card-cycle">${formatBillingCycle(plan.billingCycle)}</div>
+        <div class="membership-card-meta">${formatPlanMeta(plan)}</div>
+      `;
+
+      btn.addEventListener("click", () => {
+        state.selectedMembershipPlan = plan;
+        renderMembershipPlans();
       });
       container.appendChild(btn);
     });
@@ -106,6 +177,21 @@
       state.selectedPackage = state.packages[0];
     }
     renderPackages();
+  }
+
+  async function loadMembershipPlans() {
+    const data = await api("/api/payment/membership-plans");
+    state.membershipPlans = Array.isArray(data.plans)
+      ? data.plans.slice().sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0))
+      : [];
+    if (!state.selectedMembershipPlan && state.membershipPlans.length) {
+      state.selectedMembershipPlan = state.membershipPlans[0];
+    }
+    renderMembershipPlans();
+  }
+
+  async function loadPurchaseOptions() {
+    await Promise.all([loadPackages(), loadMembershipPlans()]);
   }
 
   async function fetchCurrentUser() {
@@ -148,7 +234,7 @@
     const user = await fetchCurrentUser();
     if (user) {
       renderUserChip(user);
-      await loadPackages();
+      await loadPurchaseOptions();
       hideLoading();
       showSection("recharge");
       return;
@@ -222,7 +308,7 @@
       state.user = data.user;
       state.sessionId = null;
       renderUserChip(data.user);
-      await loadPackages();
+      await loadPurchaseOptions();
       hideLoading();
       showSection("recharge");
     } catch (error) {
@@ -272,11 +358,15 @@
         return data;
       }
     }
-    throw new Error("支付结果确认中，请稍后在积分账户查看");
+    throw new Error("支付结果确认中，请稍后在账户中查看");
   }
 
   async function showSuccessQr() {
     hideLoading();
+    const isMembership = state.lastOrderType === "membership";
+    $("success-desc").textContent = isMembership
+      ? "会员订阅已生效，请添加下方私域微信。"
+      : "积分已充值到您的账号，请添加下方私域微信。";
     const data = await api("/api/settings/wechat-qrcodes");
     const qrUrl = data.wechatGroup || data.officialAccount;
     $("success-qr").src = qrUrl || "/assets/group-erweima.jpg";
@@ -286,14 +376,21 @@
     showSection("success");
   }
 
-  async function paySelectedPackage() {
+  async function paySelected() {
     if (state.paying) return;
-    if (!state.selectedPackage) {
-      alert("请选择充值档位");
-      return;
-    }
     if (!isWeChatBrowser()) {
       alert("请在微信内完成支付");
+      return;
+    }
+
+    const isMembership = state.activeTab === "membership";
+    if (isMembership) {
+      if (!state.selectedMembershipPlan) {
+        alert("请选择订阅套餐");
+        return;
+      }
+    } else if (!state.selectedPackage) {
+      alert("请选择充值档位");
       return;
     }
 
@@ -302,13 +399,20 @@
     $("pay-btn").textContent = "正在发起支付...";
 
     try {
-      const order = await api("/api/payment/h5/order", {
-        method: "POST",
-        body: JSON.stringify({
-          amount: state.selectedPackage.price,
-          credits: state.selectedPackage.credits,
-        }),
-      });
+      const order = isMembership
+        ? await api("/api/payment/h5/membership-order", {
+            method: "POST",
+            body: JSON.stringify({ planCode: state.selectedMembershipPlan.code }),
+          })
+        : await api("/api/payment/h5/order", {
+            method: "POST",
+            body: JSON.stringify({
+              amount: state.selectedPackage.price,
+              credits: state.selectedPackage.credits,
+            }),
+          });
+
+      state.lastOrderType = isMembership ? "membership" : "recharge";
 
       if (!order.jsapiPayParams) {
         throw new Error("未获取到微信支付参数");
@@ -325,14 +429,16 @@
     } finally {
       state.paying = false;
       $("pay-btn").disabled = false;
-      $("pay-btn").textContent = "立即支付";
+      $("pay-btn").textContent = isMembership ? "立即订阅" : "立即支付";
     }
   }
 
   function bindEvents() {
     $("send-code-btn").addEventListener("click", sendSmsCode);
     $("bind-submit-btn").addEventListener("click", bindPhone);
-    $("pay-btn").addEventListener("click", paySelectedPackage);
+    $("pay-btn").addEventListener("click", paySelected);
+    $("tab-credits").addEventListener("click", () => setActiveTab("credits"));
+    $("tab-membership").addEventListener("click", () => setActiveTab("membership"));
     $("retry-btn").addEventListener("click", () => {
       if (isWeChatBrowser()) {
         redirectToWechatAuth();
@@ -345,6 +451,7 @@
 
   document.addEventListener("DOMContentLoaded", () => {
     bindEvents();
+    setActiveTab("credits");
     initAuthFlow().catch((error) => {
       setError(error.message || "页面初始化失败");
     });
