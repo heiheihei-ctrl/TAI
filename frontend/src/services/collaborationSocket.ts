@@ -88,17 +88,17 @@ type FlowPatchListener = (message: CollaborationFlowPatchMessage) => void;
 
 function resolveSocketBaseUrl(): string {
   // 开发环境走 Vite 同源代理（/socket.io → backend），避免 LAN/隧道下 localhost 指向错误机器
-  if (import.meta.env.DEV && typeof window !== 'undefined') {
-    return window.location.origin;
-  }
+  // if (import.meta.env.DEV && typeof window !== 'undefined') {
+  //   return window.location.origin;
+  // }
 
-  const configured = import.meta.env.VITE_API_BASE_URL as string | undefined;
-  if (configured?.trim()) {
-    return configured.trim().replace(/\/api\/?$/, '').replace(/\/+$/, '');
-  }
-  if (typeof window !== 'undefined') {
-    return window.location.origin;
-  }
+  // const configured = import.meta.env.VITE_API_BASE_URL as string | undefined;
+  // if (configured?.trim()) {
+  //   return configured.trim().replace(/\/api\/?$/, '').replace(/\/+$/, '');
+  // }
+  // if (typeof window !== 'undefined') {
+  //   return window.location.origin;
+  // }
   return 'http://localhost:4000';
 }
 
