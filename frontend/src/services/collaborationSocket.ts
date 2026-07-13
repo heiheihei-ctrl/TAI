@@ -100,7 +100,7 @@ function resolveSocketBaseUrl(): string {
   //   return window.location.origin;
   // }
   // return 'http://localhost:4000';
-  return 'http://http://101.96.217.132:4000';
+  return 'http://101.96.217.132:4000';
 }
 
 class CollaborationSocketManager {
