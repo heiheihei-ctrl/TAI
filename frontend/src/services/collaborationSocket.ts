@@ -1,6 +1,7 @@
 import { io, type Socket } from 'socket.io-client';
 import { getAccessToken } from './authTokenStorage';
 import { tokenRefreshManager } from './tokenRefreshManager';
+import type { CommentThreadSnapshot } from '@/types/comment';
 
 export interface CollaborationPeer {
   peerId: string;
@@ -58,6 +59,7 @@ export interface CollaborationContentUpdatePayload {
   layers?: unknown[];
   activeLayerId?: string | null;
   assets?: unknown;
+  comments?: CommentThreadSnapshot[];
 }
 
 export type CollaborationCursorPayload = CollaborationPeer & {
