@@ -26,23 +26,33 @@ export default function TeamQuotaBadge() {
     }
 
     let cancelled = false;
-    setLoading(true);
 
-    void teamApi
-      .getMyQuota(activeTeam.id)
-      .then((data) => {
-        if (cancelled) return;
-        setQuota(data);
-      })
-      .catch(() => {
-        if (!cancelled) setQuota(null);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    const loadQuota = () => {
+      setLoading(true);
+      void teamApi
+        .getMyQuota(activeTeam.id)
+        .then((data) => {
+          if (cancelled) return;
+          setQuota(data);
+        })
+        .catch(() => {
+          if (!cancelled) setQuota(null);
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    };
+
+    loadQuota();
+
+    const onCreditsRefresh = () => {
+      loadQuota();
+    };
+    window.addEventListener('refresh-credits', onCreditsRefresh);
 
     return () => {
       cancelled = true;
+      window.removeEventListener('refresh-credits', onCreditsRefresh);
     };
   }, [activeTeam?.id]);
 

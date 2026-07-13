@@ -304,6 +304,7 @@ export class CollaborationGateway
       layers?: unknown[];
       activeLayerId?: string | null;
       assets?: unknown;
+      comments?: unknown[];
     },
   ) {
     const room = client.data.room;

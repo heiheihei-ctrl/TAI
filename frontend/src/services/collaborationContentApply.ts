@@ -1,4 +1,5 @@
 import type { ProjectContentSnapshot } from '@/types/project';
+import type { CommentThreadSnapshot } from '@/types/comment';
 import { paperSaveService } from '@/services/paperSaveService';
 import { useProjectContentStore } from '@/stores/projectContentStore';
 import { useLayerStore } from '@/stores/layerStore';
@@ -7,8 +8,10 @@ import { setProjectCache } from '@/services/projectCacheStore';
 import { collaborationSocket } from '@/services/collaborationSocket';
 
 const CONTENT_BROADCAST_MIN_MS = 1200;
+const COMMENTS_BROADCAST_DEBOUNCE_MS = 300;
 const MAX_INLINE_PAPER_JSON = 512 * 1024;
 const lastContentEmitAt = { value: 0 };
+let commentsEmitTimer: ReturnType<typeof setTimeout> | null = null;
 
 let applyingRemote = false;
 let lastAppliedSeq = 0;
@@ -55,11 +58,29 @@ export async function applyRemoteContentUpdate(payload: {
   layers?: unknown[];
   activeLayerId?: string | null;
   assets?: unknown;
+  comments?: CommentThreadSnapshot[];
   userId?: string;
 }): Promise<boolean> {
   const store = useProjectContentStore.getState();
   const projectId = store.projectId;
   if (!projectId || !store.hydrated) return false;
+
+  if (payload.comments !== undefined && !payload.paperJson) {
+    applyingRemote = true;
+    try {
+      const nextContent: ProjectContentSnapshot = {
+        ...(store.content ?? ({} as ProjectContentSnapshot)),
+        comments: payload.comments,
+        updatedAt: payload.updatedAt,
+      };
+      store.hydrate(nextContent, store.version, payload.updatedAt);
+      lastAppliedSeq = payload.seq;
+      lastAppliedHash = payload.contentHash;
+      return true;
+    } finally {
+      applyingRemote = false;
+    }
+  }
 
   if (payload.contentHash === lastAppliedHash && payload.seq <= lastAppliedSeq) {
     return false;
@@ -144,13 +165,42 @@ export function resetCollaborationContentState() {
   lastAppliedHash = '';
   applyingRemote = false;
   lastContentEmitAt.value = 0;
+  if (commentsEmitTimer) {
+    clearTimeout(commentsEmitTimer);
+    commentsEmitTimer = null;
+  }
+}
+
+function canBroadcastContent(projectId: string): boolean {
+  return collaborationSocket.isReadyForProject(projectId);
+}
+
+export function broadcastCollaborationCommentsUpdate() {
+  const projectId = useProjectContentStore.getState().projectId;
+  const content = useProjectContentStore.getState().content;
+  if (!projectId || !content || !canBroadcastContent(projectId)) return;
+  if (isApplyingRemoteContent()) return;
+
+  if (commentsEmitTimer) clearTimeout(commentsEmitTimer);
+  commentsEmitTimer = setTimeout(() => {
+    commentsEmitTimer = null;
+    const latest = useProjectContentStore.getState().content;
+    if (!latest || !projectId || !canBroadcastContent(projectId)) return;
+
+    collaborationSocket.emitContentUpdate(projectId, {
+      seq: useProjectContentStore.getState().dirtyCounter,
+      contentHash: `comments:${latest.updatedAt ?? ''}:${latest.comments?.length ?? 0}`,
+      updatedAt: latest.updatedAt ?? new Date().toISOString(),
+      comments: latest.comments ?? [],
+    });
+  }, COMMENTS_BROADCAST_DEBOUNCE_MS);
 }
 
 export function broadcastCollaborationContentUpdate(reason?: string) {
   const projectId = useProjectContentStore.getState().projectId;
   const content = useProjectContentStore.getState().content;
   const dirtyCounter = useProjectContentStore.getState().dirtyCounter;
-  if (!projectId || !content || !collaborationSocket.isConnected()) return;
+  if (!projectId || !content || !canBroadcastContent(projectId)) return;
   if (isApplyingRemoteContent()) return;
 
   const now = Date.now();

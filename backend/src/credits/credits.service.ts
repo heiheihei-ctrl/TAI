@@ -151,6 +151,7 @@ export interface AddCreditsResult {
 
 export interface ApiUsageParams {
   userId: string;
+  teamId?: string;
   serviceType: ServiceType;
   model?: string;
   inputTokens?: number;
@@ -224,6 +225,7 @@ type PricingCatalogDimensionView = PricingCatalogVendorView['dimensions'][number
 
 interface PreviewCreditsParams {
   userId: string;
+  teamId?: string;
   serviceType: ServiceType;
   model?: string;
   requestParams?: any;
@@ -3463,7 +3465,266 @@ export class CreditsService {
     };
   }
 
+  private extractBillingTeamId(requestParams: unknown): string | undefined {
+    if (!requestParams || typeof requestParams !== 'object') return undefined;
+    const teamId = (requestParams as Record<string, unknown>).billingTeamId;
+    return typeof teamId === 'string' && teamId.trim() ? teamId.trim() : undefined;
+  }
+
+  private computeMemberTeamAvailableCredits(
+    membership: {
+      creditQuotaMonthly: number | null;
+      creditQuotaTotal: number | null;
+      creditUsedThisCycle: number;
+      creditUsedTotal: number;
+    },
+    teamBalance: number,
+  ): number {
+    const balance = Math.max(0, teamBalance);
+    const monthly = membership.creditQuotaMonthly;
+    const total = membership.creditQuotaTotal;
+    const monthlyRemaining =
+      monthly != null ? Math.max(0, monthly - membership.creditUsedThisCycle) : null;
+    const totalRemaining =
+      total != null ? Math.max(0, total - membership.creditUsedTotal) : null;
+
+    if (monthly == null && total == null) {
+      return balance;
+    }
+
+    const parts = [monthlyRemaining, totalRemaining].filter(
+      (value): value is number => value != null,
+    );
+    const quotaRemaining = parts.length > 0 ? Math.min(...parts) : 0;
+    return Math.min(quotaRemaining, balance);
+  }
+
+  private async resolveTeamBillingContext(
+    tx: Prisma.TransactionClient,
+    teamId: string,
+    userId: string,
+  ) {
+    const membership = await tx.teamMember.findUnique({
+      where: { teamId_userId: { teamId, userId } },
+      include: {
+        team: {
+          include: { creditAccount: true },
+        },
+      },
+    });
+
+    if (
+      !membership?.team ||
+      membership.team.isPersonal ||
+      membership.team.status !== 'active'
+    ) {
+      throw new BadRequestException('当前团队不可用或无权使用团队积分');
+    }
+
+    let account = membership.team.creditAccount;
+    if (!account) {
+      account = await tx.teamCreditAccount.create({ data: { teamId } });
+    }
+
+    return { membership, account };
+  }
+
+  private async preDeductTeamCredits(params: ApiUsageParams): Promise<DeductCreditsResult> {
+    const {
+      userId,
+      teamId,
+      serviceType,
+      model,
+      inputTokens,
+      outputTokens,
+      inputImageCount,
+      outputImageCount,
+      requestParams,
+      ipAddress,
+      userAgent,
+      idempotencyKey,
+      idempotencyWindowMs,
+    } = params;
+
+    if (!teamId) {
+      throw new BadRequestException('团队计费缺少 teamId');
+    }
+
+    const normalizedIdempotencyKey = this.normalizeIdempotencyKey(
+      idempotencyKey ?? requestParams?.idempotencyKey,
+    );
+    const normalizedIdempotencyWindowMs = this.normalizeIdempotencyWindowMs(
+      idempotencyWindowMs ?? requestParams?.idempotencyWindowMs,
+    );
+    const requestFingerprint = this.buildApiUsageRequestFingerprint({
+      serviceType,
+      model,
+      inputTokens,
+      outputTokens,
+      inputImageCount,
+      outputImageCount,
+      requestParams,
+    });
+
+    const {
+      pricing,
+      creditsToDeduct,
+      effectiveRequestParams,
+      requestedProvider,
+    } = await this.resolveEffectiveCreditsQuote({
+      serviceType,
+      model,
+      requestParams,
+      outputImageCount,
+    });
+
+    const apiUsageRequestParams = this.withDedupMetaInRequestParams(
+      {
+        ...(effectiveRequestParams ?? {}),
+        billingTeamId: teamId,
+      },
+      normalizedIdempotencyKey,
+      requestFingerprint,
+    );
+
+    return await this.prisma.$transaction(async (tx) => {
+      const { membership, account } = await this.resolveTeamBillingContext(
+        tx,
+        teamId,
+        userId,
+      );
+
+      if (normalizedIdempotencyKey || requestFingerprint) {
+        const duplicateUsage = await this.findDuplicateApiUsageInWindow(tx, {
+          userId,
+          serviceType,
+          model,
+          idempotencyKey: normalizedIdempotencyKey,
+          requestFingerprint,
+          windowStartAt: new Date(Date.now() - normalizedIdempotencyWindowMs),
+        });
+        if (duplicateUsage) {
+          this.logger.warn(
+            `[Credits] Duplicate team pre-deduct blocked user=${userId} team=${teamId} service=${serviceType} apiUsageId=${duplicateUsage.apiUsageId}`,
+          );
+          return {
+            success: true,
+            newBalance: account.balance,
+            transactionId:
+              duplicateUsage.transactionId || `duplicate:${duplicateUsage.apiUsageId}`,
+            apiUsageId: duplicateUsage.apiUsageId,
+          };
+        }
+      }
+
+      const available = this.computeMemberTeamAvailableCredits(
+        membership,
+        account.balance,
+      );
+      const skipFreeUsageQuota = await this.shouldSkipFreeUsageQuota(tx, userId);
+
+      await this.enforceFreeUserImageQuota(tx, {
+        userId,
+        serviceType,
+        requestedOutputImageCount: outputImageCount,
+        skipQuota: skipFreeUsageQuota,
+      });
+      await this.enforceFreeUserVideoQuota(tx, {
+        userId,
+        serviceType,
+        skipQuota: skipFreeUsageQuota,
+      });
+
+      if (creditsToDeduct > available) {
+        throw new BadRequestException(
+          `团队积分不足，当前可用: ${available}，需要: ${creditsToDeduct}`,
+        );
+      }
+
+      let effectiveServiceName = this.resolveSoraServiceName(
+        serviceType,
+        pricing.serviceName,
+        apiUsageRequestParams,
+        model,
+      );
+      effectiveServiceName = this.resolveKlingServiceName(
+        serviceType,
+        effectiveServiceName,
+        apiUsageRequestParams,
+      );
+      effectiveServiceName = this.resolveManagedVideoServiceName(
+        serviceType,
+        effectiveServiceName,
+        apiUsageRequestParams,
+      );
+      effectiveServiceName = this.resolveBananaImageServiceName(
+        serviceType,
+        effectiveServiceName,
+        apiUsageRequestParams,
+        outputImageCount,
+      );
+
+      const apiUsage = await tx.apiUsageRecord.create({
+        data: {
+          userId,
+          serviceType,
+          serviceName: effectiveServiceName,
+          provider: requestedProvider || pricing.provider,
+          model,
+          creditsUsed: creditsToDeduct,
+          inputTokens,
+          outputTokens,
+          inputImageCount,
+          outputImageCount,
+          requestParams: apiUsageRequestParams,
+          responseStatus: ApiResponseStatus.PENDING,
+          ipAddress,
+          userAgent,
+        },
+      });
+
+      const newBalance = account.balance - creditsToDeduct;
+      await tx.teamCreditAccount.update({
+        where: { id: account.id },
+        data: { balance: newBalance },
+      });
+
+      await tx.teamCreditLedger.create({
+        data: {
+          accountId: account.id,
+          entryType: 'deduct',
+          amount: creditsToDeduct,
+          actorUserId: userId,
+          taskId: apiUsage.id,
+          taskKind: serviceType,
+          note: effectiveServiceName,
+        },
+      });
+
+      await tx.teamMember.update({
+        where: { id: membership.id },
+        data: {
+          creditUsedThisCycle: membership.creditUsedThisCycle + creditsToDeduct,
+          creditUsedTotal: membership.creditUsedTotal + creditsToDeduct,
+        },
+      });
+
+      return {
+        success: true,
+        newBalance,
+        transactionId: `team:${account.id}:${apiUsage.id}`,
+        apiUsageId: apiUsage.id,
+      };
+    }, {
+      timeout: PRE_DEDUCT_TRANSACTION_TIMEOUT_MS,
+    });
+  }
+
   async preDeductCredits(params: ApiUsageParams): Promise<DeductCreditsResult> {
+    if (params.teamId) {
+      return this.preDeductTeamCredits(params);
+    }
+
     const {
       userId,
       serviceType,
@@ -3755,14 +4016,38 @@ export class CreditsService {
       await this.setCachedPreviewQuote(params, cachedQuote);
     }
 
+    let balance = account.balance;
+    if (params.teamId) {
+      const membership = await this.prisma.teamMember.findUnique({
+        where: {
+          teamId_userId: { teamId: params.teamId, userId: params.userId },
+        },
+        include: {
+          team: {
+            include: { creditAccount: true },
+          },
+        },
+      });
+      if (
+        membership?.team &&
+        !membership.team.isPersonal &&
+        membership.team.status === 'active'
+      ) {
+        balance = this.computeMemberTeamAvailableCredits(
+          membership,
+          membership.team.creditAccount?.balance ?? 0,
+        );
+      }
+    }
+
     return {
       serviceType: params.serviceType,
       serviceName: cachedQuote.serviceName,
       provider: cachedQuote.requestedProvider,
       model: params.model ?? null,
       credits: cachedQuote.creditsToDeduct,
-      balance: account.balance,
-      sufficient: account.balance >= cachedQuote.creditsToDeduct,
+      balance,
+      sufficient: balance >= cachedQuote.creditsToDeduct,
       managedPricing: cachedQuote.managedPricing,
       requestParams: cachedQuote.effectiveRequestParams ?? null,
     };
@@ -4068,6 +4353,79 @@ export class CreditsService {
 
       if (apiUsage.responseStatus !== ApiResponseStatus.FAILED) {
         throw new BadRequestException('只能退还失败的API调用积分');
+      }
+
+      const billingTeamId = this.extractBillingTeamId(apiUsage.requestParams);
+      if (billingTeamId) {
+        const teamAccount = await tx.teamCreditAccount.findUnique({
+          where: { teamId: billingTeamId },
+        });
+        if (!teamAccount) {
+          throw new NotFoundException('团队积分账户不存在');
+        }
+
+        const existingTeamRefund = await tx.teamCreditLedger.findFirst({
+          where: {
+            accountId: teamAccount.id,
+            taskId: apiUsageId,
+            entryType: 'refund',
+          },
+          orderBy: { createdAt: 'asc' },
+        });
+
+        if (existingTeamRefund) {
+          return {
+            success: true,
+            newBalance: teamAccount.balance,
+            transactionId: existingTeamRefund.id,
+          };
+        }
+
+        const creditsToRefund = apiUsage.creditsUsed;
+        const newTeamBalance = teamAccount.balance + creditsToRefund;
+        await tx.teamCreditAccount.update({
+          where: { id: teamAccount.id },
+          data: { balance: newTeamBalance },
+        });
+
+        const refundLedger = await tx.teamCreditLedger.create({
+          data: {
+            accountId: teamAccount.id,
+            entryType: 'refund',
+            amount: creditsToRefund,
+            actorUserId: userId,
+            taskId: apiUsageId,
+            taskKind: apiUsage.serviceType,
+            note: `退款：${apiUsage.serviceName}`,
+          },
+        });
+
+        const membership = await tx.teamMember.findUnique({
+          where: {
+            teamId_userId: { teamId: billingTeamId, userId },
+          },
+        });
+        if (membership) {
+          await tx.teamMember.update({
+            where: { id: membership.id },
+            data: {
+              creditUsedThisCycle: Math.max(
+                0,
+                membership.creditUsedThisCycle - creditsToRefund,
+              ),
+              creditUsedTotal: Math.max(
+                0,
+                membership.creditUsedTotal - creditsToRefund,
+              ),
+            },
+          });
+        }
+
+        return {
+          success: true,
+          newBalance: newTeamBalance,
+          transactionId: refundLedger.id,
+        };
       }
 
       const account = await tx.creditAccount.findUnique({

@@ -28,6 +28,7 @@ import { RemoveBackgroundDto } from './dto/background-removal.dto';
 import { ApplyWatermarkDto } from './dto/apply-watermark.dto';
 import { getGeminiApiKeyFromEnv } from './services/gemini-api-key.util';
 import { buildToapisUrl, getToapisApiKey } from '../utils/apimartHttpClient';
+import { extractTeamIdFromRequest } from '../common/team-request.util';
 import {
   GenerateImageDto,
   EditImageDto,
@@ -1416,11 +1417,13 @@ export class AiController {
         )
       : undefined;
     const idempotencyKey = this.extractIdempotencyKey(req, sanitizedRequestParams);
+    const teamId = extractTeamIdFromRequest(req);
 
     try {
       // 预扣积分
       const deductResult = await this.creditsService.preDeductCredits({
         userId,
+        teamId,
         serviceType,
         model,
         inputImageCount,
@@ -5379,6 +5382,7 @@ export class AiController {
     // 预扣积分
     const deductResult = await this.creditsService.preDeductCredits({
       userId,
+      teamId: extractTeamIdFromRequest(req),
       serviceType,
       model: billingModel,
       inputImageCount: effectiveDto.referenceImages?.length || undefined,

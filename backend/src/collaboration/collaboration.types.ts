@@ -51,6 +51,7 @@ export interface CollaborationContentUpdatePayload {
   layers?: unknown[];
   activeLayerId?: string | null;
   assets?: unknown;
+  comments?: unknown[];
 }
 
 /** Flow 节点/连线协作 patch（与 Tanva NodePatchPayload 同结构） */

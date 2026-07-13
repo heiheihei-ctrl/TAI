@@ -3784,6 +3784,10 @@ function FlowInner() {
     flowCollabRef.current = flowCollab;
   }, [flowCollab]);
 
+  React.useEffect(() => {
+    flowCollabRef.current.syncLocalNodeDataChanges(nodes as RFNode[]);
+  }, [nodes, flowCollab.syncLocalNodeDataChanges]);
+
   // Alt+拖拽复制相关状态（在 onNodesChange 中做位置重映射，让“副本在动、原节点不动”）
   const altDragStartRef = React.useRef<any>(null);
   const aiProvider = useAIChatStore((state) => state.aiProvider);
@@ -6032,6 +6036,16 @@ function FlowInner() {
     }
 
     commitFlowSnapshotImmediately("flow-paste", nextNodes, nextEdges);
+    try {
+      if (newNodes.length) {
+        flowCollabRef.current.broadcastNodeUpserts(newNodes as RFNode[]);
+      }
+      if (newEdges.length) {
+        flowCollabRef.current.sendFlowPatch({
+          upsertEdges: newEdges.map((edge) => ({ ...edge })),
+        });
+      }
+    } catch {}
     return true;
   }, [sanitizeNodeData, setEdges, setNodes, rf, commitFlowSnapshotImmediately]);
 
@@ -9042,6 +9056,9 @@ function FlowInner() {
       const nextNodes = (nodesRef.current as RFNode[]).concat([newNode]);
       setNodes(nextNodes);
       commitFlowSnapshotImmediately("flow-add-node", nextNodes);
+      try {
+        flowCollabRef.current.broadcastNodeUpserts([newNode as RFNode]);
+      } catch {}
       setAddPanel((v) => (v.visible ? { ...v, visible: false } : v));
       return id;
     },
@@ -11388,6 +11405,25 @@ function FlowInner() {
             (e) => !(e.target === detail.id && e.targetHandle === "img")
           )
         );
+      }
+
+      if (positionOffset) {
+        try {
+          const current = nodesRef.current.find((node) => node.id === detail.id);
+          if (current) {
+            flowCollabRef.current.sendFlowPatch({
+              upsertNodes: [
+                {
+                  id: detail.id,
+                  position: {
+                    x: current.position.x + Number(positionOffset.x ?? 0),
+                    y: current.position.y + Number(positionOffset.y ?? 0),
+                  },
+                },
+              ],
+            });
+          }
+        } catch {}
       }
     };
     window.addEventListener("flow:updateNodeData", handler as EventListener);
@@ -21894,6 +21930,9 @@ function FlowInner() {
       const nextNodes = (nodesRef.current as RFNode[]).concat([base as RFNode]);
       setNodes(nextNodes);
       commitFlowSnapshotImmediately("flow-add-at-center", nextNodes);
+      try {
+        flowCollabRef.current.broadcastNodeUpserts([base as RFNode]);
+      } catch {}
       return id;
     },
     [aiProvider, rf, setNodes, commitFlowSnapshotImmediately]

@@ -5,7 +5,7 @@ import {
   dedupePeersByUser,
   type CollaborationPeer,
 } from '@/services/collaborationSocket';
-import { clientToProject, getDpr, projectToClient } from '@/utils/paperCoords';
+import { clientToProjectWithViewport, projectToClientWithViewport } from '@/utils/paperCoords';
 import { useAuthStore } from '@/stores/authStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { useTeamStore } from '@/stores/teamStore';
@@ -32,19 +32,21 @@ function FigmaCursorArrow({ color }: { color: string }) {
 function RemoteCursor({
   peer,
   canvas,
-  viewportKey,
+  zoom,
+  panX,
+  panY,
 }: {
   peer: CollaborationPeer;
   canvas: HTMLCanvasElement;
-  viewportKey: string;
+  zoom: number;
+  panX: number;
+  panY: number;
 }) {
   if (peer.visible === false || peer.x == null || peer.y == null) {
     return null;
   }
 
-  // 对端坐标是与 DPR 无关的共享画布坐标；乘回本地 dpr 再投影到屏幕（对齐 Tanva CollabCursorLayer）。
-  const dpr = getDpr();
-  const screen = projectToClient(canvas, new paper.Point(peer.x * dpr, peer.y * dpr));
+  const screen = projectToClientWithViewport(canvas, peer.x, peer.y, zoom, panX, panY);
 
   return (
     <div
@@ -53,9 +55,7 @@ function RemoteCursor({
         left: screen.x,
         top: screen.y,
         transform: 'translate(-2px, -2px)',
-        transition: 'left 80ms linear, top 80ms linear',
       }}
-      data-viewport={viewportKey}
     >
       <FigmaCursorArrow color={peer.color} />
       <div
@@ -79,7 +79,10 @@ export default function CollaborativeCursors({ canvasRef }: Props) {
     const team = s.teams.find((t) => t.id === s.activeTeamId);
     return team && !team.isPersonal ? team : null;
   });
-  const viewportKey = useCanvasStore((s) => `${s.zoom}:${s.panX}:${s.panY}`);
+  const zoom = useCanvasStore((s) => s.zoom);
+  const panX = useCanvasStore((s) => s.panX);
+  const panY = useCanvasStore((s) => s.panY);
+  const viewportKey = `${zoom}:${panX}:${panY}`;
 
   const [peers, setPeers] = useState<Map<string, CollaborationPeer>>(new Map());
   const [connected, setConnected] = useState(false);
@@ -90,6 +93,8 @@ export default function CollaborativeCursors({ canvasRef }: Props) {
   const lastCursorRef = useRef<{ x: number; y: number } | null>(null);
   const rafRef = useRef<number | null>(null);
   const pendingRef = useRef<{ x: number; y: number } | null>(null);
+  const peersRafRef = useRef<number | null>(null);
+  const pendingPeersRef = useRef<Map<string, CollaborationPeer> | null>(null);
 
   const isTeamProject = !!activeTeam;
 
@@ -122,7 +127,16 @@ export default function CollaborativeCursors({ canvasRef }: Props) {
       }
     });
 
-    const unsubPeers = collaborationSocket.subscribePeers(setPeers);
+    const unsubPeers = collaborationSocket.subscribePeers((map) => {
+      pendingPeersRef.current = map;
+      if (peersRafRef.current != null) return;
+      peersRafRef.current = window.requestAnimationFrame(() => {
+        peersRafRef.current = null;
+        if (pendingPeersRef.current) {
+          setPeers(new Map(pendingPeersRef.current));
+        }
+      });
+    });
     const unsubConn = collaborationSocket.subscribeConnection(
       ({ connected: ok, projectId: activeProjectId }) => {
         if (!cancelled) {
@@ -137,6 +151,10 @@ export default function CollaborativeCursors({ canvasRef }: Props) {
       cancelled = true;
       unsubPeers();
       unsubConn();
+      if (peersRafRef.current != null) {
+        window.cancelAnimationFrame(peersRafRef.current);
+        peersRafRef.current = null;
+      }
     };
   }, [user?.id, projectId, isTeamProject]);
 
@@ -159,14 +177,14 @@ export default function CollaborativeCursors({ canvasRef }: Props) {
 
       const canvas =
         (paper?.view?.element as HTMLCanvasElement | undefined) ?? canvasEl;
-      if (!canvas || !paper?.view) return;
+      if (!canvas) return;
 
-      const p = clientToProject(canvas, pending.x, pending.y);
-      const dpr = getDpr();
+      const { zoom: z, panX: px, panY: py } = useCanvasStore.getState();
+      const p = clientToProjectWithViewport(canvas, pending.x, pending.y, z, px, py);
       const now = performance.now();
       if (now - lastEmitRef.current < CURSOR_THROTTLE_MS) return;
       lastEmitRef.current = now;
-      const cursor = { x: p.x / dpr, y: p.y / dpr };
+      const cursor = { x: p.x, y: p.y };
       lastCursorRef.current = cursor;
       collaborationSocket.emitCursor(projectId, cursor.x, cursor.y, true);
     };
@@ -246,7 +264,9 @@ export default function CollaborativeCursors({ canvasRef }: Props) {
               key={peer.userId}
               peer={peer}
               canvas={canvasEl}
-              viewportKey={viewportKey}
+              zoom={zoom}
+              panX={panX}
+              panY={panY}
             />
           ))}
         </div>

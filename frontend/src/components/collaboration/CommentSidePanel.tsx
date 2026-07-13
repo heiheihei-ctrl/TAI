@@ -19,6 +19,7 @@ import {
   type CommentThreadSnapshot,
   EMPTY_COMMENT_THREADS,
 } from '@/types/comment';
+import { broadcastCollaborationCommentsUpdate } from '@/services/collaborationContentApply';
 import './comment-mode.css';
 
 function resolveAuthorName(user: {
@@ -143,6 +144,7 @@ export default function CommentSidePanel({ visible }: Props) {
           : thread
       ),
     });
+    broadcastCollaborationCommentsUpdate();
     setReplyText('');
   };
 

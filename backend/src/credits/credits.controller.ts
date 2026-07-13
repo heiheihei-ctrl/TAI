@@ -13,15 +13,16 @@ import { FastifyRequest } from 'fastify';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { CreditsService } from './credits.service';
 import {
-  GetBalanceResponseDto,
+  AdjustCreditsDto,
   AdminAddCreditsDto,
   AdminDeductCreditsDto,
-  TransactionHistoryQueryDto,
   ApiUsageQueryDto,
-  PricingResponseDto,
   CreditsPreviewDto,
-  AdjustCreditsDto,
+  GetBalanceResponseDto,
+  PricingResponseDto,
+  TransactionHistoryQueryDto,
 } from './dto/credits.dto';
+import { extractTeamIdFromRequest } from '../common/team-request.util';
 
 interface AuthenticatedUser {
   id: string;
@@ -101,6 +102,7 @@ export class CreditsController {
   ) {
     return this.creditsService.previewCredits({
       userId: req.user.id,
+      teamId: extractTeamIdFromRequest(req),
       serviceType: dto.serviceType as any,
       model: dto.model,
       requestParams: dto.requestParams,

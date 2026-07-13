@@ -2,6 +2,7 @@ import { tokenRefreshManager } from './tokenRefreshManager';
 import { triggerAuthExpired } from './authEvents';
 import { getAccessToken, getRefreshAuthHeader, setTokens } from './authTokenStorage';
 import { ensureTraceHeader } from '../utils/trace';
+import { getActiveWorkspaceTeamId } from '@/stores/teamStore';
 
 type RequestInput = RequestInfo | URL;
 
@@ -124,6 +125,11 @@ const normalizeInit = (init?: AuthFetchInit): RequestInit => {
     if (!currentAuth && accessToken) {
       headers.set("Authorization", `Bearer ${accessToken}`);
     }
+  }
+
+  const workspaceTeamId = getActiveWorkspaceTeamId();
+  if (workspaceTeamId && !headers.has("X-Team-Id")) {
+    headers.set("X-Team-Id", workspaceTeamId);
   }
 
   const credentials =

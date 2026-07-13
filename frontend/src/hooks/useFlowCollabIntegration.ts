@@ -6,6 +6,11 @@ import {
   type CollaborationSelectionState,
   type FlowPatchPayload,
 } from '@/services/collaborationSocket';
+import {
+  buildCollabNodeDataUpsert,
+  buildCollabNodeUpsert,
+  sanitizeCollabDataPatch,
+} from '@/utils/flowCollabPatch';
 
 const PATCH_DEBOUNCE_MS = 200;
 const PATCH_MAXWAIT_MS = 150;
@@ -73,12 +78,19 @@ export function useFlowCollabIntegration({
   >([]);
   const [lockedNodeIds, setLockedNodeIds] = useState<Set<string>>(() => new Set());
   const lockedNodeMapRef = useRef<Map<string, RemoteFlowNodeLock>>(new Map());
+  const prevCollabDataRef = useRef(new Map<string, string>());
+  const remoteDataSkipRef = useRef(new Set<string>());
 
   const applyRemotePatch = useCallback(
     (payload: FlowPatchPayload) => {
       applyingRemoteRef.current = true;
       try {
         if (Array.isArray(payload.upsertNodes) && payload.upsertNodes.length > 0) {
+          for (const incoming of payload.upsertNodes as Record<string, unknown>[]) {
+            if (incoming?.id && incoming.data) {
+              remoteDataSkipRef.current.add(String(incoming.id));
+            }
+          }
           setNodes((ns) => {
             const result = [...ns];
             for (const incoming of payload.upsertNodes as Record<string, unknown>[]) {
@@ -189,8 +201,23 @@ export function useFlowCollabIntegration({
     return unsub;
   }, [enabled, projectId]);
 
+  const flushPendingPatch = useCallback(() => {
+    if (patchDebounce.current) {
+      clearTimeout(patchDebounce.current);
+      patchDebounce.current = null;
+    }
+    if (!projectId || !collaborationSocket.isReadyForProject(projectId)) {
+      return;
+    }
+    const toSend = pendingPatch.current;
+    pendingPatch.current = null;
+    patchLastFlush.current = Date.now();
+    if (!toSend) return;
+    collaborationSocket.emitFlowPatch(projectId, toSend);
+  }, [projectId]);
+
   const sendFlowPatch = useCallback(
-    (patch: FlowPatchPayload) => {
+    (patch: FlowPatchPayload, options?: { immediate?: boolean }) => {
       if (!enabled || !projectId) return;
 
       const prev = pendingPatch.current ?? {};
@@ -201,33 +228,18 @@ export function useFlowCollabIntegration({
         removeEdgeIds: [...new Set([...(prev.removeEdgeIds ?? []), ...(patch.removeEdgeIds ?? [])])],
       };
 
-      const flush = () => {
-        if (patchDebounce.current) {
-          clearTimeout(patchDebounce.current);
-          patchDebounce.current = null;
-        }
-        if (!projectId || !collaborationSocket.isReadyForProject(projectId)) {
-          return;
-        }
-        const toSend = pendingPatch.current;
-        pendingPatch.current = null;
-        patchLastFlush.current = Date.now();
-        if (!toSend) return;
-        collaborationSocket.emitFlowPatch(projectId, toSend);
-      };
-
       if (!collaborationSocket.isReadyForProject(projectId)) {
         return;
       }
 
-      if (Date.now() - patchLastFlush.current >= PATCH_MAXWAIT_MS) {
-        flush();
+      if (options?.immediate || Date.now() - patchLastFlush.current >= PATCH_MAXWAIT_MS) {
+        flushPendingPatch();
         return;
       }
       if (patchDebounce.current) clearTimeout(patchDebounce.current);
-      patchDebounce.current = setTimeout(flush, PATCH_DEBOUNCE_MS);
+      patchDebounce.current = setTimeout(flushPendingPatch, PATCH_DEBOUNCE_MS);
     },
-    [enabled, projectId],
+    [enabled, projectId, flushPendingPatch],
   );
 
   useEffect(() => {
@@ -330,12 +342,95 @@ export function useFlowCollabIntegration({
     [],
   );
 
+  const broadcastNodeUpserts = useCallback(
+    (nodes: Node[]) => {
+      if (!nodes.length) return;
+      sendFlowPatch(
+        {
+          upsertNodes: nodes.map((node) => buildCollabNodeUpsert(node)),
+        },
+        { immediate: true },
+      );
+      for (const node of nodes) {
+        const sanitized = sanitizeCollabDataPatch((node.data ?? {}) as Record<string, unknown>);
+        prevCollabDataRef.current.set(node.id, JSON.stringify(sanitized ?? {}));
+      }
+    },
+    [sendFlowPatch],
+  );
+
+  const broadcastNodeDataChange = useCallback(
+    (
+      nodeId: string,
+      patch: Record<string, unknown>,
+      position?: { x: number; y: number },
+    ) => {
+      const upsert = buildCollabNodeDataUpsert(nodeId, patch, position);
+      if (upsert) {
+        sendFlowPatch({ upsertNodes: [upsert] });
+      }
+    },
+    [sendFlowPatch],
+  );
+
+  const syncLocalNodeDataChanges = useCallback(
+    (nodes: Node[]) => {
+      if (!enabled || !projectId || applyingRemoteRef.current) return;
+
+      const skip = remoteDataSkipRef.current;
+      const prev = prevCollabDataRef.current;
+      const nextPrev = new Map<string, string>();
+
+      for (const node of nodes) {
+        const sanitized = sanitizeCollabDataPatch(
+          (node.data ?? {}) as Record<string, unknown>,
+        );
+        const serialized = JSON.stringify(sanitized ?? {});
+        nextPrev.set(node.id, serialized);
+
+        if (skip.has(node.id)) continue;
+
+        const prior = prev.get(node.id);
+        if (prior === undefined || prior === serialized) continue;
+
+        let priorObj: Record<string, unknown> = {};
+        const nextObj = sanitized ?? {};
+        try {
+          priorObj = JSON.parse(prior) as Record<string, unknown>;
+        } catch {
+          priorObj = {};
+        }
+
+        const patch: Record<string, unknown> = {};
+        const keys = new Set([...Object.keys(priorObj), ...Object.keys(nextObj)]);
+        for (const key of keys) {
+          if (JSON.stringify(priorObj[key]) !== JSON.stringify(nextObj[key])) {
+            patch[key] = nextObj[key];
+          }
+        }
+
+        const upsert = buildCollabNodeDataUpsert(node.id, patch);
+        if (upsert) {
+          const hasStatus = Object.prototype.hasOwnProperty.call(patch, 'status');
+          sendFlowPatch({ upsertNodes: [upsert] }, hasStatus ? { immediate: true } : undefined);
+        }
+      }
+
+      prevCollabDataRef.current = nextPrev;
+      if (skip.size > 0) skip.clear();
+    },
+    [enabled, projectId, sendFlowPatch],
+  );
+
   return {
     applyingRemoteRef,
     sendFlowPatch,
     broadcastNodeChanges,
     broadcastEdgeChanges,
     broadcastFlowSelection,
+    broadcastNodeUpserts,
+    broadcastNodeDataChange,
+    syncLocalNodeDataChanges,
     remoteFlowSelections,
     lockedNodeIds,
     isNodeLockedByRemote,

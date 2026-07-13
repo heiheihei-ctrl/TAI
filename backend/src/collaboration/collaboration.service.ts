@@ -178,6 +178,7 @@ export class CollaborationService {
       layers?: unknown[];
       activeLayerId?: string | null;
       assets?: unknown;
+      comments?: unknown[];
     },
   ): CollaborationContentUpdatePayload | null {
     const peer = this.getPeer(room, peerId);
@@ -207,6 +208,7 @@ export class CollaborationService {
       layers: body.layers,
       activeLayerId: body.activeLayerId,
       assets: body.assets,
+      comments: body.comments,
     };
   }
 

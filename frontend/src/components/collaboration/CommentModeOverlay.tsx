@@ -16,7 +16,7 @@ import {
   type CommentThreadSnapshot,
   EMPTY_COMMENT_THREADS,
 } from '@/types/comment';
-import './comment-mode.css';
+import { broadcastCollaborationCommentsUpdate } from '@/services/collaborationContentApply';
 
 type DraftState = {
   x: number;
@@ -288,6 +288,7 @@ export default function CommentModeOverlay({ canvasRef }: Props) {
   const persistThreads = React.useCallback(
     (nextThreads: CommentThreadSnapshot[]) => {
       updatePartial({ comments: nextThreads });
+      broadcastCollaborationCommentsUpdate();
     },
     [updatePartial]
   );

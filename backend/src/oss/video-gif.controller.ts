@@ -22,6 +22,7 @@ import { OssService } from './oss.service';
 import { CreditsService } from '../credits/credits.service';
 import { ApiResponseStatus } from '../credits/dto/credits.dto';
 import { ServiceType } from '../credits/credits.config';
+import { extractTeamIdFromRequest } from '../common/team-request.util';
 import {
   createAsyncTask,
   getAsyncTaskResult,
@@ -100,6 +101,7 @@ export class VideoGifController {
     const idempotencyKey = this.extractIdempotencyKey(req);
     const deductResult = await this.creditsService.preDeductCredits({
       userId,
+      teamId: extractTeamIdFromRequest(req),
       serviceType: 'video-to-gif',
       model: 'ffmpeg-gif',
       outputImageCount: 1,
@@ -361,6 +363,7 @@ export class VideoGifController {
         await this.creditsService.getOrCreateAccount(userId);
         const deductResult = await this.creditsService.preDeductCredits({
           userId,
+          teamId: extractTeamIdFromRequest(req),
           serviceType,
           model: 'ffmpeg-gif',
           outputImageCount: 1,
