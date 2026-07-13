@@ -3529,6 +3529,33 @@ export class CreditsService {
     return { membership, account };
   }
 
+  private async resolveProjectTeamId(
+    userId: string,
+    projectId?: string,
+  ): Promise<string | undefined> {
+    if (!projectId) return undefined;
+
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { teamId: true },
+    });
+    if (!project?.teamId) return undefined;
+
+    const membership = await this.prisma.teamMember.findUnique({
+      where: { teamId_userId: { teamId: project.teamId, userId } },
+      include: { team: { select: { isPersonal: true, status: true } } },
+    });
+    if (
+      !membership?.team ||
+      membership.team.isPersonal ||
+      membership.team.status !== 'active'
+    ) {
+      return undefined;
+    }
+
+    return project.teamId;
+  }
+
   private async preDeductTeamCredits(params: ApiUsageParams): Promise<DeductCreditsResult> {
     const {
       userId,
@@ -3721,8 +3748,17 @@ export class CreditsService {
   }
 
   async preDeductCredits(params: ApiUsageParams): Promise<DeductCreditsResult> {
-    if (params.teamId) {
-      return this.preDeductTeamCredits(params);
+    const teamId =
+      params.teamId ??
+      (await this.resolveProjectTeamId(
+        params.userId,
+        typeof params.requestParams?.projectId === 'string'
+          ? params.requestParams.projectId
+          : undefined,
+      ));
+
+    if (teamId) {
+      return this.preDeductTeamCredits({ ...params, teamId });
     }
 
     const {

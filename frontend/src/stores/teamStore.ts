@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { teamApi } from '@/services/teamApi';
+import { useProjectStore } from '@/stores/projectStore';
 
 export interface TeamInfo {
   id: string;
@@ -68,4 +69,24 @@ export function getActiveWorkspaceTeamId(): string | undefined {
   const team = teams.find((t) => t.id === activeTeamId);
   if (!team || team.isPersonal) return undefined;
   return team.id;
+}
+
+/** 计费用 teamId：优先当前选中的共享团队，其次当前打开项目的 teamId */
+export function getBillingTeamId(): string | undefined {
+  const { activeTeamId, teams } = useTeamStore.getState();
+  const projectTeamId = useProjectStore.getState().currentProject?.teamId;
+  return (
+    resolveCollaborationTeam(teams, activeTeamId, projectTeamId)?.id
+  );
+}
+
+export function resolveCollaborationTeam(
+  teams: TeamInfo[],
+  activeTeamId: string | null,
+  projectTeamId?: string | null,
+): TeamInfo | null {
+  const workspaceTeam = teams.find((t) => t.id === activeTeamId && !t.isPersonal);
+  if (workspaceTeam) return workspaceTeam;
+  if (!projectTeamId) return null;
+  return teams.find((t) => t.id === projectTeamId && !t.isPersonal) ?? null;
 }

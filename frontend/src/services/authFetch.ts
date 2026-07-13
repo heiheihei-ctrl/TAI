@@ -2,7 +2,7 @@ import { tokenRefreshManager } from './tokenRefreshManager';
 import { triggerAuthExpired } from './authEvents';
 import { getAccessToken, getRefreshAuthHeader, setTokens } from './authTokenStorage';
 import { ensureTraceHeader } from '../utils/trace';
-import { getActiveWorkspaceTeamId } from '@/stores/teamStore';
+import { getBillingTeamId } from '@/stores/teamStore';
 
 type RequestInput = RequestInfo | URL;
 
@@ -127,9 +127,9 @@ const normalizeInit = (init?: AuthFetchInit): RequestInit => {
     }
   }
 
-  const workspaceTeamId = getActiveWorkspaceTeamId();
-  if (workspaceTeamId && !headers.has("X-Team-Id")) {
-    headers.set("X-Team-Id", workspaceTeamId);
+  const billingTeamId = getBillingTeamId();
+  if (billingTeamId && !headers.has("X-Team-Id")) {
+    headers.set("X-Team-Id", billingTeamId);
   }
 
   const credentials =

@@ -8,7 +8,7 @@ import {
 import { clientToProjectWithViewport, projectToClientWithViewport } from '@/utils/paperCoords';
 import { useAuthStore } from '@/stores/authStore';
 import { useProjectStore } from '@/stores/projectStore';
-import { useTeamStore } from '@/stores/teamStore';
+import { useTeamStore, resolveCollaborationTeam } from '@/stores/teamStore';
 import { useCanvasStore } from '@/stores/canvasStore';
 import CollaborationPresenceBar from './CollaborationPresenceBar';
 import { SHOW_TEAM_COLLABORATION } from '@/config/featureFlags';
@@ -75,10 +75,13 @@ interface Props {
 export default function CollaborativeCursors({ canvasRef }: Props) {
   const user = useAuthStore((s) => s.user);
   const projectId = useProjectStore((s) => s.currentProjectId);
-  const activeTeam = useTeamStore((s) => {
-    const team = s.teams.find((t) => t.id === s.activeTeamId);
-    return team && !team.isPersonal ? team : null;
-  });
+  const projectTeamId = useProjectStore((s) => s.currentProject?.teamId);
+  const activeTeamId = useTeamStore((s) => s.activeTeamId);
+  const teams = useTeamStore((s) => s.teams);
+  const activeTeam = useMemo(
+    () => resolveCollaborationTeam(teams, activeTeamId, projectTeamId),
+    [activeTeamId, projectTeamId, teams],
+  );
   const zoom = useCanvasStore((s) => s.zoom);
   const panX = useCanvasStore((s) => s.panX);
   const panY = useCanvasStore((s) => s.panY);

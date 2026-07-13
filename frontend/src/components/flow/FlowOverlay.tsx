@@ -122,7 +122,8 @@ import {
 } from "@/stores/flowStore";
 import { useShallow } from "zustand/react/shallow";
 import { useProjectContentStore } from "@/stores/projectContentStore";
-import { useTeamStore } from "@/stores/teamStore";
+import { useProjectStore } from "@/stores/projectStore";
+import { useTeamStore, resolveCollaborationTeam } from "@/stores/teamStore";
 import { SHOW_TEAM_COLLABORATION } from "@/config/featureFlags";
 import { useFlowCollabIntegration } from "@/hooks/useFlowCollabIntegration";
 import RemoteFlowSelectionOverlays from "@/components/collaboration/RemoteFlowSelectionOverlays";
@@ -3763,10 +3764,13 @@ function FlowInner() {
   }, []);
 
   const projectIdForCollab = useProjectContentStore((s) => s.projectId);
-  const activeTeamForCollab = useTeamStore((s) => {
-    const team = s.teams.find((t) => t.id === s.activeTeamId);
-    return team && !team.isPersonal ? team : null;
-  });
+  const projectTeamId = useProjectStore((s) => s.currentProject?.teamId);
+  const activeTeamIdForCollab = useTeamStore((s) => s.activeTeamId);
+  const teamsForCollab = useTeamStore((s) => s.teams);
+  const activeTeamForCollab = React.useMemo(
+    () => resolveCollaborationTeam(teamsForCollab, activeTeamIdForCollab, projectTeamId),
+    [teamsForCollab, activeTeamIdForCollab, projectTeamId],
+  );
   const knownFlowNodeTypes = React.useMemo(
     () => new Set(Object.keys(nodeTypes)),
     []

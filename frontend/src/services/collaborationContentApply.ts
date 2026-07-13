@@ -12,6 +12,7 @@ const COMMENTS_BROADCAST_DEBOUNCE_MS = 300;
 const MAX_INLINE_PAPER_JSON = 512 * 1024;
 const lastContentEmitAt = { value: 0 };
 let commentsEmitTimer: ReturnType<typeof setTimeout> | null = null;
+let commentsBroadcastSeq = 0;
 
 let applyingRemote = false;
 let lastAppliedSeq = 0;
@@ -63,7 +64,7 @@ export async function applyRemoteContentUpdate(payload: {
 }): Promise<boolean> {
   const store = useProjectContentStore.getState();
   const projectId = store.projectId;
-  if (!projectId || !store.hydrated) return false;
+  if (!projectId) return false;
 
   if (payload.comments !== undefined && !payload.paperJson) {
     applyingRemote = true;
@@ -73,7 +74,14 @@ export async function applyRemoteContentUpdate(payload: {
         comments: payload.comments,
         updatedAt: payload.updatedAt,
       };
-      store.hydrate(nextContent, store.version, payload.updatedAt);
+      if (store.hydrated) {
+        store.hydrate(nextContent, store.version, payload.updatedAt);
+      } else {
+        store.updatePartial(
+          { comments: payload.comments, updatedAt: payload.updatedAt },
+          { markDirty: false },
+        );
+      }
       lastAppliedSeq = payload.seq;
       lastAppliedHash = payload.contentHash;
       return true;
@@ -81,6 +89,8 @@ export async function applyRemoteContentUpdate(payload: {
       applyingRemote = false;
     }
   }
+
+  if (!store.hydrated) return false;
 
   if (payload.contentHash === lastAppliedHash && payload.seq <= lastAppliedSeq) {
     return false;
@@ -164,6 +174,7 @@ export function resetCollaborationContentState() {
   lastAppliedSeq = 0;
   lastAppliedHash = '';
   applyingRemote = false;
+  commentsBroadcastSeq = 0;
   lastContentEmitAt.value = 0;
   if (commentsEmitTimer) {
     clearTimeout(commentsEmitTimer);
@@ -187,9 +198,16 @@ export function broadcastCollaborationCommentsUpdate() {
     const latest = useProjectContentStore.getState().content;
     if (!latest || !projectId || !canBroadcastContent(projectId)) return;
 
+    commentsBroadcastSeq += 1;
+    const seq = Math.max(
+      commentsBroadcastSeq,
+      useProjectContentStore.getState().dirtyCounter,
+      1,
+    );
+
     collaborationSocket.emitContentUpdate(projectId, {
-      seq: useProjectContentStore.getState().dirtyCounter,
-      contentHash: `comments:${latest.updatedAt ?? ''}:${latest.comments?.length ?? 0}`,
+      seq,
+      contentHash: `comments:${latest.updatedAt ?? ''}:${latest.comments?.length ?? 0}:${seq}`,
       updatedAt: latest.updatedAt ?? new Date().toISOString(),
       comments: latest.comments ?? [],
     });

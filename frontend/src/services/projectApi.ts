@@ -9,6 +9,7 @@ import { getActiveWorkspaceTeamId } from "@/stores/teamStore";
 export type Project = {
   id: string;
   name: string;
+  teamId?: string | null;
   contentVersion: number;
   createdAt: string;
   updatedAt: string;

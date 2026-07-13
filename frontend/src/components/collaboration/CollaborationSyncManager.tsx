@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { collaborationSocket, dedupeByUserId } from '@/services/collaborationSocket';
 import type { CollaborationSelectionState } from '@/services/collaborationSocket';
 import {
@@ -7,7 +7,7 @@ import {
 } from '@/services/collaborationContentApply';
 import { useAuthStore } from '@/stores/authStore';
 import { useProjectStore } from '@/stores/projectStore';
-import { useTeamStore } from '@/stores/teamStore';
+import { useTeamStore, resolveCollaborationTeam } from '@/stores/teamStore';
 import RemoteSelectionOverlays from './RemoteSelectionOverlays';
 import { SHOW_TEAM_COLLABORATION } from '@/config/featureFlags';
 
@@ -18,10 +18,13 @@ interface Props {
 export default function CollaborationSyncManager({ canvasRef }: Props) {
   const user = useAuthStore((s) => s.user);
   const projectId = useProjectStore((s) => s.currentProjectId);
-  const activeTeam = useTeamStore((s) => {
-    const team = s.teams.find((t) => t.id === s.activeTeamId);
-    return team && !team.isPersonal ? team : null;
-  });
+  const projectTeamId = useProjectStore((s) => s.currentProject?.teamId);
+  const activeTeamId = useTeamStore((s) => s.activeTeamId);
+  const teams = useTeamStore((s) => s.teams);
+  const activeTeam = useMemo(
+    () => resolveCollaborationTeam(teams, activeTeamId, projectTeamId),
+    [activeTeamId, projectTeamId, teams],
+  );
   const [connected, setConnected] = useState(false);
   const [canvasEl, setCanvasEl] = useState<HTMLCanvasElement | null>(null);
   const [remoteSelections, setRemoteSelections] = useState<

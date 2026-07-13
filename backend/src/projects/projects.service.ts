@@ -68,6 +68,7 @@ export class ProjectsService {
   private toPublicProjectSummary(project: {
     id: string;
     name: string;
+    teamId?: string | null;
     mainKey?: string | null;
     contentVersion?: number | null;
     createdAt: Date;
@@ -78,6 +79,7 @@ export class ProjectsService {
     return {
       id: project.id,
       name: project.name,
+      teamId: project.teamId ?? null,
       contentVersion: project.contentVersion ?? 1,
       createdAt: project.createdAt,
       updatedAt: project.updatedAt,
