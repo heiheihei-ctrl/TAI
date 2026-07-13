@@ -1,3 +1,4 @@
+import type { CommentThreadSnapshot } from '@/types/comment';
 import type { LayerMeta } from '@/stores/layerStore';
 import type { StoredImageAsset } from '@/types/canvas';
 import type { Model3DData } from '@/services/model3DUploadService';
@@ -95,6 +96,8 @@ export interface ProjectContentSnapshot {
   assets?: ProjectAssetsSnapshot;
   // Flow 模板节点系统的图谱（每个项目独立保存）
   flow?: FlowGraphSnapshot;
+  /** 画布评论线程（协同） */
+  comments?: CommentThreadSnapshot[];
   aiChatSessions?: SerializedConversationContext[];
   aiChatActiveSessionId?: string | null;
   updatedAt: string;
@@ -119,6 +122,7 @@ export function createEmptyProjectContent(): ProjectContentSnapshot {
       nodes: [],
       edges: [],
     },
+    comments: [],
     aiChatSessions: [],
     aiChatActiveSessionId: null,
     updatedAt: new Date().toISOString(),

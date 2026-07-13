@@ -17,6 +17,10 @@ import { TeamCreditsService } from './team-credits.service';
 import { CreateTeamDto } from './dto/create-team.dto';
 import { CreateTeamInviteDto } from './dto/create-invite.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
+import {
+  CreateTeamCreditsTopupOrderDto,
+  CreateTeamSeatPackageOrderDto,
+} from './dto/team-payment.dto';
 import { UpdateMemberQuotaDto } from './dto/update-member-quota.dto';
 
 @ApiTags('teams')
@@ -159,8 +163,12 @@ export class TeamsController {
   @Post(':teamId/credits/topup/orders')
   @ApiCookieAuth('access_token')
   @UseGuards(JwtAuthGuard)
-  createTopupOrder() {
-    return this.teamCredits.createTopupOrder();
+  createTopupOrder(
+    @Req() req: any,
+    @Param('teamId') teamId: string,
+    @Body() dto: CreateTeamCreditsTopupOrderDto,
+  ) {
+    return this.teamCredits.createTopupOrder(teamId, this.userId(req), dto);
   }
 
   @Get(':teamId/seat-packages')
@@ -173,7 +181,11 @@ export class TeamsController {
   @Post(':teamId/seat-packages/orders')
   @ApiCookieAuth('access_token')
   @UseGuards(JwtAuthGuard)
-  createSeatPackageOrder() {
-    return this.teamCredits.createSeatPackageOrder();
+  createSeatPackageOrder(
+    @Req() req: any,
+    @Param('teamId') teamId: string,
+    @Body() dto: CreateTeamSeatPackageOrderDto,
+  ) {
+    return this.teamCredits.createSeatPackageOrder(teamId, this.userId(req), dto);
   }
 }

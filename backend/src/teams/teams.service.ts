@@ -447,6 +447,10 @@ export class TeamsService {
     return membership;
   }
 
+  async assertTeamManager(teamId: string, userId: string) {
+    return this.assertCanManage(teamId, userId);
+  }
+
   async resolvePersonalTeamId(userId: string): Promise<string> {
     const team = await this.ensurePersonalTeam(userId);
     return team.id;

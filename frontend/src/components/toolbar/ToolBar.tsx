@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
-import { Eraser, Square, Trash2, Box, Image, Layers, Sparkles, Type, GitBranch, MousePointer2, LayoutTemplate, FolderOpen, HelpCircle } from 'lucide-react';
+import { Eraser, Square, Trash2, Box, Image, Layers, Sparkles, Type, GitBranch, MousePointer2, LayoutTemplate, FolderOpen, HelpCircle, MessageCircle } from 'lucide-react';
 import TextStylePanel from './TextStylePanel';
 import ColorPicker from './ColorPicker';
 import AbrBrushPicker from './AbrBrushPicker';
@@ -18,7 +18,9 @@ import { canvasToDataUrl } from '@/utils/imageConcurrency';
 import { isRemoteUrl, normalizePersistableImageRef } from '@/utils/imageSource';
 import { useLocaleText } from '@/utils/localeText';
 import { useFlowOnboardingStore } from '@/stores/flowOnboardingStore';
-import { SHOW_FLOW_ONBOARDING_TOOLBAR } from '@/config/featureFlags';
+import { useCommentStore } from '@/stores/commentStore';
+import { SHOW_FLOW_ONBOARDING_TOOLBAR, SHOW_TEAM_COLLABORATION } from '@/config/featureFlags';
+import '@/components/collaboration/comment-mode.css';
 import { getStoredTemplateParentCategory } from '@/services/publicTemplateService';
 
 // 统一画板：移除 Node 模式专属按钮组件
@@ -958,11 +960,11 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
         <Tooltip open={isSubMenuOpen ? false : undefined}>
           <TooltipTrigger asChild>
             <Button
-              variant={drawMode !== 'select' && drawMode !== 'marquee' && drawMode !== 'pointer' && drawMode !== 'text' && drawMode !== 'image' && drawMode !== '3d-model' && drawMode !== 'screenshot' && !isEraser ? "default" : "outline"}
+              variant={drawMode !== 'select' && drawMode !== 'marquee' && drawMode !== 'pointer' && drawMode !== 'text' && drawMode !== 'image' && drawMode !== '3d-model' && drawMode !== 'screenshot' && drawMode !== 'comment' && !isEraser ? "default" : "outline"}
               size="sm"
               className={cn(
                 "p-0 h-8 w-8 rounded-full",
-                getActiveButtonStyle(drawMode !== 'select' && drawMode !== 'marquee' && drawMode !== 'pointer' && drawMode !== 'text' && drawMode !== 'image' && drawMode !== '3d-model' && drawMode !== 'screenshot' && !isEraser)
+                getActiveButtonStyle(drawMode !== 'select' && drawMode !== 'marquee' && drawMode !== 'pointer' && drawMode !== 'text' && drawMode !== 'image' && drawMode !== '3d-model' && drawMode !== 'screenshot' && drawMode !== 'comment' && !isEraser)
               )}
               onClick={() => {
                 const isDrawingMode = drawingModes.includes(drawMode as typeof drawingModes[number]);
@@ -981,11 +983,11 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
               {drawMode === 'rect' && <Square className="w-4 h-4" />}
               {drawMode === 'circle' && <CircleIcon className="w-4 h-4" />}
               {/* 如果是选择模式或独立工具模式，显示默认的自由绘制图标但为非激活状态 */}
-              {(drawMode === 'select' || drawMode === 'marquee' || drawMode === 'pointer' || drawMode === 'image' || drawMode === '3d-model' || drawMode === 'text' || drawMode === 'screenshot' || drawMode === 'polyline') && <FreeDrawIcon className="w-4 h-4" />}
+              {(drawMode === 'select' || drawMode === 'marquee' || drawMode === 'pointer' || drawMode === 'image' || drawMode === '3d-model' || drawMode === 'text' || drawMode === 'screenshot' || drawMode === 'comment' || drawMode === 'polyline') && <FreeDrawIcon className="w-4 h-4" />}
             </Button>
           </TooltipTrigger>
           <TooltipContent side="right">
-            {drawMode === 'select' || drawMode === 'marquee' || drawMode === 'pointer' || isEraser || drawMode === 'text' || drawMode === 'image' || drawMode === '3d-model' || drawMode === 'screenshot'
+            {drawMode === 'select' || drawMode === 'marquee' || drawMode === 'pointer' || isEraser || drawMode === 'text' || drawMode === 'image' || drawMode === '3d-model' || drawMode === 'screenshot' || drawMode === 'comment'
               ? lt('点击切换到自由绘制工具', 'Switch to free draw')
               : lt(
                   `当前工具：${drawMode === 'free' ? '自由绘制' : drawMode === 'line' ? '直线' : drawMode === 'rect' ? '矩形' : drawMode === 'circle' ? '圆形' : drawMode === 'polyline' ? '多段线' : drawMode}`,
@@ -1245,6 +1247,45 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
             )}
         </div>
 
+        {SHOW_TEAM_COLLABORATION ? (
+          <div className="relative">
+            <Tooltip open={isSubMenuOpen ? false : undefined}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={drawMode === 'comment' ? 'default' : 'outline'}
+                  size="sm"
+                  className={cn(
+                    'p-0 h-8 w-8 rounded-full',
+                    getActiveButtonStyle(drawMode === 'comment')
+                  )}
+                  onClick={() => {
+                    if (drawMode === 'comment') {
+                      useCommentStore.getState().reset();
+                      setDrawMode('select');
+                      logger.tool('工具栏：退出评论模式');
+                    } else {
+                      setDrawMode('comment');
+                      logger.tool('工具栏：切换到评论模式');
+                    }
+                  }}
+                >
+                  <MessageCircle className="w-4 h-4" />
+                </Button>
+              </TooltipTrigger>
+              {drawMode !== 'comment' ? (
+                <TooltipContent side="right">
+                  {lt('评论模式', 'Comment mode')}
+                </TooltipContent>
+              ) : null}
+            </Tooltip>
+            {drawMode === 'comment' ? (
+              <div className="comment-mode-toolbar-hint">
+                {lt('评论模式 (点击画布添加评论)', 'Comment mode (click canvas to add)')}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
       {/* AI编辑图像工具 - 暂时隐藏 */}
         {/* <Button
           variant="outline"
@@ -1288,7 +1329,7 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
         <TooltipContent side="right">{lt('图层面板', 'Layer Panel')}</TooltipContent>
       </Tooltip>
 
-      {/* AI资产按钮 */}
+      {/* 素材库按钮 */}
       <Tooltip open={isSubMenuOpen ? false : undefined}>
         <TooltipTrigger asChild>
           <Button
@@ -1303,7 +1344,7 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
             <FolderOpen className="w-4 h-4" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="right">{lt('AI资产', 'AI Assets')}</TooltipContent>
+        <TooltipContent side="right">{lt('素材库', 'Asset Library')}</TooltipContent>
       </Tooltip>
 
       {/* 模板库按钮 */}

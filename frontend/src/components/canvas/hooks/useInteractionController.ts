@@ -688,6 +688,15 @@ export const useInteractionController = ({
     // 转换为 Paper.js 项目坐标（考虑 devicePixelRatio）
     const point = clientToProject(canvas, event.clientX, event.clientY);
 
+    if (currentDrawMode === 'comment') {
+      window.dispatchEvent(
+        new CustomEvent('tanva:comment-canvas-click', {
+          detail: { x: point.x, y: point.y },
+        })
+      );
+      return;
+    }
+
     // ========== 选择模式处理 ==========
     if (currentDrawMode === 'select' || currentDrawMode === 'marquee') {
       // 橡皮擦模式下，不允许激活选择框功能
@@ -1094,6 +1103,11 @@ export const useInteractionController = ({
     const latestImageTool = imageToolRef.current;
     const latestSelectionTool = selectionToolRef.current;
     const latestPathEditor = pathEditorRef.current;
+
+    if (drawModeRef.current === 'comment') {
+      canvas.style.cursor = 'crosshair';
+      return;
+    }
 
     // 空格抓手优先：仅在选择/指针模式下生效
     if (isSelectionLikeMode() && isSpacePressedRef.current) {

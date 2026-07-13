@@ -7,7 +7,7 @@ import { createSafeStorage } from './storageUtils';
 import { isBitmapBrushSupported } from '@/utils/abrBrushSupport';
 
 // 工具类型定义
-export type DrawMode = 'select' | 'marquee' | 'pointer' | 'free' | 'line' | 'rect' | 'circle' | 'polyline' | 'text' | 'image' | 'quick-image' | '3d-model' | 'screenshot';
+export type DrawMode = 'select' | 'marquee' | 'pointer' | 'free' | 'line' | 'rect' | 'circle' | 'polyline' | 'text' | 'image' | 'quick-image' | '3d-model' | 'screenshot' | 'comment';
 export type LineStyle =
   | 'solid'
   | 'dashed'
@@ -60,6 +60,7 @@ const ALL_DRAW_MODES: DrawMode[] = [
   'quick-image',
   '3d-model',
   'screenshot',
+  'comment',
 ];
 const TOOL_SETTINGS_VERSION = 4;
 

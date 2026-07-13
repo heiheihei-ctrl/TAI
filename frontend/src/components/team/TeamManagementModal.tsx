@@ -696,6 +696,7 @@ function LedgerTab({ teamId }: { teamId: string }) {
 
   const entryLabel = (type: string) => {
     if (type === 'topup') return '充值';
+    if (type === 'seat_package') return '席位购买';
     if (type === 'admin_add') return '管理员充值';
     if (type === 'reserve') return '冻结';
     if (type === 'deduct') return '扣款';
@@ -759,6 +760,12 @@ function LedgerTab({ teamId }: { teamId: string }) {
 
 /* ─── Subscription tab ────────────────────────────────────────────── */
 
+function seatCycleLabel(cycle: string): string {
+  if (cycle === 'monthly') return '席位';
+  if (cycle === 'annual') return '年卡';
+  return cycle;
+}
+
 function SubscriptionTab({ teamId, myRole }: { teamId: string; myRole?: string }) {
   const canManage = myRole === 'owner' || myRole === 'admin';
 
@@ -793,7 +800,7 @@ function SubscriptionTab({ teamId, myRole }: { teamId: string; myRole?: string }
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const PLANS = {
-    monthly: { pricePerSeat: 100, creditsPerSeat: 10000, label: '月卡', days: 30 },
+    monthly: { pricePerSeat: 100, creditsPerSeat: 10000, label: '席位', days: 30 },
     annual:  { pricePerSeat: 1200, creditsPerSeat: 120000, label: '年卡', days: 365 },
   } as const;
 
@@ -907,7 +914,7 @@ function SubscriptionTab({ teamId, myRole }: { teamId: string; myRole?: string }
               <div key={pkg.id} className="rounded-xl border border-slate-200 bg-white px-4 py-3 flex items-center justify-between text-sm">
                 <div>
                   <span className="font-medium text-slate-700">{pkg.seats} 席位</span>
-                  <span className="ml-2 text-xs text-slate-400">{pkg.cycle === 'annual' ? '年卡' : '月卡'}</span>
+                  <span className="ml-2 text-xs text-slate-400">{seatCycleLabel(pkg.cycle)}</span>
                 </div>
                 <div className="text-xs text-slate-400">
                   到期 {new Date(pkg.expiresAt).toLocaleDateString('zh-CN')}

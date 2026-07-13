@@ -22,6 +22,10 @@ import FlowOverlay from '@/components/flow/FlowOverlay';
 import { SHOW_TEAM_COLLABORATION } from '@/config/featureFlags';
 import CollaborativeCursors from '@/components/collaboration/CollaborativeCursors';
 import CollaborationSyncManager from '@/components/collaboration/CollaborationSyncManager';
+import CommentModeOverlay from '@/components/collaboration/CommentModeOverlay';
+import CommentSidePanel from '@/components/collaboration/CommentSidePanel';
+import '@/components/collaboration/comment-mode.css';
+import { cn } from '@/lib/utils';
 import { migrateImageHistoryToRemote } from '@/services/imageHistoryService';
 import { useAIChatStore } from '@/stores/aiChatStore';
 import paper from 'paper';
@@ -83,8 +87,29 @@ const Canvas: React.FC = () => {
         };
     }, [chatTheme]);
 
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (drawMode === 'comment') {
+            if (canvas) canvas.style.cursor = 'crosshair';
+            document.body.classList.add('tanva-comment-mode-active');
+        } else {
+            if (canvas && canvas.style.cursor === 'crosshair') {
+                canvas.style.cursor = '';
+            }
+            document.body.classList.remove('tanva-comment-mode-active');
+        }
+        return () => {
+            document.body.classList.remove('tanva-comment-mode-active');
+        };
+    }, [drawMode]);
+
     return (
-        <div className="relative w-full h-full overflow-hidden">
+        <div
+            className={cn(
+                'relative w-full h-full overflow-hidden',
+                drawMode === 'comment' && 'tanva-comment-mode-active'
+            )}
+        >
             <GlobalZoomCapture />
             <canvas
                 ref={canvasRef}
@@ -133,6 +158,8 @@ const Canvas: React.FC = () => {
               <>
                 <CollaborativeCursors canvasRef={canvasRef} />
                 <CollaborationSyncManager canvasRef={canvasRef} />
+                <CommentModeOverlay canvasRef={canvasRef} />
+                <CommentSidePanel visible={drawMode === 'comment'} />
               </>
             )}
 

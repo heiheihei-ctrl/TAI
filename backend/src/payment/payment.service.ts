@@ -401,6 +401,27 @@ export class PaymentService implements OnModuleInit {
         dailyGiftCredits: plan.dailyGiftCredits,
         metadata: plan.metadata,
       } as Prisma.InputJsonValue;
+    } else if (
+      orderType === 'team_seat_package' ||
+      orderType === 'team_credits_topup'
+    ) {
+      if (!Number.isFinite(orderAmount) || orderAmount <= 0) {
+        throw new BadRequestException('Invalid order amount');
+      }
+      orderAmount = this.normalizeMoneyAmount(orderAmount);
+      const meta =
+        dto.metadata &&
+        typeof dto.metadata === 'object' &&
+        !Array.isArray(dto.metadata)
+          ? (dto.metadata as Record<string, unknown>)
+          : null;
+      if (!meta?.teamId || typeof meta.teamId !== 'string') {
+        throw new BadRequestException('团队订单缺少 teamId');
+      }
+      if (!Number.isFinite(orderCredits) || orderCredits <= 0) {
+        throw new BadRequestException('团队订单积分无效');
+      }
+      businessCode = orderType;
     } else {
       if (!Number.isFinite(orderAmount) || orderAmount <= 0) {
         throw new BadRequestException('Invalid recharge amount');
@@ -995,6 +1016,14 @@ export class PaymentService implements OnModuleInit {
         });
         return;
       }
+      if (currentOrder.orderType === 'team_seat_package') {
+        await this.fulfillTeamSeatPackageOrder(tx, currentOrder, userId);
+        return;
+      }
+      if (currentOrder.orderType === 'team_credits_topup') {
+        await this.fulfillTeamCreditsTopupOrder(tx, currentOrder, userId);
+        return;
+      }
       let account = await tx.creditAccount.findUnique({ where: { userId } });
       if (!account) account = await tx.creditAccount.create({ data: { userId, balance: 0, totalEarned: 0 } });
       const newBalance = account.balance + credits;
@@ -1041,6 +1070,119 @@ export class PaymentService implements OnModuleInit {
         await this.referralService.rewardInviterForInviteeFirstRechargeInTransaction(tx, userId);
       }
     });
+  }
+
+  private parseOrderMetadata(metadata: unknown): Record<string, unknown> {
+    if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
+      return metadata as Record<string, unknown>;
+    }
+    return {};
+  }
+
+  private async ensureTeamCreditAccount(
+    tx: Prisma.TransactionClient,
+    teamId: string,
+  ) {
+    const existing = await tx.teamCreditAccount.findUnique({ where: { teamId } });
+    if (existing) return existing;
+    return tx.teamCreditAccount.create({ data: { teamId } });
+  }
+
+  private async grantTeamCreditsInTransaction(
+    tx: Prisma.TransactionClient,
+    teamId: string,
+    amount: number,
+    entryType: string,
+    note: string,
+    actorUserId: string,
+  ) {
+    const account = await this.ensureTeamCreditAccount(tx, teamId);
+    const nextBalance = account.balance + amount;
+    await tx.teamCreditAccount.update({
+      where: { id: account.id },
+      data: { balance: nextBalance },
+    });
+    await tx.teamCreditLedger.create({
+      data: {
+        accountId: account.id,
+        entryType,
+        amount,
+        actorUserId,
+        note,
+      },
+    });
+    return nextBalance;
+  }
+
+  private async fulfillTeamSeatPackageOrder(
+    tx: Prisma.TransactionClient,
+    order: {
+      id: string;
+      credits: number;
+      metadata: unknown;
+      orderNo: string;
+    },
+    actorUserId: string,
+  ) {
+    const meta = this.parseOrderMetadata(order.metadata);
+    const teamId = typeof meta.teamId === 'string' ? meta.teamId : null;
+    const seats = Number(meta.seats);
+    const cycle = typeof meta.cycle === 'string' ? meta.cycle : 'monthly';
+    if (!teamId || !Number.isFinite(seats) || seats <= 0) {
+      throw new BadRequestException('团队席位订单数据无效');
+    }
+
+    const team = await tx.team.findUnique({ where: { id: teamId } });
+    if (!team || team.status !== 'active') {
+      throw new BadRequestException('团队不存在或已停用');
+    }
+
+    await tx.team.update({
+      where: { id: teamId },
+      data: { maxSeats: team.maxSeats + seats },
+    });
+
+    const cycleLabel = cycle === 'monthly' ? '席位' : cycle === 'annual' ? '年卡' : cycle;
+
+    await this.grantTeamCreditsInTransaction(
+      tx,
+      teamId,
+      order.credits,
+      'seat_package',
+      `席位套餐购买（${cycleLabel} × ${seats} 席位，订单 ${order.orderNo}）`,
+      actorUserId,
+    );
+  }
+
+  private async fulfillTeamCreditsTopupOrder(
+    tx: Prisma.TransactionClient,
+    order: {
+      id: string;
+      credits: number;
+      metadata: unknown;
+      orderNo: string;
+    },
+    actorUserId: string,
+  ) {
+    const meta = this.parseOrderMetadata(order.metadata);
+    const teamId = typeof meta.teamId === 'string' ? meta.teamId : null;
+    if (!teamId) {
+      throw new BadRequestException('团队充值订单数据无效');
+    }
+
+    const team = await tx.team.findUnique({ where: { id: teamId } });
+    if (!team || team.status !== 'active') {
+      throw new BadRequestException('团队不存在或已停用');
+    }
+
+    await this.grantTeamCreditsInTransaction(
+      tx,
+      teamId,
+      order.credits,
+      'topup',
+      `团队积分充值（订单 ${order.orderNo}）`,
+      actorUserId,
+    );
   }
   
   private async syncPendingOrdersForUser(userId: string, limit = 10): Promise<void> {

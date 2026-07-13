@@ -13,7 +13,14 @@ export enum PaymentStatus {
   CANCELLED = 'cancelled',
 }
 
-export type PaymentOrderType = 'recharge' | 'membership';
+export type PaymentOrderType =
+  | 'recharge'
+  | 'membership'
+  | 'team_seat_package'
+  | 'team_credits_topup';
+
+/** 团队相关支付临时测试价（元） */
+export const TEAM_TEST_PAY_AMOUNT = 0.01;
 
 // 创建订单请求
 export interface CreateOrderDto {

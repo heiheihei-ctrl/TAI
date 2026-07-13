@@ -24125,9 +24125,12 @@ function FlowInner() {
 export default function FlowOverlay() {
   // 若未启用 Flow UI，则让该层不拦截指针事件
   const flowUIEnabled = useUIStore((s) => s.flowUIEnabled);
-  const wrapperStyle: React.CSSProperties = flowUIEnabled
-    ? { pointerEvents: "auto" }
-    : { pointerEvents: "none" };
+  const drawMode = useToolStore((s) => s.drawMode);
+  const isCommentMode = drawMode === "comment";
+  const wrapperStyle: React.CSSProperties =
+    flowUIEnabled && !isCommentMode
+      ? { pointerEvents: "auto" }
+      : { pointerEvents: "none" };
   return (
     <div style={{ position: "absolute", inset: 0, ...wrapperStyle }}>
       <ReactFlowProvider>

@@ -36,6 +36,44 @@ export function projectToClient(canvas: HTMLCanvasElement, projectPoint: paper.P
   return { x: rect.left + v.x / dpr, y: rect.top + v.y / dpr };
 }
 
+/** 与 PaperCanvasManager 视口公式一致：view = zoom * (world + pan) */
+export function projectToClientWithViewport(
+  canvas: HTMLCanvasElement,
+  projectX: number,
+  projectY: number,
+  zoom: number,
+  panX: number,
+  panY: number
+): { x: number; y: number } {
+  const viewCanvas =
+    (paper?.view?.element as HTMLCanvasElement | undefined) || canvas;
+  const rect = viewCanvas.getBoundingClientRect();
+  const dpr = getDpr();
+  const safeZoom = Math.max(zoom, 0.0001);
+  const viewX = safeZoom * (projectX + panX);
+  const viewY = safeZoom * (projectY + panY);
+  return { x: rect.left + viewX / dpr, y: rect.top + viewY / dpr };
+}
+
+/** 与 projectToClientWithViewport 互逆 */
+export function clientToProjectWithViewport(
+  canvas: HTMLCanvasElement,
+  clientX: number,
+  clientY: number,
+  zoom: number,
+  panX: number,
+  panY: number
+): paper.Point {
+  const viewCanvas =
+    (paper?.view?.element as HTMLCanvasElement | undefined) || canvas;
+  const rect = viewCanvas.getBoundingClientRect();
+  const dpr = getDpr();
+  const safeZoom = Math.max(zoom, 0.0001);
+  const viewX = (clientX - rect.left) * dpr;
+  const viewY = (clientY - rect.top) * dpr;
+  return new paper.Point(viewX / safeZoom - panX, viewY / safeZoom - panY);
+}
+
 // 将 Paper 的矩形（project 坐标）转换为 CSS 像素矩形
 export function projectRectToClient(canvas: HTMLCanvasElement, rectInProject: paper.Rectangle) {
   const tl = projectToClient(canvas, rectInProject.topLeft);
