@@ -95,6 +95,7 @@ export const useToolStore = create<ToolState>()(
 
         // 设置方法
         setDrawMode: (mode) => {
+          if (get().drawMode === mode && !get().isEraser) return;
           logger.debug(`🔧 切换工具模式: ${get().drawMode} -> ${mode}`);
           // 切换任意工具时，关闭橡皮擦，确保工具互斥
           set({ drawMode: mode, isEraser: false });

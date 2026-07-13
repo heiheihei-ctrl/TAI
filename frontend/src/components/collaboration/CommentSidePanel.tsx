@@ -17,6 +17,7 @@ import {
   formatCommentTime,
   type CommentMessageSnapshot,
   type CommentThreadSnapshot,
+  EMPTY_COMMENT_THREADS,
 } from '@/types/comment';
 import './comment-mode.css';
 
@@ -64,7 +65,9 @@ type Props = {
 export default function CommentSidePanel({ visible }: Props) {
   const setDrawMode = useToolStore((s) => s.setDrawMode);
   const user = useAuthStore((s) => s.user);
-  const threads = useProjectContentStore((s) => s.content?.comments ?? []);
+  const threads = useProjectContentStore(
+    (s) => s.content?.comments ?? EMPTY_COMMENT_THREADS
+  );
   const updatePartial = useProjectContentStore((s) => s.updatePartial);
 
   const activeThreadId = useCommentStore((s) => s.activeThreadId);

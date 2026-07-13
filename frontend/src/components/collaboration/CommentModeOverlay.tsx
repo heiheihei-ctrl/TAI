@@ -14,6 +14,7 @@ import {
   formatCommentTime,
   type CommentMessageSnapshot,
   type CommentThreadSnapshot,
+  EMPTY_COMMENT_THREADS,
 } from '@/types/comment';
 import './comment-mode.css';
 
@@ -254,7 +255,7 @@ export default function CommentModeOverlay({ canvasRef }: Props) {
   const content = useProjectContentStore((s) => s.content);
   const updatePartial = useProjectContentStore((s) => s.updatePartial);
 
-  const threads = content?.comments ?? [];
+  const threads = content?.comments ?? EMPTY_COMMENT_THREADS;
   const authorId = user?.id ?? 'guest';
   const authorName = resolveAuthorName(user);
 

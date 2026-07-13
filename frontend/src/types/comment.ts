@@ -41,3 +41,6 @@ export function commentAuthorInitial(name: string): string {
   if (cjk) return trimmed.slice(-1);
   return trimmed.slice(0, 1).toUpperCase();
 }
+
+/** 稳定空数组，避免 Zustand selector 每次返回新 [] 触发无限更新 */
+export const EMPTY_COMMENT_THREADS: CommentThreadSnapshot[] = [];
