@@ -191,7 +191,7 @@ export function useFlowCollabIntegration({
 
   const sendFlowPatch = useCallback(
     (patch: FlowPatchPayload) => {
-      if (!enabled || !projectId || !collaborationSocket.isConnected()) return;
+      if (!enabled || !projectId) return;
 
       const prev = pendingPatch.current ?? {};
       pendingPatch.current = {
@@ -206,12 +206,19 @@ export function useFlowCollabIntegration({
           clearTimeout(patchDebounce.current);
           patchDebounce.current = null;
         }
+        if (!projectId || !collaborationSocket.isReadyForProject(projectId)) {
+          return;
+        }
         const toSend = pendingPatch.current;
         pendingPatch.current = null;
         patchLastFlush.current = Date.now();
-        if (!toSend || !projectId) return;
+        if (!toSend) return;
         collaborationSocket.emitFlowPatch(projectId, toSend);
       };
+
+      if (!collaborationSocket.isReadyForProject(projectId)) {
+        return;
+      }
 
       if (Date.now() - patchLastFlush.current >= PATCH_MAXWAIT_MS) {
         flush();
@@ -222,6 +229,26 @@ export function useFlowCollabIntegration({
     },
     [enabled, projectId],
   );
+
+  useEffect(() => {
+    if (!enabled || !projectId) return;
+
+    const unsub = collaborationSocket.subscribeConnection(({ connected, projectId: activeId }) => {
+      if (!connected || activeId !== projectId || !pendingPatch.current) return;
+      if (patchDebounce.current) clearTimeout(patchDebounce.current);
+      patchDebounce.current = setTimeout(() => {
+        if (!projectId || !collaborationSocket.isReadyForProject(projectId)) return;
+        const toSend = pendingPatch.current;
+        pendingPatch.current = null;
+        patchLastFlush.current = Date.now();
+        if (toSend) {
+          collaborationSocket.emitFlowPatch(projectId, toSend);
+        }
+      }, PATCH_DEBOUNCE_MS);
+    });
+
+    return unsub;
+  }, [enabled, projectId]);
 
   const broadcastNodeChanges = useCallback(
     (changes: unknown[]) => {
@@ -276,7 +303,7 @@ export function useFlowCollabIntegration({
 
   const broadcastFlowSelection = useCallback(
     (nodeIds: string[]) => {
-      if (!enabled || !projectId || !collaborationSocket.isConnected()) return;
+      if (!enabled || !projectId || !collaborationSocket.isReadyForProject(projectId)) return;
       const normalized = [...nodeIds].sort().join(',');
       if (normalized === lastBroadcastFlowSelectionRef.current) return;
       lastBroadcastFlowSelectionRef.current = normalized;
