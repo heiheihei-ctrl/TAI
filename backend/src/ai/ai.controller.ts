@@ -28,7 +28,7 @@ import { RemoveBackgroundDto } from './dto/background-removal.dto';
 import { ApplyWatermarkDto } from './dto/apply-watermark.dto';
 import { getGeminiApiKeyFromEnv } from './services/gemini-api-key.util';
 import { buildToapisUrl, getToapisApiKey } from '../utils/apimartHttpClient';
-import { extractTeamIdFromRequest } from '../common/team-request.util';
+import { extractTeamIdFromRequest, resolveBillingTeamId } from '../common/team-request.util';
 import {
   GenerateImageDto,
   EditImageDto,
@@ -453,6 +453,23 @@ export class AiController {
     } catch {
       return null;
     }
+  }
+
+  /** 异步图像任务：合并计费上下文（header / body / projectId）写入 requestData */
+  private buildAsyncTaskRequestData<T extends { billingTeamId?: string; projectId?: string }>(
+    req: any,
+    dto: T,
+    extra: Record<string, unknown> = {},
+  ): T & { billingTeamId?: string; projectId?: string } {
+    const billingTeamId = resolveBillingTeamId(req, dto);
+    const projectId =
+      typeof dto.projectId === 'string' && dto.projectId.trim() ? dto.projectId.trim() : undefined;
+    return {
+      ...dto,
+      ...extra,
+      ...(billingTeamId ? { billingTeamId } : {}),
+      ...(projectId ? { projectId } : {}),
+    };
   }
 
   private normalizeRole(value: unknown): string {
@@ -6870,7 +6887,7 @@ export class AiController {
       userId,
       'generate',
       dto.prompt,
-      { ...dto, model },
+      this.buildAsyncTaskRequestData(req, dto, { model }),
       providerName || 'gemini',
       { traceId, parentRequestId },
     );
@@ -6932,7 +6949,7 @@ export class AiController {
       userId,
       'edit',
       dto.prompt,
-      { ...dto, sourceImage, model },
+      this.buildAsyncTaskRequestData(req, dto, { sourceImage, model }),
       providerName || 'gemini',
       { traceId, parentRequestId },
     );
@@ -6991,7 +7008,7 @@ export class AiController {
       userId,
       'blend',
       dto.prompt,
-      { ...dto, sourceImages, model },
+      this.buildAsyncTaskRequestData(req, dto, { sourceImages, model }),
       providerName || 'gemini',
       { traceId, parentRequestId },
     );

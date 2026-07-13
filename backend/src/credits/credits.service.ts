@@ -3750,6 +3750,7 @@ export class CreditsService {
   async preDeductCredits(params: ApiUsageParams): Promise<DeductCreditsResult> {
     const teamId =
       params.teamId ??
+      this.extractBillingTeamId(params.requestParams) ??
       (await this.resolveProjectTeamId(
         params.userId,
         typeof params.requestParams?.projectId === 'string'

@@ -185,6 +185,16 @@ export class GenerateImageDto {
   @IsOptional()
   @IsString()
   billingTitleSource?: 'dialog' | 'node';
+
+  /** 团队计费：前端当前选中的团队 ID（与 X-Team-Id 互为备份） */
+  @IsOptional()
+  @IsString()
+  billingTeamId?: string;
+
+  /** 团队计费：当前项目 ID，用于解析项目所属团队 */
+  @IsOptional()
+  @IsString()
+  projectId?: string;
 }
 
 export class EditImageDto {
@@ -282,6 +292,14 @@ export class EditImageDto {
   @IsOptional()
   @IsString()
   billingTitleSource?: 'dialog' | 'node';
+
+  @IsOptional()
+  @IsString()
+  billingTeamId?: string;
+
+  @IsOptional()
+  @IsString()
+  projectId?: string;
 }
 
 export class BlendImagesDto {
@@ -381,6 +399,14 @@ export class BlendImagesDto {
   @IsOptional()
   @IsString()
   billingTitleSource?: 'dialog' | 'node';
+
+  @IsOptional()
+  @IsString()
+  billingTeamId?: string;
+
+  @IsOptional()
+  @IsString()
+  projectId?: string;
 }
 
 export class AnalyzeImageDto {

@@ -18,3 +18,14 @@ export function extractTeamIdFromRequest(
   }
   return undefined;
 }
+
+/** 解析团队计费 ID：优先请求头，其次 body.billingTeamId */
+export function resolveBillingTeamId(
+  req: { headers?: Record<string, string | string[] | undefined> } | null | undefined,
+  body?: { billingTeamId?: string } | null,
+): string | undefined {
+  const fromHeader = extractTeamIdFromRequest(req);
+  if (fromHeader) return fromHeader;
+  const fromBody = body?.billingTeamId?.trim();
+  return fromBody || undefined;
+}

@@ -197,6 +197,9 @@ export class ImageTaskService {
       nodeConfigKey: requestData?.nodeConfigKey,
       nodeConfigNameZh: requestData?.nodeConfigNameZh,
       nodeConfigNameEn: requestData?.nodeConfigNameEn,
+      billingTeamId:
+        typeof requestData?.billingTeamId === 'string' ? requestData.billingTeamId : undefined,
+      projectId: typeof requestData?.projectId === 'string' ? requestData.projectId : undefined,
     };
   }
 
@@ -578,8 +581,14 @@ export class ImageTaskService {
           // 如果需要自己处理积分，则先预扣积分
           if (needsCreditsProcessing) {
             try {
+              const billingTeamId =
+                typeof taskRequestData?.billingTeamId === 'string' &&
+                taskRequestData.billingTeamId.trim()
+                  ? taskRequestData.billingTeamId.trim()
+                  : undefined;
               const deductResult = await this.creditsService.preDeductCredits({
                 userId: task.userId,
+                teamId: billingTeamId,
                 serviceType: serviceType as any,
                 model,
                 inputImageCount,

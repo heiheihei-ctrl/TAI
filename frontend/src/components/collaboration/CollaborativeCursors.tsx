@@ -5,7 +5,10 @@ import {
   dedupePeersByUser,
   type CollaborationPeer,
 } from '@/services/collaborationSocket';
-import { clientToProjectWithViewport, projectToClientWithViewport } from '@/utils/paperCoords';
+import {
+  clientToProject,
+  projectToClient,
+} from '@/utils/paperCoords';
 import { useAuthStore } from '@/stores/authStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { useTeamStore, resolveCollaborationTeam } from '@/stores/teamStore';
@@ -32,21 +35,15 @@ function FigmaCursorArrow({ color }: { color: string }) {
 function RemoteCursor({
   peer,
   canvas,
-  zoom,
-  panX,
-  panY,
 }: {
   peer: CollaborationPeer;
   canvas: HTMLCanvasElement;
-  zoom: number;
-  panX: number;
-  panY: number;
 }) {
   if (peer.visible === false || peer.x == null || peer.y == null) {
     return null;
   }
 
-  const screen = projectToClientWithViewport(canvas, peer.x, peer.y, zoom, panX, panY);
+  const screen = projectToClient(canvas, new paper.Point(peer.x, peer.y));
 
   return (
     <div
@@ -182,8 +179,7 @@ export default function CollaborativeCursors({ canvasRef }: Props) {
         (paper?.view?.element as HTMLCanvasElement | undefined) ?? canvasEl;
       if (!canvas) return;
 
-      const { zoom: z, panX: px, panY: py } = useCanvasStore.getState();
-      const p = clientToProjectWithViewport(canvas, pending.x, pending.y, z, px, py);
+      const p = clientToProject(canvas, pending.x, pending.y);
       const now = performance.now();
       if (now - lastEmitRef.current < CURSOR_THROTTLE_MS) return;
       lastEmitRef.current = now;
@@ -267,9 +263,6 @@ export default function CollaborativeCursors({ canvasRef }: Props) {
               key={peer.userId}
               peer={peer}
               canvas={canvasEl}
-              zoom={zoom}
-              panX={panX}
-              panY={panY}
             />
           ))}
         </div>

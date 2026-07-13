@@ -20,6 +20,7 @@ import type {
 } from "@/types/ai";
 import { fetchWithAuth } from "./authFetch";
 import { logger } from "@/utils/logger";
+import { attachBillingContext } from "@/utils/billingContext";
 
 // 后端基础地址，统一从 .env 读取；无配置则默认 http://localhost:4000
 const API_BASE_URL =
@@ -448,6 +449,7 @@ async function createImageTaskRequest<T extends ImageTaskRequestBase>(
 ): Promise<AIServiceResponse<ImageTaskCreateResponse>> {
   const { request: requestWithRoute, bananaImageRoute } =
     attachBananaRouteToProviderOptions(request);
+  const payload = attachBillingContext(requestWithRoute as Record<string, unknown>);
   try {
     const response = await fetchWithAuth(`${API_BASE_URL}/ai/${endpoint}`, {
       method: "POST",
@@ -456,7 +458,7 @@ async function createImageTaskRequest<T extends ImageTaskRequestBase>(
         "Idempotency-Key": idempotencyKey,
         ...(bananaImageRoute ? { "X-Banana-Image-Route": bananaImageRoute } : {}),
       },
-      body: JSON.stringify(requestWithRoute),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
