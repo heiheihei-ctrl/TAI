@@ -1506,7 +1506,7 @@ const NODE_CREDITS_MAP: Record<string, number | string> = {
   klingO1Video: 600, // 可灵 O3 / Omni Video
   klingO3Video: 600, // 可灵O3视频生成 - Omni Video
   viduVideo: 600, // Vidu视频生成
-  viduQ3: 600, // Vidu Q3 Pro视频生成
+  viduQ3: 400, // Vidu Q3：默认 5 秒 × 80 积分/秒
   doubaoVideo: 600, // Seedance 1.5 Pro包视频生成
   seedance20Video: 600, // Seedance 2.0 视频生成
   omniFlashExtVideo: 600, // Omni Flash Ext 视频生成

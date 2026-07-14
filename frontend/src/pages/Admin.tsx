@@ -1679,6 +1679,7 @@ const createKling30PricingTemplate = () => ({
   },
 });
 
+/** Vidu Q3：按秒线性计费，1 秒 = 80 积分（unitPriceYuan=0.8） */
 const createQ3TurboPricingTemplate = () => ({
   version: "v2",
   dimensions: [
@@ -1700,68 +1701,30 @@ const createQ3TurboPricingTemplate = () => ({
     }),
     createNumberDimension("durationSec", "时长（秒）", {
       required: true,
-      description: "按秒线性计费",
+      description: "按秒线性计费，80 积分/秒",
     }),
   ],
   matchingRules: [
     {
-      ruleKey: "q3_turbo_540p_rule",
-      label: "Q3 Turbo 540P 线性计费",
+      ruleKey: "q3_per_second_rule",
+      label: "Q3 按秒计费（80 积分/秒）",
       enabled: true,
       priority: 100,
-      evaluatorKey: "q3_turbo_540p_linear",
+      evaluatorKey: "q3_per_second_linear",
       conditions: {
         all: [
           { field: "generationMode", op: "in" as const, value: ["t2v", "i2v", "start_end_frame"] },
-          { field: "resolution", op: "eq" as const, value: "540P" },
-        ],
-        any: [],
-      },
-    },
-    {
-      ruleKey: "q3_turbo_720p_rule",
-      label: "Q3 Turbo 720P 线性计费",
-      enabled: true,
-      priority: 110,
-      evaluatorKey: "q3_turbo_720p_linear",
-      conditions: {
-        all: [
-          { field: "generationMode", op: "in" as const, value: ["t2v", "i2v", "start_end_frame"] },
-          { field: "resolution", op: "eq" as const, value: "720P" },
-        ],
-        any: [],
-      },
-    },
-    {
-      ruleKey: "q3_turbo_1080p_rule",
-      label: "Q3 Turbo 1080P 线性计费",
-      enabled: true,
-      priority: 120,
-      evaluatorKey: "q3_turbo_1080p_linear",
-      conditions: {
-        all: [
-          { field: "generationMode", op: "in" as const, value: ["t2v", "i2v", "start_end_frame"] },
-          { field: "resolution", op: "eq" as const, value: "1080P" },
+          { field: "resolution", op: "in" as const, value: ["540P", "720P", "1080P"] },
         ],
         any: [],
       },
     },
   ],
   evaluators: {
-    q3_turbo_540p_linear: {
+    q3_per_second_linear: {
       type: "linear" as const,
       unitField: "durationSec",
-      unitPriceYuan: 0.25,
-    },
-    q3_turbo_720p_linear: {
-      type: "linear" as const,
-      unitField: "durationSec",
-      unitPriceYuan: 0.375,
-    },
-    q3_turbo_1080p_linear: {
-      type: "linear" as const,
-      unitField: "durationSec",
-      unitPriceYuan: 0.5,
+      unitPriceYuan: 0.8,
     },
   },
   displayConfig: {

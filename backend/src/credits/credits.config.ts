@@ -301,8 +301,11 @@ export const CREDIT_PRICING_CONFIG = {
   'viduq3-pro-video': {
     serviceName: 'Vidu Q3 Pro 视频',
     provider: 'viduq3-pro',
-    creditsPerCall: 600,
-    description: '使用 Vidu Q3 Pro 生成视频',
+    creditsPerCall: 400, // 默认展示：5 秒 × 80 积分/秒
+    description: '使用 Vidu Q3 生成视频（按秒计费，80 积分/秒）',
+    dynamicPricing: {
+      creditsPerSecond: 80,
+    },
   },
   'doubao-video': {
     serviceName: 'Seedance 1.5 Pro 视频',

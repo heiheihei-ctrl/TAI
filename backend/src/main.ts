@@ -210,6 +210,41 @@ async function bootstrap() {
     }
   };
 
+  // 浏览器用 127.0.0.1 打开前端时 Origin 与 localhost 不同源；本地开发二者应等价
+  const normalizeLocalHostname = (hostname: string) => {
+    if (hostname === "127.0.0.1" || hostname === "::1") {
+      return "localhost";
+    }
+    return hostname;
+  };
+
+  const isOriginAllowed = (allowedOrigin: string, requestOrigin: string) => {
+    if (allowedOrigin === requestOrigin) {
+      return true;
+    }
+
+    try {
+      const allowedUrl = new URL(allowedOrigin);
+      const requestUrl = new URL(requestOrigin);
+      const allowedPort =
+        allowedUrl.port || (allowedUrl.protocol === "https:" ? "443" : "80");
+      const requestPort =
+        requestUrl.port || (requestUrl.protocol === "https:" ? "443" : "80");
+
+      return (
+        allowedUrl.protocol === requestUrl.protocol &&
+        allowedPort === requestPort &&
+        normalizeLocalHostname(allowedUrl.hostname) ===
+          normalizeLocalHostname(requestUrl.hostname)
+      );
+    } catch {
+      return (
+        normalizeLocalHostname(resolveHostname(allowedOrigin)) ===
+        normalizeLocalHostname(resolveHostname(requestOrigin))
+      );
+    }
+  };
+
   // 动态检查 origin，允许 trycloudflare.com 的所有子域名（用于内网穿透）
   const originCallback = (
     origin: string | undefined,
@@ -234,13 +269,9 @@ async function bootstrap() {
 
     // 如果配置了 CORS_ORIGIN，检查是否在允许列表中
     if (corsOrigins.length > 0) {
-      const allowed = corsOrigins.some((allowedOrigin: string) => {
-        if (allowedOrigin === origin) {
-          return true;
-        }
-
-        return resolveHostname(allowedOrigin) === hostname;
-      });
+      const allowed = corsOrigins.some((allowedOrigin: string) =>
+        isOriginAllowed(allowedOrigin, origin)
+      );
       callback(null, allowed);
       return;
     }
@@ -268,6 +299,7 @@ async function bootstrap() {
       "x-idempotency-key",
       "x-request-id",
       "x-banana-image-route",
+      "x-team-id",
     ],
     exposedHeaders: ["x-trace-id"],
   });

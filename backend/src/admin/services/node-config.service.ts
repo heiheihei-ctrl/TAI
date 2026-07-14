@@ -1099,10 +1099,10 @@ export class NodeConfigService {
         nameEn: 'Vidu',
         category: 'video',
         sortOrder: 24,
-        creditsPerCall: 600,
+        creditsPerCall: 400, // Q3 默认 5s×80；实扣按秒
         serviceType: 'vidu-video',
-        priceYuan: 6,
-        description: 'Vidu 视频生成（统一入口，含 Q2 / Q3）',
+        priceYuan: 4,
+        description: 'Vidu 视频生成（统一入口，含 Q2 / Q3；Q3 按秒 80 积分）',
         metadata: {
           ...buildVodNodeMetadata(
             {
@@ -1707,10 +1707,10 @@ export class NodeConfigService {
         nameEn: 'Vidu',
         category: 'video',
         sortOrder: 24,
-        creditsPerCall: 600,
+        creditsPerCall: 400, // Q3 默认 5s×80；实扣按秒
         serviceType: 'vidu-video',
-        priceYuan: 6,
-        description: 'Vidu 视频生成（统一入口，含 Q2 / Q3 / Q3-Mix）',
+        priceYuan: 4,
+        description: 'Vidu 视频生成（统一入口，含 Q2 / Q3 / Q3-Mix；Q3 按秒 80 积分）',
         metadata: {
           type: 'viduVideo',
           provider: 'vidu',

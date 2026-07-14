@@ -1261,7 +1261,6 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
             )}
         </div>
 
-        {/* 评论模式入口：暂时关闭
         {SHOW_TEAM_COLLABORATION ? (
           <div className="relative">
             <Tooltip open={isSubMenuOpen ? false : undefined}>
@@ -1300,7 +1299,6 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
             ) : null}
           </div>
         ) : null}
-        */}
 
       {/* AI编辑图像工具 - 暂时隐藏 */}
         {/* <Button

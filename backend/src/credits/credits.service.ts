@@ -697,6 +697,12 @@ export class CreditsService {
       effectiveRequestParams,
     );
 
+    creditsToDeduct = this.resolveViduQ3Credits(
+      params.serviceType,
+      creditsToDeduct,
+      effectiveRequestParams,
+    );
+
     creditsToDeduct = this.resolveVolcEnhanceVideoCredits(
       params.serviceType,
       creditsToDeduct,
@@ -1291,6 +1297,70 @@ export class CreditsService {
       return Math.round(rate * duration);
     }
     return defaultCredits;
+  }
+
+  /** Vidu Q3：统一按秒计费，1 秒 = 80 积分（覆盖 managed pricing 旧矩阵） */
+  private static readonly VIDU_Q3_CREDITS_PER_SECOND = 80;
+
+  private isViduQ3BillingRequest(serviceType: ServiceType, requestParams: any): boolean {
+    if (serviceType === 'viduq3-pro-video') return true;
+
+    const provider = String(
+      requestParams?.aiProvider || requestParams?.provider || '',
+    )
+      .trim()
+      .toLowerCase();
+    if (provider === 'viduq3-pro') return true;
+
+    const modelKey = this.inferManagedModelKeyFromRequestParams(requestParams || {})
+      .trim()
+      .toLowerCase();
+    if (modelKey === 'vidu-q3') return true;
+
+    if (serviceType === 'vidu-video') {
+      const viduModelRaw =
+        typeof requestParams?.viduModelVariant === 'string' &&
+        requestParams.viduModelVariant.trim().length > 0
+          ? requestParams.viduModelVariant.trim().toLowerCase()
+          : typeof requestParams?.viduModel === 'string'
+            ? requestParams.viduModel.trim().toLowerCase()
+            : '';
+      if (
+        viduModelRaw === 'q3' ||
+        viduModelRaw === 'q3-pro' ||
+        viduModelRaw === 'q3pro' ||
+        viduModelRaw === 'q3-turbo' ||
+        viduModelRaw === 'q3turbo' ||
+        viduModelRaw === 'q3-mix' ||
+        viduModelRaw === 'q3mix'
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private resolveViduQ3Credits(
+    serviceType: ServiceType,
+    currentCredits: number,
+    requestParams: any,
+  ): number {
+    if (!this.isViduQ3BillingRequest(serviceType, requestParams)) {
+      return currentCredits;
+    }
+
+    const durationRaw = Number(
+      requestParams?.durationSec ??
+        requestParams?.duration ??
+        requestParams?.clipDuration,
+    );
+    const duration =
+      Number.isFinite(durationRaw) && durationRaw > 0
+        ? Math.max(1, Math.round(durationRaw))
+        : 5;
+
+    return duration * CreditsService.VIDU_Q3_CREDITS_PER_SECOND;
   }
 
   /**

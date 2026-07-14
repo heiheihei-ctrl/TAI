@@ -402,6 +402,7 @@ const createKling30PricingTemplate = (): ManagedPricingBook => ({
   },
 });
 
+/** Vidu Q3：按秒线性计费，1 秒 = 80 积分（unitPriceYuan=0.8 → ceil(0.8×100)=80） */
 const createQ3TurboPricingTemplate = (): ManagedPricingBook => ({
   version: 'v2',
   dimensions: [
@@ -436,52 +437,22 @@ const createQ3TurboPricingTemplate = (): ManagedPricingBook => ({
   ],
   matchingRules: [
     {
-      ruleKey: 'q3_turbo_540p_rule',
-      label: 'Q3 Turbo 540P 线性计费',
+      ruleKey: 'q3_per_second_rule',
+      label: 'Q3 按秒计费（80 积分/秒）',
       enabled: true,
       priority: 100,
-      evaluatorKey: 'q3_turbo_540p_linear',
+      evaluatorKey: 'q3_per_second_linear',
       conditions: {
         all: [
           { field: 'generationMode', op: 'in', value: ['t2v', 'i2v', 'start_end_frame'] },
-          { field: 'resolution', op: 'eq', value: '540P' },
-        ],
-        any: [],
-      },
-    },
-    {
-      ruleKey: 'q3_turbo_720p_rule',
-      label: 'Q3 Turbo 720P 线性计费',
-      enabled: true,
-      priority: 110,
-      evaluatorKey: 'q3_turbo_720p_linear',
-      conditions: {
-        all: [
-          { field: 'generationMode', op: 'in', value: ['t2v', 'i2v', 'start_end_frame'] },
-          { field: 'resolution', op: 'eq', value: '720P' },
-        ],
-        any: [],
-      },
-    },
-    {
-      ruleKey: 'q3_turbo_1080p_rule',
-      label: 'Q3 Turbo 1080P 线性计费',
-      enabled: true,
-      priority: 120,
-      evaluatorKey: 'q3_turbo_1080p_linear',
-      conditions: {
-        all: [
-          { field: 'generationMode', op: 'in', value: ['t2v', 'i2v', 'start_end_frame'] },
-          { field: 'resolution', op: 'eq', value: '1080P' },
+          { field: 'resolution', op: 'in', value: ['540P', '720P', '1080P'] },
         ],
         any: [],
       },
     },
   ],
   evaluators: {
-    q3_turbo_540p_linear: { type: 'linear', unitField: 'durationSec', unitPriceYuan: 0.25 },
-    q3_turbo_720p_linear: { type: 'linear', unitField: 'durationSec', unitPriceYuan: 0.375 },
-    q3_turbo_1080p_linear: { type: 'linear', unitField: 'durationSec', unitPriceYuan: 0.5 },
+    q3_per_second_linear: { type: 'linear', unitField: 'durationSec', unitPriceYuan: 0.8 },
   },
   displayConfig: {
     specAxes: ['generationMode', 'resolution', 'durationSec'],
@@ -495,14 +466,13 @@ const createQ3TurboPricingTemplate = (): ManagedPricingBook => ({
     },
     defaultSelections: {
       generationMode: 't2v',
-      resolution: '540P',
+      resolution: '720P',
       durationSec: 5,
     },
     presets: [
-      { generationMode: 't2v', resolution: '540P', durationSec: 5 },
       { generationMode: 't2v', resolution: '720P', durationSec: 5 },
       { generationMode: 't2v', resolution: '1080P', durationSec: 5 },
-      { generationMode: 'i2v', resolution: '540P', durationSec: 5 },
+      { generationMode: 'i2v', resolution: '720P', durationSec: 5 },
       { generationMode: 'i2v', resolution: '720P', durationSec: 10 },
       { generationMode: 'start_end_frame', resolution: '1080P', durationSec: 10 },
     ],
@@ -929,7 +899,7 @@ export class ModelRoutingService {
         : normalized === 'kling-3.0'
         ? { pricing: createKling30PricingTemplate(), priceYuan: 3, creditsPerCall: 300 }
         : normalized === 'vidu-q3'
-        ? { pricing: createQ3TurboPricingTemplate(), priceYuan: 1.25, creditsPerCall: 125 }
+        ? { pricing: createQ3TurboPricingTemplate(), priceYuan: 4, creditsPerCall: 400 }
         : null;
 
     if (!fallback) return vendor;
