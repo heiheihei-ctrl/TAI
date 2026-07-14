@@ -316,9 +316,7 @@ export default function CommentModeOverlay({ canvasRef }: Props) {
     const legacy = content.comments;
     if (!legacy?.length) {
       migratedCoordSpaceRef.current = true;
-      if (content.commentsCoordSpace !== 'css') {
-        updatePartial({ commentsCoordSpace: 'css' });
-      }
+      updatePartial({ commentsCoordSpace: 'css' });
       return;
     }
     const dpr = getDpr();
