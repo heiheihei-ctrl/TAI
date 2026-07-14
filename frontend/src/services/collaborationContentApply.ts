@@ -72,13 +72,19 @@ export async function applyRemoteContentUpdate(payload: {
       const nextContent: ProjectContentSnapshot = {
         ...(store.content ?? ({} as ProjectContentSnapshot)),
         comments: payload.comments,
+        // 评论协同载荷统一为 CSS 逻辑世界坐标（与协作光标一致）
+        commentsCoordSpace: 'css',
         updatedAt: payload.updatedAt,
       };
       if (store.hydrated) {
         store.hydrate(nextContent, store.version, payload.updatedAt);
       } else {
         store.updatePartial(
-          { comments: payload.comments, updatedAt: payload.updatedAt },
+          {
+            comments: payload.comments,
+            commentsCoordSpace: 'css',
+            updatedAt: payload.updatedAt,
+          },
           { markDirty: false },
         );
       }

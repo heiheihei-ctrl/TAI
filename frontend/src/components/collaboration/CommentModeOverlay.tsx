@@ -7,7 +7,7 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { useProjectContentStore } from '@/stores/projectContentStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useCommentStore } from '@/stores/commentStore';
-import { projectToClientWithViewport, clientToProjectWithViewport } from '@/utils/paperCoords';
+import { clientToCollabWorld, collabWorldToClient, getDpr } from '@/utils/paperCoords';
 import {
   commentAuthorInitial,
   createCommentId,
@@ -42,7 +42,17 @@ function resolveAuthorName(user: {
   return `用户-${user.id.slice(0, 6)}`;
 }
 
-function projectPointToScreen(
+function resolveCommentCanvas(
+  canvasRef: React.RefObject<HTMLCanvasElement | null>
+): HTMLCanvasElement | null {
+  return (
+    (paper?.view?.element as HTMLCanvasElement | undefined) ??
+    canvasRef.current
+  );
+}
+
+/** 与协作光标同一套 CSS 逻辑世界坐标 → 屏幕 client */
+function collabPointToScreen(
   canvas: HTMLCanvasElement,
   x: number,
   y: number,
@@ -50,7 +60,7 @@ function projectPointToScreen(
   panX: number,
   panY: number
 ): ScreenPoint {
-  const p = projectToClientWithViewport(canvas, x, y, zoom, panX, panY);
+  const p = collabWorldToClient(canvas, x, y, zoom, panX, panY);
   return { left: p.x, top: p.y };
 }
 
@@ -126,7 +136,7 @@ function CommentMarkerButton({
       ) {
         dragRef.current.moved = true;
       }
-      const pt = clientToProjectWithViewport(canvas, ev.clientX, ev.clientY, zoom, panX, panY);
+      const pt = clientToCollabWorld(canvas, ev.clientX, ev.clientY, zoom, panX, panY);
       onDragPreview(thread.id, pt.x, pt.y);
     };
 
@@ -137,7 +147,7 @@ function CommentMarkerButton({
       const moved = dragRef.current?.moved ?? false;
       dragRef.current = null;
       if (moved) {
-        const pt = clientToProjectWithViewport(canvas, ev.clientX, ev.clientY, zoom, panX, panY);
+        const pt = clientToCollabWorld(canvas, ev.clientX, ev.clientY, zoom, panX, panY);
         onDragCommit(thread.id, pt.x, pt.y);
       } else {
         onDragCancel();
@@ -251,6 +261,7 @@ export default function CommentModeOverlay({ canvasRef }: Props) {
   const zoom = useCanvasStore((s) => s.zoom);
   const panX = useCanvasStore((s) => s.panX);
   const panY = useCanvasStore((s) => s.panY);
+  const viewportKey = `${zoom}:${panX}:${panY}`;
   const user = useAuthStore((s) => s.user);
   const content = useProjectContentStore((s) => s.content);
   const updatePartial = useProjectContentStore((s) => s.updatePartial);
@@ -277,8 +288,10 @@ export default function CommentModeOverlay({ canvasRef }: Props) {
     x: number;
     y: number;
   } | null>(null);
+  const [canvasEl, setCanvasEl] = React.useState<HTMLCanvasElement | null>(null);
   const draftInputRef = React.useRef<HTMLInputElement>(null);
   const replyInputRef = React.useRef<HTMLInputElement>(null);
+  const migratedCoordSpaceRef = React.useRef(false);
 
   const activeThread = React.useMemo(
     () => threads.find((t) => t.id === activeThreadId) ?? null,
@@ -286,12 +299,47 @@ export default function CommentModeOverlay({ canvasRef }: Props) {
   );
 
   const persistThreads = React.useCallback(
-    (nextThreads: CommentThreadSnapshot[]) => {
-      updatePartial({ comments: nextThreads });
+    (nextThreads: CommentThreadSnapshot[], coordSpace: 'css' | 'paper' = 'css') => {
+      updatePartial({ comments: nextThreads, commentsCoordSpace: coordSpace });
       broadcastCollaborationCommentsUpdate();
     },
     [updatePartial]
   );
+
+  // 旧版评论落在 Paper 设备像素世界；迁移到与光标/节点一致的 CSS 逻辑世界
+  React.useLayoutEffect(() => {
+    if (!content || migratedCoordSpaceRef.current) return;
+    if (content.commentsCoordSpace === 'css') {
+      migratedCoordSpaceRef.current = true;
+      return;
+    }
+    const legacy = content.comments;
+    if (!legacy?.length) {
+      migratedCoordSpaceRef.current = true;
+      if (content.commentsCoordSpace !== 'css') {
+        updatePartial({ commentsCoordSpace: 'css' });
+      }
+      return;
+    }
+    const dpr = getDpr();
+    migratedCoordSpaceRef.current = true;
+    if (dpr === 1) {
+      updatePartial({ commentsCoordSpace: 'css' });
+      return;
+    }
+    persistThreads(
+      legacy.map((thread) => ({
+        ...thread,
+        x: thread.x / dpr,
+        y: thread.y / dpr,
+      })),
+      'css'
+    );
+  }, [content, persistThreads, updatePartial]);
+
+  React.useLayoutEffect(() => {
+    setCanvasEl(resolveCommentCanvas(canvasRef));
+  }, [canvasRef, threads.length, viewportKey, isCommentMode, draft, activeThreadId]);
 
   const moveThreadPosition = React.useCallback(
     (threadId: string, x: number, y: number) => {
@@ -512,15 +560,15 @@ export default function CommentModeOverlay({ canvasRef }: Props) {
       ? activeThread.messages.find((msg) => msg.id === menuAnchor.messageId) ?? null
       : null;
 
-  const canvas = canvasRef.current;
+  const canvas = canvasEl;
   if (!canvas) return null;
 
   const draftScreen = draft
-    ? projectPointToScreen(canvas, draft.x, draft.y, zoom, panX, panY)
+    ? collabPointToScreen(canvas, draft.x, draft.y, zoom, panX, panY)
     : null;
   const activeProjectPoint = activeThread ? getThreadProjectPoint(activeThread) : null;
   const activeScreen = activeProjectPoint
-    ? projectPointToScreen(
+    ? collabPointToScreen(
         canvas,
         activeProjectPoint.x,
         activeProjectPoint.y,
@@ -622,7 +670,7 @@ export default function CommentModeOverlay({ canvasRef }: Props) {
     <div className="comment-mode-root" aria-hidden={!isCommentMode && !draft && !activeThread}>
       {threads.map((thread) => {
         const point = getThreadProjectPoint(thread);
-        const screen = projectPointToScreen(canvas, point.x, point.y, zoom, panX, panY);
+        const screen = collabPointToScreen(canvas, point.x, point.y, zoom, panX, panY);
         const isActive = activeThreadId === thread.id;
         if (isActive && activeScreen) return null;
         return (

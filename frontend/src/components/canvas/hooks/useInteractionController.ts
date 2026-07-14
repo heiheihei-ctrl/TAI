@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import paper from 'paper';
 import { logger } from '@/utils/logger';
-import { clientToProject, getDpr } from '@/utils/paperCoords';
+import { clientToCollabWorld, clientToProject, getDpr } from '@/utils/paperCoords';
 import { historyService } from '@/services/historyService';
 import type { DrawMode } from '@/stores/toolStore';
 import type { ImageDragState, ImageResizeState } from '@/types/canvas';
@@ -689,9 +689,12 @@ export const useInteractionController = ({
     const point = clientToProject(canvas, event.clientX, event.clientY);
 
     if (currentDrawMode === 'comment') {
+      // 与协作光标 / Flow 节点同一套 CSS 逻辑世界坐标（跨 DPR 一致）
+      const { zoom: z, panX: px, panY: py } = useCanvasStore.getState();
+      const collab = clientToCollabWorld(canvas, event.clientX, event.clientY, z, px, py);
       window.dispatchEvent(
         new CustomEvent('tanva:comment-canvas-click', {
-          detail: { x: point.x, y: point.y },
+          detail: { x: collab.x, y: collab.y },
         })
       );
       return;

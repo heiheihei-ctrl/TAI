@@ -12,7 +12,10 @@ export interface CommentMessageSnapshot {
 
 export interface CommentThreadSnapshot {
   id: string;
-  /** 画布项目坐标 */
+  /**
+   * 画布 CSS 逻辑世界坐标（与协作光标 / Flow 节点一致，跨 DPR 对齐）。
+   * 公式见 `clientToCollabWorld` / `collabWorldToClient`。
+   */
   x: number;
   y: number;
   resolved: boolean;

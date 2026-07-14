@@ -98,6 +98,11 @@ export interface ProjectContentSnapshot {
   flow?: FlowGraphSnapshot;
   /** 画布评论线程（协同） */
   comments?: CommentThreadSnapshot[];
+  /**
+   * 评论坐标空间：`css` = 与协作光标/Flow 一致的逻辑世界坐标；
+   * 缺省或 `paper` = 旧版 Paper 设备像素世界坐标（需 /dpr 迁移）。
+   */
+  commentsCoordSpace?: 'css' | 'paper';
   aiChatSessions?: SerializedConversationContext[];
   aiChatActiveSessionId?: string | null;
   updatedAt: string;

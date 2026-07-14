@@ -143,6 +143,7 @@ export default function CommentSidePanel({ visible }: Props) {
           ? { ...thread, messages: [...thread.messages, message] }
           : thread
       ),
+      commentsCoordSpace: 'css',
     });
     broadcastCollaborationCommentsUpdate();
     setReplyText('');
