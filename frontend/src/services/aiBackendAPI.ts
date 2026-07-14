@@ -21,6 +21,7 @@ import type {
 import { fetchWithAuth } from "./authFetch";
 import { logger } from "@/utils/logger";
 import { attachBillingContext } from "@/utils/billingContext";
+import { notifyCreditsChanged } from "@/utils/creditsEvents";
 
 // 后端基础地址，统一从 .env 读取；无配置则默认 http://localhost:4000
 const API_BASE_URL =
@@ -564,9 +565,24 @@ async function waitForAsyncImageTaskResult(params: {
 }): Promise<AIServiceResponse<AIImageResult>> {
   const { taskId, startedAt, endpointLabel, request, resolvedModel } = params;
   const pollStartedAt = Date.now();
+  // worker 在进入 processing 时才预扣；此时通知 UI 刷新，实现「用完就显示」
+  let creditsRefreshNotified = false;
+  const notifyCreditsOnce = () => {
+    if (creditsRefreshNotified) return;
+    creditsRefreshNotified = true;
+    notifyCreditsChanged();
+  };
+  let isFirstPoll = true;
 
   while (Date.now() - pollStartedAt < IMAGE_TASK_MAX_WAIT_MS) {
-    await sleep(IMAGE_TASK_POLL_INTERVAL_MS);
+    // 首次立刻查：预扣通常很快，不必空等 2s 才看到余额变化
+    if (!isFirstPoll) {
+      const intervalMs = creditsRefreshNotified
+        ? IMAGE_TASK_POLL_INTERVAL_MS
+        : Math.min(500, IMAGE_TASK_POLL_INTERVAL_MS);
+      await sleep(intervalMs);
+    }
+    isFirstPoll = false;
     const pollResponse = await queryImageTaskViaAPI(taskId);
 
     if (!pollResponse.success || !pollResponse.data) {
@@ -595,7 +611,13 @@ async function waitForAsyncImageTaskResult(params: {
 
     const taskStatus = String(pollResponse.data.status || "").toLowerCase();
 
+    // queued 之后任意状态（processing / success / failed）都意味着已尝试预扣
+    if (taskStatus !== "queued" && taskStatus !== "pending") {
+      notifyCreditsOnce();
+    }
+
     if (IMAGE_TASK_SUCCESS_STATUSES.has(taskStatus)) {
+      notifyCreditsChanged();
       const mapped = mapBackendImageResult({
         data: {
           imageUrl: pollResponse.data.imageUrl,
@@ -635,6 +657,8 @@ async function waitForAsyncImageTaskResult(params: {
     }
 
     if (IMAGE_TASK_FAILED_STATUSES.has(taskStatus)) {
+      // 失败可能退款，再刷一次
+      notifyCreditsChanged();
       return {
         success: false,
         error: {
@@ -649,6 +673,7 @@ async function waitForAsyncImageTaskResult(params: {
     }
 
     if (!IMAGE_TASK_PENDING_STATUSES.has(taskStatus)) {
+      notifyCreditsChanged();
       return {
         success: false,
         error: {

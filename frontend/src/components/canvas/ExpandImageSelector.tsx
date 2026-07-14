@@ -13,6 +13,10 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useAIChatStore } from '@/stores/aiChatStore';
 import { useCanvasStore } from '@/stores';
+import {
+  projectToClientWithViewport,
+  clientToProjectWithViewport,
+} from '@/utils/paperCoords';
 
 const isDarkFlowTheme = (): boolean => useAIChatStore.getState().chatTheme === 'black';
 
@@ -141,25 +145,37 @@ const ExpandImageSelector: React.FC<ExpandImageSelectorProps> = ({
     setSelectedSizeLabel(lt('常用尺寸', 'Common sizes'));
   }, [imageId, imageBounds, lt]);
 
-  // 将Paper.js坐标转换为屏幕坐标
+  // 将Paper.js坐标转换为屏幕 client 坐标（与 store 视口同步）
   const convertToScreen = useCallback((point: paper.Point) => {
-    if (!paper.view) return { x: point.x, y: point.y };
-    const dpr = window.devicePixelRatio || 1;
-    const viewPoint = paper.view.projectToView(point);
-    const canvas = paper.project?.view?.element;
-    const rect = canvas?.getBoundingClientRect();
-    return {
-      x: viewPoint.x / dpr + (rect?.left ?? 0),
-      y: viewPoint.y / dpr + (rect?.top ?? 0),
-    };
-  }, []);
+    const canvas =
+      (paper.project?.view?.element as HTMLCanvasElement | undefined) ||
+      (paper.view?.element as HTMLCanvasElement | undefined);
+    if (!canvas) return { x: point.x, y: point.y };
+    return projectToClientWithViewport(
+      canvas,
+      point.x,
+      point.y,
+      zoom,
+      panX,
+      panY,
+    );
+  }, [zoom, panX, panY]);
 
-  // 将屏幕坐标转换为Paper.js坐标
-  const convertToPaper = useCallback((screenX: number, screenY: number) => {
-    if (!paper.view) return new paper.Point(screenX, screenY);
-    const dpr = window.devicePixelRatio || 1;
-    return paper.view.viewToProject(new paper.Point(screenX * dpr, screenY * dpr));
-  }, []);
+  // 将屏幕 client 坐标转换为Paper.js坐标
+  const convertToPaper = useCallback((clientX: number, clientY: number) => {
+    const canvas =
+      (paper.project?.view?.element as HTMLCanvasElement | undefined) ||
+      (paper.view?.element as HTMLCanvasElement | undefined);
+    if (!canvas) return new paper.Point(clientX, clientY);
+    return clientToProjectWithViewport(
+      canvas,
+      clientX,
+      clientY,
+      zoom,
+      panX,
+      panY,
+    );
+  }, [zoom, panX, panY]);
 
   // 计算扩图比例
   const calculateExpandRatios = useCallback((bounds: { x: number; y: number; width: number; height: number }) => {
@@ -200,12 +216,8 @@ const ExpandImageSelector: React.FC<ExpandImageSelectorProps> = ({
   // Handle resizing logic outside useEffect
 
   const getPaperPointFromClient = useCallback((clientX: number, clientY: number) => {
-    const canvas = paper.project?.view?.element;
-    if (!canvas) return null;
-    const rect = canvas.getBoundingClientRect();
-    const screenX = clientX - rect.left;
-    const screenY = clientY - rect.top;
-    return convertToPaper(screenX, screenY);
+    if (!paper.project?.view?.element && !paper.view?.element) return null;
+    return convertToPaper(clientX, clientY);
   }, [convertToPaper]);
 
   const startHandleDrag = useCallback((index: number, clientX: number, clientY: number) => {

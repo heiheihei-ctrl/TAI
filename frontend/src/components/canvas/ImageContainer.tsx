@@ -49,7 +49,7 @@ import { loadImageElement } from "@/utils/imageHelper";
 import { imageUrlCache } from "@/services/imageUrlCache";
 import { imageUploadService } from "@/services/imageUploadService";
 import { optimizeHdImage } from "@/services/hdUpscaleService";
-import { isGroup, isRaster } from "@/utils/paperCoords";
+import { isGroup, isRaster, projectToCanvasCssWithViewport } from "@/utils/paperCoords";
 import { editImageViaAPI } from "@/services/aiBackendAPI";
 import { useAIChatStore, getImageModelForProvider } from "@/stores/aiChatStore";
 import {
@@ -772,33 +772,33 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
 
   const shouldHideUi = isCanvasDragging || isBodyDragging;
 
-  // 将Paper.js世界坐标转换为屏幕坐标（改进版）
+  // 将Paper.js世界坐标转换为画布内 CSS 坐标（与 store pan/zoom 同步，避免 paper.view.matrix 滞后）
   const convertToScreenBounds = useCallback(
     (paperBounds: { x: number; y: number; width: number; height: number }) => {
-      if (!paper.view) return paperBounds;
-
       try {
-        const dpr = window.devicePixelRatio || 1;
-        // 使用更精确的坐标转换
-        const topLeft = paper.view.projectToView(
-          new paper.Point(paperBounds.x, paperBounds.y)
+        const topLeft = projectToCanvasCssWithViewport(
+          paperBounds.x,
+          paperBounds.y,
+          zoom,
+          panX,
+          panY,
         );
-        const bottomRight = paper.view.projectToView(
-          new paper.Point(
-            paperBounds.x + paperBounds.width,
-            paperBounds.y + paperBounds.height
-          )
+        const bottomRight = projectToCanvasCssWithViewport(
+          paperBounds.x + paperBounds.width,
+          paperBounds.y + paperBounds.height,
+          zoom,
+          panX,
+          panY,
         );
 
-        // 添加数值验证，防止NaN或无限值
         const result = {
-          x: isFinite(topLeft.x) ? topLeft.x / dpr : paperBounds.x,
-          y: isFinite(topLeft.y) ? topLeft.y / dpr : paperBounds.y,
+          x: isFinite(topLeft.x) ? topLeft.x : paperBounds.x,
+          y: isFinite(topLeft.y) ? topLeft.y : paperBounds.y,
           width: isFinite(bottomRight.x - topLeft.x)
-            ? (bottomRight.x - topLeft.x) / dpr
+            ? bottomRight.x - topLeft.x
             : paperBounds.width,
           height: isFinite(bottomRight.y - topLeft.y)
-            ? (bottomRight.y - topLeft.y) / dpr
+            ? bottomRight.y - topLeft.y
             : paperBounds.height,
         };
 
@@ -809,7 +809,7 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
       }
     },
     [zoom, panX, panY]
-  ); // 添加画布状态依赖，确保画布变化时函数重新创建
+  );
 
   // 使用 ref 存储最新的 bounds，避免 getRealTimePaperBounds 依赖变化
   const boundsRef = useRef(bounds);

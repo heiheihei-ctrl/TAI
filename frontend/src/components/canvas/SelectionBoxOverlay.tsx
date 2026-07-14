@@ -5,6 +5,8 @@
 
 import React, { useEffect, useState } from 'react';
 import paper from 'paper';
+import { useCanvasStore } from '@/stores/canvasStore';
+import { projectToClientWithViewport } from '@/utils/paperCoords';
 
 interface SelectionBoxBounds {
   left: number;
@@ -15,9 +17,11 @@ interface SelectionBoxBounds {
 
 const SelectionBoxOverlay: React.FC = () => {
   const [boxBounds, setBoxBounds] = useState<SelectionBoxBounds | null>(null);
+  const zoom = useCanvasStore((s) => s.zoom);
+  const panX = useCanvasStore((s) => s.panX);
+  const panY = useCanvasStore((s) => s.panY);
 
   useEffect(() => {
-    // Listen to selection box update events.
     const handleSelectionBoxUpdate = (event: CustomEvent) => {
       const { startPoint, currentPoint } = event.detail;
 
@@ -26,57 +30,64 @@ const SelectionBoxOverlay: React.FC = () => {
         return;
       }
 
-      // Convert Paper.js coordinates to screen coordinates.
       const canvas = paper.view.element as HTMLCanvasElement;
-      const rect = canvas.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
+      const { zoom: z, panX: px, panY: py } = useCanvasStore.getState();
+      const start = projectToClientWithViewport(
+        canvas,
+        startPoint.x,
+        startPoint.y,
+        z,
+        px,
+        py,
+      );
+      const current = projectToClientWithViewport(
+        canvas,
+        currentPoint.x,
+        currentPoint.y,
+        z,
+        px,
+        py,
+      );
 
-      const startView = paper.view.projectToView(startPoint);
-      const currentView = paper.view.projectToView(currentPoint);
-
-      const startX = startView.x / dpr + rect.left;
-      const startY = startView.y / dpr + rect.top;
-      const currentX = currentView.x / dpr + rect.left;
-      const currentY = currentView.y / dpr + rect.top;
-
-      // Compute box position and size.
-      const left = Math.min(startX, currentX);
-      const top = Math.min(startY, currentY);
-      const width = Math.abs(currentX - startX);
-      const height = Math.abs(currentY - startY);
+      const left = Math.min(start.x, current.x);
+      const top = Math.min(start.y, current.y);
+      const width = Math.abs(current.x - start.x);
+      const height = Math.abs(current.y - start.y);
 
       setBoxBounds({ left, top, width, height });
     };
 
-    const handleSelectionBoxClear = () => {
-      setBoxBounds(null);
-    };
+    const handleClear = () => setBoxBounds(null);
 
-    window.addEventListener('selection-box-update', handleSelectionBoxUpdate as EventListener);
-    window.addEventListener('selection-box-clear', handleSelectionBoxClear);
+    window.addEventListener(
+      'selection-box-update',
+      handleSelectionBoxUpdate as EventListener,
+    );
+    window.addEventListener('selection-box-clear', handleClear);
 
     return () => {
-      window.removeEventListener('selection-box-update', handleSelectionBoxUpdate as EventListener);
-      window.removeEventListener('selection-box-clear', handleSelectionBoxClear);
+      window.removeEventListener(
+        'selection-box-update',
+        handleSelectionBoxUpdate as EventListener,
+      );
+      window.removeEventListener('selection-box-clear', handleClear);
     };
-  }, []);
+  }, [zoom, panX, panY]);
 
-  if (!boxBounds) {
+  if (!boxBounds || boxBounds.width < 1 || boxBounds.height < 1) {
     return null;
   }
 
   return (
     <div
+      className="pointer-events-none fixed z-[9999]"
       style={{
-        position: 'fixed',
         left: boxBounds.left,
         top: boxBounds.top,
         width: boxBounds.width,
         height: boxBounds.height,
-        border: '1px dashed #007AFF',
-        background: 'rgba(0, 122, 255, 0.1)',
-        pointerEvents: 'none',
-        zIndex: 10000, // Keep above React Flow nodes.
+        border: '1px solid rgba(59, 130, 246, 0.9)',
+        background: 'rgba(59, 130, 246, 0.12)',
       }}
     />
   );

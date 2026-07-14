@@ -929,15 +929,29 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
                         inactiveButtonStyle
                       )}
                       onClick={() => {
-                        // 在画面中心打开节点面板
-                        const centerX = window.innerWidth / 2;
-                        const centerY = window.innerHeight / 2;
+                        // 在画布可视区域中心打开节点面板（client 坐标）
+                        const canvas =
+                          document.querySelector('.tanva-main-canvas') ||
+                          document.querySelector('.react-flow');
+                        const center = (() => {
+                          const rect = canvas?.getBoundingClientRect();
+                          if (!rect) {
+                            return {
+                              x: window.innerWidth / 2,
+                              y: window.innerHeight / 2,
+                            };
+                          }
+                          return {
+                            x: rect.left + rect.width / 2,
+                            y: rect.top + rect.height / 2,
+                          };
+                        })();
                         window.dispatchEvent(new CustomEvent('flow:set-template-panel', {
                           detail: {
                             visible: true,
                             tab: 'nodes',
                             allowedTabs: ['nodes', 'beta', 'custom'],
-                            screen: { x: centerX, y: centerY }
+                            screen: center,
                           }
                         }));
                         setAddToolsMenuOpen(false);

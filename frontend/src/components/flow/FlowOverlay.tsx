@@ -26,6 +26,8 @@ import ReactFlow, {
 } from "reactflow";
 import { ReactFlowProvider } from "reactflow";
 import { useCanvasStore } from "@/stores";
+import { canvasStateToFlowViewport } from "@/utils/flowViewportTransform";
+import { getElementClientCenter } from "@/utils/paperCoords";
 import { useToolStore } from "@/stores";
 import "reactflow/dist/style.css";
 import "./flow.css";
@@ -6678,13 +6680,7 @@ function FlowInner() {
 
   const initialViewport = React.useMemo(() => {
     try {
-      const state = useCanvasStore.getState();
-      const z = state.zoom || 1;
-      const dpr =
-        typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
-      const x = ((state.panX || 0) * z) / dpr;
-      const y = ((state.panY || 0) * z) / dpr;
-      return { x, y, zoom: z };
+      return canvasStateToFlowViewport(useCanvasStore.getState());
     } catch {
       return { x: 0, y: 0, zoom: 1 };
     }
@@ -6709,14 +6705,9 @@ function FlowInner() {
 
   const syncViewportToCanvasStore = () => {
     try {
-      const state = useCanvasStore.getState();
-      const z = state.zoom || 1;
-      const dpr =
-        typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
-      const x = ((state.panX || 0) * z) / dpr;
-      const y = ((state.panY || 0) * z) / dpr;
-      lastApplied.current = { x, y, z };
-      applyViewportImmediate({ x, y, z });
+      const vp = canvasStateToFlowViewport(useCanvasStore.getState());
+      lastApplied.current = { x: vp.x, y: vp.y, z: vp.zoom };
+      applyViewportImmediate({ x: vp.x, y: vp.y, z: vp.zoom });
     } catch {
       /* noop */
     }
@@ -6724,35 +6715,29 @@ function FlowInner() {
   React.useEffect(() => {
     // 使用 Zustand subscribe 直接监听状态变化，绕过 React 渲染周期
     const unsubscribe = useCanvasStore.subscribe((state) => {
-      const z = state.zoom || 1;
-      const dpr =
-        typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
-      const x = ((state.panX || 0) * z) / dpr;
-      const y = ((state.panY || 0) * z) / dpr;
+      const vp = canvasStateToFlowViewport(state);
       const prev = lastApplied.current;
       const eps = 1e-6;
       if (
         prev &&
-        Math.abs(prev.x - x) < eps &&
-        Math.abs(prev.y - y) < eps &&
-        Math.abs(prev.z - z) < eps
+        Math.abs(prev.x - vp.x) < eps &&
+        Math.abs(prev.y - vp.y) < eps &&
+        Math.abs(prev.z - vp.zoom) < eps
       )
         return;
-      lastApplied.current = { x, y, z };
+      lastApplied.current = { x: vp.x, y: vp.y, z: vp.zoom };
       // 平移与缩放均立即同步，消除交互中的短暂“脱节/漂移感”。
-      applyViewportImmediate({ x, y, z });
+      applyViewportImmediate({ x: vp.x, y: vp.y, z: vp.zoom });
     });
 
     // 初始同步
-    const state = useCanvasStore.getState();
-    const z = state.zoom || 1;
-    const dpr =
-      typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
-    const x = ((state.panX || 0) * z) / dpr;
-    const y = ((state.panY || 0) * z) / dpr;
-    lastApplied.current = { x, y, z };
+    const vp = canvasStateToFlowViewport(useCanvasStore.getState());
+    lastApplied.current = { x: vp.x, y: vp.y, z: vp.zoom };
     try {
-      rfRef.current.setViewport({ x, y, zoom: z }, { duration: 0 });
+      rfRef.current.setViewport(
+        { x: vp.x, y: vp.y, zoom: vp.zoom },
+        { duration: 0 },
+      );
     } catch {
       /* noop */
     }
@@ -11845,10 +11830,9 @@ function FlowInner() {
     const resolveVideoNodePosition = (screenPosition?: { x: number; y: number }) => {
       const flowPos = screenPosition
         ? rf.screenToFlowPosition(screenPosition)
-        : rf.screenToFlowPosition({
-            x: window.innerWidth / 2,
-            y: window.innerHeight / 2,
-          });
+        : rf.screenToFlowPosition(
+            getElementClientCenter(containerRef.current),
+          );
       return {
         x: flowPos.x - VIDEO_NODE_W / 2,
         y: flowPos.y - VIDEO_NODE_H / 2,
@@ -12025,13 +12009,10 @@ function FlowInner() {
         typeof detail?.imageData === "string" ? detail.imageData.trim() : "";
       if (!imageUrlForNode && !imageDataForNode) return;
       const normalizedImageName = detail.imageName?.trim();
-      const rect = containerRef.current?.getBoundingClientRect();
+      const center = getElementClientCenter(containerRef.current);
       const screenPosition = {
-        x: (rect?.width || window.innerWidth) / 2 + (Math.random() * 120 - 60),
-        y:
-          (rect?.height || window.innerHeight) / 2 +
-          60 +
-          (Math.random() * 80 - 40),
+        x: center.x + (Math.random() * 120 - 60),
+        y: center.y + 60 + (Math.random() * 80 - 40),
       };
       const position = rf.screenToFlowPosition(screenPosition);
       const id = `img_${Date.now()}`;
@@ -21672,14 +21653,15 @@ function FlowInner() {
         return id;
       },
       addThreeFromScreen: (
-        screenX = window.innerWidth / 2,
-        screenY = window.innerHeight / 2,
+        screenX?: number,
+        screenY?: number,
         dataPatch?: Record<string, any>
       ) => {
         const id = `three_${Date.now()}`;
+        const fallback = getElementClientCenter(containerRef.current);
         const position = rf.screenToFlowPosition({
-          x: screenX,
-          y: screenY,
+          x: typeof screenX === "number" ? screenX : fallback.x,
+          y: typeof screenY === "number" ? screenY : fallback.y,
         });
         setNodes((ns) =>
           ns.concat([
@@ -21768,23 +21750,14 @@ function FlowInner() {
           const allNodes = rf.getNodes();
           const selectedNodeIds: string[] = [];
 
-          // 获取 Flow 容器的位置
-          const container = containerRef.current;
-          if (!container) return [];
-
-          // 将屏幕坐标转换为相对于 Flow 容器的坐标
-          const containerRect = container.getBoundingClientRect();
-          const relativeX = screenRect.x - containerRect.left;
-          const relativeY = screenRect.y - containerRect.top;
-
-          // 将屏幕坐标的选择框转换为 Flow 坐标
+          // screenRect 已是 viewport client 坐标；screenToFlowPosition 会再减 pane rect，不要二次减
           const topLeft = rf.screenToFlowPosition({
-            x: relativeX,
-            y: relativeY,
+            x: screenRect.x,
+            y: screenRect.y,
           });
           const bottomRight = rf.screenToFlowPosition({
-            x: relativeX + screenRect.width,
-            y: relativeY + screenRect.height,
+            x: screenRect.x + screenRect.width,
+            y: screenRect.y + screenRect.height,
           });
 
           // 确保坐标顺序正确
@@ -21871,11 +21844,7 @@ function FlowInner() {
         | "generateRef"
         | "analysis"
     ) => {
-      const rect = containerRef.current?.getBoundingClientRect();
-      const centerScreen = {
-        x: (rect?.width || window.innerWidth) / 2,
-        y: (rect?.height || window.innerHeight) / 2,
-      };
+      const centerScreen = getElementClientCenter(containerRef.current);
       const center = rf.screenToFlowPosition(centerScreen);
       const id = `${type}_${Date.now()}`;
       const base: any = {
@@ -22659,11 +22628,9 @@ function FlowInner() {
         console.warn("[FlowOverlay] instantiateTemplate: 模板数据无效", detail);
         return;
       }
-      const container = document.querySelector(".react-flow");
-      const rect = container?.getBoundingClientRect();
-      const centerX = rect ? rect.width / 2 : 400;
-      const centerY = rect ? rect.height / 2 : 300;
-      const world = rf.screenToFlowPosition({ x: centerX, y: centerY });
+      const world = rf.screenToFlowPosition(
+        getElementClientCenter(document.querySelector(".react-flow")),
+      );
       console.log("[FlowOverlay] 收到模板实例化事件，位置:", world);
       instantiateTemplateAt(detail.template, world);
     };

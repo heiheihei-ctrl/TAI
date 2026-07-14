@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTeamStore } from '@/stores/teamStore';
@@ -7,6 +7,7 @@ import {
   formatPersonalQuotaBadge,
   type PersonalTeamQuota,
 } from '@/utils/teamQuotaDisplay';
+import { CREDITS_REFRESH_EVENT } from '@/utils/creditsEvents';
 import { TeamManagementModal } from './TeamManagementModal';
 import { SHOW_TEAM_COLLABORATION } from '@/config/featureFlags';
 
@@ -15,9 +16,11 @@ export default function TeamQuotaBadge() {
     const team = s.teams.find((t) => t.id === s.activeTeamId);
     return team && !team.isPersonal ? team : null;
   });
+  const patchTeamCredits = useTeamStore((s) => s.patchTeamCredits);
   const [quota, setQuota] = useState<PersonalTeamQuota | null>(null);
   const [loading, setLoading] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
+  const loadSeqRef = useRef(0);
 
   useEffect(() => {
     if (!activeTeam) {
@@ -28,18 +31,22 @@ export default function TeamQuotaBadge() {
     let cancelled = false;
 
     const loadQuota = () => {
+      const seq = ++loadSeqRef.current;
       setLoading(true);
       void teamApi
         .getMyQuota(activeTeam.id)
         .then((data) => {
-          if (cancelled) return;
+          if (cancelled || seq !== loadSeqRef.current) return;
           setQuota(data);
+          if (typeof data.teamBalance === 'number' && Number.isFinite(data.teamBalance)) {
+            patchTeamCredits(activeTeam.id, Math.max(0, data.teamBalance));
+          }
         })
         .catch(() => {
-          if (!cancelled) setQuota(null);
+          if (!cancelled && seq === loadSeqRef.current) setQuota(null);
         })
         .finally(() => {
-          if (!cancelled) setLoading(false);
+          if (!cancelled && seq === loadSeqRef.current) setLoading(false);
         });
     };
 
@@ -48,13 +55,13 @@ export default function TeamQuotaBadge() {
     const onCreditsRefresh = () => {
       loadQuota();
     };
-    window.addEventListener('refresh-credits', onCreditsRefresh);
+    window.addEventListener(CREDITS_REFRESH_EVENT, onCreditsRefresh);
 
     return () => {
       cancelled = true;
-      window.removeEventListener('refresh-credits', onCreditsRefresh);
+      window.removeEventListener(CREDITS_REFRESH_EVENT, onCreditsRefresh);
     };
-  }, [activeTeam?.id]);
+  }, [activeTeam?.id, patchTeamCredits]);
 
   const display = useMemo(() => {
     if (!activeTeam) return null;
@@ -96,7 +103,12 @@ export default function TeamQuotaBadge() {
             setManageOpen(false);
             void teamApi
               .getMyQuota(activeTeam.id)
-              .then((data) => setQuota(data))
+              .then((data) => {
+                setQuota(data);
+                if (typeof data.teamBalance === 'number' && Number.isFinite(data.teamBalance)) {
+                  patchTeamCredits(activeTeam.id, Math.max(0, data.teamBalance));
+                }
+              })
               .catch(() => {});
           }}
           initialTab="members"

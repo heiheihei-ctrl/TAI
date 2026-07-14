@@ -3,6 +3,7 @@ import { triggerAuthExpired } from './authEvents';
 import { getAccessToken, getRefreshAuthHeader, setTokens } from './authTokenStorage';
 import { ensureTraceHeader } from '../utils/trace';
 import { getBillingTeamId } from '@/stores/teamStore';
+import { notifyCreditsChanged } from '@/utils/creditsEvents';
 
 type RequestInput = RequestInfo | URL;
 
@@ -13,15 +14,24 @@ export type AuthFetchInit = RequestInit & {
 
 let refreshPromise: Promise<boolean> | null = null;
 
-const CREDITS_REFRESH_EVENT = "refresh-credits";
 const SAFE_URL_BASE = "http://localhost";
 const CREDITS_AFFECTING_PATH_PATTERNS = [
   "/api/ai/",
   "/video-gif/convert",
 ];
 
+/** 仅创建异步任务、积分在 worker 里才预扣 —— 此时刷新会拿到旧余额 */
+const CREDITS_DEDUCT_DEFERRED_PATH_PATTERNS = [
+  "/api/ai/generate-image-async",
+  "/api/ai/edit-image-async",
+  "/api/ai/blend-images-async",
+];
+
 const isCreditsAffectingPath = (path: string): boolean =>
   CREDITS_AFFECTING_PATH_PATTERNS.some((pattern) => path.includes(pattern));
+
+const isDeferredCreditsDeductPath = (path: string): boolean =>
+  CREDITS_DEDUCT_DEFERRED_PATH_PATTERNS.some((pattern) => path.includes(pattern));
 
 const resolveRequestUrl = (input: RequestInput): string => {
   if (typeof input === "string") return input;
@@ -61,8 +71,10 @@ const shouldNotifyCreditsRefresh = (
       rawUrl,
       typeof window !== "undefined" ? window.location.origin : SAFE_URL_BASE
     );
+    if (isDeferredCreditsDeductPath(parsed.pathname)) return false;
     return isCreditsAffectingPath(parsed.pathname);
   } catch {
+    if (isDeferredCreditsDeductPath(rawUrl)) return false;
     return isCreditsAffectingPath(rawUrl);
   }
 };
@@ -72,9 +84,8 @@ const notifyCreditsRefreshIfNeeded = (
   normalized: RequestInit,
   response: Response
 ) => {
-  if (typeof window === "undefined") return;
   if (!shouldNotifyCreditsRefresh(input, normalized, response)) return;
-  window.dispatchEvent(new CustomEvent(CREDITS_REFRESH_EVENT));
+  notifyCreditsChanged();
 };
 
 const refreshUrl =

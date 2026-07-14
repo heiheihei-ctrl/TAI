@@ -9,6 +9,10 @@ import { LoadingSpinner } from '../ui/loading-spinner';
 import { downloadFile } from '@/utils/downloadHelper';
 import { logger } from '@/utils/logger';
 import { useAIChatStore } from '@/stores/aiChatStore';
+import {
+  projectToCanvasCssWithViewport,
+  canvasCssToProjectWithViewport,
+} from '@/utils/paperCoords';
 
 interface Model3DContainerProps {
   modelData: Model3DData;
@@ -145,21 +149,30 @@ const Model3DContainer: React.FC<Model3DContainerProps> = ({
     };
   }, [zoom, panX, panY]); // 移除forceRerender依赖，避免循环
 
-  // 将Paper.js世界坐标转换为屏幕坐标 - 直接使用当前Paper.js状态
+  // 将Paper.js世界坐标转换为画布内 CSS 坐标（与 store pan/zoom 同步）
   const convertToScreenBounds = useCallback((paperBounds: { x: number; y: number; width: number; height: number }) => {
-    if (!paper.view) return paperBounds;
-
-    const dpr = window.devicePixelRatio || 1;
-    const topLeft = paper.view.projectToView(new paper.Point(paperBounds.x, paperBounds.y));
-    const bottomRight = paper.view.projectToView(new paper.Point(paperBounds.x + paperBounds.width, paperBounds.y + paperBounds.height));
+    const topLeft = projectToCanvasCssWithViewport(
+      paperBounds.x,
+      paperBounds.y,
+      zoom,
+      panX,
+      panY,
+    );
+    const bottomRight = projectToCanvasCssWithViewport(
+      paperBounds.x + paperBounds.width,
+      paperBounds.y + paperBounds.height,
+      zoom,
+      panX,
+      panY,
+    );
 
     return {
-      x: topLeft.x / dpr,
-      y: topLeft.y / dpr,
-      width: (bottomRight.x - topLeft.x) / dpr,
-      height: (bottomRight.y - topLeft.y) / dpr
+      x: topLeft.x,
+      y: topLeft.y,
+      width: bottomRight.x - topLeft.x,
+      height: bottomRight.y - topLeft.y,
     };
-  }, []);
+  }, [zoom, panX, panY]);
 
   const [screenBounds, setScreenBounds] = useState(() => convertToScreenBounds(bounds));
 
@@ -186,21 +199,30 @@ const Model3DContainer: React.FC<Model3DContainerProps> = ({
     };
   }, [realTimeBounds, zoom, panX, panY, renderKey, convertToScreenBounds]);
 
-  // 将屏幕坐标转换为Paper.js世界坐标
+  // 将画布内 CSS 坐标转换为 Paper.js 世界坐标
   const convertToPaperBounds = useCallback((screenBounds: { x: number; y: number; width: number; height: number }) => {
-    if (!paper.view) return screenBounds;
-
-    const dpr = window.devicePixelRatio || 1;
-    const topLeft = paper.view.viewToProject(new paper.Point(screenBounds.x * dpr, screenBounds.y * dpr));
-    const bottomRight = paper.view.viewToProject(new paper.Point((screenBounds.x + screenBounds.width) * dpr, (screenBounds.y + screenBounds.height) * dpr));
+    const topLeft = canvasCssToProjectWithViewport(
+      screenBounds.x,
+      screenBounds.y,
+      zoom,
+      panX,
+      panY,
+    );
+    const bottomRight = canvasCssToProjectWithViewport(
+      screenBounds.x + screenBounds.width,
+      screenBounds.y + screenBounds.height,
+      zoom,
+      panX,
+      panY,
+    );
 
     return {
       x: topLeft.x,
       y: topLeft.y,
       width: bottomRight.x - topLeft.x,
-      height: bottomRight.y - topLeft.y
+      height: bottomRight.y - topLeft.y,
     };
-  }, []); // 移除依赖，通过强制重渲染确保同步
+  }, [zoom, panX, panY]);
 
   // 计算控制点偏移量 - 与边框精确对齐
   const handleSize = 6; // 控制点尺寸（固定屏幕像素大小）
