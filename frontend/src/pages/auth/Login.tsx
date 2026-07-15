@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { useAuthStore } from "@/stores/authStore";
-import { Loader2, Eye, EyeOff, Check, RefreshCw } from "lucide-react";
+import { Loader2, Eye, EyeOff, Check, RefreshCw, X } from "lucide-react";
 import { authApi, type WechatOfficialSessionDetail } from "@/services/authApi";
 import ForgotPasswordModal from "@/components/auth/ForgotPasswordModal";
 import ProfileCompletionLoginModal from "@/components/auth/ProfileCompletionLoginModal";
@@ -14,6 +14,7 @@ import {
   fetchExtendedProfile,
   queueOpenSettingsSection,
 } from "@/services/extendedProfileApi";
+import { validateInviteCode } from "@/services/referralApi";
 import { useTranslation } from "react-i18next";
 import WelcomeShaderBackground from "@/components/background/WelcomeShaderBackground";
 
@@ -44,7 +45,13 @@ export default function LoginPage() {
   const [wechatError, setWechatError] = useState<string | null>(null);
   const [wechatBindPhone, setWechatBindPhone] = useState("");
   const [wechatBindCode, setWechatBindCode] = useState("");
+  const [wechatBindPassword, setWechatBindPassword] = useState("");
+  const [wechatBindConfirm, setWechatBindConfirm] = useState("");
   const [wechatInviteCode, setWechatInviteCode] = useState("");
+  const [wechatInviteCodeValid, setWechatInviteCodeValid] = useState<boolean | null>(null);
+  const [wechatInviterName, setWechatInviterName] = useState<string | null>(null);
+  const [showWechatBindPassword, setShowWechatBindPassword] = useState(false);
+  const [showWechatBindConfirm, setShowWechatBindConfirm] = useState(false);
   const [wechatBindSubmitting, setWechatBindSubmitting] = useState(false);
   const consumingRef = useRef(false);
   const consumedSessionIdRef = useRef<string | null>(null);
@@ -161,8 +168,14 @@ export default function LoginPage() {
       });
       setWechatBindPhone("");
       setWechatBindCode("");
+      setWechatBindPassword("");
+      setWechatBindConfirm("");
       setWechatInviteCode("");
-    } catch (err: any) {
+      setWechatInviteCodeValid(null);
+      setWechatInviterName(null);
+      setShowWechatBindPassword(false);
+      setShowWechatBindConfirm(false);
+      setAgreeTerms(false);    } catch (err: any) {
       setWechatSession(null);
       setWechatError(err?.message || t("auth.login.wechatLoadFailed"));
     } finally {
@@ -242,12 +255,6 @@ export default function LoginPage() {
     await performLogin();
   };
 
-  const handleAgreementAgree = async () => {
-    setAgreeTerms(true);
-    setIsAgreementModalOpen(false);
-    await performLogin();
-  };
-
   const sendSmsCode = async (targetPhone: string) => {
     if (sendCooldown > 0) return;
     if (!targetPhone) {
@@ -302,19 +309,62 @@ export default function LoginPage() {
     return () => clearInterval(timer);
   }, [sendCooldown]);
 
-  const handleWechatBindSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleWechatInviteCodeBlur = async () => {
+    if (!wechatInviteCode.trim()) {
+      setWechatInviteCodeValid(null);
+      setWechatInviterName(null);
+      return;
+    }
+    const result = await validateInviteCode(wechatInviteCode.trim());
+    setWechatInviteCodeValid(result.valid);
+    if (result.valid && result.inviterName) {
+      setWechatInviterName(result.inviterName);
+    } else {
+      setWechatInviterName(null);
+    }
+  };
+
+  const submitWechatBind = async () => {
     if (!wechatSession?.id) return;
-    if (!wechatBindPhone.trim() || !wechatBindCode.trim()) {
+    const trimmedPhone = wechatBindPhone.trim();
+    const trimmedCode = wechatBindCode.trim();
+    if (!trimmedPhone || !trimmedCode) {
       setWechatError(t("auth.login.wechatBindIncomplete"));
       return;
+    }
+    if (!/^\d{6}$/.test(trimmedCode)) {
+      setWechatError(t("auth.register.codeInvalid"));
+      return;
+    }
+    if (wechatBindPassword.length < 6) {
+      setWechatError(t("auth.login.wechatBindPasswordRequired"));
+      return;
+    }
+    if (wechatBindPassword !== wechatBindConfirm) {
+      setWechatError(t("auth.register.passwordMismatch"));
+      return;
+    }
+    if (wechatInviteCode.trim()) {
+      if (wechatInviteCodeValid === null) {
+        const result = await validateInviteCode(wechatInviteCode.trim());
+        setWechatInviteCodeValid(result.valid);
+        if (!result.valid) {
+          setWechatError(t("auth.register.invalidInvite"));
+          return;
+        }
+      } else if (wechatInviteCodeValid === false) {
+        setWechatError(t("auth.register.invalidInvite"));
+        return;
+      }
     }
     setWechatBindSubmitting(true);
     setWechatError(null);
     try {
       const result = await authApi.bindWechatOfficialPhone(wechatSession.id, {
-        phone: wechatBindPhone.trim(),
-        code: wechatBindCode.trim(),
+        phone: trimmedPhone,
+        code: trimmedCode,
+        password: wechatBindPassword,
+        confirmPassword: wechatBindConfirm,
         inviteCode: wechatInviteCode.trim() || undefined,
       });
       void finalizeWechatLogin(result.user, result.returnTo);
@@ -323,6 +373,15 @@ export default function LoginPage() {
     } finally {
       setWechatBindSubmitting(false);
     }
+  };
+
+  const handleWechatBindSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!agreeTerms) {
+      setIsAgreementModalOpen(true);
+      return;
+    }
+    await submitWechatBind();
   };
 
   const isWechatQrExpired = wechatSession?.status === "expired";
@@ -338,6 +397,16 @@ export default function LoginPage() {
     setWechatError(null);
     clearError();
     setTab(nextTab);
+  };
+
+  const handleAgreementAgree = async () => {
+    setAgreeTerms(true);
+    setIsAgreementModalOpen(false);
+    if (needsWechatPhoneBind) {
+      await submitWechatBind();
+      return;
+    }
+    await performLogin();
   };
 
   const agreementSection = (
@@ -377,7 +446,9 @@ export default function LoginPage() {
       <div className='absolute inset-0 bg-black/50 z-[2]'></div>
 
       <div className='relative z-10 my-auto w-full max-w-xl flex flex-col items-center'>
-        <Card className='flex min-h-[560px] w-full flex-col rounded-3xl border border-blue-400/20 bg-blue-500/10 p-6 shadow-2xl backdrop-blur-md transition-[min-height,height] duration-300 sm:p-8'>
+        <Card className={`flex w-full flex-col rounded-3xl border border-blue-400/20 bg-blue-500/10 p-6 shadow-2xl backdrop-blur-md transition-[min-height,height] duration-300 sm:p-8 ${
+          needsWechatPhoneBind ? "min-h-[720px]" : "min-h-[560px]"
+        }`}>
           {/* Logo 区域 */}
           <div className='flex shrink-0 items-center justify-center sm:mb-5'>
             <img src='/TAI-logo.png' alt='TAI' className='h-12 w-auto sm:h-14 pr-3.5 pb-1' />
@@ -443,27 +514,39 @@ export default function LoginPage() {
                               {(wechatSession?.displayName || wechatSession?.nickname || "微").slice(0, 1)}
                             </div>
                           )}
-                          <p className='text-sm text-white/90'>
-                            {wechatSession?.displayName
-                              ? t("auth.login.wechatBindHintWithName", { name: wechatSession.displayName })
-                              : t("auth.login.wechatBindHint")}
-                          </p>
+                          <div className='space-y-1 text-left'>
+                            <p className='text-sm font-medium text-white'>
+                              {t("auth.login.wechatRegisterTitle")}
+                            </p>
+                            <p className='text-xs text-white/75'>
+                              {wechatSession?.displayName
+                                ? t("auth.login.wechatBindHintWithName", { name: wechatSession.displayName })
+                                : t("auth.login.wechatBindHint")}
+                            </p>
+                          </div>
                         </div>
 
                         <form onSubmit={handleWechatBindSubmit} className='space-y-3'>
-                          <Input
-                            placeholder={t("auth.login.phonePlaceholder")}
-                            value={wechatBindPhone}
-                            onChange={(e) => setWechatBindPhone(e.target.value)}
-                            className='bg-[#0d2847] border-transparent text-gray-300 placeholder:text-gray-400 focus:bg-[#144272] focus:border-transparent transition-all duration-200 rounded-xl h-12'
-                          />
+                          <div className='relative'>
+                            <img src='/register1.png' alt='' className='absolute left-6 top-1/2 z-10 h-5 w-auto -translate-y-1/2 pointer-events-none' />
+                            <Input
+                              placeholder={t("auth.register.phonePlaceholder")}
+                              value={wechatBindPhone}
+                              onChange={(e) => setWechatBindPhone(e.target.value)}
+                              required
+                              className='bg-[#0d2847] border-transparent text-gray-300 placeholder:text-gray-400 focus:bg-[#144272] focus:border-transparent transition-all duration-200 rounded-xl h-12 pl-12'
+                            />
+                          </div>
+
                           <div className='relative flex items-center rounded-xl h-12 bg-[#0d2847] border-transparent focus-within:bg-[#144272] transition-all duration-200'>
+                            <img src='/register2.png' alt='' className='absolute left-6 top-1/2 z-10 h-5 w-auto -translate-y-1/2 pointer-events-none' />
                             <Input
                               placeholder={t("auth.login.codePlaceholder")}
                               value={wechatBindCode}
                               onChange={(e) => setWechatBindCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                              required
                               maxLength={6}
-                              className='flex-1 bg-transparent border-0 text-gray-300 placeholder:text-gray-400 focus:bg-transparent focus:border-0 focus:ring-0 focus-visible:ring-0 h-full pr-2 shadow-none'
+                              className='flex-1 bg-transparent border-0 text-gray-300 placeholder:text-gray-400 focus:bg-transparent focus:border-0 focus:ring-0 focus-visible:ring-0 h-full pl-12 pr-2 shadow-none'
                             />
                             <div className='h-5 w-px bg-white/20 shrink-0' />
                             <button
@@ -479,16 +562,80 @@ export default function LoginPage() {
                                   : "发送"}
                             </button>
                           </div>
-                          <Input
-                            placeholder={t("auth.register.invitePlaceholder")}
-                            value={wechatInviteCode}
-                            onChange={(e) => setWechatInviteCode(e.target.value)}
-                            className='bg-[#0d2847] border-transparent text-gray-300 placeholder:text-gray-400 focus:bg-[#144272] focus:border-transparent transition-all duration-200 rounded-xl h-12'
-                          />
+
+                          <div className='relative'>
+                            <img src='/register3.png' alt='' className='absolute left-6 top-1/2 z-10 h-5 w-auto -translate-y-1/2 pointer-events-none' />
+                            <Input
+                              placeholder={t("auth.register.passwordPlaceholder")}
+                              type={showWechatBindPassword ? "text" : "password"}
+                              value={wechatBindPassword}
+                              onChange={(e) => setWechatBindPassword(e.target.value)}
+                              minLength={6}
+                              required
+                              className='bg-[#0d2847] border-transparent text-gray-300 placeholder:text-gray-400 focus:bg-[#144272] focus:border-transparent transition-all duration-200 rounded-xl h-12 pl-12 pr-10'
+                            />
+                            <button
+                              type='button'
+                              onClick={() => setShowWechatBindPassword((v) => !v)}
+                              className='absolute right-3 top-1/2 -translate-y-1/2 text-white/70 hover:text-white transition-colors'
+                            >
+                              {showWechatBindPassword ? <Eye className='h-5 w-5' /> : <EyeOff className='h-5 w-5' />}
+                            </button>
+                          </div>
+
+                          <div className='relative'>
+                            <img src='/register3.png' alt='' className='absolute left-6 top-1/2 z-10 h-5 w-auto -translate-y-1/2 pointer-events-none' />
+                            <Input
+                              placeholder={t("auth.register.confirmPlaceholder")}
+                              type={showWechatBindConfirm ? "text" : "password"}
+                              value={wechatBindConfirm}
+                              onChange={(e) => setWechatBindConfirm(e.target.value)}
+                              required
+                              className='bg-[#0d2847] border-transparent text-gray-300 placeholder:text-gray-400 focus:bg-[#144272] focus:border-transparent transition-all duration-200 rounded-xl h-12 pl-12 pr-10'
+                            />
+                            <button
+                              type='button'
+                              onClick={() => setShowWechatBindConfirm((v) => !v)}
+                              className='absolute right-3 top-1/2 -translate-y-1/2 text-white/70 hover:text-white transition-colors'
+                            >
+                              {showWechatBindConfirm ? <Eye className='h-5 w-5' /> : <EyeOff className='h-5 w-5' />}
+                            </button>
+                          </div>
+
+                          <div className='relative'>
+                            <img src='/register4.png' alt='' className='absolute left-6 top-1/2 z-10 h-5 w-auto -translate-y-1/2 pointer-events-none' />
+                            <Input
+                              placeholder={t("auth.register.invitePlaceholder")}
+                              value={wechatInviteCode}
+                              onChange={(e) => {
+                                setWechatInviteCode(e.target.value);
+                                setWechatInviteCodeValid(null);
+                              }}
+                              onBlur={() => void handleWechatInviteCodeBlur()}
+                              className='bg-[#0d2847] border-transparent text-gray-300 placeholder:text-gray-400 focus:bg-[#144272] focus:border-transparent transition-all duration-200 rounded-xl h-12 pl-12 pr-10'
+                            />
+                            {wechatInviteCodeValid !== null && (
+                              <div className='absolute right-3 top-1/2 -translate-y-1/2'>
+                                {wechatInviteCodeValid ? (
+                                  <Check className='h-5 w-5 text-green-400' />
+                                ) : (
+                                  <X className='h-5 w-5 text-red-400' />
+                                )}
+                              </div>
+                            )}
+                            {wechatInviteCodeValid && wechatInviterName && (
+                              <div className='mt-1 ml-1 text-xs text-green-400'>
+                                {t("auth.register.inviteFrom", { name: wechatInviterName })}
+                              </div>
+                            )}
+                          </div>
+
+                          {agreementSection}
+
                           <Button
                             type='submit'
                             className='w-full bg-blue-500 hover:bg-blue-600 text-white border-transparent rounded-xl h-12 font-medium backdrop-blur-sm transition-all duration-200 disabled:opacity-70 hover:shadow-lg'
-                            disabled={wechatBindSubmitting}
+                            disabled={wechatBindSubmitting || !agreeTerms}
                           >
                             {wechatBindSubmitting ? (
                               <>

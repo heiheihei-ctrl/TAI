@@ -1363,11 +1363,14 @@ export class AuthService {
     phone: string,
     code: string,
     inviteCode?: string,
-    meta?: { ip?: string; ua?: string }
+    meta?: { ip?: string; ua?: string },
+    credentials?: { password?: string; confirmPassword?: string }
   ) {
     const normalizedPhone = this.normalizePhone(phone);
     const normalizedCode = code.trim();
     const normalizedInviteCode = inviteCode?.trim() || null;
+    const password = credentials?.password?.trim() || "";
+    const confirmPassword = credentials?.confirmPassword?.trim() || "";
     if (!normalizedPhone || !this.isPrimaryPhone(normalizedPhone)) {
       throw new BadRequestException("手机号格式不正确");
     }
@@ -1414,10 +1417,23 @@ export class AuthService {
       avatarUrl: fetchedProfile?.avatarUrl || null,
     };
 
-    const syntheticPasswordHash = await bcrypt.hash(
-      randomBytes(24).toString("hex"),
-      10
-    );
+    const existingPhoneUser = await this.prisma.user.findUnique({
+      where: { phone: normalizedPhone },
+      select: { id: true },
+    });
+    const willCreateNewUser = !existingPhoneUser;
+    if (willCreateNewUser) {
+      if (password.length < 6) {
+        throw new BadRequestException("密码至少6位");
+      }
+      if (password !== confirmPassword) {
+        throw new BadRequestException("两次输入的密码不一致");
+      }
+    }
+
+    const passwordHash = willCreateNewUser
+      ? await bcrypt.hash(password, 10)
+      : null;
 
     const user = await this.prisma.$transaction(async (tx) => {
       const existingWechatUser = await this.findWechatOfficialUserByIdentity(
@@ -1470,7 +1486,7 @@ export class AuthService {
       const createdUser = await tx.user.create({
         data: {
           phone: normalizedPhone,
-          passwordHash: syntheticPasswordHash,
+          passwordHash: passwordHash!,
           name,
           wechatOfficialOpenId: openId,
           wechatUnionId: this.normalizeWechatUnionId(profile.unionId),

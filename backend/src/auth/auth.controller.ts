@@ -155,10 +155,20 @@ export class AuthController {
     @Req() req: any,
     @Res({ passthrough: true }) res: any,
   ) {
-    const result = await this.auth.bindWechatOfficialSessionPhone(id, dto.phone, dto.code, dto.inviteCode, {
-      ip: req.ip,
-      ua: req.headers['user-agent'],
-    });
+    const result = await this.auth.bindWechatOfficialSessionPhone(
+      id,
+      dto.phone,
+      dto.code,
+      dto.inviteCode,
+      {
+        ip: req.ip,
+        ua: req.headers['user-agent'],
+      },
+      {
+        password: dto.password,
+        confirmPassword: dto.confirmPassword,
+      },
+    );
     this.auth.setAuthCookies(res, result.tokens, req);
     return {
       user: this.toAuthUser(result.user),

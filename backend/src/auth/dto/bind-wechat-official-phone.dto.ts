@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 export class BindWechatOfficialPhoneDto {
   @ApiProperty({ description: '手机号' })
@@ -11,6 +11,19 @@ export class BindWechatOfficialPhoneDto {
   @IsString({ message: '验证码必须是字符串' })
   @MaxLength(32, { message: '验证码过长' })
   code!: string;
+
+  @ApiPropertyOptional({ description: '登录密码（新用户注册必填）' })
+  @IsOptional()
+  @IsString({ message: '密码必须是字符串' })
+  @MinLength(6, { message: '密码至少6位' })
+  @MaxLength(64, { message: '密码过长' })
+  password?: string;
+
+  @ApiPropertyOptional({ description: '确认密码（新用户注册必填）' })
+  @IsOptional()
+  @IsString({ message: '确认密码必须是字符串' })
+  @MaxLength(64, { message: '确认密码过长' })
+  confirmPassword?: string;
 
   @ApiPropertyOptional({ description: '邀请码（选填）' })
   @IsOptional()

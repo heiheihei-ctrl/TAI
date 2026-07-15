@@ -249,7 +249,13 @@ export const authApi = {
 
   async bindWechatOfficialPhone(
     sessionId: string,
-    payload: { phone: string; code: string; inviteCode?: string },
+    payload: {
+      phone: string;
+      code: string;
+      password?: string;
+      confirmPassword?: string;
+      inviteCode?: string;
+    },
   ): Promise<{ user: UserInfo; returnTo: string; tokens?: { accessToken?: string; refreshToken?: string } }> {
     if (isMock) {
       throw new Error("Mock 模式暂不支持公众号扫码登录");
