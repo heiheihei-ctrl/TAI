@@ -2,6 +2,10 @@ import { create } from 'zustand';
 import { authApi, type UserInfo } from '@/services/authApi';
 import { clearTokens } from '@/services/authTokenStorage';
 import { useTeamStore } from '@/stores/teamStore';
+import {
+  clearContactPopupShownDay,
+  requestContactPopupOnNextEnter,
+} from '@/utils/contactPopupStorage';
 
 type AuthState = {
   user: UserInfo | null;
@@ -29,6 +33,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   connection: null,
   clearError: () => set({ error: null }),
   setAuthenticatedUser: (user, connection = 'server') => {
+    requestContactPopupOnNextEnter();
     set({ user, connection, error: null, loading: false, initializing: false });
   },
   updateProfile: async (payload) => {
@@ -60,6 +65,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ loading: true, error: null });
     try {
       const { user } = await authApi.loginWithSms({ phone, code });
+      requestContactPopupOnNextEnter();
       set({ user, loading: false, connection: 'server' });
     } catch (e: any) {
       set({ loading: false, error: e?.message || '登录失败' });
@@ -70,6 +76,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ loading: true, error: null });
     try {
       const { user } = await authApi.login({ phone, password });
+      requestContactPopupOnNextEnter();
       set({ user, loading: false, connection: 'server' });
     } catch (e: any) {
       set({ loading: false, error: e?.message || '登录失败' });
@@ -88,6 +95,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
   logout: async () => {
     set({ loading: true, error: null });
+    clearContactPopupShownDay();
     try {
       await authApi.logout();
       useTeamStore.getState().setTeams([]);
@@ -98,6 +106,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
   forceLogout: (reason) => {
+    clearContactPopupShownDay();
     set({
       user: null,
       loading: false,

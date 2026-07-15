@@ -99,6 +99,10 @@ import ReminderBannerStack from "@/components/reminder/ReminderBannerStack";
 import { REMINDER_BANNER_STACK_TOP_CLASS } from "@/components/reminder/reminderBannerLayout";
 import ProfileCompletionSettingsPanel from "@/components/profile/ProfileCompletionSettingsPanel";
 import {
+  markContactPopupShown,
+  shouldAutoShowContactPopup,
+} from "@/utils/contactPopupStorage";
+import {
   clearProfileCompletionBannerDismissCache,
   DEFAULT_INCOMPLETE_PROFILE,
   fetchExtendedProfile,
@@ -363,7 +367,9 @@ const FloatingHeader: React.FC = () => {
   const [dailyRewardClaiming, setDailyRewardClaiming] = useState(false);
   const [isHelpMenuOpen, setIsHelpMenuOpen] = useState(false);
   const [isPricingCatalogOpen, setIsPricingCatalogOpen] = useState(false);
-  const [isWechatQrOpen, setIsWechatQrOpen] = useState(true);
+  const contactPopupUserId = useAuthStore((s) => s.user?.id);
+  const authInitializing = useAuthStore((s) => s.initializing);
+  const [isWechatQrOpen, setIsWechatQrOpen] = useState(false);
   const [wechatQrFading, setWechatQrFading] = useState(false);
   const wechatQrAutoHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
@@ -390,13 +396,8 @@ const FloatingHeader: React.FC = () => {
     }
   }, []);
 
-  const closeWechatQrPanel = useCallback(() => {
+  const scheduleWechatQrAutoHide = useCallback(() => {
     clearWechatQrAutoHideTimers();
-    setWechatQrFading(false);
-    setIsWechatQrOpen(false);
-  }, [clearWechatQrAutoHideTimers]);
-
-  useEffect(() => {
     wechatQrAutoHideTimerRef.current = setTimeout(() => {
       setWechatQrFading(true);
       wechatQrFadeTimerRef.current = setTimeout(() => {
@@ -404,9 +405,46 @@ const FloatingHeader: React.FC = () => {
         setWechatQrFading(false);
       }, 800);
     }, 10_000);
-
-    return clearWechatQrAutoHideTimers;
   }, [clearWechatQrAutoHideTimers]);
+
+  const closeWechatQrPanel = useCallback(() => {
+    clearWechatQrAutoHideTimers();
+    setWechatQrFading(false);
+    setIsWechatQrOpen(false);
+  }, [clearWechatQrAutoHideTimers]);
+
+  // 等认证 init 稳定后再判定，避免登录进画布时 AuthWrapper 闪屏误 mark 导致重挂不弹
+  useEffect(() => {
+    if (!contactPopupUserId) {
+      closeWechatQrPanel();
+      return;
+    }
+    if (authInitializing) return;
+
+    let cancelled = false;
+    // 留给 ProtectedRoute.init 把 initializing 置 true 并卸载本次闪屏挂载
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      if (useAuthStore.getState().initializing) return;
+      if (!shouldAutoShowContactPopup()) return;
+
+      markContactPopupShown();
+      setIsWechatQrOpen(true);
+      scheduleWechatQrAutoHide();
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      clearWechatQrAutoHideTimers();
+    };
+  }, [
+    authInitializing,
+    clearWechatQrAutoHideTimers,
+    closeWechatQrPanel,
+    contactPopupUserId,
+    scheduleWechatQrAutoHide,
+  ]);
 
   useEffect(() => {
     const fetchQrCodes = async () => {

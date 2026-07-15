@@ -182,11 +182,8 @@ const BTN_LOGIN_CLASS =
 const CTA_BTN_CLASS =
   "group inline-flex items-center justify-center rounded-full border border-sky-300/35 bg-gradient-to-r from-[rgba(33,75,157,0.1)] to-[rgba(33,75,157,1)] text-white w-[120px] h-[40px] text-[16px]";
 
-const BTN_ARCHITECTURE_INDUSTRY_CLASS =
-  "inline-flex min-w-[120px] items-center justify-center rounded-full border border-[#c9954a]/85 bg-[#08101f] px-5 py-2 text-[13px] font-medium text-[#d4a056] shadow-[inset_0_0_24px_rgba(201,149,74,0.08)] transition-all duration-200 hover:border-[#e8b86d] hover:text-[#f0c078]";
-
-const BTN_OTHER_INDUSTRY_CLASS =
-  "inline-flex min-w-[120px] items-center justify-center rounded-full border border-sky-400/75 bg-[#08101f] px-5 py-2 text-[13px] font-medium text-sky-300 shadow-[inset_0_0_28px_rgba(56,189,248,0.1)] transition-all duration-200 hover:border-sky-300 hover:text-sky-200";
+const CTA_BTN_ORANGE_CLASS =
+  "group inline-flex items-center justify-center rounded-full border border-orange-300/35 bg-gradient-to-r from-[rgba(194,98,32,0.1)] to-[rgba(234,120,40,0.6)] text-white w-[120px] h-[40px] text-[16px]";
 
 const WeChatFloatingButton = () => {
   const { t } = useTranslation();
@@ -647,16 +644,16 @@ export default function Home() {
             <button
               type="button"
               onClick={() => openTemplatesWithParent("建筑")}
-              className={BTN_ARCHITECTURE_INDUSTRY_CLASS}
+              className={CTA_BTN_ORANGE_CLASS}
             >
-              {t("home.hero.architectureIndustry")}
+              <span>{t("home.hero.architectureIndustry")}</span>
             </button>
             <button
               type="button"
               onClick={() => openTemplatesWithParent("其他")}
-              className={BTN_OTHER_INDUSTRY_CLASS}
+              className={CTA_BTN_CLASS}
             >
-              {t("home.hero.otherIndustry")}
+              <span>{t("home.hero.otherIndustry")}</span>
             </button>
           </div>
         </div>
@@ -1037,16 +1034,16 @@ export default function Home() {
             <button
               type="button"
               onClick={() => openTemplatesWithParent("建筑")}
-              className={BTN_ARCHITECTURE_INDUSTRY_CLASS}
+              className={CTA_BTN_ORANGE_CLASS}
             >
-              {t("home.hero.architectureIndustry")}
+              <span>{t("home.hero.architectureIndustry")}</span>
             </button>
             <button
               type="button"
               onClick={() => openTemplatesWithParent("其他")}
-              className={BTN_OTHER_INDUSTRY_CLASS}
+              className={CTA_BTN_CLASS}
             >
-              {t("home.hero.otherIndustry")}
+              <span>{t("home.hero.otherIndustry")}</span>
             </button>
           </div>
         </div>
