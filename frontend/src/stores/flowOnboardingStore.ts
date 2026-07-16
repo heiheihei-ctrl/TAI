@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import flowOnboardingExampleImage from '@/assets/flow_1783419642525.png';
+import flowOnboardingOtherExampleImage from '@/assets/other.png';
 import type { UserInfo } from '@/services/authApi';
+import { getStoredTemplateParentCategory } from '@/services/publicTemplateService';
 import { useAuthStore } from '@/stores/authStore';
 
 export const FLOW_ONBOARDING_STORAGE_KEY = 'tanva-flow-onboarding-v1-completed';
@@ -9,6 +11,7 @@ export const FLOW_ONBOARDING_STORAGE_KEY = 'tanva-flow-onboarding-v1-completed';
 export const FLOW_ONBOARDING_NEW_USER_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 export const FLOW_ONBOARDING_EXAMPLE_IMAGE_URL = flowOnboardingExampleImage;
+export const FLOW_ONBOARDING_OTHER_EXAMPLE_IMAGE_URL = flowOnboardingOtherExampleImage;
 
 /** 文生图步骤示例：图片描述式短提示词 */
 export const FLOW_ONBOARDING_TEXT2IMG_DESC = '城市综合体';
@@ -21,6 +24,32 @@ export const FLOW_ONBOARDING_PROMPTS = {
   img2video:
     '5 秒建筑漫游视频，镜头平稳缓慢向前推近滨水商业综合体建筑群，完整保留原图建筑结构、水系路网与环境细节，光影自然连贯，4K 高清流畅无畸变，写实建筑表现质感。',
 } as const;
+
+/** 其他创意行业：图生图 / 图生视频示例提示词 */
+export const FLOW_ONBOARDING_OTHER_PROMPT =
+  '产品外包装：椭圆形翻盖亮面高光外壳，蜜桃粉渐变亮光烤漆盒身，盒盖印有简约樱花浮雕插画，顶部居中烫银品牌 logo，盒身底部哑光白色，内侧自带放大高清化妆镜，外壳亮面通透反光，边缘细闪银边；多状态多角度：闭合正面全貌、开盖镜面粉芯侧面、背面成分标识平面图、按压取粉粉质特写，粉芯带有均匀使用痕迹，亮光烤漆细腻通透质感，渐变柔和马卡龙配色，少女温柔风格，纯白白底，1:1 正方形电商主图';
+
+export function isArchitectureOnboardingIndustry(): boolean {
+  return getStoredTemplateParentCategory() !== '其他';
+}
+
+export function getFlowOnboardingExampleImageUrl(): string {
+  return isArchitectureOnboardingIndustry()
+    ? FLOW_ONBOARDING_EXAMPLE_IMAGE_URL
+    : FLOW_ONBOARDING_OTHER_EXAMPLE_IMAGE_URL;
+}
+
+export function getFlowOnboardingImg2imgPrompt(): string {
+  return isArchitectureOnboardingIndustry()
+    ? FLOW_ONBOARDING_PROMPTS.img2img
+    : FLOW_ONBOARDING_OTHER_PROMPT;
+}
+
+export function getFlowOnboardingImg2videoPrompt(): string {
+  return isArchitectureOnboardingIndustry()
+    ? FLOW_ONBOARDING_PROMPTS.img2video
+    : FLOW_ONBOARDING_OTHER_PROMPT;
+}
 
 export type FlowOnboardingTrack = 'text2img' | 'img2img' | 'img2video';
 export type FlowOnboardingPhase = 'select' | 'guide';
@@ -235,8 +264,22 @@ const IMG2VIDEO_STEPS: FlowOnboardingStepDef[] = [
 export function getFlowOnboardingSteps(
   track: FlowOnboardingTrack | null
 ): FlowOnboardingStepDef[] {
-  if (track === 'img2img') return IMG2IMG_STEPS;
-  if (track === 'img2video') return IMG2VIDEO_STEPS;
+  if (track === 'img2img') {
+    const prompt = getFlowOnboardingImg2imgPrompt();
+    return IMG2IMG_STEPS.map((step) =>
+      step.target === 'text-prompt-input'
+        ? { ...step, hintZh: prompt, hintEn: prompt }
+        : step
+    );
+  }
+  if (track === 'img2video') {
+    const prompt = getFlowOnboardingImg2videoPrompt();
+    return IMG2VIDEO_STEPS.map((step) =>
+      step.target === 'text-prompt-input'
+        ? { ...step, hintZh: prompt, hintEn: prompt }
+        : step
+    );
+  }
   return TEXT2IMG_STEPS;
 }
 

@@ -2,9 +2,10 @@ import React from 'react';
 import type { Connection } from 'reactflow';
 import type { useReactFlow } from 'reactflow';
 import {
-  FLOW_ONBOARDING_EXAMPLE_IMAGE_URL,
-  FLOW_ONBOARDING_PROMPTS,
   FLOW_ONBOARDING_TEXT2IMG_DESC,
+  getFlowOnboardingExampleImageUrl,
+  getFlowOnboardingImg2imgPrompt,
+  getFlowOnboardingImg2videoPrompt,
   useFlowOnboardingStore,
 } from '@/stores/flowOnboardingStore';
 import { getFlowNodeDefaultSize } from './constants/flowNodeDefaults';
@@ -57,15 +58,15 @@ type Props = {
   rf: ReturnType<typeof useReactFlow>;
 };
 
-const EXAMPLE_IMAGE_PATCH = {
-  imageUrl: FLOW_ONBOARDING_EXAMPLE_IMAGE_URL,
-  imageData: FLOW_ONBOARDING_EXAMPLE_IMAGE_URL,
-};
+function getExampleImagePatch() {
+  const imageUrl = getFlowOnboardingExampleImageUrl();
+  return { imageUrl, imageData: imageUrl };
+}
 
 function patchImageNode(nodeId: string) {
   window.dispatchEvent(
     new CustomEvent('flow:updateNodeData', {
-      detail: { id: nodeId, patch: EXAMPLE_IMAGE_PATCH },
+      detail: { id: nodeId, patch: getExampleImagePatch() },
     })
   );
 }
@@ -186,7 +187,7 @@ export default function FlowOnboardingAutoStepBridge({
             x: center.x - ONBOARDING_COLUMN_GAP,
             y: center.y - 80,
           };
-      const id = createNodeAtWorldCenter('image', world, EXAMPLE_IMAGE_PATCH);
+      const id = createNodeAtWorldCenter('image', world, getExampleImagePatch());
       if (id) {
         store.setImageNodeId(id);
         patchImageNode(id);
@@ -278,7 +279,7 @@ export default function FlowOnboardingAutoStepBridge({
           break;
         case 5:
           if (store.textPromptNodeId) {
-            patchTextPrompt(store.textPromptNodeId, FLOW_ONBOARDING_PROMPTS.img2img);
+            patchTextPrompt(store.textPromptNodeId, getFlowOnboardingImg2imgPrompt());
           }
           store.nextStep();
           break;
@@ -333,7 +334,7 @@ export default function FlowOnboardingAutoStepBridge({
           break;
         case 5:
           if (store.textPromptNodeId) {
-            patchTextPrompt(store.textPromptNodeId, FLOW_ONBOARDING_PROMPTS.img2video);
+            patchTextPrompt(store.textPromptNodeId, getFlowOnboardingImg2videoPrompt());
           }
           store.nextStep();
           break;
