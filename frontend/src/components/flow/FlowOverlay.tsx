@@ -3732,6 +3732,9 @@ function FlowInner() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const nodesRef = React.useRef<RFNode[]>([]);
   const edgesRef = React.useRef<Edge[]>([]);
+  const runOnboardingAutoStepRef = React.useRef<((step: number) => void) | null>(
+    null
+  );
   React.useEffect(() => {
     nodesRef.current = nodes as RFNode[];
   }, [nodes]);
@@ -6989,30 +6992,45 @@ function FlowInner() {
   const scrollOnboardingNodesIntoView = React.useCallback(
     async (
       nodeIds: string[],
-      options?: { reserveBottom?: number }
+      options?: { reserveBottom?: number; preferZoom?: number }
     ) => {
       const validIds = nodeIds.filter((id) => Boolean(rf.getNode(id)));
       if (!validIds.length) return;
       try {
         const container = containerRef.current;
         const viewH = container?.clientHeight ?? window.innerHeight;
+        // React Flow v11 的 padding 只接受 number；对象会让 zoom 变成 NaN → 画布白屏
         const bottomRatio = Math.min(
           0.45,
           (options?.reserveBottom ?? 0) / Math.max(viewH, 1)
         );
+        const padding = Math.min(0.5, 0.18 + bottomRatio);
+        const maxZoom =
+          typeof options?.preferZoom === "number" &&
+          Number.isFinite(options.preferZoom) &&
+          options.preferZoom > 0
+            ? options.preferZoom
+            : 1;
         await rf.fitView({
           nodes: validIds.map((id) => ({ id })),
-          padding: {
-            top: 0.14,
-            right: 0.14,
-            bottom: 0.14 + bottomRatio,
-            left: 0.14,
-          },
+          padding,
           duration: 320,
-          maxZoom: 1,
-          minZoom: 0.15,
+          maxZoom,
+          minZoom: 0.35,
+        });
+        // 等动画结束后再同步 Paper 视口，避免 fitView 中途被旧 pan 顶回去
+        await new Promise<void>((resolve) => {
+          window.setTimeout(resolve, 340);
         });
         const vp = rf.getViewport();
+        if (
+          !Number.isFinite(vp.zoom) ||
+          vp.zoom <= 0 ||
+          !Number.isFinite(vp.x) ||
+          !Number.isFinite(vp.y)
+        ) {
+          return;
+        }
         const dpr =
           typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
         useCanvasStore.getState().setZoom(vp.zoom);
@@ -8179,8 +8197,13 @@ function FlowInner() {
     };
     const onDown = (e: MouseEvent) => {
       if (!addPanel.visible) return;
+      const target = e.target as HTMLElement | null;
+      // 新手引导卡片在面板外；点击「下一步」绝不能先关面板，否则第一次点击会被吞掉
+      if (target?.closest?.(".flow-onboarding-root, .flow-onboarding-card")) {
+        return;
+      }
       const el = addPanelRef.current;
-      if (el && !el.contains(e.target as HTMLElement))
+      if (el && !el.contains(target as HTMLElement))
         setAddPanel((v) => (v.visible ? { ...v, visible: false } : v));
     };
     window.addEventListener("keydown", onKey);
@@ -9053,6 +9076,54 @@ function FlowInner() {
     },
     [aiProvider, setNodes, commitFlowSnapshotImmediately]
   );
+
+  /** 引导「下一步」：2/7 必须同步创建 Prompt 并进 3/7，禁止走可能为空的间接链 */
+  const handleOnboardingNext = React.useCallback(() => {
+    const store = useFlowOnboardingStore.getState();
+    if (!store.active || store.phase !== "guide" || !store.track) return;
+
+    const { step, track } = store;
+
+    if (track === "text2img" && step === 1) {
+      const existing = (nodesRef.current as RFNode[]).find(
+        (n) =>
+          n.type === "textPrompt" &&
+          !store.initialNodeIds.has(n.id)
+      );
+      if (existing) {
+        store.setTextPromptNodeId(existing.id);
+        store.setStep(2);
+        return;
+      }
+
+      const rect = containerRef.current?.getBoundingClientRect();
+      const centerX = rect
+        ? rect.left + rect.width / 2
+        : window.innerWidth / 2;
+      const centerY = rect
+        ? rect.top + rect.height / 2
+        : window.innerHeight / 2;
+      const center = rf.screenToFlowPosition({ x: centerX, y: centerY });
+      const world = addPanel.visible
+        ? { ...addPanel.world }
+        : { x: center.x - 200, y: center.y };
+
+      const id = createNodeAtWorldCenter("textPrompt", world);
+      if (id) {
+        store.setTextPromptNodeId(id);
+      }
+      // 无论创建是否成功，都立刻进入 3/7，避免卡在空的 2/7
+      store.setStep(2);
+      return;
+    }
+
+    runOnboardingAutoStepRef.current?.(step);
+  }, [
+    addPanel.visible,
+    addPanel.world,
+    createNodeAtWorldCenter,
+    rf,
+  ]);
 
   const textSourceTypes = React.useMemo(
     () => [
@@ -24117,6 +24188,9 @@ function FlowInner() {
       </div>
       <FlowOnboardingAutoStepBridge
         containerRef={containerRef}
+        addPanelVisible={addPanel.visible}
+        addPanelWorld={addPanel.world}
+        runAutoStepRef={runOnboardingAutoStepRef}
         openAddPanelAtContainerCenter={openAddPanelAtContainerCenter}
         createNodeAtWorldCenter={createNodeAtWorldCenter}
         onConnect={onConnect}
@@ -24126,6 +24200,7 @@ function FlowInner() {
         addPanelVisible={addPanel.visible}
         nodes={nodes}
         edges={edges}
+        onNext={handleOnboardingNext}
         scrollNodesIntoView={scrollOnboardingNodesIntoView}
       />
     </FlowRenderModeProvider>

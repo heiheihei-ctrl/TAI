@@ -3,9 +3,7 @@ import { createPortal } from 'react-dom';
 import type { Edge, Node } from 'reactflow';
 import { useLocaleText } from '@/utils/localeText';
 import {
-  FLOW_ONBOARDING_EXAMPLE_IMAGE_URL,
   FLOW_ONBOARDING_TRACK_META,
-  advanceOnboardingWhenNodeVisible,
   getFlowOnboardingSteps,
   type FlowOnboardingStepTarget,
   type FlowOnboardingTrack,
@@ -120,8 +118,8 @@ function buildConnectGuideVisual(
       arrowColor: TEXT_HANDLE_COLOR,
       sourceLabelZh: '提示词节点',
       sourceLabelEn: 'Prompt node',
-      targetLabelZh: '生成节点',
-      targetLabelEn: 'Generate node',
+      targetLabelZh: track === 'img2video' ? 'Seedance 节点' : '生成节点',
+      targetLabelEn: track === 'img2video' ? 'Seedance node' : 'Generate node',
       hintZh: '沿虚线方向，将绿色文字输出口连到生成节点的绿色文字输入口',
       hintEn:
         'Follow the dashed line to connect the green text output to the green text input',
@@ -150,6 +148,107 @@ function buildConnectGuideVisual(
     hintZh: '沿虚线方向，将橙色图片输出口连到目标节点的橙色图片输入口',
     hintEn:
       'Follow the dashed line to connect the orange image output to the orange image input',
+  };
+}
+
+/** 图生图 / 图生视频需同时展示橙线（图）+ 绿线（文） */
+function buildConnectGuideVisuals(
+  stepTarget: FlowOnboardingStepTarget,
+  textPromptNodeId: string | null,
+  imageNodeId: string | null,
+  targetNodeId: string | null,
+  track: FlowOnboardingTrack | null
+): ConnectGuideVisual[] {
+  if (stepTarget === 'connect-nodes') {
+    const visual = buildConnectGuideVisual(
+      textPromptNodeId,
+      targetNodeId,
+      'text',
+      track
+    );
+    return visual ? [visual] : [];
+  }
+  if (stepTarget === 'connect-image-nodes') {
+    const visual = buildConnectGuideVisual(
+      imageNodeId,
+      targetNodeId,
+      'image',
+      track
+    );
+    return visual ? [visual] : [];
+  }
+  if (
+    stepTarget === 'connect-img2img-nodes' ||
+    stepTarget === 'connect-img2video-nodes'
+  ) {
+    return [
+      buildConnectGuideVisual(imageNodeId, targetNodeId, 'image', track),
+      buildConnectGuideVisual(textPromptNodeId, targetNodeId, 'text', track),
+    ].filter((v): v is ConnectGuideVisual => Boolean(v));
+  }
+  return [];
+}
+
+function ringKey(rect: Rect): string {
+  return `${Math.round(rect.left)}:${Math.round(rect.top)}:${Math.round(rect.width)}:${Math.round(rect.height)}`;
+}
+
+function collectConnectRings(
+  visuals: ConnectGuideVisual[]
+): Array<{
+  rect: Rect;
+  labelZh: string;
+  labelEn: string;
+  color: string;
+}> {
+  const rings: Array<{
+    rect: Rect;
+    labelZh: string;
+    labelEn: string;
+    color: string;
+  }> = [];
+  const seen = new Set<string>();
+
+  for (const visual of visuals) {
+    const sourceKey = `s:${ringKey(visual.sourceRing)}`;
+    if (!seen.has(sourceKey)) {
+      seen.add(sourceKey);
+      rings.push({
+        rect: visual.sourceRing,
+        labelZh: visual.sourceLabelZh,
+        labelEn: visual.sourceLabelEn,
+        color: visual.arrowColor,
+      });
+    }
+  }
+
+  // 目标节点共用一个环，避免绿/橙双环叠字
+  const first = visuals[0];
+  if (first) {
+    const targetKey = `t:${ringKey(first.targetRing)}`;
+    if (!seen.has(targetKey)) {
+      seen.add(targetKey);
+      rings.push({
+        rect: first.targetRing,
+        labelZh: first.targetLabelZh,
+        labelEn: first.targetLabelEn,
+        color: visuals.length > 1 ? TEXT_HANDLE_COLOR : first.arrowColor,
+      });
+    }
+  }
+
+  return rings;
+}
+
+function arrowPath(arrow: ConnectGuideVisual['arrow']): string {
+  const midX = (arrow.x1 + arrow.x2) / 2;
+  return `M ${arrow.x1} ${arrow.y1} C ${midX} ${arrow.y1}, ${midX} ${arrow.y2}, ${arrow.x2} ${arrow.y2}`;
+}
+
+function ringTintStyle(color: string): React.CSSProperties {
+  return {
+    borderColor: color,
+    boxShadow: `0 0 0 6px ${color}24, 0 10px 28px ${color}33`,
   };
 }
 
@@ -215,9 +314,15 @@ function getTargetRect(
       return mergeRects(rects);
     }
     case 'generate-run-button':
-      return getElementRect('[data-flow-onboarding="generate-run-button"]');
+      return (
+        getElementRect('[data-flow-onboarding="generate-run-button"]') ||
+        (targetNodeId ? getNodeRect(targetNodeId) : null)
+      );
     case 'kling-run-button':
-      return getElementRect('[data-flow-onboarding="kling-run-button"]');
+      return (
+        getElementRect('[data-flow-onboarding="kling-run-button"]') ||
+        (targetNodeId ? getNodeRect(targetNodeId) : null)
+      );
     default:
       return null;
   }
@@ -317,18 +422,6 @@ function hasImageToTargetConnection(
   });
 }
 
-function nodeHasExampleImage(node: Node | undefined): boolean {
-  if (!node) return false;
-  const imageUrl = String(node.data?.imageUrl || '').trim();
-  const imageData = String(node.data?.imageData || '').trim();
-  return (
-    imageUrl === FLOW_ONBOARDING_EXAMPLE_IMAGE_URL ||
-    imageData === FLOW_ONBOARDING_EXAMPLE_IMAGE_URL ||
-    imageUrl.length > 0 ||
-    imageData.length > 0
-  );
-}
-
 function buildCardStyle(
   stepTarget: FlowOnboardingStepTarget,
   spotRect: Rect | null,
@@ -425,12 +518,16 @@ function scrollPaletteTargetIntoView(selector: string) {
 
 type OnboardingScrollOptions = {
   reserveBottom?: number;
+  /** 限制最大缩放，避免 Run 步 fitView 把另一节点甩出视野 */
+  preferZoom?: number;
 };
 
 type Props = {
   addPanelVisible: boolean;
   nodes: Node[];
   edges: Edge[];
+  /** 由 FlowOverlay 提供的稳定「下一步」处理（含 2/7→3/7 同步创建） */
+  onNext: () => void;
   scrollNodesIntoView?: (
     nodeIds: string[],
     options?: OnboardingScrollOptions
@@ -441,6 +538,7 @@ export default function FlowOnboardingGuide({
   addPanelVisible,
   nodes,
   edges,
+  onNext,
   scrollNodesIntoView,
 }: Props) {
   const { lt } = useLocaleText();
@@ -462,8 +560,8 @@ export default function FlowOnboardingGuide({
   const hideSkipButton = useFlowOnboardingStore((s) => s.hideSkipButton);
 
   const [spotRect, setSpotRect] = React.useState<Rect | null>(null);
-  const [connectVisual, setConnectVisual] = React.useState<ConnectGuideVisual | null>(
-    null
+  const [connectVisuals, setConnectVisuals] = React.useState<ConnectGuideVisual[]>(
+    []
   );
   const autoAdvanceKeyRef = React.useRef<string | null>(null);
   const scrolledLayoutKeyRef = React.useRef<string | null>(null);
@@ -484,8 +582,73 @@ export default function FlowOnboardingGuide({
     if (!active) {
       autoAdvanceKeyRef.current = null;
       scrolledLayoutKeyRef.current = null;
+      return;
     }
-  }, [active]);
+    // 换步时清滚动缓存，确保连线步 → Run 步会重新 fitView
+    scrolledLayoutKeyRef.current = null;
+  }, [active, step]);
+
+  // 文生图：连线步 / Run 步都要把 Prompt+生成节点滚进视野，避免 6→7「节点消失」
+  React.useEffect(() => {
+    if (!active || phase !== 'guide' || track !== 'text2img') return;
+    if (step !== 5 && step !== 6) return;
+    if (!textPromptNodeId || !targetNodeId || !scrollNodesIntoView) return;
+
+    const layoutKey = `text2img-focus:${textPromptNodeId}:${targetNodeId}:${step}`;
+    if (scrolledLayoutKeyRef.current === layoutKey) return;
+
+    let cancelled = false;
+    let attempts = 0;
+
+    const run = () => {
+      if (cancelled) return;
+      attempts += 1;
+      const promptVisible = Boolean(getNodeRect(textPromptNodeId));
+      const generateVisible = Boolean(getNodeRect(targetNodeId));
+      const runBtnVisible =
+        step === 6 &&
+        Boolean(getElementRect('[data-flow-onboarding="generate-run-button"]'));
+      if ((!promptVisible || !generateVisible) && attempts < 40) {
+        window.requestAnimationFrame(run);
+        return;
+      }
+      // Run 步尽量等到按钮也出现再聚焦（含 fallback）
+      if (step === 6 && !runBtnVisible && !generateVisible && attempts < 40) {
+        window.requestAnimationFrame(run);
+        return;
+      }
+      scrolledLayoutKeyRef.current = layoutKey;
+      void scrollNodesIntoView([textPromptNodeId, targetNodeId], {
+        reserveBottom: ONBOARDING_CARD_RESERVE_BOTTOM,
+        preferZoom: step === 6 ? 0.85 : undefined,
+      });
+    };
+
+    window.requestAnimationFrame(run);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    active,
+    phase,
+    scrollNodesIntoView,
+    step,
+    targetNodeId,
+    textPromptNodeId,
+    track,
+  ]);
+
+  // 进入「输入提示词」时把节点滚入视野
+  React.useEffect(() => {
+    if (!active || phase !== 'guide' || track !== 'text2img') return;
+    if (step !== 2 || !textPromptNodeId || !scrollNodesIntoView) return;
+    const key = `text2img-input:${textPromptNodeId}`;
+    if (scrolledLayoutKeyRef.current === key) return;
+    scrolledLayoutKeyRef.current = key;
+    void scrollNodesIntoView([textPromptNodeId], {
+      reserveBottom: ONBOARDING_CARD_RESERVE_BOTTOM,
+    });
+  }, [active, phase, scrollNodesIntoView, step, textPromptNodeId, track]);
 
   React.useEffect(() => {
     if (!active || phase !== 'guide' || track !== 'img2video') return;
@@ -615,15 +778,11 @@ export default function FlowOnboardingGuide({
         if (nodeId && autoAdvanceKeyRef.current !== advanceKey) {
           autoAdvanceKeyRef.current = advanceKey;
           setTextPromptNodeId(nodeId);
-          advanceOnboardingWhenNodeVisible(nodeId, 2);
+          setStep(2);
         }
         return;
       }
-      if (step === 2 && textPromptNodeId) {
-        const node = nodes.find((item) => item.id === textPromptNodeId);
-        if (String(node?.data?.text || '').trim().length > 0) setStep(3);
-        return;
-      }
+      // 「输入提示词」仅由「下一步」推进，有文字时不要自动跳过
       if (step === 3 && addPanelVisible) {
         setStep(4);
         return;
@@ -634,7 +793,7 @@ export default function FlowOnboardingGuide({
         if (nodeId && autoAdvanceKeyRef.current !== advanceKey) {
           autoAdvanceKeyRef.current = advanceKey;
           setTargetNodeId(nodeId);
-          advanceOnboardingWhenNodeVisible(nodeId, 5);
+          setStep(5);
         }
         return;
       }
@@ -657,13 +816,8 @@ export default function FlowOnboardingGuide({
         if (nodeId && autoAdvanceKeyRef.current !== advanceKey) {
           autoAdvanceKeyRef.current = advanceKey;
           setImageNodeId(nodeId);
-          advanceOnboardingWhenNodeVisible(nodeId, 2);
+          setStep(2);
         }
-        return;
-      }
-      if (step === 2 && imageNodeId) {
-        const node = nodes.find((item) => item.id === imageNodeId);
-        if (nodeHasExampleImage(node)) setStep(3);
         return;
       }
       if (step === 3 && addPanelVisible) {
@@ -676,13 +830,8 @@ export default function FlowOnboardingGuide({
         if (nodeId && autoAdvanceKeyRef.current !== advanceKey) {
           autoAdvanceKeyRef.current = advanceKey;
           setTextPromptNodeId(nodeId);
-          advanceOnboardingWhenNodeVisible(nodeId, 5);
+          setStep(5);
         }
-        return;
-      }
-      if (step === 5 && textPromptNodeId) {
-        const node = nodes.find((item) => item.id === textPromptNodeId);
-        if (String(node?.data?.text || '').trim().length > 0) setStep(6);
         return;
       }
       if (step === 6 && addPanelVisible) {
@@ -695,7 +844,7 @@ export default function FlowOnboardingGuide({
         if (nodeId && autoAdvanceKeyRef.current !== advanceKey) {
           autoAdvanceKeyRef.current = advanceKey;
           setTargetNodeId(nodeId);
-          advanceOnboardingWhenNodeVisible(nodeId, 8);
+          setStep(8);
         }
         return;
       }
@@ -718,13 +867,8 @@ export default function FlowOnboardingGuide({
         if (nodeId && autoAdvanceKeyRef.current !== advanceKey) {
           autoAdvanceKeyRef.current = advanceKey;
           setImageNodeId(nodeId);
-          advanceOnboardingWhenNodeVisible(nodeId, 2);
+          setStep(2);
         }
-        return;
-      }
-      if (step === 2 && imageNodeId) {
-        const node = nodes.find((item) => item.id === imageNodeId);
-        if (nodeHasExampleImage(node)) setStep(3);
         return;
       }
       if (step === 3 && addPanelVisible) {
@@ -737,13 +881,8 @@ export default function FlowOnboardingGuide({
         if (nodeId && autoAdvanceKeyRef.current !== advanceKey) {
           autoAdvanceKeyRef.current = advanceKey;
           setTextPromptNodeId(nodeId);
-          advanceOnboardingWhenNodeVisible(nodeId, 5);
+          setStep(5);
         }
-        return;
-      }
-      if (step === 5 && textPromptNodeId) {
-        const node = nodes.find((item) => item.id === textPromptNodeId);
-        if (String(node?.data?.text || '').trim().length > 0) setStep(6);
         return;
       }
       if (step === 6 && addPanelVisible) {
@@ -756,7 +895,7 @@ export default function FlowOnboardingGuide({
         if (nodeId && autoAdvanceKeyRef.current !== advanceKey) {
           autoAdvanceKeyRef.current = advanceKey;
           setTargetNodeId(nodeId);
-          advanceOnboardingWhenNodeVisible(nodeId, 8);
+          setStep(8);
         }
         return;
       }
@@ -787,25 +926,26 @@ export default function FlowOnboardingGuide({
   React.useLayoutEffect(() => {
     if (!active || phase !== 'guide') {
       setSpotRect(null);
-      setConnectVisual(null);
+      setConnectVisuals([]);
       return;
     }
 
     const updateRect = () => {
       if (isConnectStep) {
-        const sourceId =
-          stepTarget === 'connect-nodes'
-            ? textPromptNodeId
-            : imageNodeId;
-        const kind = stepTarget === 'connect-nodes' ? 'text' : 'image';
-        setConnectVisual(
-          buildConnectGuideVisual(sourceId, targetNodeId, kind, track)
+        setConnectVisuals(
+          buildConnectGuideVisuals(
+            stepTarget,
+            textPromptNodeId,
+            imageNodeId,
+            targetNodeId,
+            track
+          )
         );
         setSpotRect(null);
         return;
       }
 
-      setConnectVisual(null);
+      setConnectVisuals([]);
       const rect = getTargetRect(
         stepTarget,
         textPromptNodeId,
@@ -899,6 +1039,8 @@ export default function FlowOnboardingGuide({
     ) {
       return;
     }
+    // 文生图 Run 步已由 text2img-focus effect 处理
+    if (track === 'text2img') return;
     if (!targetNodeId || !scrollNodesIntoView) return;
 
     const key = `run:${targetNodeId}:${stepTarget}`;
@@ -919,8 +1061,12 @@ export default function FlowOnboardingGuide({
         return;
       }
       scrolledLayoutKeyRef.current = key;
-      void scrollNodesIntoView([targetNodeId], {
+      const nodeIds = [imageNodeId, textPromptNodeId, targetNodeId].filter(
+        (id): id is string => Boolean(id)
+      );
+      void scrollNodesIntoView(nodeIds.length ? nodeIds : [targetNodeId], {
         reserveBottom: ONBOARDING_CARD_RESERVE_BOTTOM,
+        preferZoom: 0.85,
       });
     };
 
@@ -930,10 +1076,13 @@ export default function FlowOnboardingGuide({
     };
   }, [
     active,
+    imageNodeId,
     phase,
     scrollNodesIntoView,
     stepTarget,
     targetNodeId,
+    textPromptNodeId,
+    track,
   ]);
 
   React.useEffect(() => {
@@ -953,10 +1102,8 @@ export default function FlowOnboardingGuide({
   }, [active, complete, isLastStep, phase]);
 
   const handleNext = React.useCallback(() => {
-    window.dispatchEvent(
-      new CustomEvent('flow:onboarding-auto-step', { detail: { step } })
-    );
-  }, [step]);
+    onNext();
+  }, [onNext]);
 
   if (!active) return null;
 
@@ -1008,43 +1155,45 @@ export default function FlowOnboardingGuide({
 
   if (!currentStep) return null;
 
-  const connectBounds = connectVisual
-    ? mergeRects([connectVisual.sourceRing, connectVisual.targetRing])
+  const connectRings = collectConnectRings(connectVisuals);
+  const connectBounds = connectRings.length
+    ? mergeRects(connectRings.map((ring) => ring.rect))
     : null;
   const cardStyle = buildCardStyle(stepTarget, spotRect, connectBounds);
-  const line = connectVisual?.arrow;
-  const lineMidX = line ? (line.x1 + line.x2) / 2 : 0;
-  const dashedPath = line
-    ? `M ${line.x1} ${line.y1} C ${lineMidX} ${line.y1}, ${lineMidX} ${line.y2}, ${line.x2} ${line.y2}`
-    : '';
+  const connectHintFallback = connectVisuals[0];
 
   return createPortal(
     <div className="flow-onboarding-root" aria-live="polite">
       {isConnectStep ? (
         <>
           <div className="flow-onboarding-backdrop" />
-          {connectVisual ? (
+          {connectVisuals.length > 0 ? (
             <>
-              <div
-                className="flow-onboarding-node-ring"
-                style={rectToStyle(connectVisual.sourceRing)}
-              >
-                <span className="flow-onboarding-node-label">
-                  {lt(connectVisual.sourceLabelZh, connectVisual.sourceLabelEn)}
-                </span>
-              </div>
-              <div
-                className="flow-onboarding-node-ring"
-                style={rectToStyle(connectVisual.targetRing)}
-              >
-                <span className="flow-onboarding-node-label">
-                  {lt(connectVisual.targetLabelZh, connectVisual.targetLabelEn)}
-                </span>
-              </div>
+              {connectRings.map((ring) => (
+                <div
+                  key={ringKey(ring.rect)}
+                  className="flow-onboarding-node-ring"
+                  style={{
+                    ...rectToStyle(ring.rect),
+                    ...ringTintStyle(ring.color),
+                  }}
+                >
+                  <span
+                    className="flow-onboarding-node-label"
+                    style={{ background: ring.color }}
+                  >
+                    {lt(ring.labelZh, ring.labelEn)}
+                  </span>
+                </div>
+              ))}
               <svg className="flow-onboarding-connect-line" aria-hidden="true">
-                {line ? (
-                  <path d={dashedPath} stroke={connectVisual.arrowColor} />
-                ) : null}
+                {connectVisuals.map((visual) => (
+                  <path
+                    key={`${visual.arrowColor}:${visual.arrow.x1}:${visual.arrow.y1}:${visual.arrow.x2}:${visual.arrow.y2}`}
+                    d={arrowPath(visual.arrow)}
+                    stroke={visual.arrowColor}
+                  />
+                ))}
               </svg>
             </>
           ) : null}
@@ -1071,9 +1220,14 @@ export default function FlowOnboardingGuide({
               ? `${lt(FLOW_ONBOARDING_TRACK_META[track].zh, FLOW_ONBOARDING_TRACK_META[track].en)} · ${step + 1}/${steps.length}`
               : `${lt('新手引导', 'Guide')} ${step + 1}/${steps.length}`}
           </span>
-          {!hideSkipButton ? (
+          {!hideSkipButton && !isLastStep ? (
             <button type="button" className="flow-onboarding-skip" onClick={skip}>
               {lt('跳过', 'Skip')}
+            </button>
+          ) : null}
+          {isLastStep ? (
+            <button type="button" className="flow-onboarding-skip" onClick={complete}>
+              {lt('完成', 'Complete')}
             </button>
           ) : null}
         </div>
@@ -1083,15 +1237,18 @@ export default function FlowOnboardingGuide({
             {lt(currentStep.hintZh, currentStep.hintEn || currentStep.hintZh)}
           </div>
         ) : null}
-        {isConnectStep && connectVisual ? (
+        {isConnectStep && connectHintFallback ? (
           <div className="flow-onboarding-hint">
-            <span
-              className="flow-onboarding-color-dot"
-              style={{ background: connectVisual.arrowColor }}
-            />
+            {connectVisuals.map((visual) => (
+              <span
+                key={visual.arrowColor}
+                className="flow-onboarding-color-dot"
+                style={{ background: visual.arrowColor }}
+              />
+            ))}
             {lt(
-              currentStep.hintZh || connectVisual.hintZh,
-              currentStep.hintEn || connectVisual.hintEn
+              currentStep.hintZh || connectHintFallback.hintZh,
+              currentStep.hintEn || connectHintFallback.hintEn
             )}
           </div>
         ) : null}
@@ -1110,7 +1267,17 @@ export default function FlowOnboardingGuide({
               {lt('下一步', 'Next')}
             </button>
           </div>
-        ) : null}
+        ) : (
+          <div className="flow-onboarding-card-footer">
+            <button
+              type="button"
+              className="flow-onboarding-nav-btn flow-onboarding-nav-btn-primary"
+              onClick={complete}
+            >
+              {lt('完成', 'Complete')}
+            </button>
+          </div>
+        )}
       </div>
     </div>,
     document.body

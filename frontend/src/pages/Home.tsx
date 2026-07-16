@@ -160,13 +160,10 @@ const getToolboxShortestStep = (
 
 const normalizeToolboxPosition = (position: number, total: number) => {
   if (total <= 0) return 0;
-  let normalized = Math.round(position) % total;
+  let normalized = Math.round(position) % total; 
   if (normalized < 0) normalized += total;
   return normalized;
 };
-
-const NAV_LINK_CLASS =
-  "text-sm text-white/[0.82] transition-colors duration-200 hover:text-white";
 
 const SCENE_FILTER_BTN_CLASS =
   "rounded-full px-4 py-1.5 text-sm transition-all duration-200";
