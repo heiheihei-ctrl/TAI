@@ -2,4 +2,4 @@
 export const SHOW_TEAM_COLLABORATION = false;
 
 /** 是否展示 Flow 新手引导工具栏入口 */
-export const SHOW_FLOW_ONBOARDING_TOOLBAR = false;
+export const SHOW_FLOW_ONBOARDING_TOOLBAR = true;
