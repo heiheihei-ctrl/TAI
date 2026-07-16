@@ -230,10 +230,12 @@ function PromptOptimizeNodeInner({ id, data, selected }: Props) {
       id={id}
       data={data}
       selected={selected}
+      nodeType="promptOptimize"
       defaultWidth={360}
       defaultHeight={300}
       minWidth={300}
       minHeight={220}
+      heightMode="fixed"
       style={{
         padding: 12,
         background: '#fff',
@@ -250,7 +252,8 @@ function PromptOptimizeNodeInner({ id, data, selected }: Props) {
         marginBottom: 12, 
         display: 'flex', 
         alignItems: 'center', 
-        justifyContent: 'space-between' 
+        justifyContent: 'space-between',
+        flexShrink: 0,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span>Prompt Optimizer</span>
@@ -366,10 +369,36 @@ function PromptOptimizeNodeInner({ id, data, selected }: Props) {
 
       {/* 已移除详细设置，仅保留关键运行与预览部分 */}
 
-      {/* 预览输出 */}
-      <div style={{ marginBottom: 12, flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <label style={{ fontSize: 11, color: '#6b7280', marginBottom: 4, display: 'block' }}>{lt('优化预览', 'Optimized preview')}</label>
-        <div style={{ position: 'relative', flex: 1 }}>
+      {/* 预览输出：随节点高度一起伸缩 */}
+      <div
+        style={{
+          marginBottom: error ? 12 : 0,
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        <label
+          style={{
+            fontSize: 11,
+            color: '#6b7280',
+            marginBottom: 4,
+            display: 'block',
+            flexShrink: 0,
+          }}
+        >
+          {lt('优化预览', 'Optimized preview')}
+        </label>
+        <div
+          style={{
+            position: 'relative',
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
           <textarea
             className="nodrag nopan nowheel"
             value={loading ? '' : expandedText}
@@ -403,16 +432,23 @@ function PromptOptimizeNodeInner({ id, data, selected }: Props) {
             placeholder={loading ? '' : lt('生成预览后将在此处展示扩写结果', 'Expanded result will appear here after generation')}
             style={{
               width: '100%',
+              flex: 1,
+              minHeight: 0,
+              maxHeight: '100%',
               height: '100%',
-              minHeight: 100,
               resize: 'none',
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              overscrollBehavior: 'contain',
               fontSize: 12,
+              lineHeight: 1.4,
               border: '1px solid #e5e7eb',
               borderRadius: 6,
               padding: 8,
               background: '#fff',
               outline: 'none',
-              cursor: 'text'
+              cursor: 'text',
+              boxSizing: 'border-box',
             }}
           />
           {loading && (
@@ -440,7 +476,7 @@ function PromptOptimizeNodeInner({ id, data, selected }: Props) {
           border: '1px solid #fecaca',
           borderRadius: 6,
           padding: 8,
-          marginBottom: 12
+          flexShrink: 0,
         }}>
           {error.message}
         </div>
