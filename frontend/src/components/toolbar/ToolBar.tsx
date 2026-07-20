@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
-import { Eraser, Square, Trash2, Box, Image, Layers, Sparkles, Type, GitBranch, MousePointer2, LayoutTemplate, FolderOpen, HelpCircle, MessageCircle } from 'lucide-react';
+import { Eraser, Square, Trash2, Box, Image, Layers, Sparkles, Type, GitBranch, MousePointer2, LayoutTemplate, FolderOpen, HelpCircle, MessageCircle, Copy, ClipboardPaste } from 'lucide-react';
 import TextStylePanel from './TextStylePanel';
 import ColorPicker from './ColorPicker';
 import AbrBrushPicker from './AbrBrushPicker';
@@ -731,6 +731,48 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
             {showFlowPanel ? lt('关闭 Flow 面板', 'Close Flow panel') : lt('打开 Flow 面板', 'Open Flow panel')}
           </TooltipContent>
         </Tooltip>
+      )}
+
+      {/* Flow 节点跨项目复制 */}
+      {flowUIEnabled && showFlowPanel && (
+        <>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant='outline'
+                size="sm"
+                className="p-0 h-8 w-8 rounded-full"
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('tanva-flow-copy-request'));
+                }}
+                title={lt('复制选中节点', 'Copy selected nodes')}
+              >
+                <Copy className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              {lt('复制选中节点', 'Copy selected nodes')}
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant='outline'
+                size="sm"
+                className="p-0 h-8 w-8 rounded-full"
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('tanva-flow-paste-request'));
+                }}
+                title={lt('粘贴节点', 'Paste nodes')}
+              >
+                <ClipboardPaste className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              {lt('粘贴节点', 'Paste nodes')}
+            </TooltipContent>
+          </Tooltip>
+        </>
       )}
 
       {/* 预留：若需在主工具栏控制网格背景颜色，可在此恢复控件 */}

@@ -19,6 +19,7 @@ import { refreshTeams, useTeamStore } from '@/stores/teamStore';
 import { isTeamInviteQueryParam } from '@/utils/teamInvite';
 import { AppLoadingIndicator } from '@/components/AppLoadingIndicator';
 import { useTranslation } from 'react-i18next';
+import Toast from '@/components/Toast';
 
 // 检测是否为移动设备
 const isMobileDevice = (): boolean => {
@@ -245,6 +246,7 @@ const App: React.FC = () => {
       )}
 
       <SaveDebugPanel />
+      <Toast />
     </div>
   );
 };

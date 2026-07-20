@@ -1,7 +1,7 @@
 // Canvas image upload trigger with local preview and OSS sync.
 import { logger } from '@/utils/logger';
 import React, { useRef, useCallback } from 'react';
-import { imageUploadService } from '@/services/imageUploadService';
+import { imageUploadService, REFERENCE_IMAGE_MAX_SIZE } from '@/services/imageUploadService';
 import { recordImageHistoryEntry } from '@/services/imageHistoryService';
 import type { StoredImageAsset } from '@/types/canvas';
 import { generateOssKey } from '@/services/ossUploadService';
@@ -38,6 +38,12 @@ const ImageUploadComponent: React.FC<ImageUploadComponentProps> = ({
     const file = event.target.files?.[0];
     if (!file) {
       resetInputValue();
+      return;
+    }
+
+    if (file.size > REFERENCE_IMAGE_MAX_SIZE) {
+      resetInputValue();
+      onUploadError(lt('图片文件过大，请选择小于 10MB 的图片', 'Image file is too large, please select images smaller than 10MB'));
       return;
     }
 

@@ -2,7 +2,7 @@
 // Flow 主画布与节点调度入口。
 import React from "react";
 import { createPortal } from "react-dom";
-import { Trash2, Plus, Upload, Download, Group, Ungroup, Lock, Crown } from "lucide-react";
+import { Trash2, Plus, Upload, Download, Group, Ungroup, Lock, Crown, Copy, ClipboardPaste } from "lucide-react";
 import { fetchTemplateCategories, fetchPublicTemplateIndex, sortPublicTemplateCategories, getStoredTemplateParentCategory, setStoredTemplateParentCategory, type TemplateParentCategory } from "@/services/publicTemplateService";
 import { fetchWithAuth } from "@/services/authFetch";
 import SharedTemplateCard from "@/components/template/SharedTemplateCard";
@@ -199,7 +199,7 @@ import {
   normalizeViduModelValue,
   type ViduModelValue,
 } from "@/services/videoProviderParams";
-import { imageUploadService } from "@/services/imageUploadService";
+import { imageUploadService, REFERENCE_IMAGE_MAX_SIZE } from "@/services/imageUploadService";
 import { personalLibraryApi } from "@/services/personalLibraryApi";
 import {
   fetchNodeConfigs,
@@ -5918,6 +5918,24 @@ function FlowInner() {
     buildCanvasClipboardFromFlowNodes,
   ]);
 
+  const copySelectedNodesToClipboard = React.useCallback(async () => {
+    const handled = handleCopyFlow();
+    if (!handled) return 0;
+    const payload = clipboardService.getFlowData();
+    if (!payload) return 0;
+    const serialized = JSON.stringify({
+      type: FLOW_CLIPBOARD_TYPE,
+      version: 1,
+      data: payload,
+    });
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(serialized);
+      }
+    } catch {}
+    return payload.nodes.length;
+  }, [handleCopyFlow]);
+
   const handlePasteFlow = React.useCallback((options?: { preserveLinkedEdges?: boolean }) => {
     const payload = clipboardService.getFlowData();
     if (!payload || !Array.isArray(payload.nodes) || payload.nodes.length === 0)
@@ -6058,6 +6076,32 @@ function FlowInner() {
     return true;
   }, [sanitizeNodeData, setEdges, setNodes, rf, commitFlowSnapshotImmediately]);
 
+  const pasteNodesFromClipboard = React.useCallback(async () => {
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.readText) {
+        const raw = await navigator.clipboard.readText();
+        if (raw && raw !== FLOW_CLIPBOARD_FALLBACK_TEXT) {
+          try {
+            const jsonPart = raw.startsWith(`${FLOW_CLIPBOARD_FALLBACK_TEXT}\n`)
+              ? raw.slice(FLOW_CLIPBOARD_FALLBACK_TEXT.length + 1)
+              : raw;
+            const parsed = JSON.parse(jsonPart);
+            const flowPayload =
+              parsed?.type === FLOW_CLIPBOARD_TYPE
+                ? parsed.data
+                : parsed?.nodes && parsed?.edges
+                ? parsed
+                : null;
+            if (flowPayload) {
+              clipboardService.setFlowData(flowPayload);
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+    return handlePasteFlow();
+  }, [handlePasteFlow]);
+
   // Flow 复制：写入系统剪贴板（覆盖系统截图内容），以便粘贴时能优先恢复节点而非图片
   React.useEffect(() => {
     const handleCopyEvent = (event: ClipboardEvent) => {
@@ -6111,9 +6155,10 @@ function FlowInner() {
         if (event.clipboardData) {
           event.clipboardData.setData(FLOW_CLIPBOARD_MIME, serialized);
           event.clipboardData.setData("application/json", serialized);
+          // text/plain 保留可读提示，同时附加序列化 JSON，确保跨标签页/跨项目/刷新后仍能粘贴
           event.clipboardData.setData(
             "text/plain",
-            FLOW_CLIPBOARD_FALLBACK_TEXT
+            `${FLOW_CLIPBOARD_FALLBACK_TEXT}\n${serialized}`
           );
           event.preventDefault();
         } else if (
@@ -6278,12 +6323,17 @@ function FlowInner() {
       const clipboardData = event.clipboardData;
 
       // 先尝试解析系统剪贴板中的 Flow 数据（支持跨页面/跨实例粘贴）
+      // 兼容 event.clipboardData 自定义 MIME 以及 navigator.clipboard.writeText fallback
       const rawFlowData =
         clipboardData?.getData(FLOW_CLIPBOARD_MIME) ||
-        clipboardData?.getData("application/json");
-      if (rawFlowData) {
+        clipboardData?.getData("application/json") ||
+        clipboardData?.getData("text/plain");
+      if (rawFlowData && rawFlowData !== FLOW_CLIPBOARD_FALLBACK_TEXT) {
         try {
-          const parsed = JSON.parse(rawFlowData);
+          const jsonPart = rawFlowData.startsWith(`${FLOW_CLIPBOARD_FALLBACK_TEXT}\n`)
+            ? rawFlowData.slice(FLOW_CLIPBOARD_FALLBACK_TEXT.length + 1)
+            : rawFlowData;
+          const parsed = JSON.parse(jsonPart);
           const flowPayload =
             parsed?.type === FLOW_CLIPBOARD_TYPE
               ? parsed.data
@@ -6342,6 +6392,51 @@ function FlowInner() {
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
   }, [handlePasteFlow]);
+
+  // 响应主工具栏的复制/粘贴请求
+  React.useEffect(() => {
+    const handleCopyRequest = async () => {
+      const count = await copySelectedNodesToClipboard();
+      if (count > 0) {
+        window.dispatchEvent(
+          new CustomEvent("toast", {
+            detail: {
+              message: `已复制 ${count} 个节点，可切换到其他项目粘贴`,
+              type: "success",
+            },
+          })
+        );
+      } else {
+        window.dispatchEvent(
+          new CustomEvent("toast", {
+            detail: { message: "请先选中节点再复制", type: "warning" },
+          })
+        );
+      }
+    };
+    const handlePasteRequest = async () => {
+      const handled = await pasteNodesFromClipboard();
+      if (handled) {
+        window.dispatchEvent(
+          new CustomEvent("toast", {
+            detail: { message: "已粘贴节点", type: "success" },
+          })
+        );
+      } else {
+        window.dispatchEvent(
+          new CustomEvent("toast", {
+            detail: { message: "剪贴板中没有可粘贴的节点", type: "warning" },
+          })
+        );
+      }
+    };
+    window.addEventListener("tanva-flow-copy-request", handleCopyRequest);
+    window.addEventListener("tanva-flow-paste-request", handlePasteRequest);
+    return () => {
+      window.removeEventListener("tanva-flow-copy-request", handleCopyRequest);
+      window.removeEventListener("tanva-flow-paste-request", handlePasteRequest);
+    };
+  }, [copySelectedNodesToClipboard, pasteNodesFromClipboard]);
 
   // 切换项目时先清空，避免跨项目残留
   React.useEffect(() => {
@@ -15362,6 +15457,24 @@ function FlowInner() {
                 continue;
               }
               const dataUrl = ensureDataUrl(trimmed);
+              const bytes = estimateDataUrlByteLength(dataUrl);
+              if (typeof bytes === "number" && Number.isFinite(bytes) && bytes > REFERENCE_IMAGE_MAX_SIZE) {
+                setNodes((ns) =>
+                  ns.map((n) =>
+                    n.id === nodeId
+                      ? {
+                          ...n,
+                          data: {
+                            ...n.data,
+                            status: "failed",
+                            error: `参考图文件过大，请选择小于 10MB 的图片，当前约 ${(bytes / 1024 / 1024).toFixed(1)}MB`,
+                          },
+                        }
+                      : n
+                  )
+                );
+                return;
+              }
               const uploaded = await uploadImageToOSS(dataUrl, projectId);
               if (!uploaded) {
                 setNodes((ns) =>
@@ -16497,22 +16610,19 @@ function FlowInner() {
                   referenceImageUrls.push(normalizeStableRemoteUrl(normalizedRef || trimmed));
                 } else {
                   const dataUrl = ensureDataUrl(trimmed);
-                  if (isSeedanceNode) {
-                    const bytes = estimateDataUrlByteLength(dataUrl);
-                    if (
-                      typeof bytes === "number" &&
-                      Number.isFinite(bytes) &&
-                      bytes > SEEDANCE_REFERENCE_IMAGE_MAX_BYTES
-                    ) {
-                      failCurrentVideoNode(
-                        `Seedance 图片单图需不超过 30MB，当前约 ${(
-                          bytes /
-                          1024 /
-                          1024
-                        ).toFixed(1)}MB`
-                      );
-                      return;
-                    }
+                  const bytes = estimateDataUrlByteLength(dataUrl);
+                  const maxBytes = isSeedanceNode ? SEEDANCE_REFERENCE_IMAGE_MAX_BYTES : REFERENCE_IMAGE_MAX_SIZE;
+                  if (
+                    typeof bytes === "number" &&
+                    Number.isFinite(bytes) &&
+                    bytes > maxBytes
+                  ) {
+                    failCurrentVideoNode(
+                      isSeedanceNode
+                        ? `Seedance 图片单图需不超过 30MB，当前约 ${(bytes / 1024 / 1024).toFixed(1)}MB`
+                        : `参考图文件过大，请选择小于 10MB 的图片，当前约 ${(bytes / 1024 / 1024).toFixed(1)}MB`
+                    );
+                    return;
                   }
                   const uploaded = await uploadImageToOSS(dataUrl, projectId);
                   if (!uploaded) {
@@ -16538,9 +16648,20 @@ function FlowInner() {
                 // 其他供应商直接使用 Base64 Data URI
                 if (isRemoteUrl(trimmed)) {
                   const dataUrl = await fetchRemoteImageAsDataUrl(trimmed);
+                  const bytes = estimateDataUrlByteLength(dataUrl);
+                  if (typeof bytes === "number" && Number.isFinite(bytes) && bytes > REFERENCE_IMAGE_MAX_SIZE) {
+                    failCurrentVideoNode(`参考图文件过大，请选择小于 10MB 的图片，当前约 ${(bytes / 1024 / 1024).toFixed(1)}MB`);
+                    return;
+                  }
                   referenceImageUrls.push(dataUrl);
                 } else {
-                  referenceImageUrls.push(ensureDataUrl(trimmed));
+                  const dataUrl = ensureDataUrl(trimmed);
+                  const bytes = estimateDataUrlByteLength(dataUrl);
+                  if (typeof bytes === "number" && Number.isFinite(bytes) && bytes > REFERENCE_IMAGE_MAX_SIZE) {
+                    failCurrentVideoNode(`参考图文件过大，请选择小于 10MB 的图片，当前约 ${(bytes / 1024 / 1024).toFixed(1)}MB`);
+                    return;
+                  }
+                  referenceImageUrls.push(dataUrl);
                 }
               }
             }
@@ -21998,6 +22119,10 @@ function FlowInner() {
     () => getSelectedGroupIds(nodes as RFNode[]),
     [nodes, getSelectedGroupIds]
   );
+  const selectedNodeCount = React.useMemo(
+    () => nodes.filter((node) => node.selected).length,
+    [nodes]
+  );
   const canCreateGroup = selectedNonGroupNodeCount >= 2;
   const canDissolveGroup = selectedGroupIds.length > 0;
 
@@ -22011,8 +22136,10 @@ function FlowInner() {
           right: 16,
           zIndex: 10,
           display: "flex",
+          flexWrap: "wrap",
           gap: 8,
           alignItems: "center",
+          maxWidth: "calc(100vw - 32px)",
           background: "rgba(255,255,255,0.9)",
           border: "1px solid #e5e7eb",
           borderRadius: 8,
@@ -22177,6 +22304,66 @@ function FlowInner() {
         >
           <Ungroup size={14} />
           解组
+        </button>
+        <button
+          onClick={async () => {
+            const count = await copySelectedNodesToClipboard();
+            if (count > 0) {
+              window.dispatchEvent(
+                new CustomEvent("toast", {
+                  detail: {
+                    message: `已复制 ${count} 个节点，可切换到其他项目粘贴`,
+                    type: "success",
+                  },
+                })
+              );
+            }
+          }}
+          disabled={selectedNodeCount === 0}
+          title='复制选中节点 (Ctrl + C)'
+          style={{
+            padding: "6px 10px",
+            fontSize: 12,
+            borderRadius: 6,
+            border: "1px solid #e5e7eb",
+            background: selectedNodeCount > 0 ? "#fff" : "#f3f4f6",
+            color: selectedNodeCount > 0 ? "#111827" : "#9ca3af",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            cursor: selectedNodeCount > 0 ? "pointer" : "not-allowed",
+          }}
+        >
+          <Copy size={14} />
+          复制
+        </button>
+        <button
+          onClick={async () => {
+            const handled = await pasteNodesFromClipboard();
+            if (handled) {
+              window.dispatchEvent(
+                new CustomEvent("toast", {
+                  detail: { message: "已粘贴节点", type: "success" },
+                })
+              );
+            }
+          }}
+          title='粘贴节点 (Ctrl + V)'
+          style={{
+            padding: "6px 10px",
+            fontSize: 12,
+            borderRadius: 6,
+            border: "1px solid #e5e7eb",
+            background: "#fff",
+            color: "#111827",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            cursor: "pointer",
+          }}
+        >
+          <ClipboardPaste size={14} />
+          粘贴
         </button>
         <div
           style={{

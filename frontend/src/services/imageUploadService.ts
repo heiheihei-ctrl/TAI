@@ -52,6 +52,8 @@ const INVALID_IMAGE_MIME_TYPES = [
 // 限制并发上传，避免同时解码/压缩/网络导致内存峰值
 const uploadLimiter = createAsyncLimiter(2);
 
+export const REFERENCE_IMAGE_MAX_SIZE = 10 * 1024 * 1024;
+
 function validateImageFile(file: File, options?: ImageUploadOptions): string | null {
   const fileType = file.type.toLowerCase();
   // 检查是否为无效格式

@@ -6462,7 +6462,9 @@ function TemplatesTab() {
     templateJsonKey: undefined as string | undefined,
     isActive: true,
     templateScope: "all" as "all" | "vip-only",
+    sortOrder: 0,
   });
+  const [sortOrderInput, setSortOrderInput] = useState("0");
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [jsonFileName, setJsonFileName] = useState<string | null>(null);
   const [imageFileName, setImageFileName] = useState<string | null>(null);
@@ -6517,7 +6519,9 @@ function TemplatesTab() {
       templateJsonKey: undefined,
       isActive: true,
       templateScope: "all",
+      sortOrder: 0,
     });
+    setSortOrderInput("0");
     setJsonFileName(null);
     setImageFileName(null);
     setModalOpen(true);
@@ -6536,7 +6540,9 @@ function TemplatesTab() {
       templateJsonKey: undefined,
       isActive: fullTemplate.isActive ?? true,
       templateScope: inferTemplateScope(fullTemplate.tags),
+      sortOrder: fullTemplate.sortOrder ?? 0,
     });
+    setSortOrderInput(String(fullTemplate.sortOrder ?? 0));
     setJsonFileName(null);
     setImageFileName(null);
     setModalOpen(true);
@@ -6552,6 +6558,7 @@ function TemplatesTab() {
         thumbnailSmall: formData.thumbnailSmall || undefined,
         isActive: formData.isActive,
         tags: applyTemplateScopeToTags(editingTemplate?.tags, formData.templateScope),
+        sortOrder: formData.sortOrder,
       };
 
       // 清理空值
@@ -6813,6 +6820,7 @@ function TemplatesTab() {
                 <th className='px-4 py-3 text-left'>模板</th>
                 <th className='px-4 py-3 text-left'>分类</th>
                 <th className='px-4 py-3 text-left'>状态</th>
+                <th className='px-4 py-3 text-left'>排序</th>
                 <th className='px-4 py-3 text-left'>更新时间</th>
                 <th className='px-4 py-3 text-left'>操作</th>
               </tr>
@@ -6821,7 +6829,7 @@ function TemplatesTab() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className='px-4 py-8 text-center text-gray-500'
                   >
                     加载中...
@@ -6830,7 +6838,7 @@ function TemplatesTab() {
               ) : templates.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className='px-4 py-8 text-center text-gray-500'
                   >
                     暂无数据
@@ -6867,6 +6875,27 @@ function TemplatesTab() {
                       >
                         {template.isActive ? "启用" : "禁用"}
                       </span>
+                    </td>
+                    <td className='px-4 py-3'>
+                      <input
+                        type='number'
+                        defaultValue={template.sortOrder ?? 0}
+                        onBlur={async (e) => {
+                          const value = e.target.value.trim();
+                          const num = value === '' ? 0 : parseInt(value, 10);
+                          const newSortOrder = Number.isNaN(num) ? 0 : num;
+                          if (newSortOrder !== (template.sortOrder ?? 0)) {
+                            try {
+                              await updateTemplate(template.id, { sortOrder: newSortOrder });
+                              loadTemplates();
+                            } catch (error) {
+                              alert(error instanceof Error ? error.message : '更新排序失败');
+                            }
+                          }
+                        }}
+                        className='w-20 px-2 py-1 border rounded text-sm'
+                        placeholder='序号'
+                      />
                     </td>
                     <td className='px-4 py-3 text-xs text-gray-500'>
                       {template.updatedAt
@@ -7167,6 +7196,27 @@ function TemplatesTab() {
                   />
                   <span className='text-sm text-gray-600'>启用</span>
                 </label>
+                <div className='flex-1'>
+                  <label className='block text-sm font-medium text-gray-700 mb-1'>排序序号</label>
+                  <input
+                    type='number'
+                    value={sortOrderInput}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSortOrderInput(value);
+                      const num = value === '' ? 0 : parseInt(value, 10);
+                      setFormData({ ...formData, sortOrder: Number.isNaN(num) ? 0 : num });
+                    }}
+                    onBlur={(e) => {
+                      const num = parseInt(e.target.value, 10);
+                      const normalized = Number.isNaN(num) ? 0 : num;
+                      setSortOrderInput(String(normalized));
+                      setFormData({ ...formData, sortOrder: normalized });
+                    }}
+                    className='w-full px-3 py-2 border rounded-lg'
+                    placeholder='数值越大越靠前'
+                  />
+                </div>
               </div>
 
               <div>

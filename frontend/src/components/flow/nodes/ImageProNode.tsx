@@ -6,7 +6,7 @@ import SmartImage from '../../ui/SmartImage';
 import { useImageHistoryStore } from '../../../stores/imageHistoryStore';
 import { recordImageHistoryEntry } from '@/services/imageHistoryService';
 import { useProjectContentStore } from '@/stores/projectContentStore';
-import { imageUploadService } from '@/services/imageUploadService';
+import { imageUploadService, REFERENCE_IMAGE_MAX_SIZE } from '@/services/imageUploadService';
 import { generateOssKey } from '@/services/ossUploadService';
 import ContextMenu from '../../ui/context-menu';
 import { proxifyRemoteAssetUrl } from '@/utils/assetProxy';
@@ -212,6 +212,10 @@ function ImageProNodeInner({ id, data, selected }: Props) {
     if (!files || files.length === 0) return;
     const file = files[0];
     if (!file.type.startsWith('image/')) return;
+    if (file.size > REFERENCE_IMAGE_MAX_SIZE) {
+      window.dispatchEvent(new CustomEvent('toast', { detail: { message: lt('图片文件过大，请选择小于 10MB 的图片', 'Image file is too large, please select images smaller than 10MB'), type: 'error' } }));
+      return;
+    }
 
     const normalizedFileName = (file.name || '').trim();
     const displayName = normalizedFileName || lt('未命名图片', 'Untitled image');

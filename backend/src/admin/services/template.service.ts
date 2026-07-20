@@ -209,6 +209,7 @@ export class TemplateService {
       this.prisma.publicTemplate.findMany({
         where,
         orderBy: [
+          { sortOrder: 'desc' },
           { updatedAt: 'desc' },
         ],
         skip,
