@@ -74,6 +74,10 @@ export function buildDefaultCategoryParentGroups(
     }
   }
 
+  if (!groups.其他.includes('美育设计')) {
+    groups.其他.push('美育设计');
+  }
+
   return groups;
 }
 

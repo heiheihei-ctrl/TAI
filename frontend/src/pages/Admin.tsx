@@ -6814,7 +6814,7 @@ function TemplatesTab() {
 
       <div className='bg-white rounded-lg border overflow-hidden'>
         <div className='max-h-[800px] overflow-auto'>
-          <table className='w-full text-sm'>
+          <table className='w-full text-sm table-fixed'>
             <thead className='bg-gray-50'>
               <tr>
                 <th className='px-4 py-3 text-left'>模板</th>
@@ -6847,11 +6847,11 @@ function TemplatesTab() {
               ) : (
                 templates.map((template) => (
                   <tr key={template.id} className='border-t hover:bg-gray-50'>
-                    <td className='px-4 py-3'>
-                      <div>
-                        <div className='font-medium'>{template.name}</div>
+                    <td className='px-4 py-3 w-[300px] min-w-[300px]'>
+                      <div className='truncate'>
+                        <div className='font-medium truncate'>{template.name}</div>
                         {template.description && (
-                          <div className='text-xs text-gray-500 mt-1'>
+                          <div className='text-xs text-gray-500 mt-1 truncate'>
                             {template.description}
                           </div>
                         )}
