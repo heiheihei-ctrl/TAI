@@ -6,6 +6,10 @@ import {
 } from '@nestjs/common';
 import { Readable } from 'stream';
 import { OssService } from '../../oss/oss.service';
+import {
+  TOAPIS_REFERENCE_IMAGE_MAX_BYTES,
+  formatToapisReferenceImageSizeError,
+} from '../constants/toapisReferenceImage.constants';
 
 const MANAGED_IMAGE_KEY_REGEX = /^(projects|uploads|templates|videos|ai)\//i;
 const BASE64_REGEX = /^[A-Za-z0-9+/]+={0,2}$/;
@@ -38,6 +42,31 @@ export class UpstreamImageUrlService {
   private readonly logger = new Logger(UpstreamImageUrlService.name);
 
   constructor(private readonly oss: OssService) {}
+
+  private assertWithinToapisLimit(buffer: Buffer, label = '参考图'): void {
+    if (buffer.length <= TOAPIS_REFERENCE_IMAGE_MAX_BYTES) return;
+    throw new BadRequestException(
+      formatToapisReferenceImageSizeError(buffer.length, label),
+    );
+  }
+
+  private async assertRemoteUrlWithinToapisLimit(
+    url: string,
+    label = '参考图',
+  ): Promise<void> {
+    try {
+      const response = await fetchWithTimeout(url, { method: 'HEAD' });
+      const contentLength = response.headers.get('content-length');
+      if (!contentLength) return;
+      const bytes = Number.parseInt(contentLength, 10);
+      if (Number.isFinite(bytes) && bytes > TOAPIS_REFERENCE_IMAGE_MAX_BYTES) {
+        throw new BadRequestException(formatToapisReferenceImageSizeError(bytes, label));
+      }
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      // HEAD 不可用时跳过；后续上传/镜像仍会校验实际体积
+    }
+  }
 
   async resolveHttpUrls(
     inputs: string[],
@@ -79,13 +108,16 @@ export class UpstreamImageUrlService {
 
     const managedKeyOnly = this.extractManagedImageKey(trimmed);
     if (managedKeyOnly && !/^https?:\/\//i.test(trimmed)) {
-      return this.normalizeManagedAssetUrl(trimmed);
+      const url = this.normalizeManagedAssetUrl(trimmed);
+      await this.assertRemoteUrlWithinToapisLimit(url);
+      return url;
     }
 
     if (/^https?:\/\//i.test(trimmed)) {
       if (this.isDataUrl(trimmed)) {
         return this.uploadDataOrBase64(trimmed, options);
       }
+      await this.assertRemoteUrlWithinToapisLimit(trimmed);
       return this.normalizeManagedAssetUrl(trimmed);
     }
 
@@ -95,7 +127,9 @@ export class UpstreamImageUrlService {
 
     const keyFromInput = this.extractManagedImageKey(trimmed);
     if (keyFromInput) {
-      return this.normalizeManagedAssetUrl(keyFromInput);
+      const url = this.normalizeManagedAssetUrl(keyFromInput);
+      await this.assertRemoteUrlWithinToapisLimit(url);
+      return url;
     }
 
     throw new BadRequestException(
@@ -254,6 +288,7 @@ export class UpstreamImageUrlService {
   ): Promise<string> {
     this.ensureOssEnabled();
     const { buffer, mimeType } = this.parseDataOrBase64(input);
+    this.assertWithinToapisLimit(buffer);
     const prefix = (options?.uploadPrefix || 'ai/images/upstream-inputs').replace(/\/+$/, '');
     const timestamp = Date.now();
     const randomId = Math.random().toString(36).substring(2, 8);
@@ -374,6 +409,8 @@ export class UpstreamImageUrlService {
         `远程图片下载失败: ${errors.slice(0, 3).join(' | ')}`,
       );
     }
+
+    this.assertWithinToapisLimit(imageBuffer);
 
     const prefix = (options?.uploadPrefix || 'ai/images/upstream-inputs').replace(/\/+$/, '');
     const timestamp = Date.now();

@@ -1562,11 +1562,23 @@ export class BananaProvider implements IAIProvider {
         if (result.imageUrl) {
           return { imageUrl: result.imageUrl };
         }
-        throw new Error(`Upstream task ${taskId} completed but image url missing`);
+        throw new Error(`Upstream task ${taskId} completed but no images in response`);
       }
 
       if (isUpstreamImageTaskFailed(status)) {
         const detail = result.errorMessage ? `: ${result.errorMessage}` : "";
+        const combined = `${status}${detail}`;
+        if (/mirror|10\s*mb|10mb|reference image|must not be larger/i.test(combined)) {
+          throw new Error(
+            `参考图不符合 ToAPIs 要求（≤10MB 且可公网访问）${detail}`,
+          );
+        }
+        if (/deadline exceeded|timeout|polling timeout|context deadline/i.test(combined)) {
+          throw new Error(`ToAPIs 任务超时，请稍后重试${detail}`);
+        }
+        if (/no images in/i.test(combined)) {
+          throw new Error(`ToAPIs 未返回有效图片${detail}`);
+        }
         throw new Error(`Upstream task ${taskId} failed with status: ${status}${detail}`);
       }
 

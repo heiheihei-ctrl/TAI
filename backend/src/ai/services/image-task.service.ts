@@ -10,6 +10,8 @@ import { ApiResponseStatus } from '../../credits/dto/credits.dto';
 import crypto from 'crypto';
 import { Readable } from 'stream';
 
+const REFUND_RETRY_DELAYS_MS = [0, 150, 420];
+
 export type ImageTaskType = 'generate' | 'edit' | 'blend' | 'expand';
 export type ImageTaskStatus = 'queued' | 'processing' | 'succeeded' | 'failed';
 type BananaImageRoute = 'normal' | 'stable';
@@ -688,12 +690,11 @@ export class ImageTaskService {
                 const uploaded = await this.uploadRemoteImageToOss(rawImageUrl, task.userId);
                 persistedImageUrls.push(uploaded.url);
               } catch (uploadError) {
-                this.logger.warn(
-                  `图像任务多图上传失败，保留原始 URL: taskId=${taskId}, url=${rawImageUrl}, error=${
-                    uploadError instanceof Error ? uploadError.message : String(uploadError)
-                  }`,
+                const detail =
+                  uploadError instanceof Error ? uploadError.message : String(uploadError);
+                throw new BadGatewayException(
+                  `oss_upload_failed: 上游已返回图片，但上传到存储桶失败: ${detail}`,
                 );
-                persistedImageUrls.push(rawImageUrl);
               }
             }
             persistedImageUrls = Array.from(new Set(persistedImageUrls.filter(Boolean)));
@@ -718,6 +719,10 @@ export class ImageTaskService {
                 persistedImageUrls = [uploaded.url];
               }
             }
+          }
+
+          if (!persistedImageUrl) {
+            throw new BadGatewayException('oss_upload_failed: 上游已返回图片，但持久化到存储桶失败');
           }
 
           const resultMetadata =
@@ -792,42 +797,15 @@ export class ImageTaskService {
             },
           });
 
-          // GPT-image-2 节点失败时不返还积分
-          const resolvedServiceType = resolveTaskServiceType(
-            taskType,
-            taskRequestData?.model || undefined,
-            task.aiProvider || undefined,
-          );
-          const skipRefund = resolvedServiceType === 'gpt-image-2';
-
-          // 任务失败，标记积分状态为失败
+          // 任务失败，标记积分状态为失败并退款
           if (effectiveApiUsageId) {
-            try {
-              await this.creditsService.updateApiUsageStatus(
-                effectiveApiUsageId,
-                ApiResponseStatus.FAILED,
-                errorMessage,
-                Date.now() - startedAt
-              );
-
-              if (skipRefund) {
-                this.logger.warn(
-                  `异步任务失败（不退积分）: taskId=${taskId}, apiUsageId=${effectiveApiUsageId}, serviceType=${resolvedServiceType}`
-                );
-              } else {
-                // 执行退款
-                await this.creditsService.refundCredits(task.userId, effectiveApiUsageId);
-                this.logger.log(
-                  `异步任务失败已退款: taskId=${taskId}, apiUsageId=${effectiveApiUsageId}`
-                );
-              }
-            } catch (creditsError) {
-              const creditsErrorMsg =
-                creditsError instanceof Error ? creditsError.message : String(creditsError);
-              this.logger.error(
-                `异步任务积分退款失败: taskId=${taskId}, apiUsageId=${effectiveApiUsageId}, error=${creditsErrorMsg}`
-              );
-            }
+            await this.markFailedAndRefundWithRetry({
+              userId: task.userId,
+              apiUsageId: effectiveApiUsageId,
+              errorMessage,
+              processingTime: Date.now() - startedAt,
+              taskId,
+            });
           }
 
           void this.telemetryService.ingestGenerationTask({
@@ -845,6 +823,88 @@ export class ImageTaskService {
           });
         }
       },
+    );
+  }
+
+  private async delay(ms: number): Promise<void> {
+    if (!Number.isFinite(ms) || ms <= 0) return;
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private async markFailedAndRefundWithRetry(params: {
+    userId: string;
+    apiUsageId: string;
+    errorMessage: string;
+    processingTime: number;
+    taskId: string;
+  }): Promise<void> {
+    const markRetryDelaysMs = [0, 120, 360];
+    const refundRetryDelaysMs = [0, 150, 420];
+
+    for (let markAttempt = 0; markAttempt < markRetryDelaysMs.length; markAttempt++) {
+      if (markAttempt > 0) {
+        await this.delay(markRetryDelaysMs[markAttempt]);
+      }
+
+      let failedMarked = false;
+      try {
+        await this.creditsService.updateApiUsageStatus(
+          params.apiUsageId,
+          ApiResponseStatus.FAILED,
+          params.errorMessage,
+          params.processingTime,
+        );
+        failedMarked = true;
+      } catch (statusError) {
+        this.logger.warn(
+          `[ImageTask] mark-failed attempt ${markAttempt + 1} failed: taskId=${params.taskId}, error=${
+            statusError instanceof Error ? statusError.message : String(statusError)
+          }`,
+        );
+      }
+
+      if (!failedMarked) {
+        try {
+          await this.creditsService.markApiUsageFailedForUser(
+            params.userId,
+            params.apiUsageId,
+            params.errorMessage,
+            params.processingTime,
+          );
+          failedMarked = true;
+        } catch (markError) {
+          this.logger.warn(
+            `[ImageTask] mark-failed fallback attempt ${markAttempt + 1} failed: taskId=${params.taskId}, error=${
+              markError instanceof Error ? markError.message : String(markError)
+            }`,
+          );
+        }
+      }
+
+      if (!failedMarked) continue;
+
+      for (let refundAttempt = 0; refundAttempt < refundRetryDelaysMs.length; refundAttempt++) {
+        if (refundAttempt > 0) {
+          await this.delay(refundRetryDelaysMs[refundAttempt]);
+        }
+        try {
+          await this.creditsService.refundCredits(params.userId, params.apiUsageId);
+          this.logger.log(
+            `异步任务失败已退款: taskId=${params.taskId}, apiUsageId=${params.apiUsageId}`,
+          );
+          return;
+        } catch (refundError) {
+          this.logger.warn(
+            `[ImageTask] refund attempt ${refundAttempt + 1} failed: taskId=${params.taskId}, error=${
+              refundError instanceof Error ? refundError.message : String(refundError)
+            }`,
+          );
+        }
+      }
+    }
+
+    this.logger.error(
+      `[ImageTask] CRITICAL: Failed to mark failed/refund after retries. taskId=${params.taskId}, apiUsageId=${params.apiUsageId}`,
     );
   }
 }

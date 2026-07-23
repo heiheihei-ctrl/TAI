@@ -31,7 +31,11 @@ import { useUIStore } from "@/stores/uiStore";
 import { contextManager } from "@/services/contextManager";
 import { useProjectContentStore } from "@/stores/projectContentStore";
 import { ossUploadService, dataURLToBlob, dataURLToBlobAsync } from "@/services/ossUploadService";
-import { imageUploadService } from "@/services/imageUploadService";
+import { imageUploadService, REFERENCE_IMAGE_MAX_SIZE } from "@/services/imageUploadService";
+import {
+  formatReferenceImageSizeError,
+  validateReferenceImageInputs,
+} from "@/utils/referenceImageValidation";
 import { createSafeStorage } from "@/stores/storageUtils";
 import { recordImageHistoryEntry } from "@/services/imageHistoryService";
 import { useImageHistoryStore } from "@/stores/imageHistoryStore";
@@ -2028,11 +2032,16 @@ export async function uploadImageToOSS(
         return null;
       }
 
+      if (blob.size > REFERENCE_IMAGE_MAX_SIZE) {
+        throw new Error(formatReferenceImageSizeError(blob.size));
+      }
+
       const result = await ossUploadService.uploadToOSS(blob, {
         dir: "ai-chat-images/",
         projectId,
         fileName: `ai-chat-${Date.now()}.png`,
         contentType: blob.type || "image/png",
+        maxSize: REFERENCE_IMAGE_MAX_SIZE,
       });
 
       if (result.success && result.url) {
@@ -2042,6 +2051,12 @@ export async function uploadImageToOSS(
       return null;
     } catch (error) {
       console.error("❌ 图片上传异常:", error);
+      if (
+        error instanceof Error &&
+        (error.message.includes("文件过大") || error.message.includes("10MB"))
+      ) {
+        throw error;
+      }
       return null;
     }
   });
@@ -3688,6 +3703,10 @@ export const useAIChatStore = create<AIChatState>()(
               generationReferenceImageUrls.push(remote);
             });
 
+            if (generationReferenceImageUrls.length > 0) {
+              await validateReferenceImageInputs(generationReferenceImageUrls);
+            }
+
             const generateRequest =
               effectiveProvider === "nano2"
                 ? {
@@ -4319,6 +4338,7 @@ export const useAIChatStore = create<AIChatState>()(
 
             // 🔥 统一改为先上传到 OSS，用 URL 传给后端（避免大 base64 中转占用内存/带宽）
             const projectIdEdit = useProjectContentStore.getState().projectId;
+            await validateReferenceImageInputs([sourceImage], "源图");
             const remoteSourceUrl = normalizeRemoteUrl(sourceImage);
             const remoteSourceAllowed = Boolean(
               remoteSourceUrl &&
@@ -5112,6 +5132,7 @@ export const useAIChatStore = create<AIChatState>()(
 
             // 🔥 统一改为先上传到 OSS，用 URL 传给后端
             const projectIdBlend = useProjectContentStore.getState().projectId;
+            await validateReferenceImageInputs(sourceImages, "融合参考图");
             const sourceImageUrls = await mapWithLimit(sourceImages, 2, async (img, index) => {
               const remoteUrl = normalizeRemoteUrl(img);
               const remoteAllowed = Boolean(
@@ -5160,6 +5181,7 @@ export const useAIChatStore = create<AIChatState>()(
                 projectId: projectIdBlend,
                 fileName: `ai-chat-blend-${Date.now()}-${index + 1}.png`,
                 contentType: "image/png",
+                maxFileSize: REFERENCE_IMAGE_MAX_SIZE,
               });
               const uploadedUrl = uploadResult.asset?.url?.trim();
               if (uploadedUrl) return uploadedUrl;

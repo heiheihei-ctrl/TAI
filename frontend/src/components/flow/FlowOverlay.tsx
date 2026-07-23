@@ -200,6 +200,12 @@ import {
   type ViduModelValue,
 } from "@/services/videoProviderParams";
 import { imageUploadService, REFERENCE_IMAGE_MAX_SIZE } from "@/services/imageUploadService";
+import {
+  assertReferenceImageBytesWithinLimit,
+  estimateDataUrlByteLength,
+  formatReferenceImageSizeError,
+  validateReferenceImageInputs,
+} from "@/utils/referenceImageValidation";
 import { personalLibraryApi } from "@/services/personalLibraryApi";
 import {
   fetchNodeConfigs,
@@ -758,18 +764,6 @@ const ensureDataUrl = (imageData: string): string =>
   imageData.startsWith("data:image")
     ? imageData
     : `data:image/png;base64,${imageData}`;
-
-const estimateDataUrlByteLength = (value: string): number | undefined => {
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  if (!trimmed.startsWith("data:")) return undefined;
-  const commaIndex = trimmed.indexOf(",");
-  if (commaIndex < 0) return undefined;
-  const payload = trimmed.slice(commaIndex + 1).trim();
-  if (!payload) return 0;
-  const padding = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
-  return Math.floor((payload.length * 3) / 4) - padding;
-};
 
 const createThumbnailDataUrl = async (
   source: string,
@@ -15467,7 +15461,7 @@ function FlowInner() {
                           data: {
                             ...n.data,
                             status: "failed",
-                            error: `参考图文件过大，请选择小于 10MB 的图片，当前约 ${(bytes / 1024 / 1024).toFixed(1)}MB`,
+                            error: formatReferenceImageSizeError(bytes),
                           },
                         }
                       : n
@@ -18712,6 +18706,29 @@ function FlowInner() {
           ])
         );
 
+        try {
+          await validateReferenceImageInputs(imageDatas);
+        } catch (sizeError) {
+          setNodes((ns) =>
+            ns.map((n) =>
+              n.id === nodeId
+                ? {
+                    ...n,
+                    data: {
+                      ...n.data,
+                      status: "failed",
+                      error:
+                        sizeError instanceof Error
+                          ? sizeError.message
+                          : "参考图文件过大，请选择小于 10MB 的图片",
+                    },
+                  }
+                : n
+            )
+          );
+          return;
+        }
+
         setNodes((ns) =>
           ns.map((n) =>
             n.id === nodeId
@@ -18982,6 +18999,29 @@ function FlowInner() {
         const imageDatas = Array.from(
           new Set([...connectedImageDatas, ...promptMentionImageUrls])
         ).slice(0, 5);
+
+        try {
+          await validateReferenceImageInputs(imageDatas);
+        } catch (sizeError) {
+          setNodes((ns) =>
+            ns.map((n) =>
+              n.id === nodeId
+                ? {
+                    ...n,
+                    data: {
+                      ...n.data,
+                      status: "failed",
+                      error:
+                        sizeError instanceof Error
+                          ? sizeError.message
+                          : "参考图文件过大，请选择小于 10MB 的图片",
+                    },
+                  }
+                : n
+            )
+          );
+          return;
+        }
 
         // 提示超过5张图片
         const totalReferenceCount =
@@ -19292,6 +19332,15 @@ function FlowInner() {
         imageDatas = Array.from(new Set([...imageDatas, ...promptMentionImageUrls]));
       }
 
+      try {
+        await validateReferenceImageInputs(imageDatas);
+      } catch (sizeError) {
+        failWithMessage(
+          sizeError instanceof Error ? sizeError.message : "参考图文件过大，请选择小于 10MB 的图片",
+        );
+        return;
+      }
+
       // 运行时图片输入归一化（优先走 sourceImageUrl，避免大体积 sourceImage 触发上游 500）：
       // - 仅当已是后端可直连的 HTTPS 资源时直传；
       // - 其余（代理 URL、key、data/blob/flow-asset、裸 base64）统一先上传 OSS，失败即中断。
@@ -19323,6 +19372,21 @@ function FlowInner() {
           const uploadInput = weakRawBase64(trimmed)
             ? ensureDataUrl(trimmed)
             : trimmed;
+          const dataUrlBytes = estimateDataUrlByteLength(
+            uploadInput.startsWith("data:") ? uploadInput : "",
+          );
+          if (typeof dataUrlBytes === "number") {
+            try {
+              assertReferenceImageBytesWithinLimit(dataUrlBytes);
+            } catch (sizeError) {
+              failWithMessage(
+                sizeError instanceof Error
+                  ? sizeError.message
+                  : "参考图文件过大，请选择小于 10MB 的图片",
+              );
+              return;
+            }
+          }
           const uploaded = await uploadImageToOSS(uploadInput, projectId);
           if (uploaded && isRemoteUrl(uploaded)) {
             normalizedInputs.push(uploaded);

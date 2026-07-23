@@ -1528,14 +1528,10 @@ export class AiController {
       const processingTime = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      // GPT-image-2 及图片下方AI功能（极速抠图、高清放大、智能抠图、一键分层、
-      // 2D转3D、图片拓展、改文字等）失败时不返还积分
+      // 画布下方 AI 工具（极速抠图、2D转3D、图片拓展等）失败时不返还积分；
+      // 普通路线 ToAPIs 生图/编辑/融合失败一律退款
       const NO_REFUND_SERVICE_TYPES = [
-        'gpt-image-2',
         'background-removal',    // 极速抠图
-        'gemini-image-edit',     // 高清放大、智能抠图、一键分层、改文字
-        'gemini-2.5-image-edit', // 高清放大、智能抠图、一键分层、改文字（2.5模型）
-        'gemini-3.1-image-edit', // 高清放大、智能抠图、一键分层、改文字（3.1模型）
         'expand-image',          // 图片拓展
         'convert-2d-to-3d',      // 2D转3D
       ];

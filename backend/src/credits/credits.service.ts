@@ -94,6 +94,7 @@ const STALE_PENDING_IMAGE_SERVICE_TYPES: ServiceType[] = [
   'gemini-image-blend',
   'gemini-3.1-image-blend',
   'gemini-2.5-image-blend',
+  'gpt-image-2',
   'midjourney-imagine',
   'midjourney-variation',
   'midjourney-upscale',

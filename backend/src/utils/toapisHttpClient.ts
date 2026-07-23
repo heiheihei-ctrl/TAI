@@ -34,6 +34,21 @@ export function formatToapisHttpError(
     return 'ToAPIs 账户余额或配额不足，请在 ToAPIs 控制台充值后再试（与应用内签到积分无关）';
   }
   if (
+    /mirror|10\s*mb|10mb|reference image|must not be larger/.test(normalized)
+  ) {
+    return `参考图不符合 ToAPIs 要求（≤10MB 且可公网访问）: ${errorData}`;
+  }
+  if (
+    normalized.includes('deadline exceeded') ||
+    normalized.includes('context deadline') ||
+    normalized.includes('timeout')
+  ) {
+    return `ToAPIs 上游超时，请稍后重试: ${errorData}`;
+  }
+  if (normalized.includes('no images in')) {
+    return `ToAPIs 未返回有效图片: ${errorData}`;
+  }
+  if (
     normalized.includes('channelcapability') ||
     normalized.includes('model_not_found')
   ) {
