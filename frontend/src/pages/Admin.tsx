@@ -87,6 +87,17 @@ import {
   getEventSettingsConfig,
   saveEventSettingsConfig,
   type EventSettingsConfig,
+  getAdminTeams,
+  getAdminTeamMembers,
+  adminAddTeamCredits,
+  adminDeductTeamCredits,
+  adminUpdateTeamSeats,
+  adminUpdateTeamStatus,
+  adminDeleteTeam,
+  getAdminTeamCreditHistory,
+  type AdminTeam,
+  type AdminTeamMember,
+  type AdminTeamCreditHistory,
 } from "@/services/adminApi";
 import VolcengineMonthlyCreditsChart from "@/components/admin/VolcengineMonthlyCreditsChart";
 import { notifyNodeConfigsUpdated } from "@/services/nodeConfigService";
@@ -4561,6 +4572,8 @@ function UsersTab({
 }: {
   canManageSensitiveUserFields: boolean;
 }) {
+  const [usersSubTab, setUsersSubTab] = useState<"users" | "teams">("users");
+
   const currentUserId = useAuthStore((state) => state.user?.id);
   const [users, setUsers] = useState<UserWithCredits[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
@@ -4901,25 +4914,48 @@ function UsersTab({
   };
 
   return (
-    <div>
-      <div className='mb-4 flex gap-2'>
-        <Input
-          placeholder='搜索手机号/邮箱/昵称'
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className='max-w-xs'
-        />
-        <Button
-          onClick={() => {
-            setPage(1);
-            loadUsers();
-          }}
-        >
-          搜索
-        </Button>
+    <div className='space-y-4'>
+      <div className='rounded-lg border bg-white p-2 shadow-sm'>
+        <div className='flex flex-wrap gap-2'>
+          {[
+            { key: "users", label: "用户列表" },
+            { key: "teams", label: "团队列表" },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setUsersSubTab(tab.key as "users" | "teams")}
+              className={`rounded-md px-4 py-2 text-sm font-medium transition ${
+                usersSubTab === tab.key
+                  ? "bg-blue-100 text-blue-700"
+                  : "text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className='bg-white rounded-lg border overflow-hidden'>
+      {usersSubTab === "users" && (
+        <div className='space-y-4'>
+          <div className='flex gap-2'>
+            <Input
+              placeholder='搜索手机号/邮箱/昵称'
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className='max-w-xs'
+            />
+            <Button
+              onClick={() => {
+                setPage(1);
+                loadUsers();
+              }}
+            >
+              搜索
+            </Button>
+          </div>
+
+          <div className='bg-white rounded-lg border overflow-hidden'>
         <div className='max-h-[1100px] overflow-auto'>
           <table className='w-full text-sm'>
             <thead className='bg-gray-50'>
@@ -5130,6 +5166,8 @@ function UsersTab({
               下一页
             </Button>
           </div>
+        </div>
+      )}
         </div>
       )}
 
@@ -5696,6 +5734,10 @@ function UsersTab({
             )}
           </div>
         </div>
+      )}
+
+      {usersSubTab === "teams" && (
+        <TeamsTab />
       )}
     </div>
   );
@@ -7244,6 +7286,513 @@ function TemplatesTab() {
                 </Button>
                 <Button onClick={handleSave}>保存</Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 团队管理 Tab
+function TeamsTab() {
+  const [teams, setTeams] = useState<AdminTeam[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [pagination, setPagination] = useState<Pagination>({ page: 1, pageSize: 20, total: 0, totalPages: 0 });
+  const [selectedTeam, setSelectedTeam] = useState<AdminTeam | null>(null);
+  const [teamMembers, setTeamMembers] = useState<AdminTeamMember[]>([]);
+  const [showMembersModal, setShowMembersModal] = useState(false);
+  const [showCreditsModal, setShowCreditsModal] = useState(false);
+  const [showSeatsModal, setShowSeatsModal] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [showCreditHistoryModal, setShowCreditHistoryModal] = useState(false);
+  const [creditHistory, setCreditHistory] = useState<AdminTeamCreditHistory[]>([]);
+  const [creditHistoryPagination, setCreditHistoryPagination] = useState<Pagination>({ page: 1, pageSize: 20, total: 0, totalPages: 0 });
+  const [creditsAmount, setCreditsAmount] = useState("");
+  const [creditsDescription, setCreditsDescription] = useState("");
+  const [creditsAction, setCreditsAction] = useState<"add" | "deduct">("add");
+  const [seatsCount, setSeatsCount] = useState("");
+  const [statusValue, setStatusValue] = useState("active");
+  const [error, setError] = useState("");
+
+  const loadTeams = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await getAdminTeams({ search: search || undefined, page: pagination.page, pageSize: pagination.pageSize });
+      setTeams(result.teams);
+      setPagination(result.pagination);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [search, pagination.page, pagination.pageSize]);
+
+  useEffect(() => {
+    loadTeams();
+  }, [loadTeams]);
+
+  const handleViewMembers = async (team: AdminTeam) => {
+    setSelectedTeam(team);
+    try {
+      const members = await getAdminTeamMembers(team.id);
+      setTeamMembers(members);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+    setShowMembersModal(true);
+  };
+
+  const handleViewCreditHistory = async (team: AdminTeam) => {
+    setSelectedTeam(team);
+    try {
+      const result = await getAdminTeamCreditHistory(team.id);
+      setCreditHistory(result.records);
+      setCreditHistoryPagination(result.pagination);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+    setShowCreditHistoryModal(true);
+  };
+
+  const handleOpenCreditsModal = (team: AdminTeam, action: "add" | "deduct") => {
+    setSelectedTeam(team);
+    setCreditsAction(action);
+    setCreditsAmount("");
+    setCreditsDescription("");
+    setShowCreditsModal(true);
+  };
+
+  const handleOpenSeatsModal = (team: AdminTeam) => {
+    setSelectedTeam(team);
+    setSeatsCount(String(team.maxSeats));
+    setShowSeatsModal(true);
+  };
+
+  const handleOpenStatusModal = (team: AdminTeam) => {
+    setSelectedTeam(team);
+    setStatusValue(team.status);
+    setShowStatusModal(true);
+  };
+
+  const handleSubmitCredits = async () => {
+    if (!selectedTeam || !creditsAmount) return;
+    const amount = Number(creditsAmount);
+    if (amount <= 0) {
+      setError("金额必须大于0");
+      return;
+    }
+    setError("");
+    try {
+      if (creditsAction === "add") {
+        await adminAddTeamCredits(selectedTeam.id, amount, creditsDescription || `充值 ${amount} 积分`);
+      } else {
+        await adminDeductTeamCredits(selectedTeam.id, amount, creditsDescription || `扣除 ${amount} 积分`);
+      }
+      setShowCreditsModal(false);
+      loadTeams();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const handleSubmitSeats = async () => {
+    if (!selectedTeam || !seatsCount) return;
+    const maxSeats = Number(seatsCount);
+    if (maxSeats < 1) {
+      setError("席位数必须大于0");
+      return;
+    }
+    setError("");
+    try {
+      await adminUpdateTeamSeats(selectedTeam.id, maxSeats);
+      setShowSeatsModal(false);
+      loadTeams();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const handleSubmitStatus = async () => {
+    if (!selectedTeam) return;
+    setError("");
+    try {
+      await adminUpdateTeamStatus(selectedTeam.id, statusValue);
+      setShowStatusModal(false);
+      loadTeams();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const handleDeleteTeam = async (team: AdminTeam) => {
+    if (!window.confirm(`确定要删除团队「${team.name}」吗？此操作不可恢复。`)) return;
+    try {
+      await adminDeleteTeam(team.id);
+      loadTeams();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    const map: Record<string, string> = { active: "正常", suspended: "已暂停", dissolved: "已解散" };
+    return map[status] || status;
+  };
+
+  const getStatusClass = (status: string) => {
+    const map: Record<string, string> = {
+      active: "bg-green-100 text-green-700",
+      suspended: "bg-yellow-100 text-yellow-700",
+      dissolved: "bg-gray-100 text-gray-700",
+    };
+    return map[status] || "bg-gray-100 text-gray-700";
+  };
+
+  return (
+    <div className='space-y-4'>
+      <div className='flex flex-wrap items-center justify-between gap-4'>
+        <h2 className='text-lg font-semibold'>团队管理</h2>
+        <div className='flex items-center gap-2'>
+          <Input
+            placeholder='搜索团队名称、负责人手机号/邮箱/姓名'
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPagination((p) => ({ ...p, page: 1 }));
+            }}
+            className='w-64'
+          />
+          <Button onClick={loadTeams}>搜索</Button>
+        </div>
+      </div>
+
+      {error && (
+        <div className='bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg'>
+          {error}
+        </div>
+      )}
+
+      <Card>
+        <CardContent className='p-0'>
+          <table className='w-full'>
+            <thead>
+              <tr className='border-b bg-gray-50'>
+                <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>团队名称</th>
+                <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>负责人</th>
+                <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>成员数量</th>
+                <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>席位</th>
+                <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>状态</th>
+                <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>积分余额</th>
+                <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>创建时间</th>
+                <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className='text-center py-8'>
+                    <LoadingSpinner />
+                  </td>
+                </tr>
+              ) : teams.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className='text-center py-8 text-gray-500'>
+                    暂无团队
+                  </td>
+                </tr>
+              ) : (
+                teams.map((team) => (
+                  <tr key={team.id} className='border-b hover:bg-gray-50'>
+                    <td className='px-4 py-3'>{team.name}</td>
+                    <td className='px-4 py-3'>
+                      <div>{team.owner.name || team.owner.phone}</div>
+                      <div className='text-xs text-gray-400'>{team.owner.phone}</div>
+                    </td>
+                    <td className='px-4 py-3'>{team.memberCount}</td>
+                    <td className='px-4 py-3'>{team.maxSeats}</td>
+                    <td className='px-4 py-3'>
+                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusClass(team.status)}`}>
+                        {getStatusLabel(team.status)}
+                      </span>
+                    </td>
+                    <td className='px-4 py-3'>
+                      <div className='font-medium'>{team.balance}</div>
+                      <div className='text-xs text-gray-400'>可用: {team.availableCredits}</div>
+                    </td>
+                    <td className='px-4 py-3 text-sm'>{new Date(team.createdAt).toLocaleString()}</td>
+                    <td className='px-4 py-3'>
+                      <div className='flex items-center gap-2'>
+                        <Button variant='ghost' size='sm' onClick={() => handleViewMembers(team)}>
+                          成员
+                        </Button>
+                        <Button variant='ghost' size='sm' onClick={() => handleOpenCreditsModal(team, "add")}>
+                          充值
+                        </Button>
+                        <Button variant='ghost' size='sm' onClick={() => handleOpenSeatsModal(team)}>
+                          席位
+                        </Button>
+                        <Button variant='ghost' size='sm' onClick={() => handleOpenStatusModal(team)}>
+                          状态
+                        </Button>
+                        <Button variant='ghost' size='sm' onClick={() => handleViewCreditHistory(team)}>
+                          积分历史
+                        </Button>
+                        <Button variant='ghost' size='sm' className='text-red-600 hover:text-red-700' onClick={() => handleDeleteTeam(team)}>
+                          删除
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </CardContent>
+        {pagination.total > 0 && (
+          <CardFooter className='flex items-center justify-between border-t bg-gray-50'>
+            <span className='text-sm text-gray-500'>
+              共 {pagination.total} 条记录
+            </span>
+            <div className='flex items-center gap-2'>
+              <Button
+                variant='outline'
+                size='sm'
+                disabled={pagination.page <= 1}
+                onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}
+              >
+                上一页
+              </Button>
+              <span className='text-sm text-gray-600'>
+                {pagination.page} / {pagination.totalPages}
+              </span>
+              <Button
+                variant='outline'
+                size='sm'
+                disabled={pagination.page >= pagination.totalPages}
+                onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}
+              >
+                下一页
+              </Button>
+            </div>
+          </CardFooter>
+        )}
+      </Card>
+
+      {/* 成员列表弹窗 */}
+      {showMembersModal && selectedTeam && (
+        <div className='fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4'>
+          <div className='bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden'>
+            <div className='flex items-center justify-between px-6 py-4 border-b'>
+              <h3 className='text-lg font-semibold'>团队成员 - {selectedTeam.name}</h3>
+              <Button variant='ghost' onClick={() => setShowMembersModal(false)}>
+                关闭
+              </Button>
+            </div>
+            <div className='overflow-y-auto max-h-[60vh] p-4'>
+              <table className='w-full'>
+                <thead>
+                  <tr className='border-b bg-gray-50'>
+                    <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>姓名</th>
+                    <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>手机号</th>
+                    <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>邮箱</th>
+                    <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>角色</th>
+                    <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>月配额</th>
+                    <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>总配额</th>
+                    <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>本月已用</th>
+                    <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>总已用</th>
+                    <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>加入时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {teamMembers.map((member) => (
+                    <tr key={member.userId} className='border-b hover:bg-gray-50'>
+                      <td className='px-4 py-3'>{member.user.name || "-"}</td>
+                      <td className='px-4 py-3'>{member.user.phone}</td>
+                      <td className='px-4 py-3'>{member.user.email || "-"}</td>
+                      <td className='px-4 py-3'>{member.role === "owner" ? "负责人" : member.role === "admin" ? "管理员" : "成员"}</td>
+                      <td className='px-4 py-3'>{member.creditQuotaMonthly}</td>
+                      <td className='px-4 py-3'>{member.creditQuotaTotal}</td>
+                      <td className='px-4 py-3'>{member.creditUsedThisCycle}</td>
+                      <td className='px-4 py-3'>{member.creditUsedTotal}</td>
+                      <td className='px-4 py-3 text-sm'>{new Date(member.createdAt).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {teamMembers.length === 0 && (
+                <div className='text-center py-8 text-gray-500'>暂无成员</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 积分操作弹窗 */}
+      {showCreditsModal && selectedTeam && (
+        <div className='fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4'>
+          <div className='bg-white rounded-lg shadow-xl w-full max-w-md'>
+            <div className='flex items-center justify-between px-6 py-4 border-b'>
+              <h3 className='text-lg font-semibold'>{creditsAction === "add" ? "团队充值" : "扣除积分"} - {selectedTeam.name}</h3>
+              <Button variant='ghost' onClick={() => setShowCreditsModal(false)}>
+                关闭
+              </Button>
+            </div>
+            <div className='p-6 space-y-4'>
+              <div>
+                <Label htmlFor='creditsAmount'>金额</Label>
+                <Input
+                  id='creditsAmount'
+                  type='number'
+                  placeholder='请输入积分数量'
+                  value={creditsAmount}
+                  onChange={(e) => setCreditsAmount(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor='creditsDescription'>备注</Label>
+                <Textarea
+                  id='creditsDescription'
+                  placeholder='请输入备注（可选）'
+                  value={creditsDescription}
+                  onChange={(e) => setCreditsDescription(e.target.value)}
+                  className='h-24'
+                />
+              </div>
+              {error && (
+                <div className='text-red-600 text-sm'>{error}</div>
+              )}
+              <div className='flex gap-2'>
+                <Button variant='outline' onClick={() => setShowCreditsModal(false)}>
+                  取消
+                </Button>
+                <Button onClick={handleSubmitCredits}>
+                  {creditsAction === "add" ? "确认充值" : "确认扣除"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 席位修改弹窗 */}
+      {showSeatsModal && selectedTeam && (
+        <div className='fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4'>
+          <div className='bg-white rounded-lg shadow-xl w-full max-w-md'>
+            <div className='flex items-center justify-between px-6 py-4 border-b'>
+              <h3 className='text-lg font-semibold'>修改席位 - {selectedTeam.name}</h3>
+              <Button variant='ghost' onClick={() => setShowSeatsModal(false)}>
+                关闭
+              </Button>
+            </div>
+            <div className='p-6 space-y-4'>
+              <div>
+                <Label htmlFor='seatsCount'>席位数</Label>
+                <Input
+                  id='seatsCount'
+                  type='number'
+                  placeholder='请输入席位数'
+                  value={seatsCount}
+                  onChange={(e) => setSeatsCount(e.target.value)}
+                />
+              </div>
+              {error && (
+                <div className='text-red-600 text-sm'>{error}</div>
+              )}
+              <div className='flex gap-2'>
+                <Button variant='outline' onClick={() => setShowSeatsModal(false)}>
+                  取消
+                </Button>
+                <Button onClick={handleSubmitSeats}>确认修改</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 状态修改弹窗 */}
+      {showStatusModal && selectedTeam && (
+        <div className='fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4'>
+          <div className='bg-white rounded-lg shadow-xl w-full max-w-md'>
+            <div className='flex items-center justify-between px-6 py-4 border-b'>
+              <h3 className='text-lg font-semibold'>修改状态 - {selectedTeam.name}</h3>
+              <Button variant='ghost' onClick={() => setShowStatusModal(false)}>
+                关闭
+              </Button>
+            </div>
+            <div className='p-6 space-y-4'>
+              <div>
+                <Label htmlFor='statusValue'>状态</Label>
+                <select
+                  id='statusValue'
+                  value={statusValue}
+                  onChange={(e) => setStatusValue(e.target.value)}
+                  className='w-full border rounded-lg px-3 py-2'
+                >
+                  <option value="active">正常</option>
+                  <option value="suspended">已暂停</option>
+                  <option value="dissolved">已解散</option>
+                </select>
+              </div>
+              {error && (
+                <div className='text-red-600 text-sm'>{error}</div>
+              )}
+              <div className='flex gap-2'>
+                <Button variant='outline' onClick={() => setShowStatusModal(false)}>
+                  取消
+                </Button>
+                <Button onClick={handleSubmitStatus}>确认修改</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 积分历史弹窗 */}
+      {showCreditHistoryModal && selectedTeam && (
+        <div className='fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4'>
+          <div className='bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[80vh] overflow-hidden'>
+            <div className='flex items-center justify-between px-6 py-4 border-b'>
+              <h3 className='text-lg font-semibold'>积分历史 - {selectedTeam.name}</h3>
+              <Button variant='ghost' onClick={() => setShowCreditHistoryModal(false)}>
+                关闭
+              </Button>
+            </div>
+            <div className='overflow-y-auto max-h-[60vh] p-4'>
+              <table className='w-full'>
+                <thead>
+                  <tr className='border-b bg-gray-50'>
+                    <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>类型</th>
+                    <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>金额</th>
+                    <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>操作人</th>
+                    <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>备注</th>
+                    <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {creditHistory.map((record) => (
+                    <tr key={record.id} className='border-b hover:bg-gray-50'>
+                      <td className='px-4 py-3'>
+                        {record.entryType === "admin_add" && <span className='text-green-600'>管理员添加</span>}
+                        {record.entryType === "admin_deduct" && <span className='text-red-600'>管理员扣除</span>}
+                        {record.entryType === "topup" && <span className='text-blue-600'>充值</span>}
+                        {record.entryType === "usage" && <span className='text-orange-600'>消费</span>}
+                        {!["admin_add", "admin_deduct", "topup", "usage"].includes(record.entryType) && record.entryType}
+                      </td>
+                      <td className='px-4 py-3 font-medium'>
+                        {record.amount > 0 ? <span className='text-green-600'>+{record.amount}</span> : <span className='text-red-600'>{record.amount}</span>}
+                      </td>
+                      <td className='px-4 py-3'>{record.actorName || record.actorPhone || "-"}</td>
+                      <td className='px-4 py-3'>{record.note || "-"}</td>
+                      <td className='px-4 py-3 text-sm'>{new Date(record.createdAt).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {creditHistory.length === 0 && (
+                <div className='text-center py-8 text-gray-500'>暂无积分记录</div>
+              )}
             </div>
           </div>
         </div>

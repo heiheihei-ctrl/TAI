@@ -923,6 +923,16 @@ export class AdminController {
     });
   }
 
+  @Get('teams/:teamId/members')
+  @ApiOperation({ summary: '获取团队成员列表（管理员）' })
+  async adminGetTeamMembers(
+    @Request() req: AuthenticatedRequest,
+    @Param('teamId') teamId: string,
+  ) {
+    this.checkAdmin(req, 'teams:list');
+    return this.adminService.adminGetTeamMembers(teamId);
+  }
+
   @Post('teams/:teamId/credits/add')
   @ApiOperation({ summary: '为团队添加积分（管理员）' })
   async adminAddTeamCredits(

@@ -1620,55 +1620,292 @@ export class AdminService {
     };
   }
 
-  // ── 团队管理（待 team 模块与数据库表落地后实现）────────────────
+  // ── 团队管理 ─────────────────────────────────────────────────────
 
-  private teamAdminNotReady(): never {
-    throw new NotImplementedException('团队管理功能尚未启用');
-  }
-
-  async adminListTeams(_params: {
+  async adminListTeams(params: {
     search?: string;
     page: number;
     pageSize: number;
   }) {
-    this.teamAdminNotReady();
+    const { search, page = 1, pageSize = 20 } = params;
+
+    const where: any = { isPersonal: false };
+    if (search) {
+      where.OR = [
+        { name: { contains: search } },
+        { owner: { phone: { contains: search } } },
+        { owner: { email: { contains: search } } },
+        { owner: { name: { contains: search } } },
+      ];
+    }
+
+    const [teams, total] = await Promise.all([
+      this.prisma.team.findMany({
+        where,
+        include: {
+          _count: { select: { memberships: true } },
+          creditAccount: { select: { balance: true, frozenBalance: true } },
+          owner: { select: { id: true, name: true, phone: true, email: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.team.count({ where }),
+    ]);
+
+    return {
+      teams: teams.map((team) => ({
+        id: team.id,
+        name: team.name,
+        ownerId: team.ownerId,
+        owner: team.owner,
+        maxSeats: team.maxSeats,
+        memberCount: team._count.memberships,
+        status: team.status,
+        balance: team.creditAccount?.balance || 0,
+        frozenBalance: team.creditAccount?.frozenBalance || 0,
+        availableCredits: (team.creditAccount?.balance || 0) - (team.creditAccount?.frozenBalance || 0),
+        createdAt: team.createdAt,
+        updatedAt: team.updatedAt,
+      })),
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    };
+  }
+
+  async adminGetTeamMembers(teamId: string) {
+    const memberships = await this.prisma.teamMembership.findMany({
+      where: { teamId },
+      include: {
+        user: { select: { id: true, name: true, phone: true, email: true, avatarUrl: true } },
+      },
+      orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    return memberships.map((m) => ({
+      userId: m.userId,
+      role: m.role,
+      creditQuotaMonthly: m.creditQuotaMonthly,
+      creditQuotaTotal: m.creditQuotaTotal,
+      creditUsedThisCycle: m.creditUsedThisCycle,
+      creditUsedTotal: m.creditUsedTotal,
+      quotaCycleStartAt: m.quotaCycleStartAt,
+      createdAt: m.createdAt,
+      updatedAt: m.updatedAt,
+      user: m.user,
+    }));
   }
 
   async adminAddTeamCredits(
-    _teamId: string,
-    _amount: number,
-    _description: string,
-    _adminUserId: string,
+    teamId: string,
+    amount: number,
+    description: string,
+    adminUserId: string,
   ) {
-    this.teamAdminNotReady();
+    if (amount <= 0) {
+      throw new BadRequestException('充值金额必须大于0');
+    }
+
+    const acc = await this.prisma.teamCreditAccount.findUnique({
+      where: { teamId },
+    });
+
+    if (!acc) {
+      throw new NotFoundException('团队积分账户不存在');
+    }
+
+    const expiresAt = new Date(Date.now() + 365 * 86400_000);
+
+    await this.prisma.$transaction([
+      this.prisma.teamCreditLot.create({
+        data: {
+          teamCreditAccId: acc.id,
+          amount,
+          remaining: amount,
+          expiresAt,
+          source: 'admin_add',
+          sourceRefId: `admin_${adminUserId}_${Date.now()}`,
+        },
+      }),
+      this.prisma.teamCreditAccount.update({
+        where: { id: acc.id },
+        data: {
+          balance: { increment: amount },
+          totalEarned: { increment: amount },
+        },
+      }),
+      this.prisma.teamCreditLedger.create({
+        data: {
+          teamAccId: acc.id,
+          entryType: 'admin_add',
+          amount,
+          actorUserId: adminUserId,
+          note: description || `管理员添加 ${amount} 积分`,
+        },
+      }),
+    ]);
+
+    return { success: true, teamId, addedCredits: amount };
   }
 
   async adminDeductTeamCredits(
-    _teamId: string,
-    _amount: number,
-    _description: string,
-    _adminUserId: string,
+    teamId: string,
+    amount: number,
+    description: string,
+    adminUserId: string,
   ) {
-    this.teamAdminNotReady();
+    if (amount <= 0) {
+      throw new BadRequestException('扣除金额必须大于0');
+    }
+
+    const acc = await this.prisma.teamCreditAccount.findUnique({
+      where: { teamId },
+    });
+
+    if (!acc) {
+      throw new NotFoundException('团队积分账户不存在');
+    }
+
+    if (acc.balance < amount) {
+      throw new BadRequestException('团队积分余额不足');
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.teamCreditAccount.update({
+        where: { id: acc.id },
+        data: {
+          balance: { decrement: amount },
+          totalSpent: { increment: amount },
+        },
+      }),
+      this.prisma.teamCreditLedger.create({
+        data: {
+          teamAccId: acc.id,
+          entryType: 'admin_deduct',
+          amount: -amount,
+          actorUserId: adminUserId,
+          note: description || `管理员扣除 ${amount} 积分`,
+        },
+      }),
+    ]);
+
+    return { success: true, teamId, deductedCredits: amount };
   }
 
-  async adminUpdateTeamSeats(_teamId: string, _maxSeats: number) {
-    this.teamAdminNotReady();
+  async adminUpdateTeamSeats(teamId: string, maxSeats: number) {
+    if (maxSeats < 1) {
+      throw new BadRequestException('席位数必须大于0');
+    }
+
+    return this.prisma.team.update({
+      where: { id: teamId },
+      data: { maxSeats },
+      select: { id: true, name: true, maxSeats: true },
+    });
   }
 
-  async adminUpdateTeamStatus(_teamId: string, _status: string) {
-    this.teamAdminNotReady();
+  async adminUpdateTeamStatus(teamId: string, status: string) {
+    const validStatuses = ['active', 'suspended', 'dissolved'];
+    if (!validStatuses.includes(status)) {
+      throw new BadRequestException(`状态必须是 ${validStatuses.join(', ')} 之一`);
+    }
+
+    return this.prisma.team.update({
+      where: { id: teamId },
+      data: { status },
+      select: { id: true, name: true, status: true },
+    });
   }
 
-  async adminDeleteTeam(_teamId: string) {
-    this.teamAdminNotReady();
+  async adminDeleteTeam(teamId: string) {
+    const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+    if (!team) {
+      throw new NotFoundException('团队不存在');
+    }
+
+    if (team.isPersonal) {
+      throw new ForbiddenException('个人团队不可删除');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.teamCreditAccount.deleteMany({ where: { teamId } });
+      await tx.teamCreditLedger.deleteMany({ where: { teamAccId: { in: [] } } });
+      await tx.teamCreditLot.deleteMany({ where: { teamCreditAccId: { in: [] } } });
+      await tx.teamSubscription.updateMany({
+        where: { teamId, status: 'active' },
+        data: { status: 'cancelled', cancelledAt: new Date() },
+      });
+      await tx.teamSeatPackage.deleteMany({ where: { teamId } });
+      await tx.teamProjectShare.deleteMany({ where: { teamId } });
+      await tx.teamInvite.deleteMany({ where: { teamId } });
+      await tx.teamMembership.deleteMany({ where: { teamId } });
+      await tx.team.delete({ where: { id: teamId } });
+    });
+
+    return { success: true, teamId };
   }
 
   async adminGetTeamCreditHistory(
-    _teamId: string,
-    _page: number,
-    _pageSize: number,
+    teamId: string,
+    page: number,
+    pageSize: number,
   ) {
-    this.teamAdminNotReady();
+    const acc = await this.prisma.teamCreditAccount.findUnique({ where: { teamId } });
+    if (!acc) {
+      return {
+        records: [],
+        pagination: { page, pageSize, total: 0, totalPages: 0 },
+      };
+    }
+
+    const [entries, total] = await Promise.all([
+      this.prisma.teamCreditLedger.findMany({
+        where: { teamAccId: acc.id },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.teamCreditLedger.count({ where: { teamAccId: acc.id } }),
+    ]);
+
+    const actorIds = Array.from(
+      new Set(entries.map((e) => e.actorUserId).filter((id): id is string => !!id)),
+    );
+    const users = actorIds.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: actorIds } },
+          select: { id: true, name: true, phone: true },
+        })
+      : [];
+    const userMap = new Map(users.map((u) => [u.id, u]));
+
+    return {
+      records: entries.map((e) => {
+        const u = e.actorUserId ? userMap.get(e.actorUserId) : undefined;
+        return {
+          id: e.id,
+          entryType: e.entryType,
+          amount: e.amount,
+          taskId: e.taskId,
+          taskKind: e.taskKind,
+          actorUserId: e.actorUserId,
+          actorName: u?.name || null,
+          actorPhone: u?.phone || null,
+          note: e.note,
+          createdAt: e.createdAt,
+        };
+      }),
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    };
   }
 }

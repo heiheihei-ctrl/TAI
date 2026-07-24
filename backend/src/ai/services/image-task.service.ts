@@ -7,6 +7,7 @@ import { captureTraceContext, runWithSpan, type PersistedTraceContext } from '..
 import { OssService } from '../../oss/oss.service';
 import { CreditsService } from '../../credits/credits.service';
 import { ApiResponseStatus } from '../../credits/dto/credits.dto';
+import { ContentModerationService } from '../../content-moderation/content-moderation.service';
 import crypto from 'crypto';
 import { Readable } from 'stream';
 
@@ -66,6 +67,7 @@ export class ImageTaskService {
     private readonly telemetryService: OpenObserveTelemetryService,
     private readonly oss: OssService,
     private readonly creditsService: CreditsService,
+    private readonly contentModeration: ContentModerationService,
   ) {}
 
   private normalizeImageUrlList(candidate: unknown): string[] {
@@ -580,6 +582,11 @@ export class ImageTaskService {
         let effectiveApiUsageId: string | undefined = apiUsageId;
 
         try {
+          await this.contentModeration.assertPromptParamsSafe({
+            prompt: task.prompt,
+            ...(taskRequestData || {}),
+          });
+
           // 如果需要自己处理积分，则先预扣积分
           if (needsCreditsProcessing) {
             try {
@@ -724,6 +731,16 @@ export class ImageTaskService {
           if (!persistedImageUrl) {
             throw new BadGatewayException('oss_upload_failed: 上游已返回图片，但持久化到存储桶失败');
           }
+
+          await this.contentModeration.assertGeneratedResultSafe({
+            success: true,
+            data: {
+              imageUrl: persistedImageUrl,
+              imageUrls: persistedImageUrls,
+              textResponse: result?.textResponse,
+              metadata: result?.metadata,
+            },
+          });
 
           const resultMetadata =
             result?.metadata && typeof result.metadata === 'object'

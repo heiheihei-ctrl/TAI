@@ -1790,3 +1790,150 @@ export async function cleanupVolcReviewGroup(date?: string) {
   });
   return response.json() as Promise<{ date: string; deleted: boolean }>;
 }
+
+// ==================== 团队管理 ====================
+
+export interface AdminTeamOwner {
+  id: string;
+  name: string | null;
+  phone: string;
+  email: string | null;
+}
+
+export interface AdminTeam {
+  id: string;
+  name: string;
+  ownerId: string;
+  owner: AdminTeamOwner;
+  maxSeats: number;
+  memberCount: number;
+  status: string;
+  balance: number;
+  frozenBalance: number;
+  availableCredits: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminTeamMember {
+  userId: string;
+  role: string;
+  creditQuotaMonthly: number;
+  creditQuotaTotal: number;
+  creditUsedThisCycle: number;
+  creditUsedTotal: number;
+  quotaCycleStartAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    id: string;
+    name: string | null;
+    phone: string;
+    email: string | null;
+    avatarUrl: string | null;
+  };
+}
+
+export interface AdminTeamCreditHistory {
+  id: string;
+  entryType: string;
+  amount: number;
+  taskId: string | null;
+  taskKind: string | null;
+  actorUserId: string | null;
+  actorName: string | null;
+  actorPhone: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+export async function getAdminTeams(params?: {
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<{ teams: AdminTeam[]; pagination: Pagination }> {
+  const searchParams = new URLSearchParams();
+  if (params?.search) searchParams.set("search", params.search);
+  if (params?.page) searchParams.set("page", String(params.page));
+  if (params?.pageSize) searchParams.set("pageSize", String(params.pageSize));
+
+  const response = await request(`/api/admin/teams?${searchParams}`);
+  return response.json();
+}
+
+export async function getAdminTeamMembers(teamId: string): Promise<AdminTeamMember[]> {
+  const response = await request(`/api/admin/teams/${teamId}/members`);
+  return response.json();
+}
+
+export async function adminAddTeamCredits(
+  teamId: string,
+  amount: number,
+  description: string
+): Promise<{ success: boolean; teamId: string; addedCredits: number }> {
+  const response = await request(`/api/admin/teams/${teamId}/credits/add`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ amount, description }),
+  });
+  return response.json();
+}
+
+export async function adminDeductTeamCredits(
+  teamId: string,
+  amount: number,
+  description: string
+): Promise<{ success: boolean; teamId: string; deductedCredits: number }> {
+  const response = await request(`/api/admin/teams/${teamId}/credits/deduct`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ amount, description }),
+  });
+  return response.json();
+}
+
+export async function adminUpdateTeamSeats(
+  teamId: string,
+  maxSeats: number
+): Promise<{ id: string; name: string; maxSeats: number }> {
+  const response = await request(`/api/admin/teams/${teamId}/seats`, {
+    method: "PATCH",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ maxSeats }),
+  });
+  return response.json();
+}
+
+export async function adminUpdateTeamStatus(
+  teamId: string,
+  status: string
+): Promise<{ id: string; name: string; status: string }> {
+  const response = await request(`/api/admin/teams/${teamId}/status`, {
+    method: "PATCH",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ status }),
+  });
+  return response.json();
+}
+
+export async function adminDeleteTeam(teamId: string): Promise<{ success: boolean; teamId: string }> {
+  const response = await request(`/api/admin/teams/${teamId}`, {
+    method: "DELETE",
+  });
+  return response.json();
+}
+
+export async function getAdminTeamCreditHistory(
+  teamId: string,
+  params?: {
+    page?: number;
+    pageSize?: number;
+  }
+): Promise<{ records: AdminTeamCreditHistory[]; pagination: Pagination }> {
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set("page", String(params.page));
+  if (params?.pageSize) searchParams.set("pageSize", String(params.pageSize));
+
+  const response = await request(`/api/admin/teams/${teamId}/credits/history?${searchParams}`);
+  return response.json();
+}

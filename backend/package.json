@@ -19,7 +19,10 @@
     "restore:tos-archived": "ts-node scripts/restore-tos-archived-objects.ts"
   },
   "dependencies": {
+    "@alicloud/green20220302": "^3.2.4",
+    "@alicloud/openapi-client": "^0.4.15",
     "@alicloud/sms-sdk": "^1.1.6",
+    "@alicloud/tea-util": "^1.4.11",
     "@aws-sdk/client-s3": "^3.1045.0",
     "@aws-sdk/lib-storage": "^3.1045.0",
     "@aws-sdk/s3-request-presigner": "^3.1045.0",

@@ -50,6 +50,7 @@ import { ExpandImageService } from './services/expand-image.service';
 import { MidjourneyProvider } from './providers/midjourney.provider';
 import { UsersService } from '../users/users.service';
 import { CreditsService } from '../credits/credits.service';
+import { ContentModerationService } from '../content-moderation/content-moderation.service';
 import { ServiceType } from '../credits/credits.config';
 import { ApiResponseStatus } from '../credits/dto/credits.dto';
 import { GenerateVideoDto } from './dto/video-generation.dto';
@@ -411,6 +412,7 @@ export class AiController {
     private readonly prisma: PrismaService,
     private readonly oss: OssService,
     private readonly telemetryService: OpenObserveTelemetryService,
+    private readonly contentModeration: ContentModerationService,
     @Optional() private readonly imageTaskService?: ImageTaskService,
   ) {}
 
@@ -1405,10 +1407,24 @@ export class AiController {
   ): Promise<T> {
     const userId = this.getUserId(req);
 
+    // 内容安全：输入预审（扣费前，命中不扣积分）
+    // 合并 requestParams + req.body，确保画布对话框等入口的 prompt/context 不会漏审
+    const moderationInput: Record<string, unknown> = {
+      ...((requestParams && typeof requestParams === 'object'
+        ? requestParams
+        : {}) as Record<string, unknown>),
+      ...((req?.body && typeof req.body === 'object'
+        ? req.body
+        : {}) as Record<string, unknown>),
+    };
+    await this.contentModeration.assertPromptParamsSafe(moderationInput);
+
     // 如果没有用户ID（API Key认证）或明确跳过积分，直接执行操作
     if (!userId) {
       this.logger.debug('API Key authentication - skipping credits deduction');
-      return operation();
+      const result = await operation();
+      await this.contentModeration.assertGeneratedResultSafe(result);
+      return result;
     }
 
     if (skipCredits) {
@@ -1419,6 +1435,7 @@ export class AiController {
       );
       this.logger.debug('Using custom API key - skipping credits deduction');
       const result = await operation();
+      await this.contentModeration.assertGeneratedResultSafe(result);
       await this.creditsService.verifyAndRewardInviterSafely(userId, { skipApiUsageCheck: true });
       return result;
     }
@@ -1457,6 +1474,9 @@ export class AiController {
 
       // 执行实际操作
       const result = await operation();
+
+      // 内容安全：输出审核（文本/图片/视频），命中按失败退款
+      await this.contentModeration.assertGeneratedResultSafe(result);
 
       if (
         creditOptions?.treatReturnedFailureAsError &&
@@ -3356,7 +3376,11 @@ export class AiController {
         reasoning: result.reasoning,
         confidence: result.confidence,
       };
-    }, undefined, undefined, true, this.buildCreditRequestParams(providerName));
+    }, undefined, undefined, true, this.buildCreditRequestParams(providerName, {
+      prompt: dto.prompt,
+      context: dto.context,
+      ...this.buildRequestPromptAndImageParams(dto.prompt),
+    }));
   }
 
   @Post('generate-image')
@@ -4356,6 +4380,7 @@ export class AiController {
       billingTag,
       model,
       requestedProvider: dto.aiProvider,
+      prompt: dto.prompt,
       ...this.buildRequestPromptAndImageParams(dto.prompt),
     }, dto.providerOptions));
   }
@@ -5366,10 +5391,21 @@ export class AiController {
     }
     const serviceType = this.resolveVideoProviderServiceType(effectiveDto);
 
+    await this.contentModeration.assertPromptParamsSafe({
+      prompt: effectiveDto.prompt,
+      negativePrompt: (effectiveDto as any)?.negativePrompt,
+      referenceImages: effectiveDto.referenceImages,
+      referenceImageUrls: (effectiveDto as any)?.referenceImageUrls,
+      referenceVideoUrl: (effectiveDto as any)?.referenceVideoUrl,
+      referenceVideoUrls: (effectiveDto as any)?.referenceVideoUrls,
+      videoUrl: (effectiveDto as any)?.videoUrl,
+    });
+
     // 如果没有用户ID（API Key认证），直接执行操作
     if (!userId) {
       this.logger.debug('API Key authentication - skipping credits deduction');
       const result = await this.videoProviderService.generateVideo(effectiveDto);
+      await this.contentModeration.assertGeneratedResultSafe(result);
       const { execution: _execution, ...publicResult } = result as any;
       return { ...publicResult, apiUsageId: null };
     }
@@ -5421,6 +5457,9 @@ export class AiController {
 
     try {
       const result = await this.videoProviderService.generateVideo(effectiveDto);
+      if (result?.videoUrl) {
+        await this.contentModeration.assertGeneratedResultSafe(result);
+      }
       const execution = (result as any)?.execution as
         | {
             modelKey?: string;
@@ -5603,9 +5642,12 @@ export class AiController {
     @Param('provider') provider: 'kling' | 'kling-2.6' | 'kling-o3' | 'vidu' | 'viduq3-pro' | 'doubao' | 'omni-flash-ext',
     @Param('taskId') taskId: string,
   ) {
-    return this.normalizeVideoTaskResponse(
-      await this.videoProviderService.queryTask(provider, taskId),
-    );
+    const raw = await this.videoProviderService.queryTask(provider, taskId);
+    const normalized = this.normalizeVideoTaskResponse(raw);
+    if (normalized.status === 'succeeded' && normalized.videoUrl) {
+      await this.contentModeration.assertGeneratedResultSafe(normalized);
+    }
+    return normalized;
   }
 
   private normalizeUnifiedVideoStatus(status?: string | null): 'queued' | 'processing' | 'succeeded' | 'failed' {

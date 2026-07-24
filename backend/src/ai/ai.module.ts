@@ -34,6 +34,7 @@ import { ModelRoutingService } from './services/model-routing.service';
 import { UpstreamImageUrlService } from './services/upstream-image-url.service';
 import { TelemetryModule } from '../telemetry/telemetry.module';
 import { VolcAssetModule } from '../volc-asset/volc-asset.module';
+import { ContentModerationModule } from '../content-moderation/content-moderation.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { VolcAssetModule } from '../volc-asset/volc-asset.module';
     PrismaModule,
     TelemetryModule,
     VolcAssetModule,
+    ContentModerationModule,
   ],
   providers: [
     AiService,
