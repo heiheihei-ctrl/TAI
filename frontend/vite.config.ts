@@ -77,10 +77,15 @@ export default defineConfig({
     proxy: {
       '/api': {
         // 后端服务器地址
-        // 后端服务器地址
         // 本地开发时使用 localhost, 其他PC访问时自动转发到 0.0.0.0:4000
         target: 'http://localhost:4000',
         changeOrigin: true,
+      },
+      // Tanva 协同：原生 WebSocket /ws/collab（必须 ws:true，否则光标连不上）
+      '/ws': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+        ws: true,
       },
       '/socket.io': {
         target: 'http://localhost:4000',

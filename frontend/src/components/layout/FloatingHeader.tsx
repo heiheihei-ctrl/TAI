@@ -53,6 +53,7 @@ import {
   Camera,
   X,
   UserCircle,
+  Users,
 } from "lucide-react";
 import MemoryDebugPanel from "@/components/debug/MemoryDebugPanel";
 import HistoryDebugPanel from "@/components/debug/HistoryDebugPanel";
@@ -80,9 +81,20 @@ import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useGlobalPaymentPoll } from "@/hooks/useGlobalPaymentPoll";
 import MembershipPanel from "@/components/payment/MembershipPanel";
 import { SHOW_TEAM_COLLABORATION } from "@/config/featureFlags";
-import TeamSwitcher from "@/components/team/TeamSwitcher";
-import TeamQuotaBadge from "@/components/team/TeamQuotaBadge";
+import { TeamSwitcher, type TeamManageTab } from "@/components/team/TeamSwitcher";
+import { TeamManagementModal } from "@/components/team/TeamManagementModal";
+import { refreshTeams, useTeamStore } from "@/stores/teamStore";
+import {
+  teamMyQuotaApi,
+  type MyTeamQuota,
+} from "@/services/teamCreditsApi";
 import PricingCatalogModal from "@/components/layout/PricingCatalogModal";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useTranslation } from "react-i18next";
 import {
   claimDailyReward,
@@ -333,6 +345,10 @@ const FloatingHeader: React.FC = () => {
   const [showMemoryDebug, setShowMemoryDebug] = useState(false);
   const [showHistoryDebug, setShowHistoryDebug] = useState(false);
   const [isMembershipOpen, setIsMembershipOpen] = useState(false);
+  const [teamManagementId, setTeamManagementId] = useState<string | null>(null);
+  const [teamModalInitialTab, setTeamModalInitialTab] = useState<TeamManageTab>('members');
+  const [teamMyQuota, setTeamMyQuota] = useState<MyTeamQuota | null>(null);
+  const [teamMyQuotaLoading, setTeamMyQuotaLoading] = useState(false);
   const [gridSizeInput, setGridSizeInput] = useState(String(gridSize));
   const [saveFeedback, setSaveFeedback] = useState<
     "idle" | "success" | "error"
@@ -1067,16 +1083,48 @@ const FloatingHeader: React.FC = () => {
     refreshCreditsAndDailyReward();
   }, [isSettingsOpen, refreshCreditsAndDailyReward, user]);
 
-  // 闂傚倸鍊搁崐鐑芥嚄閸洖纾块柣銏㈩焾閻ょ偓绻濇繝鍌滃闁搞劌鍊块弻锝夊閵忊晝鍔哥紓浣哄У閼归箖鈥﹂崸妤佸殝闂傚牊绋戦～宀€绱撴担鎻掍壕闂佺鐬奸崑鐐烘偂韫囨挴鏀介柣鎰皺娴犮垽鏌涢弬璇测偓鏍崲濠靛鐒垫い鎺戝缁犮儲銇勯弬鍨挃闁挎稒绮嶇换婵嬪閿濆懐鍘梺鎸庡哺閺岋綀绠涢弴鐐╂瀰闂佸搫鏈惄顖涗繆閹间礁唯闁宠桨绀侀崣濠囨煟鎼淬値娼愭繛鍙壝悾婵嬪箹娴ｆ瓕鎽曢梺闈浤涢埀顒勫磻閹剧粯鏅查幖绮光偓鑼晼闂備礁鎲¤摫闁告梹鐗滈幑銏犫槈濮橈絽浜炬繛鎴炵懐閻掍粙鏌ｉ鐑囨敾闁靛洤瀚伴獮瀣攽閸♀晙鎮ｉ梻?
+  const activeTeamForCredits = useTeamStore((s) => s.getActiveTeam());
+
+  const refreshTeamMyQuota = useCallback(async (teamId: string) => {
+    setTeamMyQuotaLoading(true);
+    try {
+      const quota = await teamMyQuotaApi.getMyQuota(teamId);
+      setTeamMyQuota(quota);
+    } catch (e) {
+      console.warn('Failed to fetch team quota:', e);
+      setTeamMyQuota(null);
+    } finally {
+      setTeamMyQuotaLoading(false);
+    }
+  }, []);
+
+  // 监听全局积分刷新事件
   useEffect(() => {
     const handleRefreshCredits = () => {
-      refreshCreditsAndDailyReward();
+      const activeTeam = useTeamStore.getState().getActiveTeam();
+      if (activeTeam && !activeTeam.isPersonal) {
+        void refreshTeams();
+        void refreshTeamMyQuota(activeTeam.id);
+      } else {
+        setTeamMyQuota(null);
+        refreshCreditsAndDailyReward();
+      }
     };
     window.addEventListener("refresh-credits", handleRefreshCredits);
     return () => {
       window.removeEventListener("refresh-credits", handleRefreshCredits);
     };
-  }, [refreshCreditsAndDailyReward]);
+  }, [refreshCreditsAndDailyReward, refreshTeamMyQuota]);
+
+  // 团队切换时自动拉取个人配额
+  useEffect(() => {
+    if (activeTeamForCredits && !activeTeamForCredits.isPersonal) {
+      void refreshTeamMyQuota(activeTeamForCredits.id);
+    } else {
+      setTeamMyQuota(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTeamForCredits?.id]);
 
   const handleClaimDailyReward = useCallback(async () => {
     if (!user || dailyRewardClaiming) return;
@@ -1109,16 +1157,45 @@ const FloatingHeader: React.FC = () => {
     window.open(href, "_blank", "noopener,noreferrer");
   }, []);
 
-  /** 闂傚倸鍊搁崐鐑芥倿閿曞倹鍎戠憸鐗堝笒閸ㄥ倿鏌ゆ慨鎰偓鏇㈠垂濠靛洢浜滈柡宥冨妼閸ゎ剟鏌ｉ弬鎸庮棡濞ｅ洤锕、娑樷槈濮橆叀寮村┑鐐茬摠缁秶鍒掗幘璇茶摕闁靛牆顦导鐘绘煏婢舵盯妾慨锝呭濮婅櫣鍖栭弴鐔哥彅濡炪倧绠掓禍顒€危閹版澘绠抽柟鎯х－缁愮偛鈹戦埥鍡楃仴婵炲拑绲剧粋鎺楀煛閸涱喒鎷洪梺纭呭亹閸嬫稒淇婃總鍛娾拺閻㈩垼鍠氶崚浼存煟閿濆懎妲婚摶鏍煕濞戝崬甯ｉ柕濞炬櫆閻撳繐顭跨捄铏瑰闁告柣鍊楃槐鎺斺偓锝庝憾濡偓濠殿喖锕ュ浠嬬嵁閹邦厽鍎熼柨婵嗗€搁～宀€绱撴担鍝勪壕婵犮垺顭囩划鏃堟偨缁嬭法鏌ч梺鍓插亝濞叉﹢寮插┑瀣厓鐟滄粓宕滈悢绗衡偓浣割潩閼稿灚娅滄繝銏ｆ硾閿曪箓宕?VIP / 缂傚倸鍊搁崐鎼佸磹妞嬪海鐭嗗〒姘ｅ亾閽樻繂霉閻樺樊鍎忛柛銊ュ€搁湁闁稿繐鍚嬬紞鎴︽煕閵娿儱鈧潡鐛弽顐㈠灊閻熸瑥瀚峰鎴︽⒑閹肩偛鈧牕煤閻旂厧钃熸繛鎴欏灪閺呮粓鎮归崶銊ョ祷缂佺姴顭烽幃?*/
+  /** 画板顶栏积分入口：个人模式打开会员弹窗，团队模式打开团队套餐 */
   const openMembershipHub = useCallback(() => {
+    if (activeTeamForCredits && !activeTeamForCredits.isPersonal) {
+      setTeamModalInitialTab('subscription');
+      setTeamManagementId(activeTeamForCredits.id);
+      return;
+    }
     setIsMembershipOpen(true);
-  }, []);
+  }, [activeTeamForCredits]);
+
+  const isTeamMode = !!(activeTeamForCredits && !activeTeamForCredits.isPersonal);
 
   const topCreditsText = useMemo(() => {
+    if (isTeamMode) {
+      if (teamMyQuotaLoading && !teamMyQuota) return "...";
+      if (teamMyQuota) {
+        if (teamMyQuota.personalAvailable === null) {
+          return teamMyQuota.teamAvailableCredits.toLocaleString();
+        }
+        return teamMyQuota.personalAvailable.toLocaleString();
+      }
+      return (activeTeamForCredits?.availableCredits ?? 0).toLocaleString();
+    }
     if (creditsLoading && !creditsInfo) return "...";
     if (creditsInfo) return creditsInfo.balance.toLocaleString();
     return "--";
-  }, [creditsInfo, creditsLoading]);
+  }, [isTeamMode, teamMyQuota, teamMyQuotaLoading, activeTeamForCredits, creditsInfo, creditsLoading]);
+
+  const teamUnlimitedBadge = useMemo(() => {
+    if (!isTeamMode || !teamMyQuota) return null;
+    if (teamMyQuota.personalAvailable === null) return '不限·团队额度';
+    return null;
+  }, [isTeamMode, teamMyQuota]);
+
+  const handleOpenTeamManage = useCallback((teamId: string, tab?: TeamManageTab) => {
+    setTeamModalInitialTab(tab ?? 'members');
+    setTeamManagementId(teamId);
+  }, []);
+
   const isEnglish = i18n.resolvedLanguage?.toLowerCase().startsWith("en");
   const isDarkTheme = chatTheme === "black";
   const zhThemeToDay = String.fromCharCode(0x5207, 0x6362, 0x5230, 0x767d, 0x5929, 0x4e3b, 0x9898);
@@ -2455,25 +2532,50 @@ const FloatingHeader: React.FC = () => {
             )}
 
             {SHOW_TEAM_COLLABORATION && (
-              <>
-                <TeamSwitcher />
-                <TeamQuotaBadge />
-              </>
+              <TeamSwitcher onManage={handleOpenTeamManage} variant="header" />
             )}
 
-            <Button
-              variant='ghost'
-              size='sm'
-              className='h-7 px-2.5 text-xs rounded-full border border-liquid-glass-light bg-liquid-glass-light backdrop-blur-minimal text-gray-700 hover:bg-liquid-glass-hover transition-all duration-200 flex items-center gap-1.5'
-              title={t("workspace.header.myCredits")}
-              onClick={openMembershipHub}
-            >
-              <span className='relative flex items-center justify-center w-4 h-4 rounded-full bg-gradient-to-br from-amber-300 via-amber-400 to-orange-500 shadow-[0_1px_4px_rgba(245,158,11,0.5)]'>
-                <span className='absolute inset-[1px] rounded-full bg-gradient-to-br from-amber-200/85 to-amber-500/80' />
-                <Star className='relative w-2.5 h-2.5 text-amber-50 fill-amber-100/90' />
-              </span>
-              <span className='tabular-nums font-medium'>{topCreditsText}</span>
-            </Button>
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant='ghost'
+                    size='sm'
+                    className={cn(
+                      'h-7 px-2.5 text-xs rounded-full border backdrop-blur-minimal transition-all duration-200 flex items-center gap-1.5',
+                      isTeamMode
+                        ? 'border-teal-200/70 bg-teal-50/60 text-teal-800 hover:bg-teal-100/80'
+                        : 'border-liquid-glass-light bg-liquid-glass-light text-gray-700 hover:bg-liquid-glass-hover',
+                    )}
+                    title={isTeamMode ? '团队额度' : t("workspace.header.myCredits")}
+                    onClick={openMembershipHub}
+                  >
+                    {isTeamMode ? (
+                      <span className='relative flex items-center justify-center w-4 h-4 rounded-full bg-gradient-to-br from-teal-400 via-teal-500 to-cyan-600 shadow-[0_1px_4px_rgba(20,184,166,0.5)]'>
+                        <span className='absolute inset-[1px] rounded-full bg-gradient-to-br from-teal-300/80 to-teal-600/80' />
+                        <Users className='relative w-3 h-3 text-white' />
+                      </span>
+                    ) : (
+                      <span className='relative flex items-center justify-center w-4 h-4 rounded-full bg-gradient-to-br from-amber-300 via-amber-400 to-orange-500 shadow-[0_1px_4px_rgba(245,158,11,0.5)]'>
+                        <span className='absolute inset-[1px] rounded-full bg-gradient-to-br from-amber-200/85 to-amber-500/80' />
+                        <Star className='relative w-2.5 h-2.5 text-amber-50 fill-amber-100/90' />
+                      </span>
+                    )}
+                    <span className='tabular-nums font-medium'>{topCreditsText}</span>
+                    {teamUnlimitedBadge && (
+                      <span className='ml-0.5 text-[10px] font-medium text-teal-600 bg-teal-100 rounded-full px-1.5 py-0.5 leading-none'>
+                        不限
+                      </span>
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                {isTeamMode && (
+                  <TooltipContent side='bottom'>
+                    当前使用团队额度，显示为你的个人可用配额
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -3040,6 +3142,17 @@ const FloatingHeader: React.FC = () => {
           isOpen={isPricingCatalogOpen}
           onClose={() => setIsPricingCatalogOpen(false)}
         />
+
+        {teamManagementId && (
+          <TeamManagementModal
+            teamId={teamManagementId}
+            onClose={() => {
+              setTeamManagementId(null);
+              setTeamModalInitialTab('members');
+            }}
+            initialTab={teamModalInitialTab}
+          />
+        )}
       </div>
     </>
   );

@@ -142,6 +142,9 @@ export interface DeductCreditsResult {
   newBalance: number;
   transactionId: string;
   apiUsageId: string;
+  creditsToDeduct: number;
+  duplicate: boolean;
+  duplicateReason?: 'idempotency' | 'fingerprint' | 'active-node';
 }
 
 export interface AddCreditsResult {
@@ -164,6 +167,7 @@ export interface ApiUsageParams {
   userAgent?: string;
   idempotencyKey?: string;
   idempotencyWindowMs?: number;
+  skipPersonalDeduction?: boolean;
 }
 
 interface PricingCatalogRuleConditionView {
@@ -3575,7 +3579,7 @@ export class CreditsService {
     teamId: string,
     userId: string,
   ) {
-    const membership = await tx.teamMember.findUnique({
+    const membership = await tx.teamMembership.findUnique({
       where: { teamId_userId: { teamId, userId } },
       include: {
         team: {
@@ -3612,7 +3616,7 @@ export class CreditsService {
     });
     if (!project?.teamId) return undefined;
 
-    const membership = await this.prisma.teamMember.findUnique({
+    const membership = await this.prisma.teamMembership.findUnique({
       where: { teamId_userId: { teamId: project.teamId, userId } },
       include: { team: { select: { isPersonal: true, status: true } } },
     });
@@ -3711,6 +3715,9 @@ export class CreditsService {
             transactionId:
               duplicateUsage.transactionId || `duplicate:${duplicateUsage.apiUsageId}`,
             apiUsageId: duplicateUsage.apiUsageId,
+            creditsToDeduct: 0,
+            duplicate: true,
+            duplicateReason: 'idempotency',
           };
         }
       }
@@ -3789,7 +3796,7 @@ export class CreditsService {
 
       await tx.teamCreditLedger.create({
         data: {
-          accountId: account.id,
+          teamAccId: account.id,
           entryType: 'deduct',
           amount: creditsToDeduct,
           actorUserId: userId,
@@ -3799,8 +3806,8 @@ export class CreditsService {
         },
       });
 
-      await tx.teamMember.update({
-        where: { id: membership.id },
+      await tx.teamMembership.update({
+        where: { teamId_userId: { teamId: account.teamId, userId } },
         data: {
           creditUsedThisCycle: membership.creditUsedThisCycle + creditsToDeduct,
           creditUsedTotal: membership.creditUsedTotal + creditsToDeduct,
@@ -3812,6 +3819,8 @@ export class CreditsService {
         newBalance,
         transactionId: `team:${account.id}:${apiUsage.id}`,
         apiUsageId: apiUsage.id,
+        creditsToDeduct,
+        duplicate: false,
       };
     }, {
       timeout: PRE_DEDUCT_TRANSACTION_TIMEOUT_MS,
@@ -3911,6 +3920,9 @@ export class CreditsService {
             transactionId:
               duplicateUsage.transactionId || `duplicate:${duplicateUsage.apiUsageId}`,
             apiUsageId: duplicateUsage.apiUsageId,
+            creditsToDeduct: 0,
+            duplicate: true,
+            duplicateReason: 'idempotency',
           };
         }
       }
@@ -4085,6 +4097,8 @@ export class CreditsService {
         newBalance,
         transactionId: transaction.id,
         apiUsageId: apiUsage.id,
+        creditsToDeduct,
+        duplicate: false,
       };
     }, {
       timeout: PRE_DEDUCT_TRANSACTION_TIMEOUT_MS,
@@ -4126,7 +4140,7 @@ export class CreditsService {
 
     let balance = account.balance;
     if (params.teamId) {
-      const membership = await this.prisma.teamMember.findUnique({
+      const membership = await this.prisma.teamMembership.findUnique({
         where: {
           teamId_userId: { teamId: params.teamId, userId: params.userId },
         },
@@ -4474,7 +4488,7 @@ export class CreditsService {
 
         const existingTeamRefund = await tx.teamCreditLedger.findFirst({
           where: {
-            accountId: teamAccount.id,
+            teamAccId: teamAccount.id,
             taskId: apiUsageId,
             entryType: 'refund',
           },
@@ -4498,7 +4512,7 @@ export class CreditsService {
 
         const refundLedger = await tx.teamCreditLedger.create({
           data: {
-            accountId: teamAccount.id,
+            teamAccId: teamAccount.id,
             entryType: 'refund',
             amount: creditsToRefund,
             actorUserId: userId,
@@ -4508,14 +4522,14 @@ export class CreditsService {
           },
         });
 
-        const membership = await tx.teamMember.findUnique({
+        const membership = await tx.teamMembership.findUnique({
           where: {
             teamId_userId: { teamId: billingTeamId, userId },
           },
         });
         if (membership) {
-          await tx.teamMember.update({
-            where: { id: membership.id },
+          await tx.teamMembership.update({
+            where: { teamId_userId: { teamId: billingTeamId, userId } },
             data: {
               creditUsedThisCycle: Math.max(
                 0,
@@ -5214,7 +5228,7 @@ export class CreditsService {
         model: string | null;
         requestParams: Prisma.JsonValue | null;
         responseStatus: string;
-        processingTime: number | null;
+        processingTime: bigint | null;
       }
     >();
 

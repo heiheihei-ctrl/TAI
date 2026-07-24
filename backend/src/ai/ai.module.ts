@@ -33,6 +33,7 @@ import { TencentVodAigcService } from './services/tencent-vod-aigc.service';
 import { ModelRoutingService } from './services/model-routing.service';
 import { UpstreamImageUrlService } from './services/upstream-image-url.service';
 import { TelemetryModule } from '../telemetry/telemetry.module';
+import { VolcAssetModule } from '../volc-asset/volc-asset.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { TelemetryModule } from '../telemetry/telemetry.module';
     OssModule,
     PrismaModule,
     TelemetryModule,
+    VolcAssetModule,
   ],
   providers: [
     AiService,

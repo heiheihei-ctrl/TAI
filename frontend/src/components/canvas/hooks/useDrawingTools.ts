@@ -379,7 +379,8 @@ export const useDrawingTools = ({
     if (paper.project && (paper.project as any).emit) {
       (paper.project as any).emit('change');
     }
-  }, [applyFreeDrawStrokeWidth, ensureDrawingLayer, getFreeDrawMinDistance]);
+    eventHandlers.onPathUpdate?.(pathRef.current);
+  }, [applyFreeDrawStrokeWidth, ensureDrawingLayer, eventHandlers.onPathUpdate, getFreeDrawMinDistance]);
 
   // 继续自由绘制
   const continueFreeDraw = useCallback((
@@ -797,8 +798,9 @@ export const useDrawingTools = ({
 
       // 保持起始点引用和样式
       if (pathRef.current) (pathRef.current as any).startPoint = startPoint;
+      eventHandlers.onPathUpdate?.(pathRef.current);
     }
-  }, []);
+  }, [eventHandlers.onPathUpdate]);
 
   // 完成直线绘制（第二次点击）
   const finishLineDraw = useCallback((point: paper.Point) => {

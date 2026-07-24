@@ -73,6 +73,10 @@ export const projectApi = {
     const res = await fetchWithAuth(`${base}/api/projects${query}`);
     return json<Project[]>(res);
   },
+  /** TeamSwitcher 团队 Tab 用；TAI 后端用 teamId 过滤，无 Tanva 的 scope=team。 */
+  async listByTeam(teamId: string): Promise<Project[]> {
+    return projectApi.list(teamId);
+  },
   async create(payload: { name?: string; teamId?: string }): Promise<Project> {
     const workspaceTeamId = payload.teamId ?? getActiveWorkspaceTeamId();
     const res = await fetchWithAuth(`${base}/api/projects`, {

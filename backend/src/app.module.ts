@@ -21,8 +21,10 @@ import { UserTemplatesModule } from './user-templates/user-templates.module';
 import { MembershipModule } from './membership/membership.module';
 import { VolcAssetModule } from './volc-asset/volc-asset.module';
 import { BioAuthModule } from './bio-auth/bio-auth.module';
-import { TeamsModule } from './teams/teams.module';
-import { CollaborationModule } from './collaboration/collaboration.module';
+import { TeamCoreModule } from './team-core/team-core.module';
+import { TeamCreditsModule } from './team-credits/team-credits.module';
+import { TeamCollabModule } from './team-collab/team-collab.module';
+import { CanvasCommentsModule } from './canvas-comments/canvas-comments.module';
 
 @Module({
   imports: [
@@ -52,8 +54,10 @@ import { CollaborationModule } from './collaboration/collaboration.module';
     UserTemplatesModule,
     VolcAssetModule,
     BioAuthModule,
-    TeamsModule,
-    CollaborationModule,
+    TeamCoreModule,
+    TeamCreditsModule,
+    TeamCollabModule,
+    CanvasCommentsModule,
   ],
 })
 export class AppModule {}

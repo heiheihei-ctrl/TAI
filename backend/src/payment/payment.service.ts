@@ -402,8 +402,8 @@ export class PaymentService implements OnModuleInit {
         metadata: plan.metadata,
       } as Prisma.InputJsonValue;
     } else if (
-      orderType === 'team_seat_package' ||
-      orderType === 'team_credits_topup'
+      orderType === 'team_seat' ||
+      orderType === 'team_credits'
     ) {
       if (!Number.isFinite(orderAmount) || orderAmount <= 0) {
         throw new BadRequestException('Invalid order amount');
@@ -1104,7 +1104,7 @@ export class PaymentService implements OnModuleInit {
     });
     await tx.teamCreditLedger.create({
       data: {
-        accountId: account.id,
+        teamAccId: account.id,
         entryType,
         amount,
         actorUserId,

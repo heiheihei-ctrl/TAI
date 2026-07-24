@@ -40,8 +40,10 @@ export function useGlobalPaymentPoll(enabled: boolean): void {
         } else if (TERMINAL_STATUSES.has(status.status)) {
           trackPendingPaymentOrder(null);
         }
-      } catch {
-        // 网络抖动时保留 orderNo，下次继续查
+      } catch (error: any) {
+        if (error.message?.includes("Not Found") || error.message?.includes("404")) {
+          trackPendingPaymentOrder(null);
+        }
       } finally {
         inFlight = false;
       }

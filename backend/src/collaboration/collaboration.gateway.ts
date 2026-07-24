@@ -63,7 +63,11 @@ export class CollaborationGateway
     return null;
   }
 
-  private syncExistingPeerState(client: AuthedSocket, peers: ReturnType<CollaborationService['joinRoom']>['peers'], selfPeerId: string) {
+  private syncExistingPeerState(
+    client: AuthedSocket,
+    peers: ReturnType<CollaborationService['joinRoom']>['peers'],
+    selfPeerId: string,
+  ) {
     for (const peer of peers) {
       if (peer.peerId === selfPeerId) continue;
 

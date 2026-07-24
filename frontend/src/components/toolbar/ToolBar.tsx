@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
-import { Eraser, Square, Trash2, Box, Image, Layers, Sparkles, Type, GitBranch, MousePointer2, LayoutTemplate, FolderOpen, HelpCircle, MessageCircle, Copy, ClipboardPaste } from 'lucide-react';
+import { Eraser, Square, Trash2, Box, Image, Layers, Sparkles, Type, GitBranch, MousePointer2, LayoutTemplate, FolderOpen, HelpCircle, MessageSquare, Copy, ClipboardPaste } from 'lucide-react';
 import TextStylePanel from './TextStylePanel';
 import ColorPicker from './ColorPicker';
 import AbrBrushPicker from './AbrBrushPicker';
@@ -19,8 +19,7 @@ import { isRemoteUrl, normalizePersistableImageRef } from '@/utils/imageSource';
 import { useLocaleText } from '@/utils/localeText';
 import { useFlowOnboardingStore } from '@/stores/flowOnboardingStore';
 import { useCommentStore } from '@/stores/commentStore';
-import { SHOW_FLOW_ONBOARDING_TOOLBAR, SHOW_TEAM_COLLABORATION } from '@/config/featureFlags';
-import '@/components/collaboration/comment-mode.css';
+import { SHOW_FLOW_ONBOARDING_TOOLBAR } from '@/config/featureFlags';
 import { getStoredTemplateParentCategory } from '@/services/publicTemplateService';
 
 // 统一画板：移除 Node 模式专属按钮组件
@@ -365,14 +364,14 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
     isEraser,
     hasFill,
     abrBrushId,
-    setDrawMode,
+    setDrawMode: setToolDrawMode,
     setCurrentColor,
     setFillColor,
     setStrokeWidth,
     setEraserSize,
     setLineStyle,
     setAbrBrushId,
-    toggleEraser,
+    toggleEraser: toggleToolEraser,
     toggleFill,
   } = useToolStore(
     useShallow((state) => ({
@@ -396,6 +395,24 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
       toggleFill: state.toggleFill,
     })),
   );
+
+  // 评论模式（Figma 式画布评论）：与 AI 对话框互斥（后开覆盖先开）。
+  const commentActive = useCommentStore((s) => s.active);
+  const toggleComment = useCommentStore((s) => s.toggle);
+  const closeComment = useCommentStore((s) => s.forceClose);
+
+  const setDrawMode = React.useCallback(
+    (mode: Parameters<typeof setToolDrawMode>[0]) => {
+      closeComment();
+      setToolDrawMode(mode);
+    },
+    [closeComment, setToolDrawMode],
+  );
+
+  const toggleEraser = React.useCallback(() => {
+    closeComment();
+    toggleToolEraser();
+  }, [closeComment, toggleToolEraser]);
 
   const {
     showLayerPanel: isLayerPanelOpen,
@@ -479,6 +496,13 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
   const selectionMenuEnabled = true;
   const isSubMenuOpen = (selectionMenuEnabled && isSelectionMenuOpen) || isDrawingMenuOpen || isAddToolsMenuOpen;
   const drawingModes = ['free', 'line', 'rect', 'circle'] as const;
+
+  React.useEffect(() => {
+    if (!commentActive) return;
+    setSelectionMenuOpen(false);
+    setDrawingMenuOpen(false);
+    setAddToolsMenuOpen(false);
+  }, [commentActive]);
 
   const {
     toggleDialog,
@@ -1303,44 +1327,30 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
             )}
         </div>
 
-        {SHOW_TEAM_COLLABORATION ? (
-          <div className="relative">
-            <Tooltip open={isSubMenuOpen ? false : undefined}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant={drawMode === 'comment' ? 'default' : 'outline'}
-                  size="sm"
-                  className={cn(
-                    'p-0 h-8 w-8 rounded-full',
-                    getActiveButtonStyle(drawMode === 'comment')
-                  )}
-                  onClick={() => {
-                    if (drawMode === 'comment') {
-                      useCommentStore.getState().reset();
-                      setDrawMode('select');
-                      logger.tool('工具栏：退出评论模式');
-                    } else {
-                      setDrawMode('comment');
-                      logger.tool('工具栏：切换到评论模式');
-                    }
-                  }}
-                >
-                  <MessageCircle className="w-4 h-4" />
-                </Button>
-              </TooltipTrigger>
-              {drawMode !== 'comment' ? (
-                <TooltipContent side="right">
-                  {lt('评论模式', 'Comment mode')}
-                </TooltipContent>
-              ) : null}
-            </Tooltip>
-            {drawMode === 'comment' ? (
-              <div className="comment-mode-toolbar-hint">
-                {lt('评论模式 (点击画布添加评论)', 'Comment mode (click canvas to add)')}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+        {/* 评论模式（Figma 式）：开启后点击画布任意位置可添加评论气泡，右侧展示评论抽屉 */}
+        <Tooltip open={isSubMenuOpen ? false : undefined}>
+          <TooltipTrigger asChild>
+            <Button
+              variant={commentActive ? 'default' : 'outline'}
+              size="sm"
+              className={cn(
+                'p-0 h-8 w-8 rounded-full',
+                getActiveButtonStyle(commentActive)
+              )}
+              onClick={() => {
+                toggleComment();
+                logger.tool('工具栏：切换评论模式');
+              }}
+            >
+              <MessageSquare className="w-4 h-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">
+            {commentActive
+              ? lt('退出评论模式', 'Exit comment mode')
+              : lt('评论模式（点击画布添加评论）', 'Comment mode (click canvas to add)')}
+          </TooltipContent>
+        </Tooltip>
 
       {/* AI编辑图像工具 - 暂时隐藏 */}
         {/* <Button

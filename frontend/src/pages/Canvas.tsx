@@ -3,7 +3,6 @@ import ZoomIndicator from '@/components/canvas/ZoomIndicator';
 import GridRenderer from '@/components/canvas/GridRenderer';
 import InteractionController from '@/components/canvas/InteractionController';
 import PaperCanvasManager from '@/components/canvas/PaperCanvasManager';
-import ImageSizeIndicator from '@/components/canvas/ImageSizeIndicator';
 import ToolBar from '@/components/toolbar/ToolBar';
 import FocusModeButton from '@/components/canvas/FocusModeButton';
 import DrawingController from '@/components/canvas/DrawingController';
@@ -17,183 +16,120 @@ import EraserCursorOverlay from '@/components/canvas/EraserCursorOverlay';
 import { useLayerStore } from '@/stores';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useToolStore } from '@/stores/toolStore';
-// import CachedImageDebug from '@/components/debug/CachedImageDebug';
 import FlowOverlay from '@/components/flow/FlowOverlay';
-import { SHOW_TEAM_COLLABORATION } from '@/config/featureFlags';
-import CollaborativeCursors from '@/components/collaboration/CollaborativeCursors';
-import CollaborationSyncManager from '@/components/collaboration/CollaborationSyncManager';
-import CommentModeOverlay from '@/components/collaboration/CommentModeOverlay';
-import CommentSidePanel from '@/components/collaboration/CommentSidePanel';
-import '@/components/collaboration/comment-mode.css';
-import { cn } from '@/lib/utils';
+import CollabRoot from '@/components/collab/CollabRoot';
+import CurrentProjectDeletedModal from '@/components/collab/CurrentProjectDeletedModal';
+import ProjectContentStaleModal from '@/components/collab/ProjectContentStaleModal';
+import { CollabProvider } from '@/collab/CollabContext';
+import { CanvasCommentsProvider } from '@/contexts/CanvasCommentsContext';
+import CommentDrawer from '@/components/comments/CommentDrawer';
 import { migrateImageHistoryToRemote } from '@/services/imageHistoryService';
 import { useAIChatStore } from '@/stores/aiChatStore';
-import paper from 'paper';
-import { logger } from '@/utils/logger';
 import GlobalZoomCapture from '@/components/canvas/GlobalZoomCapture';
-// import OriginCross from '@/components/debug/OriginCross';
-// import { useAIImageDisplay } from '@/hooks/useAIImageDisplay';  // No longer needed after fast upload flow.
 
 const Canvas: React.FC = () => {
-    const chatTheme = useAIChatStore((state) => state.chatTheme);
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const zoom = useCanvasStore((state) => state.zoom);
-    const isEraser = useToolStore((state) => state.isEraser);
-    const eraserSize = useToolStore((state) => state.eraserSize);
-    const drawMode = useToolStore((state) => state.drawMode);
-    const [isPaperInitialized, setIsPaperInitialized] = useState(false);
-    const [isPaperReady, setIsPaperReady] = useState(false); // Delay Paper.js init.
-    // AI image display now goes through fast upload flow; no extra hook needed.
-    // useAIImageDisplay();
+  const chatTheme = useAIChatStore((state) => state.chatTheme);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const zoom = useCanvasStore((state) => state.zoom);
+  const isEraser = useToolStore((state) => state.isEraser);
+  const eraserSize = useToolStore((state) => state.eraserSize);
+  const drawMode = useToolStore((state) => state.drawMode);
+  const [isPaperInitialized, setIsPaperInitialized] = useState(false);
+  const [isPaperReady, setIsPaperReady] = useState(false);
 
-    const handlePaperInitialized = useCallback(() => {
-        setIsPaperInitialized(true);
-    }, []);
+  const handlePaperInitialized = useCallback(() => {
+    setIsPaperInitialized(true);
+  }, []);
 
-    // Delay Paper.js init to improve first-load performance.
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            setIsPaperReady(true);
-        }, 100); // Delay Paper.js init by 100ms.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsPaperReady(true);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
 
-        return () => clearTimeout(timer);
-    }, []);
+  useEffect(() => {
+    migrateImageHistoryToRemote().catch((error) => {
+      try {
+        console.warn('[Canvas] image history migration failed', error);
+      } catch {}
+    });
+  }, []);
 
-    useEffect(() => {
-        migrateImageHistoryToRemote().catch((error) => {
-            try { console.warn('[Canvas] image history migration failed', error); } catch {}
-        });
-    }, []);
+  useEffect(() => {
+    if (isPaperInitialized) {
+      try {
+        useLayerStore.getState().ensureActiveLayer();
+      } catch {}
+    }
+  }, [isPaperInitialized]);
 
-    // Ensure default layer exists after Paper.js init.
-    useEffect(() => {
-        if (isPaperInitialized) {
-            try { useLayerStore.getState().ensureActiveLayer(); } catch { }
-        }
-    }, [isPaperInitialized]);
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const className = 'tanva-premium-black-theme';
+    if (chatTheme === 'black') {
+      document.body.classList.add(className);
+      document.body.classList.add('dark');
+    } else {
+      document.body.classList.remove(className);
+      document.body.classList.remove('dark');
+    }
+    return () => {
+      document.body.classList.remove(className);
+    };
+  }, [chatTheme]);
 
-    useEffect(() => {
-        if (typeof document === 'undefined') return;
-        const className = 'tanva-premium-black-theme';
-        if (chatTheme === 'black') {
-            document.body.classList.add(className);
-            document.body.classList.add('dark');
-        } else {
-            document.body.classList.remove(className);
-            document.body.classList.remove('dark');
-        }
-        return () => {
-            document.body.classList.remove(className);
-        };
-    }, [chatTheme]);
+  return (
+    <CollabProvider>
+      <CanvasCommentsProvider>
+        <div className="relative w-full h-full overflow-hidden">
+          <GlobalZoomCapture />
+          <canvas
+            ref={canvasRef}
+            className="tanva-main-canvas absolute inset-0 w-full h-full"
+            style={{ background: 'white' }}
+          />
 
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (drawMode === 'comment') {
-            if (canvas) canvas.style.cursor = 'crosshair';
-            document.body.classList.add('tanva-comment-mode-active');
-        } else {
-            if (canvas && canvas.style.cursor === 'crosshair') {
-                canvas.style.cursor = '';
-            }
-            document.body.classList.remove('tanva-comment-mode-active');
-        }
-        return () => {
-            document.body.classList.remove('tanva-comment-mode-active');
-        };
-    }, [drawMode]);
+          <EraserCursorOverlay
+            canvasRef={canvasRef}
+            visible={isEraser && drawMode === 'free'}
+            eraserSize={eraserSize}
+            zoom={zoom}
+          />
 
-    return (
-        <div
-            className={cn(
-                'relative w-full h-full overflow-hidden',
-                drawMode === 'comment' && 'tanva-comment-mode-active'
-            )}
-        >
-            <GlobalZoomCapture />
-            <canvas
-                ref={canvasRef}
-                className="tanva-main-canvas absolute inset-0 w-full h-full"
-                style={{ background: 'white' }}
+          {isPaperReady && (
+            <PaperCanvasManager
+              canvasRef={canvasRef}
+              onInitialized={handlePaperInitialized}
             />
+          )}
 
-            <EraserCursorOverlay
-                canvasRef={canvasRef}
-                visible={isEraser && drawMode === 'free'}
-                eraserSize={eraserSize}
-                zoom={zoom}
-            />
+          {isPaperInitialized && isPaperReady && (
+            <>
+              <GridRenderer canvasRef={canvasRef} isPaperInitialized={isPaperInitialized} />
+              <InteractionController canvasRef={canvasRef} />
+              <DrawingController canvasRef={canvasRef} />
+            </>
+          )}
 
-            {/* Paper.js manager - delayed init */}
-            {isPaperReady && (
-                <PaperCanvasManager
-                    canvasRef={canvasRef}
-                    onInitialized={handlePaperInitialized}
-                />
-            )}
-
-            {/* Enable grid and interaction only after Paper.js is ready */}
-            {isPaperInitialized && isPaperReady && (
-                <>
-                    {/* Grid renderer */}
-                    <GridRenderer canvasRef={canvasRef} isPaperInitialized={isPaperInitialized} />
-
-                    {/* Scale bar renderer removed */}
-
-                    {/* Interaction controller */}
-                    <InteractionController canvasRef={canvasRef} />
-
-                    {/* Drawing controller */}
-                    <DrawingController canvasRef={canvasRef} />
-                </>
-            )}
-
-            {/* Floating header - hidden by component in focus mode */}
-            <FloatingHeader />
-
-            {/* Flow canvas overlay */}
-            <FlowOverlay />
-
-            {SHOW_TEAM_COLLABORATION && (
-              <>
-                <CollaborativeCursors canvasRef={canvasRef} />
-                <CollaborationSyncManager canvasRef={canvasRef} />
-                <CommentModeOverlay canvasRef={canvasRef} />
-                <CommentSidePanel visible={drawMode === 'comment'} />
-              </>
-            )}
-
-            {/* Selection box overlay (above Flow nodes) */}
-            <SelectionBoxOverlay />
-
-            {/* Toolbar */}
-            <ToolBar />
-
-            {/* Focus mode button between zoom and toolbar */}
-            <FocusModeButton />
-
-            {/* Zoom indicator */}
-            <ZoomIndicator />
-
-            {/* Image size mode indicator - hidden */}
-            {/* <ImageSizeIndicator /> */}
-
-            {/* Layer panel - always mounted, visibility controlled in panel */}
-            <LayerPanel />
-
-            {/* Personal library panel - expands from right side */}
-            <LibraryPanel />
-
-            {/* AI chat dialog - hidden by component in focus mode */}
-            <AIChatDialog />
-
-            {/* Paper.js sandbox code panel */}
-            <CodeSandboxPanel />
-
-            {/* Debug panel for cached image info (hidden) */}
-            {/* <CachedImageDebug /> */}
+          <FloatingHeader />
+          <FlowOverlay />
+          <SelectionBoxOverlay />
+          <ToolBar />
+          <FocusModeButton />
+          <ZoomIndicator />
+          <LayerPanel />
+          <LibraryPanel />
+          <AIChatDialog />
+          <CommentDrawer />
+          <CodeSandboxPanel />
+          <CollabRoot />
+          <CurrentProjectDeletedModal />
+          <ProjectContentStaleModal />
         </div>
-    );
+      </CanvasCommentsProvider>
+    </CollabProvider>
+  );
 };
 
 export default Canvas;

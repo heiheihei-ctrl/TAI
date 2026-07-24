@@ -20,6 +20,7 @@ import { isTeamInviteQueryParam } from '@/utils/teamInvite';
 import { AppLoadingIndicator } from '@/components/AppLoadingIndicator';
 import { useTranslation } from 'react-i18next';
 import Toast from '@/components/Toast';
+import { useTeamRealtime } from '@/hooks/useTeamRealtime';
 
 // 检测是否为移动设备
 const isMobileDevice = (): boolean => {
@@ -65,6 +66,7 @@ const MobileWarning: React.FC = () => {
 
 const App: React.FC = () => {
   const { t } = useTranslation();
+  useTeamRealtime();
   const [isMobile, setIsMobile] = useState<boolean>(() => isMobileDevice());
   const [showPromptDemo, setShowPromptDemo] = useState<boolean>(() => {
     if (typeof window === 'undefined') {

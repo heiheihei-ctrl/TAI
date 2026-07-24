@@ -1,19 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Edge, Node } from 'reactflow';
-import {
-  collaborationSocket,
-  dedupeByUserId,
-  type CollaborationSelectionState,
-  type FlowPatchPayload,
-} from '@/services/collaborationSocket';
+import { useCollab } from '@/collab/CollabContext';
+import type { NodePatchPayload } from '@/collab/types';
 import {
   buildCollabNodeDataUpsert,
   buildCollabNodeUpsert,
   sanitizeCollabDataPatch,
 } from '@/utils/flowCollabPatch';
-
-const PATCH_DEBOUNCE_MS = 200;
-const PATCH_MAXWAIT_MS = 150;
 
 type NormalizeNodeType = (rawType?: string) => string | null;
 
@@ -22,6 +15,9 @@ export interface RemoteFlowNodeLock {
   name: string;
   color: string;
 }
+
+/** 与旧 Socket.IO FlowPatch 形状兼容；实际经 useCollab.sendPatch → /ws/collab。 */
+export type FlowPatchPayload = NodePatchPayload;
 
 interface Options {
   projectId: string | null;
@@ -32,34 +28,10 @@ interface Options {
   knownNodeTypes: ReadonlySet<string>;
 }
 
-function dedupById(arr?: unknown[]): unknown[] | undefined {
-  if (!arr || arr.length === 0) return undefined;
-  const byId = new Map<string, Record<string, unknown>>();
-  const noId: unknown[] = [];
-  for (const it of arr) {
-    const cur = it as Record<string, unknown>;
-    const id = cur?.id;
-    if (typeof id === 'string') {
-      const prev = byId.get(id);
-      if (!prev) {
-        byId.set(id, cur);
-        continue;
-      }
-      const merged: Record<string, unknown> = { ...prev, ...cur };
-      if (prev.data || cur.data) {
-        merged.data = { ...(prev.data as object || {}), ...(cur.data as object || {}) };
-      }
-      if (prev.style || cur.style) {
-        merged.style = { ...(prev.style as object || {}), ...(cur.style as object || {}) };
-      }
-      byId.set(id, merged);
-    } else {
-      noId.push(it);
-    }
-  }
-  return [...noId, ...byId.values()];
-}
-
+/**
+ * Flow 协同：走 CollabProvider 的原生 /ws/collab（与 Tanva 一致），
+ * 不再依赖已下线的 Socket.IO collaborationSocket。
+ */
 export function useFlowCollabIntegration({
   projectId,
   enabled,
@@ -68,18 +40,26 @@ export function useFlowCollabIntegration({
   normalizeNodeType,
   knownNodeTypes,
 }: Options) {
+  const collab = useCollab();
   const applyingRemoteRef = useRef(false);
-  const pendingPatch = useRef<FlowPatchPayload | null>(null);
-  const patchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const patchLastFlush = useRef(0);
-  const lastBroadcastFlowSelectionRef = useRef('');
-  const [remoteFlowSelections, setRemoteFlowSelections] = useState<
-    CollaborationSelectionState[]
-  >([]);
-  const [lockedNodeIds, setLockedNodeIds] = useState<Set<string>>(() => new Set());
-  const lockedNodeMapRef = useRef<Map<string, RemoteFlowNodeLock>>(new Map());
   const prevCollabDataRef = useRef(new Map<string, string>());
   const remoteDataSkipRef = useRef(new Set<string>());
+  const lockedNodeMapRef = useRef<Map<string, RemoteFlowNodeLock>>(new Map());
+  const [remoteFlowSelections, setRemoteFlowSelections] = useState<
+    Array<{
+      peerId: string;
+      userId: string;
+      name: string;
+      color: string;
+      imageIds: string[];
+      modelIds: string[];
+      videoIds: string[];
+      textIds: string[];
+      pathBounds: [];
+      flowNodeIds: string[];
+    }>
+  >([]);
+  const [lockedNodeIds, setLockedNodeIds] = useState<Set<string>>(() => new Set());
 
   const applyRemotePatch = useCallback(
     (payload: FlowPatchPayload) => {
@@ -156,111 +136,68 @@ export function useFlowCollabIntegration({
   );
 
   useEffect(() => {
-    if (!enabled || !projectId) {
+    if (!enabled || !projectId || !collab) {
       setRemoteFlowSelections([]);
       setLockedNodeIds(new Set());
       lockedNodeMapRef.current = new Map();
       return;
     }
 
-    const unsub = collaborationSocket.subscribeFlowPatches((message) => {
-      if (!message?.patch) return;
-      applyRemotePatch(message.patch);
+    const unsubPatch = collab.subscribe('node_patch', (env) => {
+      const payload = env?.payload as FlowPatchPayload | undefined;
+      if (!payload) return;
+      applyRemotePatch(payload);
     });
-    return unsub;
-  }, [applyRemotePatch, enabled, projectId]);
 
-  useEffect(() => {
-    if (!enabled || !projectId) {
-      setRemoteFlowSelections([]);
-      setLockedNodeIds(new Set());
-      lockedNodeMapRef.current = new Map();
-      return;
-    }
-
-    const unsub = collaborationSocket.subscribeSelections((map) => {
-      const selfUserId = collaborationSocket.getSelfUserId();
-      const remote = dedupeByUserId(
-        [...map.values()].filter((item) => item.userId !== selfUserId),
-      );
-      setRemoteFlowSelections(remote);
-
-      const locks = new Map<string, RemoteFlowNodeLock>();
-      for (const selection of remote) {
-        for (const nodeId of selection.flowNodeIds ?? []) {
-          locks.set(nodeId, {
-            userId: selection.userId,
-            name: selection.name,
-            color: selection.color,
-          });
-        }
+    const unsubLock = collab.subscribe('node_lock', (env) => {
+      const p = env?.payload as
+        | { nodeId?: string; holderUserId?: string; holderName?: string; released?: boolean }
+        | undefined;
+      if (!p?.nodeId) return;
+      const next = new Map(lockedNodeMapRef.current);
+      if (p.released) {
+        next.delete(p.nodeId);
+      } else if (p.holderUserId) {
+        next.set(p.nodeId, {
+          userId: p.holderUserId,
+          name: p.holderName || p.holderUserId.slice(0, 8),
+          color: '#3b82f6',
+        });
       }
-      lockedNodeMapRef.current = locks;
-      setLockedNodeIds(new Set(locks.keys()));
+      lockedNodeMapRef.current = next;
+      setLockedNodeIds(new Set(next.keys()));
+      setRemoteFlowSelections(
+        [...next.entries()].map(([nodeId, lock]) => ({
+          peerId: lock.userId,
+          userId: lock.userId,
+          name: lock.name,
+          color: lock.color,
+          imageIds: [],
+          modelIds: [],
+          videoIds: [],
+          textIds: [],
+          pathBounds: [],
+          flowNodeIds: [nodeId],
+        })),
+      );
     });
-    return unsub;
-  }, [enabled, projectId]);
 
-  const flushPendingPatch = useCallback(() => {
-    if (patchDebounce.current) {
-      clearTimeout(patchDebounce.current);
-      patchDebounce.current = null;
-    }
-    if (!projectId || !collaborationSocket.isReadyForProject(projectId)) {
-      return;
-    }
-    const toSend = pendingPatch.current;
-    pendingPatch.current = null;
-    patchLastFlush.current = Date.now();
-    if (!toSend) return;
-    collaborationSocket.emitFlowPatch(projectId, toSend);
-  }, [projectId]);
+    return () => {
+      unsubPatch();
+      unsubLock();
+    };
+  }, [applyRemotePatch, collab, enabled, projectId]);
 
   const sendFlowPatch = useCallback(
-    (patch: FlowPatchPayload, options?: { immediate?: boolean }) => {
-      if (!enabled || !projectId) return;
-
-      const prev = pendingPatch.current ?? {};
-      pendingPatch.current = {
-        upsertNodes: dedupById([...(prev.upsertNodes ?? []), ...(patch.upsertNodes ?? [])]),
-        removeNodeIds: [...new Set([...(prev.removeNodeIds ?? []), ...(patch.removeNodeIds ?? [])])],
-        upsertEdges: dedupById([...(prev.upsertEdges ?? []), ...(patch.upsertEdges ?? [])]),
-        removeEdgeIds: [...new Set([...(prev.removeEdgeIds ?? []), ...(patch.removeEdgeIds ?? [])])],
-      };
-
-      if (!collaborationSocket.isReadyForProject(projectId)) {
-        return;
-      }
-
-      if (options?.immediate || Date.now() - patchLastFlush.current >= PATCH_MAXWAIT_MS) {
-        flushPendingPatch();
-        return;
-      }
-      if (patchDebounce.current) clearTimeout(patchDebounce.current);
-      patchDebounce.current = setTimeout(flushPendingPatch, PATCH_DEBOUNCE_MS);
+    (patch: FlowPatchPayload, _options?: { immediate?: boolean }) => {
+      if (!enabled || !projectId || applyingRemoteRef.current) return;
+      if (!collab?.connected) return;
+      try {
+        collab.sendPatch(patch);
+      } catch {}
     },
-    [enabled, projectId, flushPendingPatch],
+    [collab, enabled, projectId],
   );
-
-  useEffect(() => {
-    if (!enabled || !projectId) return;
-
-    const unsub = collaborationSocket.subscribeConnection(({ connected, projectId: activeId }) => {
-      if (!connected || activeId !== projectId || !pendingPatch.current) return;
-      if (patchDebounce.current) clearTimeout(patchDebounce.current);
-      patchDebounce.current = setTimeout(() => {
-        if (!projectId || !collaborationSocket.isReadyForProject(projectId)) return;
-        const toSend = pendingPatch.current;
-        pendingPatch.current = null;
-        patchLastFlush.current = Date.now();
-        if (toSend) {
-          collaborationSocket.emitFlowPatch(projectId, toSend);
-        }
-      }, PATCH_DEBOUNCE_MS);
-    });
-
-    return unsub;
-  }, [enabled, projectId]);
 
   const broadcastNodeChanges = useCallback(
     (changes: unknown[]) => {
@@ -271,6 +208,7 @@ export function useFlowCollabIntegration({
 
       for (const c of changes as Array<{ id?: string; type?: string; position?: { x: number; y: number } }>) {
         if (!c?.id) continue;
+        if (lockedNodeMapRef.current.has(String(c.id))) continue;
         if (c.type === 'position' && c.position) {
           upsertNodes.push({ id: c.id, position: c.position });
         } else if (c.type === 'remove') {
@@ -292,15 +230,9 @@ export function useFlowCollabIntegration({
     (changes: unknown[]) => {
       if (applyingRemoteRef.current || !Array.isArray(changes)) return;
 
-      const upsertEdges: Record<string, unknown>[] = [];
       const removeEdgeIds: string[] = [];
-
       for (const c of changes as Array<{ id?: string; type?: string }>) {
         if (!c?.id) continue;
-        if (c.type === 'add') {
-          // add 事件本身不含完整 edge，跳过；完整 edge 由 connect 回调单独广播
-          continue;
-        }
         if (c.type === 'remove') {
           removeEdgeIds.push(String(c.id));
         }
@@ -315,42 +247,36 @@ export function useFlowCollabIntegration({
 
   const broadcastFlowSelection = useCallback(
     (nodeIds: string[]) => {
-      if (!enabled || !projectId || !collaborationSocket.isReadyForProject(projectId)) return;
-      const normalized = [...nodeIds].sort().join(',');
-      if (normalized === lastBroadcastFlowSelectionRef.current) return;
-      lastBroadcastFlowSelectionRef.current = normalized;
-      collaborationSocket.emitSelection(projectId, { flowNodeIds: nodeIds });
+      if (!enabled || !projectId || !collab?.connected) return;
+      // 选中即尝试 claim 锁（与 Tanva 行为对齐的简化版）
+      for (const id of nodeIds) {
+        void collab.claimLock(id).catch(() => {});
+      }
     },
-    [enabled, projectId],
+    [collab, enabled, projectId],
   );
 
   const isNodeLockedByRemote = useCallback((nodeId: string) => {
     return lockedNodeMapRef.current.has(nodeId);
   }, []);
 
-  const filterNodeChangesForLocks = useCallback(
-    (changes: unknown[]) => {
-      if (!Array.isArray(changes) || lockedNodeMapRef.current.size === 0) {
-        return changes;
-      }
-      return changes.filter((change) => {
-        const item = change as { type?: string; id?: string; selected?: boolean };
-        if (item?.type !== 'select' || !item.selected || !item.id) return true;
-        return !lockedNodeMapRef.current.has(item.id);
-      });
-    },
-    [],
-  );
+  const filterNodeChangesForLocks = useCallback((changes: unknown[]) => {
+    if (!Array.isArray(changes) || lockedNodeMapRef.current.size === 0) {
+      return changes;
+    }
+    return changes.filter((change) => {
+      const item = change as { type?: string; id?: string; selected?: boolean };
+      if (item?.type !== 'select' || !item.selected || !item.id) return true;
+      return !lockedNodeMapRef.current.has(item.id);
+    });
+  }, []);
 
   const broadcastNodeUpserts = useCallback(
     (nodes: Node[]) => {
       if (!nodes.length) return;
-      sendFlowPatch(
-        {
-          upsertNodes: nodes.map((node) => buildCollabNodeUpsert(node)),
-        },
-        { immediate: true },
-      );
+      sendFlowPatch({
+        upsertNodes: nodes.map((node) => buildCollabNodeUpsert(node)),
+      });
       for (const node of nodes) {
         const sanitized = sanitizeCollabDataPatch((node.data ?? {}) as Record<string, unknown>);
         prevCollabDataRef.current.set(node.id, JSON.stringify(sanitized ?? {}));
@@ -411,8 +337,7 @@ export function useFlowCollabIntegration({
 
         const upsert = buildCollabNodeDataUpsert(node.id, patch);
         if (upsert) {
-          const hasStatus = Object.prototype.hasOwnProperty.call(patch, 'status');
-          sendFlowPatch({ upsertNodes: [upsert] }, hasStatus ? { immediate: true } : undefined);
+          sendFlowPatch({ upsertNodes: [upsert] });
         }
       }
 

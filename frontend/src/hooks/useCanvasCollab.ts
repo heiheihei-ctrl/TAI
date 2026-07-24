@@ -1,0 +1,383 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { resolveCollaborationTeam, useTeamStore } from '../stores/teamStore';
+import { useProjectStore } from '../stores/projectStore';
+import { fetchWithAuth } from '../services/authFetch';
+import { realtimeClient } from '../services/realtimeClient';
+import type {
+  CollabEnvelope,
+  CollabEventType,
+  CollabListener,
+  CommentMarkerMovePayload,
+  ConnectedPayload,
+  NodePatchPayload,
+} from '../collab/types';
+
+const PATCH_DEBOUNCE_MS = 200;
+const PATCH_MAXWAIT_MS = 150;
+const CURSOR_THROTTLE_MS = 80;
+const COMMENT_MARKER_THROTTLE_MS = 80;
+const RECONNECT_MS = 3000;
+const SEQ_DEDUP_WINDOW = 200;
+
+const base =
+  import.meta.env.VITE_API_BASE_URL && import.meta.env.VITE_API_BASE_URL.trim().length > 0
+    ? import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, "")
+    : "http://localhost:4000";
+
+export interface UseCanvasCollabOptions {
+  projectId: string;
+  onAccessRevoked?: () => void;
+  onSnapshotRequired?: () => void;
+}
+
+export interface CanvasCollabHandle {
+  connected: boolean;
+  connId: string | null;
+  degraded: boolean;
+  subscribe: (type: CollabEventType | CollabEventType[], listener: CollabListener) => () => void;
+  sendPatch: (patch: NodePatchPayload) => void;
+  sendCursor: (x: number, y: number) => void;
+  sendCommentMarkerMove: (threadId: string, x: number, y: number) => void;
+  claimLock: (nodeId: string) => Promise<{ acquired: boolean; expiresAt: number; holder?: { userId: string } }>;
+  renewLock: (nodeId: string) => Promise<{ acquired: boolean; expiresAt: number }>;
+  releaseLock: (nodeId: string) => Promise<boolean>;
+  sendToast: (kind: string, text: string) => Promise<void>;
+}
+
+export function useCanvasCollab({ projectId, onAccessRevoked, onSnapshotRequired }: UseCanvasCollabOptions): CanvasCollabHandle {
+  const activeTeamId = useTeamStore((s) => s.activeTeamId);
+  const teams = useTeamStore((s) => s.teams);
+  const projectTeamId = useProjectStore((s) => s.currentProject?.teamId);
+  const collabTeamId = useMemo(
+    () => resolveCollaborationTeam(teams, activeTeamId, projectTeamId)?.id ?? null,
+    [teams, activeTeamId, projectTeamId],
+  );
+  const isTeamMode = Boolean(collabTeamId);
+  const [connected, setConnected] = useState(false);
+  const [connId, setConnId] = useState<string | null>(null);
+  const [degraded, setDegraded] = useState(false);
+
+  const connIdRef = useRef<string | null>(null);
+  const esRef = useRef<EventSource | null>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const patchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingPatch = useRef<NodePatchPayload | null>(null);
+  const patchLastFlush = useRef<number>(0);
+  const cursorLastSent = useRef<number>(0);
+  const commentMarkerLastSent = useRef<number>(0);
+  const lastSeqRef = useRef<number>(0);
+  const seenSeqs = useRef<number[]>([]);
+  const listenersRef = useRef<Map<CollabEventType | '*', Set<CollabListener>>>(new Map());
+  const onAccessRevokedRef = useRef(onAccessRevoked);
+  const onSnapshotRequiredRef = useRef(onSnapshotRequired);
+
+  useEffect(() => {
+    onAccessRevokedRef.current = onAccessRevoked;
+  }, [onAccessRevoked]);
+  useEffect(() => {
+    onSnapshotRequiredRef.current = onSnapshotRequired;
+  }, [onSnapshotRequired]);
+
+  const subscribe = useCallback(
+    (type: CollabEventType | CollabEventType[], listener: CollabListener): (() => void) => {
+      const types = Array.isArray(type) ? type : [type];
+      const cleanups: Array<() => void> = [];
+      for (const t of types) {
+        let set = listenersRef.current.get(t);
+        if (!set) {
+          set = new Set();
+          listenersRef.current.set(t, set);
+        }
+        set.add(listener);
+        const captured = set;
+        cleanups.push(() => {
+          captured.delete(listener);
+        });
+      }
+      return () => {
+        for (const c of cleanups) c();
+      };
+    },
+    [],
+  );
+
+  const dispatch = useCallback((envelope: CollabEnvelope) => {
+    if (typeof envelope.seq === 'number') {
+      if (seenSeqs.current.includes(envelope.seq)) return;
+      seenSeqs.current.push(envelope.seq);
+      if (seenSeqs.current.length > SEQ_DEDUP_WINDOW) {
+        seenSeqs.current.splice(0, seenSeqs.current.length - SEQ_DEDUP_WINDOW);
+      }
+      if (envelope.seq > lastSeqRef.current) {
+        lastSeqRef.current = envelope.seq;
+      }
+      // �?realtimeClient 推进补帧游标，断线重连时带上 after=seq�?
+      realtimeClient.noteSeq(envelope.seq);
+    }
+    const set = listenersRef.current.get(envelope.type);
+    if (set) for (const fn of set) fn(envelope);
+    const star = listenersRef.current.get('*' as CollabEventType);
+    if (star) for (const fn of star) fn(envelope);
+  }, []);
+
+  const connect = useCallback(() => {
+    // 设置 project 上下文（realtimeClient 会用新参数重连，始终单连接）�?
+    realtimeClient.setContext({ projectId: projectId || null });
+    const unsub = realtimeClient.subscribe((env: CollabEnvelope) => {
+      if (!env || typeof env.type !== 'string') return;
+      if (env.type === 'connected') {
+        const data = env.payload as ConnectedPayload;
+        setConnected(true);
+        setDegraded(Boolean(data?.degraded));
+        // 写入 connId：激�?sendPatch / claimLock / sendToast（此前为 no-op 导致协作编辑不生效）�?
+        connIdRef.current = data?.connId ?? null;
+        setConnId(data?.connId ?? null);
+        dispatch({ type: 'connected', payload: data, ts: Date.now() });
+        return;
+      }
+      if (env.type === 'access_revoked') {
+        onAccessRevokedRef.current?.();
+        return;
+      }
+      if (env.type === 'snapshot_required') {
+        onSnapshotRequiredRef.current?.();
+      }
+      // 抑制自己发出的事�?
+      if (env.senderConnId && env.senderConnId === connIdRef.current) return;
+      dispatch(env);
+    });
+    // 保存退订函数到 cleanupRef
+    cleanupRef.current = unsub;
+  }, [projectId, dispatch]);
+
+  useEffect(() => {
+    // 个人项目（非团队）不接入画布协作：无�?/ 光标 / 实时 patch�?
+    // 这是原设计（�?FlowOverlay 注释 “collab handle null when not in a team
+    // project”），此�?isTeamMode 算了却没 gate 连接 �?个人项目也连协作、选中�?
+    // claim 锁，同一用户的另一条连接会被渲染成「被他人锁定」的粉色虚线框（个人
+    // 项目根本不该有锁的概念）。这里把闸门接上：非团队一律不连、保持断开�?
+    if (!isTeamMode) {
+      realtimeClient.setContext({ projectId: null });
+      setConnected(false);
+      setConnId(null);
+      connIdRef.current = null;
+      return;
+    }
+    connect();
+    const handleProfileUpdated = () => {
+      realtimeClient.refresh();
+    };
+    window.addEventListener('tanva:profile-updated', handleProfileUpdated);
+    return () => {
+      window.removeEventListener('tanva:profile-updated', handleProfileUpdated);
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+      // 离开画布：清�?project 上下文（团队连接仍由 useTeamRealtime 维持�?
+      realtimeClient.setContext({ projectId: null });
+      if (reconnectTimer.current) {
+        clearTimeout(reconnectTimer.current);
+        reconnectTimer.current = null;
+      }
+      setConnected(false);
+      setConnId(null);
+      connIdRef.current = null;
+    };
+  }, [connect, isTeamMode]);
+
+  const sendPatch = useCallback(
+    (patch: NodePatchPayload) => {
+      if (!connIdRef.current) return;
+      // 合并待发�?patch�?00ms 去抖窗口内多次调用（移动/增删/Prompt 等不同来源）
+      // 必须累积合并，否则后一次会覆盖前一次导致编辑丢失。upsert �?id 去重保留最新�?
+      const dedupById = (arr?: unknown[]): unknown[] | undefined => {
+        if (!arr || arr.length === 0) return undefined;
+        const byId = new Map<string, Record<string, unknown>>();
+        const noId: unknown[] = [];
+        for (const it of arr) {
+          const cur = it as Record<string, unknown>;
+          const id = cur?.id;
+          if (typeof id === 'string') {
+            const prev = byId.get(id);
+            if (!prev) {
+              byId.set(id, cur);
+              continue;
+            }
+            // 合并而非整体替换：同一去抖窗口内，先到的完整新增补丁{id,type,data,...}
+            // 不能被后到的局部补丁{id,position}覆盖丢掉 type/data，否则对端会据此合成
+            // �?type �?未知节点"。{...prev,...cur} 已能保留 cur 未携带的 type�?
+            // data/style 再做深合并，避免互相覆盖�?
+            const merged: Record<string, unknown> = { ...prev, ...cur };
+            if (prev.data || cur.data) {
+              merged.data = { ...(prev.data as object || {}), ...(cur.data as object || {}) };
+            }
+            if (prev.style || cur.style) {
+              merged.style = { ...(prev.style as object || {}), ...(cur.style as object || {}) };
+            }
+            byId.set(id, merged);
+          } else {
+            noId.push(it);
+          }
+        }
+        return [...noId, ...byId.values()];
+      };
+      const prev = pendingPatch.current ?? {};
+      pendingPatch.current = {
+        upsertNodes: dedupById([...(prev.upsertNodes ?? []), ...(patch.upsertNodes ?? [])]),
+        removeNodeIds: [...new Set([...(prev.removeNodeIds ?? []), ...(patch.removeNodeIds ?? [])])],
+        upsertEdges: dedupById([...(prev.upsertEdges ?? []), ...(patch.upsertEdges ?? [])]),
+        removeEdgeIds: [...new Set([...(prev.removeEdgeIds ?? []), ...(patch.removeEdgeIds ?? [])])],
+      };
+      const post = (payload: NodePatchPayload, attempt: number) => {
+        // 用当�?可能刚重连刷新过�? connId 发送；失败(网络抖动/重连后旧 connId 被判 403)
+        // 重试一�? 避免单次丢包导致对端漏掉该次编辑(尤其拖拽最终位�?�?
+        fetchWithAuth(`${base}/api/canvas/${projectId}/patch?teamId=${collabTeamId ?? ''}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ patch: payload, connId: connIdRef.current }),
+        })
+          .then((res) => {
+            if (!res.ok && attempt === 0 && connIdRef.current) {
+              setTimeout(() => post(payload, 1), 300);
+            }
+          })
+          .catch(() => {
+            if (attempt === 0 && connIdRef.current) setTimeout(() => post(payload, 1), 300);
+          });
+      };
+      const flush = () => {
+        if (patchDebounce.current) { clearTimeout(patchDebounce.current); patchDebounce.current = null; }
+        const toSend = pendingPatch.current;
+        pendingPatch.current = null;
+        patchLastFlush.current = Date.now();
+        if (!toSend) return;
+        post(toSend, 0);
+      };
+      // maxWait 节流：持续拖�?每帧调用)�? 距上次发�?>=150ms 立即推�? 实现实时跟随;
+      // 否则�?200ms 去抖在停顿后发出最终值。两者都保证不丢、不积压�?
+      if (Date.now() - patchLastFlush.current >= PATCH_MAXWAIT_MS) {
+        flush();
+        return;
+      }
+      if (patchDebounce.current) clearTimeout(patchDebounce.current);
+      patchDebounce.current = setTimeout(flush, PATCH_DEBOUNCE_MS);
+    },
+    [projectId, collabTeamId],
+  );
+
+  const sendCursor = useCallback(
+    (x: number, y: number) => {
+      const now = Date.now();
+      if (now - cursorLastSent.current < CURSOR_THROTTLE_MS) return;
+      cursorLastSent.current = now;
+      realtimeClient.send({ type: 'cursor', payload: { x, y } });
+    },
+    [],
+  );
+
+  const sendCommentMarkerMove = useCallback(
+    (threadId: string, x: number, y: number) => {
+      if (!connIdRef.current || !threadId) return;
+      const now = Date.now();
+      if (now - commentMarkerLastSent.current < COMMENT_MARKER_THROTTLE_MS) return;
+      commentMarkerLastSent.current = now;
+      const payload: CommentMarkerMovePayload = { threadId, x, y };
+      realtimeClient.send({ type: 'comment_marker_move', payload });
+    },
+    [],
+  );
+
+  const claimLock = useCallback(
+    async (nodeId: string) => {
+      if (!connIdRef.current) return { acquired: false, expiresAt: 0 };
+      try {
+        const res = await fetchWithAuth(
+          `${base}/api/canvas/${projectId}/lock?teamId=${collabTeamId ?? ''}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nodeId, connId: connIdRef.current }),
+          },
+        );
+        return (await res.json()) as { acquired: boolean; expiresAt: number; holder?: { userId: string } };
+      } catch {
+        return { acquired: false, expiresAt: 0 };
+      }
+    },
+    [projectId, collabTeamId],
+  );
+
+  const renewLock = useCallback(
+    async (nodeId: string) => {
+      if (!connIdRef.current) return { acquired: false, expiresAt: 0 };
+      try {
+        const res = await fetchWithAuth(
+          `${base}/api/canvas/${projectId}/lock/renew?teamId=${collabTeamId ?? ''}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nodeId, connId: connIdRef.current }),
+          },
+        );
+        return (await res.json()) as { acquired: boolean; expiresAt: number };
+      } catch {
+        return { acquired: false, expiresAt: 0 };
+      }
+    },
+    [projectId, collabTeamId],
+  );
+
+  const releaseLock = useCallback(
+    async (nodeId: string) => {
+      if (!connIdRef.current) return false;
+      try {
+        const res = await fetchWithAuth(
+          `${base}/api/canvas/${projectId}/unlock?teamId=${collabTeamId ?? ''}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nodeId, connId: connIdRef.current }),
+          },
+        );
+        const data = (await res.json()) as { released?: boolean };
+        return Boolean(data.released);
+      } catch {
+        return false;
+      }
+    },
+    [projectId, collabTeamId],
+  );
+
+  const sendToast = useCallback(
+    async (kind: string, text: string) => {
+      if (!connIdRef.current) return;
+      try {
+        await fetchWithAuth(
+          `${base}/api/canvas/${projectId}/toast?teamId=${collabTeamId ?? ''}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ kind, text, connId: connIdRef.current }),
+          },
+        );
+      } catch {}
+    },
+    [projectId, collabTeamId],
+  );
+
+  return {
+    connected,
+    connId,
+    degraded,
+    subscribe,
+    sendPatch,
+    sendCursor,
+    sendCommentMarkerMove,
+    claimLock,
+    renewLock,
+    releaseLock,
+    sendToast,
+  };
+}

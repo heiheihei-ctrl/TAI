@@ -66,13 +66,13 @@ export const teamApi = {
 
   async getInviteInfo(code: string): Promise<{ teamName: string }> {
     return json<{ teamName: string }>(
-      `/api/teams/invites/${encodeURIComponent(code)}`
+      `/api/invites/${encodeURIComponent(code)}`
     );
   },
 
   async acceptInvite(code: string): Promise<{ teamId: string }> {
     return json<{ teamId: string }>(
-      `/api/teams/invites/${encodeURIComponent(code)}/accept`,
+      `/api/invites/${encodeURIComponent(code)}/accept`,
       { method: "POST" }
     );
   },
@@ -91,7 +91,7 @@ export const teamApi = {
     creditUsedThisCycle: number;
     creditUsedTotal: number;
   }> {
-    return json(`/api/teams/${encodeURIComponent(teamId)}/me/quota`);
+    return json(`/api/teams/${encodeURIComponent(teamId)}/my-quota`);
   },
 
   async createInvite(
@@ -121,7 +121,7 @@ export const teamApi = {
     role: string
   ): Promise<void> {
     await request(
-      `/api/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(userId)}/role`,
+      `/api/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(userId)}`,
       {
         method: "PATCH",
         headers: JSON_HEADERS,

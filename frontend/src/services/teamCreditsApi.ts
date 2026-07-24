@@ -58,10 +58,26 @@ export interface TeamPaymentOrder {
   credits: number;
 }
 
+export interface MyTeamQuota {
+  creditQuotaMonthly: number | null;
+  creditQuotaTotal: number | null;
+  creditUsedThisCycle: number;
+  creditUsedTotal: number;
+  quotaCycleStartAt: string;
+  teamAvailableCredits: number;
+  /** null = unlimited quota (show team balance) */
+  personalAvailable: number | null;
+}
+
+export const teamMyQuotaApi = {
+  getMyQuota: (teamId: string) =>
+    json<MyTeamQuota>(`/api/teams/${encodeURIComponent(teamId)}/my-quota`),
+};
+
 export const teamCreditsApi = {
   async getAccount(teamId: string): Promise<TeamCreditAccount> {
     return json<TeamCreditAccount>(
-      `/api/teams/${encodeURIComponent(teamId)}/credits/account`
+      `/api/teams/${encodeURIComponent(teamId)}/credits`
     );
   },
 
@@ -126,7 +142,7 @@ export const teamCreditsTopupApi = {
     }
   ): Promise<TeamPaymentOrder> {
     return json<TeamPaymentOrder>(
-      `/api/teams/${encodeURIComponent(teamId)}/credits/topup/orders`,
+      `/api/teams/${encodeURIComponent(teamId)}/credits/topup-orders`,
       {
         method: "POST",
         headers: JSON_HEADERS,

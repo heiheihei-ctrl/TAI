@@ -18,6 +18,7 @@ import {
   ModelRoutingService,
   type ResolvedManagedModelRoute,
 } from "./model-routing.service";
+import { VolcAssetService } from "../../volc-asset/volc-asset.service";
 import type { TencentVodAigcCreateVideoTaskRequest } from "./tencent-vod-aigc.service";
 import {
   buildOmniFlashExtApimartPayload,
@@ -185,7 +186,22 @@ export class VideoProviderService {
     private readonly oss: OssService,
     private readonly tencentVodAigcService: TencentVodAigcService,
     private readonly modelRoutingService: ModelRoutingService,
+    private readonly volcAssetService: VolcAssetService,
   ) {}
+
+  private async validateVolcAssetId(assetId: string): Promise<boolean> {
+    if (!this.volcAssetService || !this.volcAssetService.getAssetStatus) {
+      this.logger.warn("VolcAssetService not available, falling back to URL");
+      return false;
+    }
+    try {
+      const status = await this.volcAssetService.getAssetStatus(assetId);
+      return status.status === 'active';
+    } catch (error) {
+      this.logger.warn(`Failed to validate asset ${assetId}: ${error}`);
+      return false;
+    }
+  }
 
   private withExecutionMetadata(
     result: VideoGenerationResult,
@@ -1700,7 +1716,13 @@ export class VideoProviderService {
     for (const item of objectItems) {
       let url: string;
       if (isSeedance20 && item.volcAssetStatus === "active" && item.volcAssetId) {
-        url = `asset://${item.volcAssetId}`;
+        const isValid = await this.validateVolcAssetId(item.volcAssetId);
+        if (isValid) {
+          url = `asset://${item.volcAssetId}`;
+        } else {
+          this.logger.warn(`Asset ${item.volcAssetId} not found, falling back to URL`);
+          url = item.url;
+        }
       } else {
         url = item.url;
       }
@@ -1727,11 +1749,18 @@ export class VideoProviderService {
       });
     }
 
-    const objectItemUrls = objectItems.map((item) =>
-      isSeedance20 && item.volcAssetStatus === "active" && item.volcAssetId
-        ? `asset://${item.volcAssetId}`
-        : item.url,
-    );
+    const objectItemUrls = await Promise.all(objectItems.map(async (item) => {
+      if (isSeedance20 && item.volcAssetStatus === "active" && item.volcAssetId) {
+        const isValid = await this.validateVolcAssetId(item.volcAssetId);
+        if (isValid) {
+          return `asset://${item.volcAssetId}`;
+        } else {
+          this.logger.warn(`Asset ${item.volcAssetId} not found, falling back to URL`);
+          return item.url;
+        }
+      }
+      return item.url;
+    }));
     const allResolvedUrls = [...uploadedStringUrls, ...objectItemUrls];
 
     const transport = String(route.vendor?.metadata?.requestProfile?.transport || "").trim();
@@ -2894,10 +2923,18 @@ export class VideoProviderService {
     }
 
     for (const item of objectItems) {
-      const url =
-        isSeedance2Model && item.volcAssetStatus === "active" && item.volcAssetId
-          ? `asset://${item.volcAssetId}`
-          : item.url;
+      let url: string;
+      if (isSeedance2Model && item.volcAssetStatus === "active" && item.volcAssetId) {
+        const isValid = await this.validateVolcAssetId(item.volcAssetId);
+        if (isValid) {
+          url = `asset://${item.volcAssetId}`;
+        } else {
+          this.logger.warn(`Asset ${item.volcAssetId} not found, falling back to URL`);
+          url = item.url;
+        }
+      } else {
+        url = item.url;
+      }
       normalizedImageUrls.push(url);
       this.logger.log(`📸 Seedance 参考图片 (asset/url): ${url.substring(0, 100)}`);
     }

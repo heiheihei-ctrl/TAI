@@ -12,7 +12,7 @@
     "fix:sharp": "node scripts/fix-sharp-install.js",
     "fix:onnx": "node scripts/fix-onnxruntime-install.js",
     "verify:native": "node scripts/diagnose-sharp.js && node scripts/diagnose-background-removal.js",
-    "dev": "npm run prisma:generate && ts-node-dev --respawn --transpile-only -r ./src/tracing.bootstrap.ts src/main.ts",
+    "dev": "ts-node-dev --respawn --transpile-only -r ./src/tracing.bootstrap.ts src/main.ts",
     "lint": "echo 'no lint configured'",
     "sanitize:design-json": "ts-node scripts/sanitize-design-json.ts",
     "backfill:global-video-history": "ts-node scripts/backfill-global-video-history.ts",
@@ -70,7 +70,8 @@
     "sharp": "^0.34.5",
     "socket.io": "^4.8.3",
     "socks-proxy-agent": "^8.0.5",
-    "wechatpay-node-v3": "^2.2.1"
+    "wechatpay-node-v3": "^2.2.1",
+    "ws": "^8.21.1"
   },
   "optionalDependencies": {
     "@img/sharp-linux-x64": "0.34.5",

@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { TeamsService } from '../teams/teams.service';
+import { TeamCoreService } from '../team-core/team-core.service';
 import type {
   CollaborationContentUpdatePayload,
   CollaborationPeer,
@@ -37,7 +37,7 @@ export class CollaborationService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
-    private readonly teams: TeamsService,
+    private readonly teams: TeamCoreService,
   ) {}
 
   colorForUser(userId: string): string {
@@ -80,7 +80,7 @@ export class CollaborationService {
     });
     if (!project) throw new NotFoundException('项目不存在');
     if (project.teamId) {
-      await this.teams.assertTeamMember(project.teamId, userId);
+      await this.teams.assertMember(project.teamId, userId);
       return;
     }
     if (project.userId !== userId) {

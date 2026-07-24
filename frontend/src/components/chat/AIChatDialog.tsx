@@ -30,6 +30,7 @@ import InlineImageMentionEditor from "@/components/common/InlineImageMentionEdit
 import SmartImage from "@/components/ui/SmartImage";
 import SmoothSmartImage from "@/components/ui/SmoothSmartImage";
 import { useAIChatStore, getTextModelForProvider } from "@/stores/aiChatStore";
+import { useCommentStore } from "@/stores/commentStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useProjectContentStore } from "@/stores/projectContentStore";
 import { useUIStore } from "@/stores";
@@ -380,6 +381,22 @@ const AIChatDialog: React.FC = () => {
   const historyInitialHeightRef = useRef<number | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const showHistoryRef = useRef(showHistory);
+
+  // 右侧双抽屉互斥（后触发覆盖先触发）：
+  //  - 评论模式开启 → 收起对话框右侧展开面板（回到底部紧凑栏，不隐藏）。
+  //  - 对话框右侧展开 → 关闭评论模式。
+  const commentActive = useCommentStore((s) => s.active);
+  useEffect(() => {
+    if (commentActive) setShowHistory(false);
+  }, [commentActive]);
+  useEffect(() => {
+    if (showHistory) {
+      try {
+        useCommentStore.getState().forceClose();
+      } catch {}
+    }
+  }, [showHistory]);
+
   const [isHistoryLocked, setIsHistoryLocked] = useState(false);
   // isMaximized 现在从 store 获取
   const isMaximizedRef = useRef(isMaximized);

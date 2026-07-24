@@ -129,6 +129,7 @@ import { useTeamStore, resolveCollaborationTeam } from "@/stores/teamStore";
 import { SHOW_TEAM_COLLABORATION } from "@/config/featureFlags";
 import { useFlowCollabIntegration } from "@/hooks/useFlowCollabIntegration";
 import RemoteFlowSelectionOverlays from "@/components/collaboration/RemoteFlowSelectionOverlays";
+import CanvasCommentLayer from "@/components/comments/CanvasCommentLayer";
 import { useImageHistoryStore } from "@/stores/imageHistoryStore";
 import { useUIStore } from "@/stores";
 import {
@@ -23441,6 +23442,9 @@ function FlowInner() {
           </>
         )}
       </ReactFlow>
+
+      {/* 节点评论浮层：气泡角标随节点(Flow 坐标)移动，团队模式下经 WS 实时刷新 */}
+      <CanvasCommentLayer />
 
       <FlowMultiSelectionResizer
         nodes={nodes as RFNode[]}

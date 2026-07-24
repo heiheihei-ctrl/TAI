@@ -14,8 +14,8 @@ import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { ConfigService } from "@nestjs/config";
 import { AppModule } from "./app.module";
 import { OpenObserveTelemetryService } from "./telemetry/openobserve-telemetry.service";
-import { IoAdapter } from "@nestjs/platform-socket.io";
 import { EnvHttpProxyAgent, setGlobalDispatcher } from "undici";
+import { WsCollabGateway } from "./team-collab/ws-collab.gateway";
 
 // 配置 undici ProxyAgent 以支持代理（修复 Node.js 20+ 中 @google/genai 的代理问题）
 function configureProxyForUndici() {
@@ -101,7 +101,7 @@ async function bootstrap() {
       bodyLimit: 200 * 1024 * 1024, // 200MB，放宽项目内容请求体大小
     })
   );
-  app.useWebSocketAdapter(new IoAdapter(app));
+  // 协同走原生 WebSocket（/ws/collab）。勿挂 Socket.IO IoAdapter，会干扰 upgrade 导致光标失效。
 
   const configService = app.get(ConfigService);
   const telemetryService = app.get(OpenObserveTelemetryService);
@@ -210,74 +210,29 @@ async function bootstrap() {
     }
   };
 
-  // 浏览器用 127.0.0.1 打开前端时 Origin 与 localhost 不同源；本地开发二者应等价
-  const normalizeLocalHostname = (hostname: string) => {
-    if (hostname === "127.0.0.1" || hostname === "::1") {
-      return "localhost";
-    }
-    return hostname;
-  };
-
-  const isOriginAllowed = (allowedOrigin: string, requestOrigin: string) => {
-    if (allowedOrigin === requestOrigin) {
+  // 统一的 origin 放行判定，供 HTTP CORS 与 WS upgrade 复用，保证两者规则一致
+  const isOriginAllowed = (origin?: string): boolean => {
+    if (corsDevAllowAll || corsAllowAll) return true;
+    if (!origin || origin === "null") return true;
+    const hostname = resolveHostname(origin);
+    if (hostname === "trycloudflare.com" || hostname.endsWith(".trycloudflare.com")) {
       return true;
     }
-
-    try {
-      const allowedUrl = new URL(allowedOrigin);
-      const requestUrl = new URL(requestOrigin);
-      const allowedPort =
-        allowedUrl.port || (allowedUrl.protocol === "https:" ? "443" : "80");
-      const requestPort =
-        requestUrl.port || (requestUrl.protocol === "https:" ? "443" : "80");
-
-      return (
-        allowedUrl.protocol === requestUrl.protocol &&
-        allowedPort === requestPort &&
-        normalizeLocalHostname(allowedUrl.hostname) ===
-          normalizeLocalHostname(requestUrl.hostname)
-      );
-    } catch {
-      return (
-        normalizeLocalHostname(resolveHostname(allowedOrigin)) ===
-        normalizeLocalHostname(resolveHostname(requestOrigin))
+    if (corsOrigins.length > 0) {
+      return corsOrigins.some(
+        (allowedOrigin: string) =>
+          allowedOrigin === origin || resolveHostname(allowedOrigin) === hostname
       );
     }
+    return true;
   };
 
-  // 动态检查 origin，允许 trycloudflare.com 的所有子域名（用于内网穿透）
+  // 动态检查 origin（CORS 插件回调）
   const originCallback = (
     origin: string | undefined,
     callback: (err: Error | null, allow?: boolean | string) => void
   ) => {
-    // 如果没有 origin（如同源请求）或 file://（origin 为 "null"），允许
-    if (!origin || origin === "null") {
-      callback(null, true);
-      return;
-    }
-
-    const hostname = resolveHostname(origin);
-
-    // 允许所有 trycloudflare.com 的子域名（Cloudflare Tunnel）
-    if (
-      hostname === "trycloudflare.com" ||
-      hostname.endsWith(".trycloudflare.com")
-    ) {
-      callback(null, true);
-      return;
-    }
-
-    // 如果配置了 CORS_ORIGIN，检查是否在允许列表中
-    if (corsOrigins.length > 0) {
-      const allowed = corsOrigins.some((allowedOrigin: string) =>
-        isOriginAllowed(allowedOrigin, origin)
-      );
-      callback(null, allowed);
-      return;
-    }
-
-    // 如果没有配置 CORS_ORIGIN，允许所有来源（开发环境）
-    callback(null, true);
+    callback(null, isOriginAllowed(origin));
   };
 
   // 使用 Fastify 的 CORS 插件，确保 preflight (OPTIONS) 被正确处理并返回 Access-Control-Allow-* 头
@@ -333,6 +288,10 @@ async function bootstrap() {
     .build();
   const doc = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup("api/docs", app, doc);
+
+  const wsGateway = app.get(WsCollabGateway);
+  wsGateway.setOriginCheck((origin: string) => isOriginAllowed(origin));
+  wsGateway.attach(fastifyInstance.server);
 
   const port = Number(process.env.PORT || configService.get("PORT") || 4000);
   const host = process.env.HOST || "0.0.0.0";

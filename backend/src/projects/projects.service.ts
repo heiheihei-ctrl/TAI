@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { OssService } from '../oss/oss.service';
-import { TeamsService } from '../teams/teams.service';
+import { TeamCoreService } from '../team-core/team-core.service';
 import { sanitizeDesignJson } from '../utils/designJsonSanitizer';
 
 @Injectable()
@@ -24,7 +24,7 @@ export class ProjectsService {
   constructor(
     private prisma: PrismaService,
     private oss: OssService,
-    private teams: TeamsService,
+    private teams: TeamCoreService,
   ) {}
 
   private async assertProjectAccess(
@@ -32,7 +32,7 @@ export class ProjectsService {
     project: { userId: string; teamId: string | null },
   ) {
     if (project.teamId) {
-      await this.teams.assertTeamMember(project.teamId, userId);
+      await this.teams.assertMember(project.teamId, userId);
       return;
     }
     if (project.userId !== userId) {
@@ -94,7 +94,7 @@ export class ProjectsService {
     teamId?: string,
   ) {
     if (teamId) {
-      await this.teams.assertTeamMember(teamId, userId);
+      await this.teams.assertMember(teamId, userId);
       return this.prisma.project.findMany({
         where: { teamId },
         orderBy: { createdAt: 'desc' },
@@ -138,7 +138,7 @@ export class ProjectsService {
 
   async create(userId: string, name?: string, teamId?: string) {
     if (teamId) {
-      const membership = await this.teams.assertTeamMember(teamId, userId);
+      const membership = await this.teams.assertMember(teamId, userId);
       if (membership.team.isPersonal) {
         teamId = undefined;
       }
