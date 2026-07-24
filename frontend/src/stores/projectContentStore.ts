@@ -5,6 +5,11 @@ type UpdateOptions = {
   markDirty?: boolean;
 };
 
+/**
+ * 画布被冻结（staleContent）的原因，决定弹窗文案。
+ */
+export type StaleReason = 'other-tab' | 'remote-newer' | 'save-rejected';
+
 type ProjectContentState = {
   projectId: string | null;
   content: ProjectContentSnapshot | null;
@@ -20,6 +25,10 @@ type ProjectContentState = {
   hydrated: boolean;
   /** 正在切换/加载项目内容（用于全屏 loading） */
   switching: boolean;
+  /** 远端项目列表变更后，等待本地内容校验期间暂停自动保存。 */
+  cacheValidationPending: boolean;
+  staleContent: boolean;
+  staleReason: StaleReason | null;
   setProject: (projectId: string | null) => void;
   beginSwitch: () => void;
   completeSwitch: () => void;
@@ -27,6 +36,8 @@ type ProjectContentState = {
   updatePartial: (partial: Partial<ProjectContentSnapshot>, options?: UpdateOptions) => void;
   setSaving: (saving: boolean) => void;
   setManualSaving: (saving: boolean) => void;
+  setCacheValidationPending: (pending: boolean) => void;
+  setStaleContent: (stale: boolean, reason?: StaleReason | null) => void;
   markSaved: (version: number, savedAt: string | null, savedAtCounter?: number) => void;
   setError: (error: string | null) => void;
   setWarning: (warning: string | null) => void;
@@ -34,7 +45,7 @@ type ProjectContentState = {
 };
 
 const createInitialState = (): Omit<ProjectContentState,
-  'setProject' | 'beginSwitch' | 'completeSwitch' | 'hydrate' | 'updatePartial' | 'setSaving' | 'setManualSaving' | 'markSaved' | 'setError' | 'setWarning' | 'reset'> => ({
+  'setProject' | 'beginSwitch' | 'completeSwitch' | 'hydrate' | 'updatePartial' | 'setSaving' | 'setManualSaving' | 'setCacheValidationPending' | 'setStaleContent' | 'markSaved' | 'setError' | 'setWarning' | 'reset'> => ({
   projectId: null,
   content: null,
   version: 1,
@@ -48,6 +59,9 @@ const createInitialState = (): Omit<ProjectContentState,
   lastWarning: null,
   hydrated: false,
   switching: false,
+  cacheValidationPending: false,
+  staleContent: false,
+  staleReason: null,
 });
 
 export const useProjectContentStore = create<ProjectContentState>((set) => ({
@@ -75,6 +89,9 @@ export const useProjectContentStore = create<ProjectContentState>((set) => ({
       lastError: null,
       lastWarning: null,
       hydrated: true,
+      staleContent: false,
+      staleReason: null,
+      cacheValidationPending: false,
     }));
   },
   updatePartial: (partial, options) => {
@@ -178,6 +195,11 @@ export const useProjectContentStore = create<ProjectContentState>((set) => ({
   },
   setSaving: (saving) => set({ saving }),
   setManualSaving: (manualSaving) => set({ manualSaving }),
+  setCacheValidationPending: (cacheValidationPending) => set({ cacheValidationPending }),
+  setStaleContent: (staleContent, reason) => set({
+    staleContent,
+    staleReason: staleContent ? (reason ?? null) : null,
+  }),
   markSaved: (version, savedAt, savedAtCounter?: number) => {
     set((state) => {
       // 如果提供了 savedAtCounter，检查保存期间是否有新修改

@@ -37,8 +37,10 @@ export interface TeamMember {
   userId: string;
   role: "owner" | "admin" | "member" | string;
   user?: {
+    id?: string;
     name?: string;
     email?: string;
+    avatarUrl?: string | null;
   };
   creditQuotaMonthly?: number | null;
   creditQuotaTotal?: number | null;

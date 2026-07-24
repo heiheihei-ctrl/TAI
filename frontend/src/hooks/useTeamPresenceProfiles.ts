@@ -23,10 +23,11 @@ export function useTeamPresenceProfiles(): Record<string, Pick<PresenceUser, 'na
         const next: Record<string, Pick<PresenceUser, 'name' | 'avatarUrl'>> = {};
         for (const row of Array.isArray(rows) ? rows : []) {
           const user = row?.user;
-          if (!user?.id) continue;
-          next[user.id] = {
-            name: user.name ?? user.id.slice(0, 8),
-            avatarUrl: user.avatarUrl ?? null,
+          const userId = user?.id || row?.userId;
+          if (!userId) continue;
+          next[userId] = {
+            name: user?.name ?? userId.slice(0, 8),
+            avatarUrl: user?.avatarUrl ?? null,
           };
         }
         setProfiles(next);

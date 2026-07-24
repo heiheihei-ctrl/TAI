@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { projectApi, type Project } from '@/services/projectApi';
 import { deleteProjectCache } from '@/services/projectCacheStore';
 import { useProjectContentStore } from '@/stores/projectContentStore';
+import { useTeamStore } from '@/stores/teamStore';
 import {
   getDefaultProjectName,
   getActiveWorkspaceProjectStorageKey,
@@ -18,6 +19,8 @@ type ProjectState = {
   modalOpen: boolean;
   error: string | null;
   load: () => Promise<void>;
+  /** 轻量刷新列表：保留当前选中，不自动建项/切项。 */
+  refreshList: () => Promise<void>;
   openModal: () => void;
   closeModal: () => void;
   create: (name?: string) => Promise<Project>;
@@ -67,6 +70,24 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       set({ projects, currentProjectId: current.id, currentProject: current as Project, loading: false });
     } catch (e: any) {
       set({ loading: false, error: e?.message || '加载项目失败' });
+    }
+  },
+
+  refreshList: async () => {
+    const { activeTeamId, teams } = useTeamStore.getState();
+    const activeTeam = teams.find((t) => t.id === activeTeamId);
+    const isOrgTeam = Boolean(activeTeam && !activeTeam.isPersonal);
+    try {
+      const projects = isOrgTeam && activeTeam
+        ? await projectApi.listByTeam(activeTeam.id)
+        : await projectApi.list();
+      set((s) => {
+        const current =
+          projects.find((p) => p.id === s.currentProjectId) ?? s.currentProject;
+        return { projects, currentProject: current };
+      });
+    } catch {
+      // best-effort
     }
   },
 
