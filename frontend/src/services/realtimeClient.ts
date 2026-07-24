@@ -3,24 +3,46 @@ import { tokenRefreshManager } from './tokenRefreshManager';
 
 type Listener = (env: any) => void;
 
-/**
- * 优先直连 VITE_API_BASE_URL（与 Tanva 一致，本地即 ws://localhost:4000）。
- * 未配置时再走当前页同源，由 Vite /ws 代理转发。
- */
-function resolveWsBase(): string {
-  const configured =
-    import.meta.env.VITE_API_BASE_URL && import.meta.env.VITE_API_BASE_URL.trim().length > 0
-      ? import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, '')
-      : '';
-  if (configured) return configured.replace(/^http/i, 'ws');
-  if (typeof window !== 'undefined') {
-    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    return `${proto}://${window.location.host}`;
-  }
-  return 'ws://localhost:4000';
+function toWsBase(httpOrWsUrl: string): string {
+  return httpOrWsUrl.replace(/\/+$/, '').replace(/^http/i, 'ws');
 }
 
-const wsBase = resolveWsBase();
+/**
+ * 协同 WS 基址解析：
+ * 1) VITE_WS_BASE_URL（显式覆盖，优先）
+ * 2) 测试机写死：前端 8080 → 后端 4002（Nginx /ws 反代未通时直连）
+ * 3) VITE_API_BASE_URL
+ * 4) 当前页同源
+ */
+function resolveWsBase(): string {
+  const wsOverride =
+    typeof import.meta.env.VITE_WS_BASE_URL === 'string'
+      ? import.meta.env.VITE_WS_BASE_URL.trim()
+      : '';
+  if (wsOverride) return toWsBase(wsOverride);
+
+  if (typeof window !== 'undefined') {
+    const { hostname, port, protocol } = window.location;
+    // 线上测试：静态站 8080，API/WS 在 4002
+    if (hostname === '101.96.217.132' && (port === '8080' || port === '')) {
+      return 'ws://101.96.217.132:4002';
+    }
+    const apiConfigured =
+      import.meta.env.VITE_API_BASE_URL && import.meta.env.VITE_API_BASE_URL.trim().length > 0
+        ? import.meta.env.VITE_API_BASE_URL.trim()
+        : '';
+    if (apiConfigured) return toWsBase(apiConfigured);
+    const proto = protocol === 'https:' ? 'wss' : 'ws';
+    return `${proto}://${window.location.host}`;
+  }
+
+  const apiConfigured =
+    import.meta.env.VITE_API_BASE_URL && import.meta.env.VITE_API_BASE_URL.trim().length > 0
+      ? import.meta.env.VITE_API_BASE_URL.trim()
+      : '';
+  if (apiConfigured) return toWsBase(apiConfigured);
+  return 'ws://localhost:4000';
+}
 
 const MAX_BACKOFF_MS = 30_000;
 
@@ -38,6 +60,7 @@ let tokenHookInstalled = false;
 function buildUrl(): string | null {
   // 允许仅靠 cookie 鉴权：无 localStorage token 也要发起 WS，否则 Network 里完全看不到连接。
   if (!teamId && !projectId) return null;
+  const wsBase = resolveWsBase();
   const params = new URLSearchParams();
   const token = getAccessToken();
   if (token) params.set('token', token);
