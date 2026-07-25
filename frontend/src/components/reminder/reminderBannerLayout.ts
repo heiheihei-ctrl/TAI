@@ -19,8 +19,9 @@ export const REMINDER_BANNER_ACTIONS_CLASS =
 export const REMINDER_BANNER_ACTIONS_COMPACT_CLASS =
   "flex shrink-0 items-center gap-1.5 sm:gap-2";
 
-export const REMINDER_BANNER_STACK_TOP_CLASS: Record<0 | 1 | 2, string> = {
+export const REMINDER_BANNER_STACK_TOP_CLASS: Record<0 | 1 | 2 | 3, string> = {
   0: "top-4",
   1: "top-14",
   2: "top-28",
+  3: "top-[10.5rem]",
 };

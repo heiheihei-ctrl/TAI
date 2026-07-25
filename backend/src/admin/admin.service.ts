@@ -23,6 +23,8 @@ export interface UserProfileDemographics {
   occupation: ProfileDistributionItem[];
   regionByProvince: ProfileDistributionItem[];
   regionByCity: ProfileDistributionItem[];
+  /** 用户来源渠道分布（填写渠道奖励） */
+  sourceChannel: ProfileDistributionItem[];
 }
 
 export interface AdminDashboardStats {
@@ -328,6 +330,7 @@ export class AdminService {
           profileOccupation: true,
           profileRegion: true,
           profileCompletedAt: true,
+          sourceChannel: true,
         },
       }),
     ]);
@@ -390,6 +393,7 @@ export class AdminService {
       profileOccupation: string | null;
       profileRegion: string | null;
       profileCompletedAt: Date | null;
+      sourceChannel: string | null;
     }>,
     totalUsers: number,
     now: Date,
@@ -400,6 +404,7 @@ export class AdminService {
     const occupationCounts = new Map<string, number>();
     const provinceCounts = new Map<string, number>();
     const cityCounts = new Map<string, number>();
+    const sourceChannelCounts = new Map<string, number>();
 
     for (const row of rows) {
       const genderKey = this.normalizeGenderLabel(row.profileGender);
@@ -418,6 +423,12 @@ export class AdminService {
       const cityKey =
         province && city ? `${province} / ${city}` : province ? `${province}（未选市）` : '未填写';
       cityCounts.set(cityKey, (cityCounts.get(cityKey) ?? 0) + 1);
+
+      const sourceChannelKey = this.normalizeSourceChannelLabel(row.sourceChannel);
+      sourceChannelCounts.set(
+        sourceChannelKey,
+        (sourceChannelCounts.get(sourceChannelKey) ?? 0) + 1,
+      );
     }
 
     return {
@@ -446,7 +457,36 @@ export class AdminService {
       regionByCity: this.finalizeDistribution(
         this.toTopDistribution(cityCounts, totalUsers, 12, '未填写'),
       ),
+      sourceChannel: this.finalizeDistribution(
+        this.toDistribution(sourceChannelCounts, totalUsers, [
+          '小红书',
+          '抖音',
+          '视频号',
+          'B站',
+          '公众号',
+          '朋友推荐',
+          'AI搜索',
+          '其他渠道',
+          '未填写',
+        ]),
+      ),
     };
+  }
+
+  private normalizeSourceChannelLabel(value: string | null | undefined): string {
+    const trimmed = String(value || '').trim();
+    const allowed = new Set([
+      '小红书',
+      '抖音',
+      '视频号',
+      'B站',
+      '公众号',
+      '朋友推荐',
+      'AI搜索',
+      '其他渠道',
+    ]);
+    if (allowed.has(trimmed)) return trimmed;
+    return '未填写';
   }
 
   private computeAge(birthday: Date | null, now: Date): number | null {

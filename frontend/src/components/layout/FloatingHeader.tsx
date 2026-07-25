@@ -1031,16 +1031,13 @@ const FloatingHeader: React.FC = () => {
   const showChannelSourceBanner =
     Boolean(user) && !channelRewardClaimed && !channelBannerDismissed;
 
-  const showIncentiveBannerRow =
-    showCheckInReminderBanner || showChannelSourceBanner;
-  const incentiveSideBySide =
-    showCheckInReminderBanner && showChannelSourceBanner;
-
-  // 签到与渠道来源并排占同一行高度，完善资料单独一行
+  // 完善资料 / 签到 / 渠道来源各自独占一行
   const topBannerCount = Math.min(
-    2,
-    Number(showProfileCompletionBanner) + Number(showIncentiveBannerRow),
-  ) as 0 | 1 | 2;
+    3,
+    Number(showProfileCompletionBanner) +
+      Number(showCheckInReminderBanner) +
+      Number(showChannelSourceBanner),
+  ) as 0 | 1 | 2 | 3;
 
   const headerTopClass = REMINDER_BANNER_STACK_TOP_CLASS[topBannerCount];
 
@@ -2292,26 +2289,20 @@ const FloatingHeader: React.FC = () => {
               onDismiss={() => setProfileBannerDismissed(true)}
             />
           ) : null}
-          {showIncentiveBannerRow ? (
-            <div className="pointer-events-none flex w-full shrink-0">
-              {showCheckInReminderBanner && checkInStatus ? (
-                <CheckInReminderBanner
-                  status={checkInStatus}
-                  sideBySide={incentiveSideBySide}
-                  onDismiss={() => setCheckInBannerDismissed(true)}
-                />
-              ) : null}
-              {showChannelSourceBanner ? (
-                <ChannelSourceReminderBanner
-                  sideBySide={incentiveSideBySide}
-                  onDismiss={() => setChannelBannerDismissed(true)}
-                  onClaimed={() => {
-                    setChannelRewardClaimed(true);
-                    setChannelBannerDismissed(true);
-                  }}
-                />
-              ) : null}
-            </div>
+          {showCheckInReminderBanner && checkInStatus ? (
+            <CheckInReminderBanner
+              status={checkInStatus}
+              onDismiss={() => setCheckInBannerDismissed(true)}
+            />
+          ) : null}
+          {showChannelSourceBanner ? (
+            <ChannelSourceReminderBanner
+              onDismiss={() => setChannelBannerDismissed(true)}
+              onClaimed={() => {
+                setChannelRewardClaimed(true);
+                setChannelBannerDismissed(true);
+              }}
+            />
           ) : null}
         </ReminderBannerStack>
       ) : null}

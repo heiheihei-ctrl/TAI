@@ -38,6 +38,8 @@ export interface UserProfileDemographics {
   occupation: ProfileDistributionItem[];
   regionByProvince: ProfileDistributionItem[];
   regionByCity: ProfileDistributionItem[];
+  /** 用户来源渠道分布（填写渠道奖励） */
+  sourceChannel: ProfileDistributionItem[];
 }
 
 export interface DashboardStats {

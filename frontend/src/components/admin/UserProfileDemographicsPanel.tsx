@@ -40,6 +40,14 @@ export default function UserProfileDemographicsPanel({ data }: Props) {
           chartType="pie"
           height={300}
         />
+        <DashboardDistributionChart
+          className="min-w-0 flex-1"
+          title="渠道来源分布"
+          subtitle="用户填写来源渠道奖励后的占比"
+          data={data.sourceChannel ?? []}
+          chartType="pie"
+          height={300}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
