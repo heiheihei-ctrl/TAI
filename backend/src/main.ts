@@ -50,6 +50,17 @@ function configureProxyForUndici() {
 
 configureProxyForUndici();
 
+// Prisma BigInt 字段（如 ApiUsageRecord.processingTime）默认无法 JSON 序列化，会导致接口 500
+if (!(BigInt.prototype as any).toJSON) {
+  Object.defineProperty(BigInt.prototype, "toJSON", {
+    value(this: bigint) {
+      return Number(this);
+    },
+    configurable: true,
+    writable: true,
+  });
+}
+
 const toProcessErrorPayload = (value: unknown) => {
   if (value instanceof Error) {
     const candidate = value as Error & {

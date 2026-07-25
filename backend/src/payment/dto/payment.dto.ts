@@ -13,7 +13,13 @@ export enum PaymentStatus {
   CANCELLED = 'cancelled',
 }
 
-export type PaymentOrderType = 'recharge' | 'membership' | 'team_seat' | 'team_credits';
+export type PaymentOrderType =
+  | 'recharge'
+  | 'membership'
+  | 'team_seat'
+  | 'team_credits'
+  | 'team_seat_package'
+  | 'team_credits_topup';
 
 export const TEAM_CREDITS_PACKAGES = [
   { price: 25, credits: 2500 },

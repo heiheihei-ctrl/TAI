@@ -21,6 +21,8 @@ import WeChatCustomMenuTab from "@/components/admin/WeChatCustomMenuTab";
 import { fetchWithAuth } from "@/services/authFetch";
 import {
   getDashboardStats,
+  exportDashboardReport,
+  type DashboardReportType,
   getUsers,
   getApiUsageStats,
   getVolcengineMonthlyCreditStats,
@@ -14082,6 +14084,9 @@ export default function Admin() {
   const [trendEndDate, setTrendEndDate] = useState(defaultTrendRangeRef.current.endDate);
   const [appliedTrendRange, setAppliedTrendRange] = useState(defaultTrendRangeRef.current);
   const [trendRangeError, setTrendRangeError] = useState<string | null>(null);
+  const [dashboardReportType, setDashboardReportType] =
+    useState<DashboardReportType>("daily");
+  const [exportingDashboardReport, setExportingDashboardReport] = useState(false);
   const userRole = user?.role;
   const hasAdminPanelAccess = canAccessAdminPanel(userRole);
   const canManageSensitiveUserFields = isFullAdmin(userRole);
@@ -14161,6 +14166,29 @@ export default function Admin() {
     setTrendEndDate(nextRange.endDate);
     setTrendRangeError(null);
     setAppliedTrendRange(nextRange);
+  };
+
+  const handleExportDashboardReport = async () => {
+    const validationError = validateDashboardTrendRange(
+      appliedTrendRange.startDate,
+      appliedTrendRange.endDate,
+    );
+    if (validationError) {
+      setTrendRangeError(validationError);
+      return;
+    }
+    setExportingDashboardReport(true);
+    try {
+      await exportDashboardReport({
+        reportType: dashboardReportType,
+        startDate: appliedTrendRange.startDate,
+        endDate: appliedTrendRange.endDate,
+      });
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "导出失败");
+    } finally {
+      setExportingDashboardReport(false);
+    }
   };
 
   if (!user || !hasAdminPanelAccess) {
@@ -14272,6 +14300,35 @@ export default function Admin() {
                     >
                       近14天
                     </Button>
+                    <select
+                      aria-label='报表类型'
+                      value={dashboardReportType}
+                      onChange={(event) =>
+                        setDashboardReportType(event.target.value as DashboardReportType)
+                      }
+                      className='h-9 rounded-md border border-input bg-white px-2 text-sm'
+                      title={
+                        dashboardReportType === 'daily'
+                          ? '导出结束日期当天'
+                          : dashboardReportType === 'weekly'
+                            ? '导出结束日期所在周（按天）'
+                            : '导出结束日期所在月（按天）'
+                      }
+                    >
+                      <option value='daily'>日报</option>
+                      <option value='weekly'>周报</option>
+                      <option value='monthly'>月报</option>
+                    </select>
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      className='h-9'
+                      disabled={exportingDashboardReport}
+                      onClick={() => void handleExportDashboardReport()}
+                    >
+                      {exportingDashboardReport ? "导出中..." : "导出"}
+                    </Button>
                   </div>
                 </div>
                 {trendRangeError ? (
@@ -14287,31 +14344,68 @@ export default function Admin() {
                       })}`
                     : ""}
                 </div>
-                <div className='grid grid-cols-2 md:grid-cols-4 gap-4'>
-                  <StatCard title='总用户数' value={stats.totalUsers} />
+                                <div className='grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4'>
                   <StatCard
-                    title='日活用户'
+                    title='总用户存量'
+                    value={stats.totalUsers}
+                    subtitle='截至当前全部注册账号'
+                  />
+                  <StatCard
+                    title='日活跃用户数'
                     value={stats.dailyActiveUsers}
                     subtitle={
                       appliedTrendRange.startDate === appliedTrendRange.endDate
-                        ? "所选日期当天累计去重"
-                        : "所选时段日均日活"
+                        ? '所选日期当天活跃用户（去重）'
+                        : '所选时段日均活跃用户'
                     }
                   />
-                  <StatCard title='在线用户' value={stats.onlineUsers} subtitle='最近 15 分钟内有登录态请求' />
                   <StatCard
-                    title='注册用户'
+                    title='新用户日活跃数'
+                    value={stats.newUserDailyActiveUsers ?? 0}
+                    subtitle={
+                      appliedTrendRange.startDate === appliedTrendRange.endDate
+                        ? '当日活跃 ∩ 当日新注册'
+                        : '所选时段日均'
+                    }
+                  />
+                  <StatCard
+                    title='老用户日活跃数'
+                    value={stats.oldUserDailyActiveUsers ?? 0}
+                    subtitle={
+                      appliedTrendRange.startDate === appliedTrendRange.endDate
+                        ? '当日活跃中的非当日注册用户'
+                        : '所选时段日均'
+                    }
+                  />
+                  <StatCard
+                    title='次日留存率'
+                    value={
+                      stats.nextDayRetentionRate == null
+                        ? '-'
+                        : `${stats.nextDayRetentionRate}%`
+                    }
+                    subtitle='当日注册用户中次日回访占比（可观测日加权）'
+                  />
+                  <StatCard
+                    title='核心模型使用次数'
+                    value={stats.coreModelUsageCount ?? 0}
+                    subtitle={
+                      appliedTrendRange.startDate === appliedTrendRange.endDate
+                        ? '所选日期模型调用次数（不去重）'
+                        : '所选时段模型调用次数（不去重）'
+                    }
+                  />
+                  <StatCard
+                    title='新增注册用户数'
                     value={stats.todayRegisteredUsers}
                     subtitle={
                       appliedTrendRange.startDate === appliedTrendRange.endDate
-                        ? "所选日期当天新增"
-                        : "所选时段累计新增"
+                        ? '所选日期当天新增'
+                        : '所选时段累计新增'
                     }
                   />
-                  <StatCard
-                    title='流通积分'
-                    value={stats.totalCreditsInCirculation}
-                  />
+                  <StatCard title='在线用户' value={stats.onlineUsers} subtitle='最近 15 分钟内有登录态请求' />
+                  <StatCard title='流通积分' value={stats.totalCreditsInCirculation} />
                   <StatCard title='已消费积分' value={stats.totalCreditsSpent} />
                   <StatCard
                     title='API调用总数'
@@ -14322,15 +14416,12 @@ export default function Admin() {
                     title='API成功率'
                     value={
                       stats.totalApiCalls > 0
-                        ? `${(
-                            (stats.successfulApiCalls / stats.totalApiCalls) *
-                            100
-                          ).toFixed(1)}%`
-                        : "-"
+                        ? `${((stats.successfulApiCalls / stats.totalApiCalls) * 100).toFixed(1)}%`
+                        : '-'
                     }
                   />
                 </div>
-                <div className='bg-white rounded-lg border p-4 shadow-sm'>
+<div className='bg-white rounded-lg border p-4 shadow-sm'>
                   <div className='text-sm font-medium text-gray-700 mb-3'>注册用户 vs 日活用户</div>
                   <DashboardTrendChart data={stats.userTrend} />
                 </div>

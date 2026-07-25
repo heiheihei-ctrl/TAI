@@ -31,6 +31,14 @@ export interface AdminDashboardStats {
   totalUsers: number;
   activeUsers: number;
   dailyActiveUsers: number;
+  /** 新用户日活跃数：当日活跃 ∩ 当日新注册 */
+  newUserDailyActiveUsers: number;
+  /** 老用户日活跃数：当日活跃中的非当日注册用户 */
+  oldUserDailyActiveUsers: number;
+  /** 次日留存率（0-100，保留 1 位小数）；按所选时段内可完整观测的注册日加权平均 */
+  nextDayRetentionRate: number | null;
+  /** 核心模型使用次数（时段内 ApiUsageRecord 原始调用次数，不去重） */
+  coreModelUsageCount: number;
   onlineUsers: number;
   todayRegisteredUsers: number;
   totalCreditsInCirculation: number;
@@ -43,6 +51,8 @@ export interface AdminDashboardStats {
     date: string;
     registeredUsers: number;
     dailyActiveUsers: number;
+    newUserDailyActiveUsers: number;
+    oldUserDailyActiveUsers: number;
   }>;
   userProfileDemographics: UserProfileDemographics;
 }
@@ -173,7 +183,7 @@ export class AdminService {
     return days;
   }
 
-  private resolveTrendRange(
+  resolveTrendRange(
     now: Date,
     trendStartDate?: string,
     trendEndDate?: string,
@@ -235,6 +245,101 @@ export class AdminService {
     }
   }
 
+  /** 当日活跃用户：RefreshToken 会话 或 lastLoginAt（去重） */
+  async queryDayActivityBreakdown(
+    dayStart: Date,
+    dayEnd: Date,
+  ): Promise<{
+    dailyActiveUsers: number;
+    newUserDailyActiveUsers: number;
+    oldUserDailyActiveUsers: number;
+  }> {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        dau: bigint | number | string;
+        new_dau: bigint | number | string;
+        old_dau: bigint | number | string;
+      }>
+    >`
+      WITH active AS (
+        SELECT DISTINCT id FROM (
+          SELECT "userId" AS id
+          FROM "RefreshToken"
+          WHERE "createdAt" >= ${dayStart} AND "createdAt" < ${dayEnd}
+          UNION
+          SELECT id
+          FROM "User"
+          WHERE "lastLoginAt" >= ${dayStart} AND "lastLoginAt" < ${dayEnd}
+        ) t
+      )
+      SELECT
+        COUNT(*)::bigint AS dau,
+        COUNT(*) FILTER (
+          WHERE u."createdAt" >= ${dayStart} AND u."createdAt" < ${dayEnd}
+        )::bigint AS new_dau,
+        COUNT(*) FILTER (
+          WHERE u."createdAt" < ${dayStart}
+        )::bigint AS old_dau
+      FROM active a
+      INNER JOIN "User" u ON u.id = a.id
+    `;
+    const row = rows[0];
+    return {
+      dailyActiveUsers: this.toNumber(row?.dau ?? 0),
+      newUserDailyActiveUsers: this.toNumber(row?.new_dau ?? 0),
+      oldUserDailyActiveUsers: this.toNumber(row?.old_dau ?? 0),
+    };
+  }
+
+  /**
+   * 次日留存：dayStart 当天注册用户中，在次日仍有活跃的占比
+   * 返回 cohortSize / returnedCount，供加权汇总
+   */
+  async queryNextDayRetentionCohort(
+    dayStart: Date,
+  ): Promise<{ cohortSize: number; returnedCount: number }> {
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+    const nextEnd = new Date(dayEnd);
+    nextEnd.setDate(nextEnd.getDate() + 1);
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{ cohort_size: bigint | number | string; returned_count: bigint | number | string }>
+    >`
+      WITH cohort AS (
+        SELECT id
+        FROM "User"
+        WHERE "createdAt" >= ${dayStart} AND "createdAt" < ${dayEnd}
+      ),
+      returned AS (
+        SELECT DISTINCT c.id
+        FROM cohort c
+        WHERE EXISTS (
+          SELECT 1
+          FROM "RefreshToken" rt
+          WHERE rt."userId" = c.id
+            AND rt."createdAt" >= ${dayEnd}
+            AND rt."createdAt" < ${nextEnd}
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM "User" u
+          WHERE u.id = c.id
+            AND u."lastLoginAt" >= ${dayEnd}
+            AND u."lastLoginAt" < ${nextEnd}
+        )
+      )
+      SELECT
+        (SELECT COUNT(*)::bigint FROM cohort) AS cohort_size,
+        (SELECT COUNT(*)::bigint FROM returned) AS returned_count
+    `;
+    const row = rows[0];
+    return {
+      cohortSize: this.toNumber(row?.cohort_size ?? 0),
+      returnedCount: this.toNumber(row?.returned_count ?? 0),
+    };
+  }
+
   /**
    * 获取管理后台统计数据
    */
@@ -252,26 +357,21 @@ export class AdminService {
       options?.trendStartDate,
       options?.trendEndDate,
     );
+    const periodStart = trendDayStarts[0] ?? startOfToday;
+    const periodEndExclusive = new Date(trendDayStarts[trendDayStarts.length - 1] ?? startOfToday);
+    periodEndExclusive.setDate(periodEndExclusive.getDate() + 1);
 
     const [
       totalUsers,
-      todayActiveUsersByLastSeen,
       onlineUsers,
-      todayActiveUsersBySessionRows,
       creditStats,
       apiStats,
+      coreModelUsageCount,
       trendRows,
+      retentionCohorts,
       profileRows,
     ] = await Promise.all([
       this.prisma.user.count(),
-      this.prisma.user.count({
-        where: {
-          lastLoginAt: {
-            gte: startOfToday,
-            lt: endOfToday,
-          },
-        },
-      }),
       this.prisma.user.count({
         where: {
           status: 'active',
@@ -280,12 +380,6 @@ export class AdminService {
           },
         },
       }),
-      this.prisma.$queryRaw<Array<{ count: bigint | number | string }>>`
-        SELECT COUNT(DISTINCT "userId")::bigint AS count
-        FROM "RefreshToken"
-        WHERE "createdAt" >= ${startOfToday}
-          AND "createdAt" < ${endOfToday}
-      `,
       this.prisma.creditAccount.aggregate({
         _sum: {
           balance: true,
@@ -296,11 +390,19 @@ export class AdminService {
         by: ['responseStatus'],
         _count: true,
       }),
+      this.prisma.apiUsageRecord.count({
+        where: {
+          createdAt: {
+            gte: periodStart,
+            lt: periodEndExclusive,
+          },
+        },
+      }),
       Promise.all(
         trendDayStarts.map(async (dayStart) => {
           const dayEnd = new Date(dayStart);
           dayEnd.setDate(dayEnd.getDate() + 1);
-          const [registeredUsers, dailyActiveRows] = await Promise.all([
+          const [registeredUsers, activity] = await Promise.all([
             this.prisma.user.count({
               where: {
                 createdAt: {
@@ -309,19 +411,28 @@ export class AdminService {
                 },
               },
             }),
-            this.prisma.$queryRaw<Array<{ count: bigint | number | string }>>`
-              SELECT COUNT(DISTINCT "userId")::bigint AS count
-              FROM "RefreshToken"
-              WHERE "createdAt" >= ${dayStart}
-                AND "createdAt" < ${dayEnd}
-            `,
+            this.queryDayActivityBreakdown(dayStart, dayEnd),
           ]);
           return {
             date: this.formatDayLabel(dayStart),
             registeredUsers,
-            dailyActiveUsers: this.toNumber(dailyActiveRows[0]?.count ?? 0),
+            dailyActiveUsers: activity.dailyActiveUsers,
+            newUserDailyActiveUsers: activity.newUserDailyActiveUsers,
+            oldUserDailyActiveUsers: activity.oldUserDailyActiveUsers,
           };
-        })
+        }),
+      ),
+      Promise.all(
+        trendDayStarts.map(async (dayStart) => {
+          const nextDayEnd = new Date(dayStart);
+          nextDayEnd.setDate(nextDayEnd.getDate() + 2);
+          // 次日尚未结束则无法观测完整留存
+          if (nextDayEnd > now) {
+            return { cohortSize: 0, returnedCount: 0, measurable: false as const };
+          }
+          const cohort = await this.queryNextDayRetentionCohort(dayStart);
+          return { ...cohort, measurable: true as const };
+        }),
       ),
       this.prisma.user.findMany({
         select: {
@@ -335,44 +446,53 @@ export class AdminService {
       }),
     ]);
 
-    const todayActiveUsersBySession = this.toNumber(todayActiveUsersBySessionRows[0]?.count ?? 0);
-    const dailyActiveUsersForToday = Math.max(
-      todayActiveUsersByLastSeen,
-      todayActiveUsersBySession,
-    );
-
     const totalApiCalls = apiStats.reduce((sum, item) => sum + item._count, 0);
-    const successfulApiCalls = apiStats.find(s => s.responseStatus === ApiResponseStatus.SUCCESS)?._count || 0;
-    const failedApiCalls = apiStats.find(s => s.responseStatus === ApiResponseStatus.FAILED)?._count || 0;
+    const successfulApiCalls =
+      apiStats.find((s) => s.responseStatus === ApiResponseStatus.SUCCESS)?._count || 0;
+    const failedApiCalls =
+      apiStats.find((s) => s.responseStatus === ApiResponseStatus.FAILED)?._count || 0;
 
-    const lastTrendDay = trendDayStarts[trendDayStarts.length - 1];
-    const userTrend = trendRows.map((item, index) => {
-      if (
-        index === trendRows.length - 1 &&
-        lastTrendDay &&
-        this.isSameDay(lastTrendDay, startOfToday)
-      ) {
-        return { ...item, dailyActiveUsers: dailyActiveUsersForToday };
-      }
-      return item;
-    });
+    const userTrend = trendRows;
 
     const periodRegisteredUsers = userTrend.reduce(
       (sum, item) => sum + item.registeredUsers,
       0,
     );
-    const periodDailyActiveUsers =
-      userTrend.length <= 1
-        ? (userTrend[0]?.dailyActiveUsers ?? 0)
-        : Math.round(
-            userTrend.reduce((sum, item) => sum + item.dailyActiveUsers, 0) /
-              Math.max(userTrend.length, 1),
-          );
+    const avg = (values: number[]) =>
+      values.length <= 1
+        ? values[0] ?? 0
+        : Math.round(values.reduce((sum, v) => sum + v, 0) / Math.max(values.length, 1));
+
+    const periodDailyActiveUsers = avg(userTrend.map((item) => item.dailyActiveUsers));
+    const periodNewUserDailyActiveUsers = avg(
+      userTrend.map((item) => item.newUserDailyActiveUsers),
+    );
+    const periodOldUserDailyActiveUsers = avg(
+      userTrend.map((item) => item.oldUserDailyActiveUsers),
+    );
+
+    const measurableCohorts = retentionCohorts.filter((item) => item.measurable);
+    const retentionCohortSize = measurableCohorts.reduce(
+      (sum, item) => sum + item.cohortSize,
+      0,
+    );
+    const retentionReturnedCount = measurableCohorts.reduce(
+      (sum, item) => sum + item.returnedCount,
+      0,
+    );
+    const nextDayRetentionRate =
+      retentionCohortSize > 0
+        ? Math.round((retentionReturnedCount / retentionCohortSize) * 1000) / 10
+        : null;
 
     return {
       totalUsers,
       activeUsers: periodDailyActiveUsers,
       dailyActiveUsers: periodDailyActiveUsers,
+      newUserDailyActiveUsers: periodNewUserDailyActiveUsers,
+      oldUserDailyActiveUsers: periodOldUserDailyActiveUsers,
+      nextDayRetentionRate,
+      coreModelUsageCount,
       onlineUsers,
       todayRegisteredUsers: periodRegisteredUsers,
       totalCreditsInCirculation: creditStats._sum.balance || 0,
@@ -473,7 +593,7 @@ export class AdminService {
     };
   }
 
-  private normalizeSourceChannelLabel(value: string | null | undefined): string {
+  normalizeSourceChannelLabel(value: string | null | undefined): string {
     const trimmed = String(value || '').trim();
     const allowed = new Set([
       '小红书',
@@ -697,7 +817,11 @@ export class AdminService {
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,
       creditAccount: user.creditAccount,
-      recentApiUsage: user.apiUsageRecords,
+      recentApiUsage: user.apiUsageRecords.map((record) => ({
+        ...record,
+        processingTime:
+          record.processingTime == null ? null : Number(record.processingTime),
+      })),
     };
   }
 
@@ -1206,8 +1330,15 @@ export class AdminService {
       this.prisma.apiUsageRecord.count({ where }),
     ]);
 
+    // processingTime 为 BigInt，直接 JSON 序列化会抛错导致 500
+    const serializedRecords = records.map((record) => ({
+      ...record,
+      processingTime:
+        record.processingTime == null ? null : Number(record.processingTime),
+    }));
+
     return {
-      records,
+      records: serializedRecords,
       pagination: {
         page,
         pageSize,

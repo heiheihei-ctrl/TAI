@@ -46,6 +46,10 @@ export interface DashboardStats {
   totalUsers: number;
   activeUsers: number;
   dailyActiveUsers: number;
+  newUserDailyActiveUsers: number;
+  oldUserDailyActiveUsers: number;
+  nextDayRetentionRate: number | null;
+  coreModelUsageCount: number;
   onlineUsers: number;
   todayRegisteredUsers: number;
   totalCreditsInCirculation: number;
@@ -58,6 +62,8 @@ export interface DashboardStats {
     date: string;
     registeredUsers: number;
     dailyActiveUsers: number;
+    newUserDailyActiveUsers: number;
+    oldUserDailyActiveUsers: number;
   }>;
   userProfileDemographics: UserProfileDemographics;
 }
@@ -171,6 +177,49 @@ export async function getDashboardStats(params?: {
   const query = searchParams.toString();
   const response = await request(`/api/admin/dashboard${query ? `?${query}` : ""}`);
   return response.json();
+}
+
+export type DashboardReportType = "daily" | "weekly" | "monthly";
+
+// 导出系统概览 Excel（日报 / 周报 / 月报）
+export async function exportDashboardReport(params: {
+  reportType: DashboardReportType;
+  startDate?: string;
+  endDate?: string;
+}): Promise<void> {
+  const searchParams = new URLSearchParams();
+  searchParams.set("reportType", params.reportType);
+  if (params.startDate) searchParams.set("startDate", params.startDate);
+  if (params.endDate) searchParams.set("endDate", params.endDate);
+
+  const response = await request(`/api/admin/dashboard/export?${searchParams.toString()}`);
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") || "";
+  let filename = `系统概览_${params.reportType}.xlsx`;
+  const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+  const plainMatch = /filename="?([^";]+)"?/i.exec(disposition);
+  if (utf8Match?.[1]) {
+    try {
+      filename = decodeURIComponent(utf8Match[1]);
+    } catch {
+      filename = utf8Match[1];
+    }
+  } else if (plainMatch?.[1]) {
+    filename = plainMatch[1];
+  }
+
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
 }
 
 // 获取用户列表

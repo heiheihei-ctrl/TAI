@@ -1,4 +1,11 @@
-import { Injectable, BadRequestException, NotFoundException, OnModuleInit, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  HttpException,
+  NotFoundException,
+  OnModuleInit,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
@@ -265,6 +272,39 @@ export class PaymentService implements OnModuleInit {
     return Math.round(amount * 100) / 100;
   }
 
+  /** 支付网关错误统一转成 4xx，避免 catch 里读 null.message 再炸成 500 */
+  private rethrowPaymentGatewayError(error: unknown, fallbackMessage: string): never {
+    if (error instanceof HttpException) {
+      throw error;
+    }
+
+    let detail = fallbackMessage;
+    if (typeof error === 'string' && error.trim()) {
+      detail = error.trim();
+    } else if (error instanceof Error && error.message.trim()) {
+      detail = error.message.trim();
+    } else if (error && typeof error === 'object') {
+      const record = error as Record<string, unknown>;
+      const candidates = [record.message, record.error, record.msg, record.subMsg, record.code];
+      for (const candidate of candidates) {
+        if (typeof candidate === 'string' && candidate.trim()) {
+          detail = candidate.trim();
+          break;
+        }
+      }
+    }
+
+    throw new BadRequestException(detail || fallbackMessage);
+  }
+
+  private safeJsonStringify(value: unknown): string {
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
+    }
+  }
+
   private isPrivilegedAdminRole(role?: string | null): boolean {
     const normalized = String(role || '').trim().toLowerCase();
     return normalized === 'admin' || normalized === 'normal_admin';
@@ -403,7 +443,9 @@ export class PaymentService implements OnModuleInit {
       } as Prisma.InputJsonValue;
     } else if (
       orderType === 'team_seat' ||
-      orderType === 'team_credits'
+      orderType === 'team_credits' ||
+      orderType === 'team_seat_package' ||
+      orderType === 'team_credits_topup'
     ) {
       if (!Number.isFinite(orderAmount) || orderAmount <= 0) {
         throw new BadRequestException('Invalid order amount');
@@ -442,6 +484,15 @@ export class PaymentService implements OnModuleInit {
       orderCredits = this.resolveRechargeOrderCredits(orderAmount);
     }
 
+    const metadata =
+      dto.metadata && typeof dto.metadata === 'object' && !Array.isArray(dto.metadata)
+        ? (dto.metadata as Record<string, unknown>)
+        : null;
+    const teamId =
+      typeof metadata?.teamId === 'string' && metadata.teamId.trim()
+        ? metadata.teamId.trim()
+        : null;
+
     await this.prisma.paymentOrder.updateMany({
       where: { userId, status: PaymentStatus.PENDING },
       data: { status: PaymentStatus.CANCELLED },
@@ -451,10 +502,16 @@ export class PaymentService implements OnModuleInit {
     const expiredAt = new Date(Date.now() + 5 * 60 * 1000);
 
     let qrCodeUrl: string | null = null;
-    if (paymentMethod === PaymentMethod.ALIPAY) {
-      qrCodeUrl = await this.generateAlipayQrCode(orderNo, orderAmount);
-    } else if (paymentMethod === PaymentMethod.WECHAT) {
-      qrCodeUrl = await this.generateWechatQrCode(orderNo, orderAmount);
+    try {
+      if (paymentMethod === PaymentMethod.ALIPAY) {
+        qrCodeUrl = await this.generateAlipayQrCode(orderNo, orderAmount);
+      } else if (paymentMethod === PaymentMethod.WECHAT) {
+        qrCodeUrl = await this.generateWechatQrCode(orderNo, orderAmount);
+      } else {
+        throw new BadRequestException('不支持的支付方式');
+      }
+    } catch (error) {
+      this.rethrowPaymentGatewayError(error, '生成支付二维码失败');
     }
 
     const order = await this.prisma.paymentOrder.create({
@@ -466,10 +523,13 @@ export class PaymentService implements OnModuleInit {
         amount: orderAmount,
         credits: orderCredits,
         paymentMethod,
-        status: PaymentStatus.PENDING, qrCodeUrl, expiredAt,
+        status: PaymentStatus.PENDING,
+        qrCodeUrl,
+        expiredAt,
         membershipPlanId,
+        ...(teamId ? { teamId } : {}),
         ...(planSnapshot ? { planSnapshot } : {}),
-        ...(dto.metadata ? { metadata: dto.metadata as Prisma.InputJsonValue } : {}),
+        ...(metadata ? { metadata: metadata as Prisma.InputJsonValue } : {}),
       },
     });
 
@@ -705,9 +765,9 @@ export class PaymentService implements OnModuleInit {
         signType: payData.signType || 'RSA',
         paySign: payData.paySign,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('生成微信 JSAPI 支付参数失败:', error);
-      throw new BadRequestException(error.message || '生成微信支付参数失败');
+      this.rethrowPaymentGatewayError(error, '生成微信支付参数失败');
     }
   }
 
@@ -734,11 +794,13 @@ export class PaymentService implements OnModuleInit {
         },
       });
 
-      console.log('支付宝预创建订单响应:', JSON.stringify(result, null, 2));
+      console.log('支付宝预创建订单响应:', this.safeJsonStringify(result));
 
-      if (result.code !== '10000') {
-        console.error('支付宝预创建失败:', result);
-        throw new BadRequestException(result.subMsg || result.msg || '创建支付订单失败');
+      if (!result || result.code !== '10000') {
+        console.error('支付宝预创建失败:', this.safeJsonStringify(result));
+        throw new BadRequestException(
+          (result && (result.subMsg || result.msg)) || '创建支付订单失败',
+        );
       }
 
       const qrCodeLink = result.qrCode;
@@ -751,9 +813,9 @@ export class PaymentService implements OnModuleInit {
       });
 
       return qrCodeDataUrl;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('生成支付宝二维码失败:', error);
-      throw new BadRequestException(error.message || '生成支付二维码失败');
+      this.rethrowPaymentGatewayError(error, '生成支付二维码失败');
     }
   }
 
@@ -779,11 +841,11 @@ export class PaymentService implements OnModuleInit {
         },
       };
 
-      console.log('微信支付统一下单请求:', JSON.stringify(params, null, 2));
+      console.log('微信支付统一下单请求:', this.safeJsonStringify(params));
 
       const result = await this.wechatPay.transactions_native(params);
 
-      console.log('微信支付统一下单响应:', JSON.stringify(result, null, 2));
+      console.log('微信支付统一下单响应:', this.safeJsonStringify(result));
 
       const codeUrl =
         result?.code_url ||
@@ -800,12 +862,22 @@ export class PaymentService implements OnModuleInit {
           color: { dark: '#000000', light: '#ffffff' },
         });
         return qrCodeDataUrl;
-      } else {
-        throw new BadRequestException('未获取到微信支付二维码链接');
       }
-    } catch (error: any) {
+
+      const gatewayMessage =
+        result?.message ||
+        result?.error ||
+        result?.data?.message ||
+        result?.data?.code ||
+        null;
+      throw new BadRequestException(
+        typeof gatewayMessage === 'string' && gatewayMessage
+          ? gatewayMessage
+          : '未获取到微信支付二维码链接',
+      );
+    } catch (error: unknown) {
       console.error('生成微信支付二维码失败:', error);
-      throw new BadRequestException(error.message || '生成微信支付二维码失败');
+      this.rethrowPaymentGatewayError(error, '生成微信支付二维码失败');
     }
   }
 
@@ -1016,11 +1088,17 @@ export class PaymentService implements OnModuleInit {
         });
         return;
       }
-      if (currentOrder.orderType === 'team_seat_package') {
+      if (
+        currentOrder.orderType === 'team_seat_package' ||
+        currentOrder.orderType === 'team_seat'
+      ) {
         await this.fulfillTeamSeatPackageOrder(tx, currentOrder, userId);
         return;
       }
-      if (currentOrder.orderType === 'team_credits_topup') {
+      if (
+        currentOrder.orderType === 'team_credits_topup' ||
+        currentOrder.orderType === 'team_credits'
+      ) {
         await this.fulfillTeamCreditsTopupOrder(tx, currentOrder, userId);
         return;
       }

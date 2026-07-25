@@ -7,15 +7,17 @@ import {
   Param,
   Body,
   Query,
+  Res,
   UseGuards,
   Request,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { FastifyRequest } from 'fastify';
+import { FastifyReply, FastifyRequest } from 'fastify';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { AdminService } from './admin.service';
+import { DashboardReportExportService } from './dashboard-report-export.service';
 import { CreditsService } from '../credits/credits.service';
 import { CreditsAnomalyService } from '../credits/credits-anomaly.service';
 import { TransactionHistoryQueryDto } from '../credits/dto/credits.dto';
@@ -43,6 +45,7 @@ import {
   CreditChangeRecordsQueryDto,
   CreditAnomalyRecordsQueryDto,
 } from './dto/admin.dto';
+import { DashboardExportQueryDto } from './dto/dashboard-export.dto';
 import {
   CreateTemplateDto,
   UpdateTemplateDto,
@@ -96,6 +99,7 @@ const NORMAL_ADMIN_ALLOWED_PERMISSIONS = new Set<AdminPermission>([
 export class AdminController {
   constructor(
     private readonly adminService: AdminService,
+    private readonly dashboardReportExportService: DashboardReportExportService,
     private readonly creditsService: CreditsService,
     private readonly creditsAnomalyService: CreditsAnomalyService,
     private readonly templateService: TemplateService,
@@ -134,6 +138,33 @@ export class AdminController {
       trendStartDate: query.trendStartDate,
       trendEndDate: query.trendEndDate,
     });
+  }
+
+  @Get('dashboard/export')
+  @ApiOperation({ summary: '导出系统概览报表（Excel）' })
+  async exportDashboardReport(
+    @Request() req: AuthenticatedRequest,
+    @Query() query: DashboardExportQueryDto,
+    @Res() res: FastifyReply,
+  ) {
+    this.checkAdmin(req, 'dashboard:view');
+    const { filename, buffer } = await this.dashboardReportExportService.exportExcel({
+      reportType: query.reportType,
+      startDate: query.startDate,
+      endDate: query.endDate,
+    });
+    const encoded = encodeURIComponent(filename);
+    res
+      .header(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      )
+      .header(
+        'Content-Disposition',
+        `attachment; filename="dashboard-report.xlsx"; filename*=UTF-8''${encoded}`,
+      )
+      .header('Content-Length', String(buffer.length))
+      .send(buffer);
   }
 
   @Get('users')
