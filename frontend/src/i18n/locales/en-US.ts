@@ -307,6 +307,21 @@ const enUS = {
       action: "Check in",
       dismiss: "Dismiss reminder",
     },
+    channelSourceReminder: {
+      message: "Share your source channel and get",
+      messageTitle: "Share your source channel and get 100 credits",
+      creditsSuffix: "credits",
+      action: "Claim now",
+      dismiss: "Dismiss reminder",
+      modalTitle: "Choose your source channel",
+      modalDesc: "Tell us how you found Tanva and claim",
+      cancel: "Cancel",
+      confirm: "Confirm claim",
+      submitting: "Claiming…",
+      closeModal: "Close",
+      claimFailed: "Claim failed. Please try again later.",
+      networkError: "Network error. Please try again later.",
+    },
     settings: {
       title: "Settings",
       sections: {

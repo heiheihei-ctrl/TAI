@@ -48,15 +48,19 @@ export class TeamCoreService {
   async getSeatCapacity(teamId: string, db: any = this.prisma): Promise<number> {
     const team = await db.team.findUnique({
       where: { id: teamId },
-      select: { isPersonal: true },
+      select: { isPersonal: true, maxSeats: true },
     });
     if (!team) throw new NotFoundException('团队不存在');
     if (team.isPersonal) return 1;
+    // 购买套餐会写入 TeamSeatPackage；管理后台「修改席位」只更新 Team.maxSeats。
+    // 两者都要生效，取较大值，避免后台加席后成员管理仍显示永久 2 席。
     const agg = await db.teamSeatPackage.aggregate({
       where: { teamId, status: 'active', expiresAt: { gt: new Date() } },
       _sum: { seats: true },
     });
-    return TEAM_PERMANENT_SEATS + (agg._sum.seats ?? 0);
+    const fromPackages = TEAM_PERMANENT_SEATS + (agg._sum.seats ?? 0);
+    const fromMaxSeats = Math.max(1, team.maxSeats ?? TEAM_PERMANENT_SEATS);
+    return Math.max(fromMaxSeats, fromPackages);
   }
 
   async getMyTeams(userId: string) {

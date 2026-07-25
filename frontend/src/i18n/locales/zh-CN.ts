@@ -306,6 +306,21 @@ const zhCN = {
       action: "去签到",
       dismiss: "关闭提示",
     },
+    channelSourceReminder: {
+      message: "分享来源渠道，立即获得",
+      messageTitle: "分享您的来源渠道，立即获得 100 积分",
+      creditsSuffix: "积分",
+      action: "立即领取",
+      dismiss: "关闭提示",
+      modalTitle: "选择来源渠道",
+      modalDesc: "告诉我们您是从哪里了解到 TAI 的，领取",
+      cancel: "取消",
+      confirm: "确认领取",
+      submitting: "领取中…",
+      closeModal: "关闭",
+      claimFailed: "领取失败，请稍后重试",
+      networkError: "网络错误，请稍后重试",
+    },
     settings: {
       title: "设置",
       sections: {

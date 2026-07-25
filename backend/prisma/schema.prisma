@@ -27,6 +27,8 @@ model User {
   profileRegion              String?
   profileCompletedAt         DateTime?
   profileRewardClaimed       Boolean                @default(false)
+  sourceChannel              String?
+  sourceChannelRewardClaimed Boolean                @default(false)
   role                       String                 @default("user")
   status                     String                 @default("active")
   noWatermark                Boolean                @default(false)

@@ -107,6 +107,10 @@ import { uploadToOSS } from "@/services/ossUploadService";
 import Qrcode from "@/assets/group-erweima.jpg";
 import ProfileCompletionBanner from "@/components/profile/ProfileCompletionBanner";
 import CheckInReminderBanner from "@/components/referral/CheckInReminderBanner";
+import ChannelSourceReminderBanner, {
+  isChannelSourceBannerDismissedToday,
+  isChannelSourceRewardClaimed,
+} from "@/components/referral/ChannelSourceReminderBanner";
 import ReminderBannerStack from "@/components/reminder/ReminderBannerStack";
 import { REMINDER_BANNER_STACK_TOP_CLASS } from "@/components/reminder/reminderBannerLayout";
 import ProfileCompletionSettingsPanel from "@/components/profile/ProfileCompletionSettingsPanel";
@@ -714,6 +718,8 @@ const FloatingHeader: React.FC = () => {
   const [checkInStatus, setCheckInStatus] = useState<CheckInStatus | null>(null);
   const [checkInStatusLoaded, setCheckInStatusLoaded] = useState(false);
   const [checkInBannerDismissed, setCheckInBannerDismissed] = useState(false);
+  const [channelBannerDismissed, setChannelBannerDismissed] = useState(false);
+  const [channelRewardClaimed, setChannelRewardClaimed] = useState(false);
   // 闂傚倸鍊搁崐鐑芥嚄閸洖纾块柣銏㈩焾閻ょ偓绻濇繝鍌滃闁搞劌鍊块弻锝夊閵忊晝鍔哥紓浣哄У閼归箖鈥︾捄銊﹀磯闁惧繐婀辨导鍥╃磼妤ｅ啰鐣虹紒鐘崇墵瀵鎮㈢悰鈥充壕闁汇垺顔栭悞鎯归悩娆忓枤閻斿棝鎮峰▎蹇擃仼濠殿喖娲﹂妵鍕敇閻愭潙浠撮悗瑙勬礀閵堢鐣烽崡鐐嶆棃鍩€椤掑嫬姹查柣鏂挎啞閸欏繘鏌ㄥ┑鍡樺櫧濠⒀嶇畵閺岋紕浠﹂崜褉妲堥梺瀹狀嚙闁帮綁鐛崱妯奸檮濠㈣泛顦遍弫鏍⒑?
   useEffect(() => {
     setGridSizeInput(String(gridSize));
@@ -928,10 +934,14 @@ const FloatingHeader: React.FC = () => {
       setCheckInStatus(null);
       setCheckInStatusLoaded(false);
       setCheckInBannerDismissed(false);
+      setChannelBannerDismissed(false);
+      setChannelRewardClaimed(false);
       return;
     }
     normalizeCheckInReminderBannerDismissCache();
     setCheckInBannerDismissed(isCheckInReminderBannerDismissedToday());
+    setChannelBannerDismissed(isChannelSourceBannerDismissedToday());
+    setChannelRewardClaimed(isChannelSourceRewardClaimed());
     let cancelled = false;
     setCheckInStatusLoaded(false);
     void getCheckInStatus()
@@ -1018,9 +1028,18 @@ const FloatingHeader: React.FC = () => {
     !shouldHideCheckInReminder(checkInStatus) &&
     !checkInBannerDismissed;
 
+  const showChannelSourceBanner =
+    Boolean(user) && !channelRewardClaimed && !channelBannerDismissed;
+
+  const showIncentiveBannerRow =
+    showCheckInReminderBanner || showChannelSourceBanner;
+  const incentiveSideBySide =
+    showCheckInReminderBanner && showChannelSourceBanner;
+
+  // 签到与渠道来源并排占同一行高度，完善资料单独一行
   const topBannerCount = Math.min(
     2,
-    Number(showProfileCompletionBanner) + Number(showCheckInReminderBanner),
+    Number(showProfileCompletionBanner) + Number(showIncentiveBannerRow),
   ) as 0 | 1 | 2;
 
   const headerTopClass = REMINDER_BANNER_STACK_TOP_CLASS[topBannerCount];
@@ -2273,11 +2292,26 @@ const FloatingHeader: React.FC = () => {
               onDismiss={() => setProfileBannerDismissed(true)}
             />
           ) : null}
-          {showCheckInReminderBanner && checkInStatus ? (
-            <CheckInReminderBanner
-              status={checkInStatus}
-              onDismiss={() => setCheckInBannerDismissed(true)}
-            />
+          {showIncentiveBannerRow ? (
+            <div className="pointer-events-none flex w-full shrink-0">
+              {showCheckInReminderBanner && checkInStatus ? (
+                <CheckInReminderBanner
+                  status={checkInStatus}
+                  sideBySide={incentiveSideBySide}
+                  onDismiss={() => setCheckInBannerDismissed(true)}
+                />
+              ) : null}
+              {showChannelSourceBanner ? (
+                <ChannelSourceReminderBanner
+                  sideBySide={incentiveSideBySide}
+                  onDismiss={() => setChannelBannerDismissed(true)}
+                  onClaimed={() => {
+                    setChannelRewardClaimed(true);
+                    setChannelBannerDismissed(true);
+                  }}
+                />
+              ) : null}
+            </div>
           ) : null}
         </ReminderBannerStack>
       ) : null}

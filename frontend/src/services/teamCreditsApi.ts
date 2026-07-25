@@ -39,6 +39,9 @@ export interface TeamCreditAccount {
 
 export interface TeamSeatPackageSummary {
   permanentSeats: number;
+  packageSeats?: number;
+  adminGrantedSeats?: number;
+  maxSeats?: number;
   totalSeats: number;
   usedSeats: number;
   activePackages: Array<{

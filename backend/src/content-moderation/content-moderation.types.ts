@@ -1,6 +1,6 @@
 /** 阿里云内容安全增强版默认服务码（与开通项一致） */
 export const ALIYUN_GREEN_DEFAULTS = {
-  textService: 'text_aigc_detector',
+  textService: 'ad_compliance_detection_pro',
   imageService: 'baselineCheck',
   videoService: 'videoDetection',
   endpoint: 'green-cip.cn-shanghai.aliyuncs.com',

@@ -201,4 +201,15 @@ export class CreditsController {
       dto.actualOutputCount,
     );
   }
+
+  @Post('claim-source-channel')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '填写来源渠道并领取100积分奖励' })
+  async claimSourceChannelReward(
+    @Request() req: FastifyRequest & { user: AuthenticatedUser },
+    @Body() dto: { channel: string },
+  ) {
+    return this.creditsService.claimSourceChannelReward(req.user.id, dto.channel);
+  }
 }

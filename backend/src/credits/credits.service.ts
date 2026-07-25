@@ -5546,6 +5546,86 @@ export class CreditsService {
     });
   }
 
+  async claimSourceChannelReward(userId: string, channel: string): Promise<{
+    success: boolean;
+    newBalance?: number;
+    message?: string;
+    alreadyClaimed?: boolean;
+  }> {
+    const validChannels = ['小红书', '抖音', '视频号', 'B站', '公众号', '朋友推荐', 'AI搜索', '其他渠道'];
+    const trimmedChannel = (channel || '').trim();
+    
+    if (!validChannels.includes(trimmedChannel)) {
+      throw new BadRequestException('无效的渠道来源');
+    }
+
+    return await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw<Array<{ id: string }>>(
+        Prisma.sql`SELECT id FROM "CreditAccount" WHERE "userId" = ${userId} FOR UPDATE`,
+      );
+
+      const account = await tx.creditAccount.findUnique({
+        where: { userId },
+      });
+
+      if (!account) {
+        throw new NotFoundException('用户积分账户不存在');
+      }
+
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: { sourceChannelRewardClaimed: true },
+      });
+
+      if (!user) {
+        throw new NotFoundException('用户不存在');
+      }
+
+      if (user.sourceChannelRewardClaimed) {
+        return {
+          success: false,
+          newBalance: account.balance,
+          message: '您已经领取过渠道奖励',
+          alreadyClaimed: true,
+        };
+      }
+
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          sourceChannel: trimmedChannel,
+          sourceChannelRewardClaimed: true,
+        },
+      });
+
+      const rewardAmount = 100;
+      const newBalance = account.balance + rewardAmount;
+
+      await tx.creditAccount.update({
+        where: { userId },
+        data: { balance: newBalance },
+      });
+
+      await tx.creditTransaction.create({
+        data: {
+          accountId: account.id,
+          type: 'REWARD',
+          amount: rewardAmount,
+          balanceBefore: account.balance,
+          balanceAfter: newBalance,
+          description: `填写来源渠道奖励（${trimmedChannel}）`,
+          metadata: { channel: trimmedChannel },
+        },
+      });
+
+      return {
+        success: true,
+        newBalance,
+        message: '感谢您的分享！已获得100积分奖励',
+      };
+    });
+  }
+
   /**
    * 获取用户签到日历状态（7天周期）
    * 规则：连续签到7天后重置，断签也重置

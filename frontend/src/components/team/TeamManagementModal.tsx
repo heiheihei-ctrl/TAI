@@ -771,6 +771,8 @@ function SubscriptionTab({ teamId, myRole }: { teamId: string; myRole?: string }
 
   const [summary, setSummary] = useState<{
     permanentSeats: number;
+    packageSeats?: number;
+    adminGrantedSeats?: number;
     totalSeats: number;
     usedSeats: number;
     activePackages: Array<{
@@ -900,7 +902,16 @@ function SubscriptionTab({ teamId, myRole }: { teamId: string; myRole?: string }
               <span className="text-slate-400 ml-1">/ {summary.totalSeats} 席位已用</span>
             </div>
             <div className="text-slate-400 text-xs">
-              {summary.permanentSeats} 永久 + {summary.totalSeats - summary.permanentSeats} 套餐
+              {(() => {
+                const packageSeats = summary.packageSeats ?? 0;
+                const adminGranted =
+                  summary.adminGrantedSeats ??
+                  Math.max(0, summary.totalSeats - summary.permanentSeats - packageSeats);
+                const parts = [`${summary.permanentSeats} 永久`];
+                if (packageSeats > 0) parts.push(`${packageSeats} 套餐`);
+                if (adminGranted > 0) parts.push(`${adminGranted} 后台加席`);
+                return parts.join(' + ');
+              })()}
             </div>
           </div>
         </div>

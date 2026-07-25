@@ -9,18 +9,24 @@ import {
 import { openSettingsSection } from "@/services/extendedProfileApi";
 import {
   REMINDER_BANNER_ACTIONS_CLASS,
+  REMINDER_BANNER_ACTIONS_COMPACT_CLASS,
   REMINDER_BANNER_INNER_CLASS,
+  REMINDER_BANNER_INNER_COMPACT_CLASS,
   REMINDER_BANNER_SHELL_CLASS,
+  REMINDER_BANNER_SHELL_SIDE_CLASS,
 } from "@/components/reminder/reminderBannerLayout";
 import { reminderBannerRowClassName } from "@/components/reminder/ReminderBannerStack";
 
 type Props = {
   status: CheckInStatus;
+  /** 与渠道来源横幅并排时使用半宽布局 */
+  sideBySide?: boolean;
   onDismiss?: () => void;
 };
 
 export default function CheckInReminderBanner({
   status,
+  sideBySide = false,
   onDismiss,
 }: Props) {
   const { t } = useTranslation();
@@ -40,13 +46,19 @@ export default function CheckInReminderBanner({
   return (
     <div
       className={cn(
-        REMINDER_BANNER_SHELL_CLASS,
+        sideBySide ? REMINDER_BANNER_SHELL_SIDE_CLASS : REMINDER_BANNER_SHELL_CLASS,
         reminderBannerRowClassName(
           "border-amber-200/70 bg-gradient-to-r from-amber-50 via-white to-orange-50/90",
         ),
       )}
     >
-      <div className={REMINDER_BANNER_INNER_CLASS}>
+      <div
+        className={
+          sideBySide
+            ? REMINDER_BANNER_INNER_COMPACT_CLASS
+            : REMINDER_BANNER_INNER_CLASS
+        }
+      >
         <div className="flex min-w-0 items-center gap-2">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
             <Calendar className="h-4 w-4" />
@@ -67,7 +79,13 @@ export default function CheckInReminderBanner({
             {t("workspace.checkInReminder.creditsSuffix")}
           </p>
         </div>
-        <div className={REMINDER_BANNER_ACTIONS_CLASS}>
+        <div
+          className={
+            sideBySide
+              ? REMINDER_BANNER_ACTIONS_COMPACT_CLASS
+              : REMINDER_BANNER_ACTIONS_CLASS
+          }
+        >
           <button
             type="button"
             onClick={handleGo}

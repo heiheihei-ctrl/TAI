@@ -55,11 +55,23 @@ export class TeamSeatPackageService {
       orderBy: { expiresAt: 'asc' },
     });
 
+    const team = await this.prisma.team.findUnique({
+      where: { id: teamId },
+      select: { maxSeats: true },
+    });
     const totalSeats = await this.teamCore.getSeatCapacity(teamId);
     const usedSeats = await this.prisma.teamMembership.count({ where: { teamId } });
+    const packageSeats = activePackages.reduce((sum, pkg) => sum + (pkg.seats || 0), 0);
+    const adminGrantedSeats = Math.max(
+      0,
+      totalSeats - TEAM_PERMANENT_SEATS - packageSeats,
+    );
 
     return {
       permanentSeats: TEAM_PERMANENT_SEATS,
+      packageSeats,
+      adminGrantedSeats,
+      maxSeats: team?.maxSeats ?? totalSeats,
       totalSeats,
       usedSeats,
       activePackages,
