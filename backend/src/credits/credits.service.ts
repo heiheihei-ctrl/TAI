@@ -5554,83 +5554,110 @@ export class CreditsService {
   }> {
     const validChannels = ['小红书', '抖音', '视频号', 'B站', '公众号', '朋友推荐', 'AI搜索', '其他渠道'];
     const trimmedChannel = (channel || '').trim();
-    
+
     if (!validChannels.includes(trimmedChannel)) {
       throw new BadRequestException('无效的渠道来源');
     }
 
-    return await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw<Array<{ id: string }>>(
-        Prisma.sql`SELECT id FROM "CreditAccount" WHERE "userId" = ${userId} FOR UPDATE`,
-      );
+    const rewardAmount = 100;
 
-      const account = await tx.creditAccount.findUnique({
-        where: { userId },
-      });
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        // 先锁用户行，避免重复领取竞态；账户不存在时再创建
+        await tx.$queryRaw<Array<{ id: string }>>(
+          Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`,
+        );
 
-      if (!account) {
-        throw new NotFoundException('用户积分账户不存在');
-      }
+        const user = await tx.user.findUnique({
+          where: { id: userId },
+          select: { id: true, sourceChannelRewardClaimed: true },
+        });
 
-      const user = await tx.user.findUnique({
-        where: { id: userId },
-        select: { sourceChannelRewardClaimed: true },
-      });
+        if (!user) {
+          throw new NotFoundException('用户不存在');
+        }
 
-      if (!user) {
-        throw new NotFoundException('用户不存在');
-      }
+        const account = await tx.creditAccount.upsert({
+          where: { userId },
+          create: {
+            userId,
+            balance: 0,
+            totalEarned: 0,
+          },
+          update: {},
+        });
 
-      if (user.sourceChannelRewardClaimed) {
+        await tx.$queryRaw<Array<{ id: string }>>(
+          Prisma.sql`SELECT id FROM "CreditAccount" WHERE id = ${account.id} FOR UPDATE`,
+        );
+
+        const lockedAccount = await tx.creditAccount.findUniqueOrThrow({
+          where: { id: account.id },
+        });
+
+        if (user.sourceChannelRewardClaimed) {
+          return {
+            success: false,
+            newBalance: lockedAccount.balance,
+            message: '您已经领取过渠道奖励',
+            alreadyClaimed: true,
+          };
+        }
+
+        await tx.user.update({
+          where: { id: userId },
+          data: {
+            sourceChannel: trimmedChannel,
+            sourceChannelRewardClaimed: true,
+          },
+        });
+
+        const balanceBefore = lockedAccount.balance;
+        const balanceAfter = balanceBefore + rewardAmount;
+
+        await tx.creditAccount.update({
+          where: { id: lockedAccount.id },
+          data: {
+            balance: balanceAfter,
+            totalEarned: { increment: rewardAmount },
+          },
+        });
+
+        await tx.creditTransaction.create({
+          data: {
+            accountId: lockedAccount.id,
+            type: TransactionType.EARN,
+            amount: rewardAmount,
+            balanceBefore,
+            balanceAfter,
+            description: `填写来源渠道奖励（${trimmedChannel}）`,
+            businessType: 'source_channel_reward',
+            metadata: { channel: trimmedChannel, source: 'source_channel_reward' },
+          },
+        });
+
         return {
-          success: false,
-          newBalance: account.balance,
-          message: '您已经领取过渠道奖励',
-          alreadyClaimed: true,
+          success: true,
+          newBalance: balanceAfter,
+          message: '感谢您的分享！已获得100积分奖励',
         };
+      });
+    } catch (error: any) {
+      // 生产库若未跑迁移，缺列时 Prisma 会抛 P2022，给可操作提示
+      const msg = String(error?.message || '');
+      if (
+        error?.code === 'P2022' ||
+        msg.includes('sourceChannel') ||
+        msg.includes('sourceChannelRewardClaimed')
+      ) {
+        throw new BadRequestException(
+          '渠道奖励功能尚未就绪（数据库缺少来源渠道字段），请联系管理员执行迁移后重试',
+        );
       }
-
-      await tx.user.update({
-        where: { id: userId },
-        data: {
-          sourceChannel: trimmedChannel,
-          sourceChannelRewardClaimed: true,
-        },
-      });
-
-      const rewardAmount = 100;
-      const newBalance = account.balance + rewardAmount;
-
-      await tx.creditAccount.update({
-        where: { userId },
-        data: { balance: newBalance },
-      });
-
-      await tx.creditTransaction.create({
-        data: {
-          accountId: account.id,
-          type: 'REWARD',
-          amount: rewardAmount,
-          balanceBefore: account.balance,
-          balanceAfter: newBalance,
-          description: `填写来源渠道奖励（${trimmedChannel}）`,
-          metadata: { channel: trimmedChannel },
-        },
-      });
-
-      return {
-        success: true,
-        newBalance,
-        message: '感谢您的分享！已获得100积分奖励',
-      };
-    });
+      throw error;
+    }
   }
 
-  /**
-   * 获取用户签到日历状态（7天周期）
-   * 规则：连续签到7天后重置，断签也重置
-   * 日历显示：已签到(checked)、今日待签(isToday)、未来待签(其他)
-   */
   async getCheckInCalendar(userId: string): Promise<{
     consecutiveDays: number;
     lastCheckInDate: Date | null;
