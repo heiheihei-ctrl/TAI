@@ -22,8 +22,8 @@ type PeriodRow = {
   oldUserDailyActiveUsers: number;
   nextDayRetentionRate: number | null;
   coreModelUsageCount: number;
-  /** 当天有新增用户的渠道中文，顿号拼接；无新增时为「未填写」 */
-  sourceChannelText: string;
+  /** 各渠道新增用户数量 */
+  channelCounts: Record<string, number>;
   paidUserCount?: number;
   paidConversionRate?: number | null;
 };
@@ -90,16 +90,51 @@ export class DashboardReportExportService {
       '老用户日活跃数',
       '次日留存率(%)',
       '核心模型使用次数',
-      '渠道来源',
     ];
     const paidHeaders =
       options.reportType === 'daily' ? [] : ['付费用户数', '付费转化率(%)'];
-    sheet.addRow([...baseHeaders, ...paidHeaders]);
+    
+    const CHANNEL_COLUMNS = CHANNEL_ORDER.filter(c => c !== '未填写');
+    const channelStartCol = baseHeaders.length + 1;
+    const channelEndCol = channelStartCol + CHANNEL_COLUMNS.length - 1;
+    
+    // 第一行表头
+    const mainHeaderValues = [...baseHeaders];
+    for (let i = 0; i < CHANNEL_COLUMNS.length; i++) {
+      mainHeaderValues.push('');
+    }
+    mainHeaderValues.push(...paidHeaders);
+    
+    const mainHeaderRow = sheet.addRow(mainHeaderValues);
 
-    const headerRow = sheet.getRow(1);
-    headerRow.font = { bold: true };
-    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+    // 设置主表头样式
+    mainHeaderRow.font = { bold: true };
+    mainHeaderRow.alignment = { vertical: 'middle', horizontal: 'center' };
 
+    // 合并渠道来源单元格
+    const startCell = mainHeaderRow.getCell(channelStartCol);
+    const endCell = mainHeaderRow.getCell(channelEndCol);
+    sheet.mergeCells(startCell.address, endCell.address);
+    startCell.value = '渠道来源';
+    
+    // 合并付费相关单元格
+    if (paidHeaders.length > 0) {
+      const paidStartCol = channelEndCol + 1;
+      const paidEndCol = paidStartCol + paidHeaders.length - 1;
+      const paidStartCell = mainHeaderRow.getCell(paidStartCol);
+      const paidEndCell = mainHeaderRow.getCell(paidEndCol);
+      sheet.mergeCells(paidStartCell.address, paidEndCell.address);
+      paidStartCell.value = '付费统计';
+    }
+    
+    // 第二行表头 - 渠道子列
+    const subHeaderValues = new Array(baseHeaders.length).fill('');
+    subHeaderValues.push(...CHANNEL_COLUMNS, ...paidHeaders);
+    const subHeaderRow = sheet.addRow(subHeaderValues);
+    subHeaderRow.font = { bold: true };
+    subHeaderRow.alignment = { vertical: 'middle', horizontal: 'center' };
+    subHeaderRow.height = 20;
+    
     for (const row of rows) {
       const values: Array<string | number> = [
         row.label,
@@ -109,8 +144,13 @@ export class DashboardReportExportService {
         row.oldUserDailyActiveUsers,
         row.nextDayRetentionRate == null ? '-' : row.nextDayRetentionRate,
         row.coreModelUsageCount,
-        row.sourceChannelText,
       ];
+      
+      // 添加各渠道数量
+      for (const channel of CHANNEL_COLUMNS) {
+        values.push(row.channelCounts[channel] ?? 0);
+      }
+      
       if (options.reportType !== 'daily') {
         values.push(row.paidUserCount ?? 0);
         values.push(row.paidConversionRate == null ? '-' : row.paidConversionRate);
@@ -119,10 +159,9 @@ export class DashboardReportExportService {
     }
 
     sheet.columns.forEach((col) => {
-      col.width = 16;
+      col.width = 14;
     });
     sheet.getColumn(1).width = 14;
-    sheet.getColumn(8).width = 36;
 
     const rangeStart = this.formatDateInput(dayStarts[0]);
     const rangeEnd = this.formatDateInput(dayStarts[dayStarts.length - 1]);
@@ -233,14 +272,6 @@ export class DashboardReportExportService {
     return `${y}-${m}-${d}`;
   }
 
-  private formatChannelText(channelCounts: Record<string, number>): string {
-    const labels = CHANNEL_ORDER.filter((channel) => (channelCounts[channel] ?? 0) > 0);
-    if (!labels.length) return '未填写';
-    // 若只有「未填写」也直接返回；有真实渠道时去掉「未填写」更可读
-    const meaningful = labels.filter((c) => c !== '未填写');
-    return (meaningful.length ? meaningful : labels).join('、');
-  }
-
   private async buildPeriodRow(
     period: PeriodBucket,
     reportType: DashboardReportType,
@@ -326,7 +357,7 @@ export class DashboardReportExportService {
       oldUserDailyActiveUsers: activity.oldUserDailyActiveUsers,
       nextDayRetentionRate,
       coreModelUsageCount,
-      sourceChannelText: this.formatChannelText(channelCounts),
+      channelCounts,
       paidUserCount,
       paidConversionRate,
     };
