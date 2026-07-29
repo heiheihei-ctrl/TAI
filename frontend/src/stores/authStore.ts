@@ -7,6 +7,7 @@ import {
   requestContactPopupOnNextEnter,
 } from '@/utils/contactPopupStorage';
 import {
+  clearProfileCheckInBannerDismissDay,
   clearProfileCheckInBannerShownDay,
   requestProfileCheckInBannerOnNextEnter,
 } from '@/utils/profileCheckInBannerStorage';
@@ -104,6 +105,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ loading: true, error: null });
     clearContactPopupShownDay();
     clearProfileCheckInBannerShownDay();
+    clearProfileCheckInBannerDismissDay();
     try {
       await authApi.logout();
       useTeamStore.getState().setTeams([]);
@@ -116,6 +118,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   forceLogout: (reason) => {
     clearContactPopupShownDay();
     clearProfileCheckInBannerShownDay();
+    clearProfileCheckInBannerDismissDay();
     set({
       user: null,
       loading: false,

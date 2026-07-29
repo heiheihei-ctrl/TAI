@@ -2,6 +2,7 @@ import { getLocalDateKey } from "@/utils/contactPopupStorage";
 
 const PENDING_KEY = "tai:profile-checkin-banner-pending";
 const SHOWN_DAY_KEY = "tai:profile-checkin-banner-shown-day";
+const DISMISS_DAY_KEY = "tai:profile-checkin-banner-dismissed-day";
 const PERMANENT_DISMISS_PREFIX = "tai:profile-checkin-banner-permanent-dismiss:";
 
 function permanentDismissKey(userId: string): string {
@@ -42,6 +43,7 @@ export function markProfileCheckInBannerShown(): void {
 export function clearProfileCheckInBannerShownDay(): void {
   try {
     window.localStorage.removeItem(SHOWN_DAY_KEY);
+    window.localStorage.removeItem(DISMISS_DAY_KEY);
     window.localStorage.setItem(PENDING_KEY, "1");
   } catch {
     /* ignore */
@@ -56,6 +58,42 @@ export function isProfileCheckInBannerPermanentlyDismissed(
     return window.localStorage.getItem(permanentDismissKey(userId)) === "1";
   } catch {
     return false;
+  }
+}
+
+/** 今日是否已手动关闭广告条 */
+export function isProfileCheckInBannerDismissedToday(): boolean {
+  try {
+    return window.localStorage.getItem(DISMISS_DAY_KEY) === getLocalDateKey();
+  } catch {
+    return false;
+  }
+}
+
+/** 手动关闭广告条（仅当日有效） */
+export function dismissProfileCheckInBannerForToday(): void {
+  try {
+    window.localStorage.setItem(DISMISS_DAY_KEY, getLocalDateKey());
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 退出登录时清理手动关闭记录 */
+export function clearProfileCheckInBannerDismissDay(): void {
+  try {
+    window.localStorage.removeItem(DISMISS_DAY_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 资料已完善时清除 3 天永久标记，避免误挡签到提示 */
+export function clearProfileCheckInBannerPermanentDismiss(userId: string): void {
+  try {
+    window.localStorage.removeItem(permanentDismissKey(userId));
+  } catch {
+    /* ignore */
   }
 }
 

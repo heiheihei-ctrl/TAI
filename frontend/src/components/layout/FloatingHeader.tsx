@@ -114,10 +114,15 @@ import {
   shouldAutoShowContactPopup,
 } from "@/utils/contactPopupStorage";
 import {
+  clearProfileCheckInBannerPermanentDismiss,
+  clearProfileCheckInBannerShownDay,
+  dismissProfileCheckInBannerForToday,
   isProfileBannerGraceExpired,
+  isProfileCheckInBannerDismissedToday,
   isProfileCheckInBannerPermanentlyDismissed,
   markProfileCheckInBannerPermanentlyDismissed,
   markProfileCheckInBannerShown,
+  requestProfileCheckInBannerOnNextEnter,
   shouldAutoShowProfileCheckInBanner,
 } from "@/utils/profileCheckInBannerStorage";
 import {
@@ -449,7 +454,10 @@ const FloatingHeader: React.FC = () => {
     }
   }, []);
 
-  const closeReminderBanner = useCallback(() => {
+  const closeReminderBanner = useCallback((dismissForToday = false) => {
+    if (dismissForToday) {
+      dismissProfileCheckInBannerForToday();
+    }
     clearReminderBannerAutoHideTimers();
     setReminderBannerFading(true);
     reminderBannerFadeTimerRef.current = setTimeout(() => {
@@ -989,6 +997,12 @@ const FloatingHeader: React.FC = () => {
   }, [user]);
 
   useEffect(() => {
+    if (!user?.id) return;
+    if (isProfileCheckInBannerDismissedToday()) return;
+    requestProfileCheckInBannerOnNextEnter();
+  }, [user?.id]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     const handleOpenSettingsSection = (event: Event) => {
       const detail = (event as CustomEvent<{ section?: string }>).detail;
@@ -1031,9 +1045,11 @@ const FloatingHeader: React.FC = () => {
 
   useEffect(() => {
     if (!user?.id) return;
-    if (
-      isProfileBannerGraceExpired(user.createdAt, extendedProfile?.isComplete ?? false)
-    ) {
+    if (extendedProfile?.isComplete) {
+      clearProfileCheckInBannerPermanentDismiss(user.id);
+      return;
+    }
+    if (isProfileBannerGraceExpired(user.createdAt, false)) {
       markProfileCheckInBannerPermanentlyDismissed(user.id);
     }
   }, [user?.id, user?.createdAt, extendedProfile?.isComplete]);
@@ -1043,12 +1059,16 @@ const FloatingHeader: React.FC = () => {
     extendedProfile?.isComplete ?? false,
   );
 
+  const profilePermanentlyDismissed =
+    isProfileCheckInBannerPermanentlyDismissed(user?.id) && profileBannerGraceExpired;
+
   const showProfileBannerSection =
     Boolean(user) &&
     extendedProfileLoaded &&
     extendedProfile &&
     !extendedProfile.isComplete &&
-    !profileBannerGraceExpired;
+    !profileBannerGraceExpired &&
+    !profilePermanentlyDismissed;
 
   const showCheckInBannerSection =
     Boolean(user) &&
@@ -1059,13 +1079,10 @@ const FloatingHeader: React.FC = () => {
   const hasReminderBannerContent =
     showProfileBannerSection || showCheckInBannerSection;
 
-  const reminderBannerPermanentlyDismissed =
-    isProfileCheckInBannerPermanentlyDismissed(user?.id);
-
   const showReminderBanner =
     reminderBannerVisible &&
     hasReminderBannerContent &&
-    !reminderBannerPermanentlyDismissed;
+    !isProfileCheckInBannerDismissedToday();
 
   const topBannerCount = (showReminderBanner ? 1 : 0) as 0 | 1;
 
@@ -1080,7 +1097,7 @@ const FloatingHeader: React.FC = () => {
     }
     if (!extendedProfileLoaded || !checkInStatusLoaded) return;
     if (!hasReminderBannerContent) return;
-    if (reminderBannerPermanentlyDismissed) return;
+    if (isProfileCheckInBannerDismissedToday()) return;
     if (authInitializing) return;
 
     let cancelled = false;
@@ -1098,15 +1115,12 @@ const FloatingHeader: React.FC = () => {
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
-      clearReminderBannerAutoHideTimers();
     };
   }, [
     authInitializing,
-    clearReminderBannerAutoHideTimers,
     checkInStatusLoaded,
     extendedProfileLoaded,
     hasReminderBannerContent,
-    reminderBannerPermanentlyDismissed,
     scheduleReminderBannerAutoHide,
     user?.id,
   ]);
@@ -2355,7 +2369,7 @@ const FloatingHeader: React.FC = () => {
             showProfile={showProfileBannerSection}
             showCheckIn={showCheckInBannerSection}
             fading={reminderBannerFading}
-            onDismiss={closeReminderBanner}
+            onDismiss={() => closeReminderBanner(true)}
           />
         </ReminderBannerStack>
       ) : null}
