@@ -11,6 +11,7 @@ export type ExtendedProfile = {
   occupation: string | null;
   company: string | null;
   region: string | null;
+  sourceChannel: string | null;
   isComplete: boolean;
   rewardClaimed: boolean;
   rewardCredits: number;
@@ -26,6 +27,7 @@ export type UpdateExtendedProfilePayload = {
   occupation: string;
   company: string;
   region: string;
+  sourceChannel?: string | null;
 };
 
 export type UpdateExtendedProfileResult = {
@@ -148,6 +150,7 @@ export const DEFAULT_INCOMPLETE_PROFILE: ExtendedProfile = {
   occupation: null,
   company: null,
   region: null,
+  sourceChannel: null,
   isComplete: false,
   rewardClaimed: false,
   rewardCredits: 100,

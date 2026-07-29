@@ -596,6 +596,26 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
     return null;
   }
 
+  /**
+   * 1080p（1920*1080）下顶部提醒/头部占用更高，导致左侧工具栏与顶部发生重叠。
+   * 这里根据 viewport 高度做一个轻微上移补偿，避免视觉重叠。
+   */
+  const [toolbarExtraUpPx, setToolbarExtraUpPx] = React.useState(() => {
+    if (typeof window === "undefined") return 0;
+    const h = window.innerHeight || 0;
+    return h <= 1080 ? 64 : 0;
+  });
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const compute = () => {
+      const h = window.innerHeight || 0;
+      setToolbarExtraUpPx(h <= 1080 ? 64 : 0);
+    };
+    compute();
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, []);
+
   // 判断当前工具是否支持填充
   const supportsFill = (mode: any): boolean => {
     return ['rect', 'circle'].includes(mode);
@@ -710,12 +730,15 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
     <TooltipProvider delayDuration={0} skipDelayDuration={0}>
     <div
       className={cn(
-        "tanva-toolbar-shell fixed top-1/2 transform -translate-y-1/2 flex flex-col items-center gap-2 px-2 py-2 rounded-[999px] z-[1000] transition-all duration-[50ms] ease-out",
+        "tanva-toolbar-shell fixed top-1/2 transform flex flex-col items-center gap-2 px-2 py-2 rounded-[999px] z-[1000] transition-all duration-[50ms] ease-out",
         isBlackTheme
           ? "bg-[#1d1d1d] border border-[#1a1a1a] shadow-[0_20px_48px_rgba(0,0,0,0.6)]"
           : "bg-liquid-glass backdrop-blur-minimal backdrop-saturate-125 shadow-liquid-glass-lg border border-liquid-glass",
         isLayerPanelOpen ? "left-[322px]" : "left-2"
       )}
+      style={{
+        transform: `translateY(-50%) translateY(-${toolbarExtraUpPx}px)`,
+      }}
     >
       {/* AI 对话开关 - 暂时隐藏 */}
       {false && (

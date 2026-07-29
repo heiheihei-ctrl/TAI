@@ -298,11 +298,14 @@ export class DashboardReportExportService {
           },
         }),
         this.prisma.$queryRaw<Array<{ channel: string | null; count: bigint | number | string }>>`
-          SELECT "sourceChannel" AS channel, COUNT(*)::bigint AS count
-          FROM "User"
-          WHERE "createdAt" >= ${period.start}
+          SELECT ("metadata"->>'channel') AS channel,
+                 COUNT(DISTINCT "accountId")::bigint AS count
+          FROM "CreditTransaction"
+          WHERE "businessType" = 'source_channel_reward'
+            AND "createdAt" >= ${period.start}
             AND "createdAt" < ${period.endExclusive}
-          GROUP BY "sourceChannel"
+            AND NULLIF(TRIM("metadata"->>'channel'), '') IS NOT NULL
+          GROUP BY ("metadata"->>'channel')
         `,
       ]);
 

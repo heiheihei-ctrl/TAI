@@ -53,4 +53,10 @@ export class UpdateExtendedProfileDto {
   @MinLength(1, { message: '所在地区不能为空' })
   @MaxLength(150, { message: '所在地区过长' })
   region?: string;
+
+  @ApiPropertyOptional({ description: '来源渠道' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50, { message: '来源渠道过长' })
+  sourceChannel?: string | null;
 }

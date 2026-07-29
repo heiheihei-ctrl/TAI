@@ -4,6 +4,17 @@ import type { UpdateExtendedProfileDto } from './dto/update-extended-profile.dto
 
 export const PROFILE_COMPLETION_REWARD_CREDITS = 100;
 
+export const VALID_SOURCE_CHANNELS = [
+  '小红书',
+  '抖音',
+  '视频号',
+  'B站',
+  '公众号',
+  '朋友推荐',
+  'AI搜索',
+  '其他渠道',
+] as const;
+
 export interface ExtendedProfileView {
   realName: string | null;
   nickname: string | null;
@@ -13,6 +24,7 @@ export interface ExtendedProfileView {
   occupation: string | null;
   company: string | null;
   region: string | null;
+  sourceChannel: string | null;
   isComplete: boolean;
   rewardClaimed: boolean;
   rewardCredits: number;
@@ -28,6 +40,7 @@ export interface UpdateExtendedProfileDtoInput {
   occupation?: string;
   company?: string;
   region?: string;
+  sourceChannel?: string | null;
 }
 
 export interface UpdateGoogleApiKeyDto {
@@ -236,6 +249,17 @@ export class UsersService {
     return birthday;
   }
 
+  private normalizeSourceChannel(value?: string | null): string | null {
+    const trimmed = (value ?? '').trim();
+    return trimmed || null;
+  }
+
+  private assertValidSourceChannel(value: string | null): void {
+    if (value && !VALID_SOURCE_CHANNELS.includes(value as (typeof VALID_SOURCE_CHANNELS)[number])) {
+      throw new BadRequestException('无效的渠道来源');
+    }
+  }
+
   private mapExtendedProfile(user: {
     profileRealName?: string | null;
     profileNickname?: string | null;
@@ -245,6 +269,7 @@ export class UsersService {
     profileOccupation?: string | null;
     profileCompany?: string | null;
     profileRegion?: string | null;
+    sourceChannel?: string | null;
     profileCompletedAt?: Date | null;
     profileRewardClaimed?: boolean | null;
   }): ExtendedProfileView {
@@ -276,6 +301,7 @@ export class UsersService {
       occupation,
       company,
       region,
+      sourceChannel: this.normalizeSourceChannel(user.sourceChannel),
       isComplete,
       rewardClaimed: Boolean(user.profileRewardClaimed),
       rewardCredits: PROFILE_COMPLETION_REWARD_CREDITS,
@@ -295,6 +321,7 @@ export class UsersService {
         profileOccupation: true,
         profileCompany: true,
         profileRegion: true,
+        sourceChannel: true,
         profileCompletedAt: true,
         profileRewardClaimed: true,
       },
@@ -318,6 +345,7 @@ export class UsersService {
         profileOccupation: true,
         profileCompany: true,
         profileRegion: true,
+        sourceChannel: true,
         profileCompletedAt: true,
         profileRewardClaimed: true,
       },
@@ -325,6 +353,12 @@ export class UsersService {
     if (!existing) {
       throw new NotFoundException('用户不存在');
     }
+
+    const sourceChannel =
+      dto.sourceChannel !== undefined
+        ? this.normalizeSourceChannel(dto.sourceChannel)
+        : this.normalizeSourceChannel(existing.sourceChannel);
+    this.assertValidSourceChannel(sourceChannel);
 
     const realName = (dto.realName ?? existing.profileRealName ?? '').trim();
     const nickname = (dto.nickname ?? existing.profileNickname ?? '').trim();
@@ -379,6 +413,7 @@ export class UsersService {
           profileOccupation: occupation,
           profileCompany: company,
           profileRegion: region,
+          sourceChannel,
           profileCompletedAt: isComplete ? existing.profileCompletedAt ?? new Date() : null,
           profileRewardClaimed: shouldGrantReward ? true : existing.profileRewardClaimed,
         },
@@ -391,6 +426,7 @@ export class UsersService {
           profileOccupation: true,
           profileCompany: true,
           profileRegion: true,
+          sourceChannel: true,
           profileCompletedAt: true,
           profileRewardClaimed: true,
         },

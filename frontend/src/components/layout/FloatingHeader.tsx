@@ -105,12 +105,7 @@ import {
 } from "@/services/adminApi";
 import { uploadToOSS } from "@/services/ossUploadService";
 import Qrcode from "@/assets/group-erweima.jpg";
-import ProfileCompletionBanner from "@/components/profile/ProfileCompletionBanner";
-import CheckInReminderBanner from "@/components/referral/CheckInReminderBanner";
-import ChannelSourceReminderBanner, {
-  isChannelSourceBannerDismissedToday,
-  isChannelSourceRewardClaimed,
-} from "@/components/referral/ChannelSourceReminderBanner";
+import ProfileCheckInReminderBanner from "@/components/reminder/ProfileCheckInReminderBanner";
 import ReminderBannerStack from "@/components/reminder/ReminderBannerStack";
 import { REMINDER_BANNER_STACK_TOP_CLASS } from "@/components/reminder/reminderBannerLayout";
 import ProfileCompletionSettingsPanel from "@/components/profile/ProfileCompletionSettingsPanel";
@@ -119,19 +114,21 @@ import {
   shouldAutoShowContactPopup,
 } from "@/utils/contactPopupStorage";
 import {
-  clearProfileCompletionBannerDismissCache,
+  isProfileBannerGraceExpired,
+  isProfileCheckInBannerPermanentlyDismissed,
+  markProfileCheckInBannerPermanentlyDismissed,
+  markProfileCheckInBannerShown,
+  shouldAutoShowProfileCheckInBanner,
+} from "@/utils/profileCheckInBannerStorage";
+import {
   DEFAULT_INCOMPLETE_PROFILE,
   fetchExtendedProfile,
-  isProfileCompletionBannerDismissedToday,
-  normalizeProfileCompletionBannerDismissCache,
   OPEN_SETTINGS_SECTION_EVENT,
   takePendingSettingsSection,
   type ExtendedProfile,
 } from "@/services/extendedProfileApi";
 import {
   getCheckInStatus,
-  isCheckInReminderBannerDismissedToday,
-  normalizeCheckInReminderBannerDismissCache,
   shouldHideCheckInReminder,
   type CheckInStatus,
 } from "@/services/referralApi";
@@ -397,6 +394,14 @@ const FloatingHeader: React.FC = () => {
   const wechatQrFadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
+  const [reminderBannerVisible, setReminderBannerVisible] = useState(false);
+  const [reminderBannerFading, setReminderBannerFading] = useState(false);
+  const reminderBannerAutoHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const reminderBannerFadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const [wechatQrCodes, setWechatQrCodes] = useState<{
     officialAccount: string;
     wechatGroup: string;
@@ -424,7 +429,7 @@ const FloatingHeader: React.FC = () => {
         setIsWechatQrOpen(false);
         setWechatQrFading(false);
       }, 800);
-    }, 10_000);
+    }, 5_000);
   }, [clearWechatQrAutoHideTimers]);
 
   const closeWechatQrPanel = useCallback(() => {
@@ -432,6 +437,33 @@ const FloatingHeader: React.FC = () => {
     setWechatQrFading(false);
     setIsWechatQrOpen(false);
   }, [clearWechatQrAutoHideTimers]);
+
+  const clearReminderBannerAutoHideTimers = useCallback(() => {
+    if (reminderBannerAutoHideTimerRef.current) {
+      clearTimeout(reminderBannerAutoHideTimerRef.current);
+      reminderBannerAutoHideTimerRef.current = null;
+    }
+    if (reminderBannerFadeTimerRef.current) {
+      clearTimeout(reminderBannerFadeTimerRef.current);
+      reminderBannerFadeTimerRef.current = null;
+    }
+  }, []);
+
+  const closeReminderBanner = useCallback(() => {
+    clearReminderBannerAutoHideTimers();
+    setReminderBannerFading(true);
+    reminderBannerFadeTimerRef.current = setTimeout(() => {
+      setReminderBannerVisible(false);
+      setReminderBannerFading(false);
+    }, 800);
+  }, [clearReminderBannerAutoHideTimers]);
+
+  const scheduleReminderBannerAutoHide = useCallback(() => {
+    clearReminderBannerAutoHideTimers();
+    reminderBannerAutoHideTimerRef.current = setTimeout(() => {
+      closeReminderBanner();
+    }, 5_000);
+  }, [clearReminderBannerAutoHideTimers, closeReminderBanner]);
 
   // 等认证 init 稳定后再判定，避免登录进画布时 AuthWrapper 闪屏误 mark 导致重挂不弹
   useEffect(() => {
@@ -714,12 +746,8 @@ const FloatingHeader: React.FC = () => {
     null,
   );
   const [extendedProfileLoaded, setExtendedProfileLoaded] = useState(false);
-  const [profileBannerDismissed, setProfileBannerDismissed] = useState(false);
   const [checkInStatus, setCheckInStatus] = useState<CheckInStatus | null>(null);
   const [checkInStatusLoaded, setCheckInStatusLoaded] = useState(false);
-  const [checkInBannerDismissed, setCheckInBannerDismissed] = useState(false);
-  const [channelBannerDismissed, setChannelBannerDismissed] = useState(false);
-  const [channelRewardClaimed, setChannelRewardClaimed] = useState(false);
   // 闂傚倸鍊搁崐鐑芥嚄閸洖纾块柣銏㈩焾閻ょ偓绻濇繝鍌滃闁搞劌鍊块弻锝夊閵忊晝鍔哥紓浣哄У閼归箖鈥︾捄銊﹀磯闁惧繐婀辨导鍥╃磼妤ｅ啰鐣虹紒鐘崇墵瀵鎮㈢悰鈥充壕闁汇垺顔栭悞鎯归悩娆忓枤閻斿棝鎮峰▎蹇擃仼濠殿喖娲﹂妵鍕敇閻愭潙浠撮悗瑙勬礀閵堢鐣烽崡鐐嶆棃鍩€椤掑嫬姹查柣鏂挎啞閸欏繘鏌ㄥ┑鍡樺櫧濠⒀嶇畵閺岋紕浠﹂崜褉妲堥梺瀹狀嚙闁帮綁鐛崱妯奸檮濠㈣泛顦遍弫鏍⒑?
   useEffect(() => {
     setGridSizeInput(String(gridSize));
@@ -900,11 +928,8 @@ const FloatingHeader: React.FC = () => {
     if (!user) {
       setExtendedProfile(null);
       setExtendedProfileLoaded(false);
-      setProfileBannerDismissed(false);
       return;
     }
-    normalizeProfileCompletionBannerDismissCache();
-    setProfileBannerDismissed(isProfileCompletionBannerDismissedToday());
     let cancelled = false;
     setExtendedProfileLoaded(false);
     void fetchExtendedProfile()
@@ -912,10 +937,6 @@ const FloatingHeader: React.FC = () => {
         if (!cancelled) {
           setExtendedProfile(profile);
           setExtendedProfileLoaded(true);
-          if (profile.isComplete) {
-            clearProfileCompletionBannerDismissCache();
-            setProfileBannerDismissed(true);
-          }
         }
       })
       .catch(() => {
@@ -933,15 +954,8 @@ const FloatingHeader: React.FC = () => {
     if (!user) {
       setCheckInStatus(null);
       setCheckInStatusLoaded(false);
-      setCheckInBannerDismissed(false);
-      setChannelBannerDismissed(false);
-      setChannelRewardClaimed(false);
       return;
     }
-    normalizeCheckInReminderBannerDismissCache();
-    setCheckInBannerDismissed(isCheckInReminderBannerDismissedToday());
-    setChannelBannerDismissed(isChannelSourceBannerDismissedToday());
-    setChannelRewardClaimed(isChannelSourceRewardClaimed());
     let cancelled = false;
     setCheckInStatusLoaded(false);
     void getCheckInStatus()
@@ -1015,31 +1029,87 @@ const FloatingHeader: React.FC = () => {
     }
   }, [user, location.key, location.pathname, location.search, location.state, navigate]);
 
-  const showProfileCompletionBanner =
+  useEffect(() => {
+    if (!user?.id) return;
+    if (
+      isProfileBannerGraceExpired(user.createdAt, extendedProfile?.isComplete ?? false)
+    ) {
+      markProfileCheckInBannerPermanentlyDismissed(user.id);
+    }
+  }, [user?.id, user?.createdAt, extendedProfile?.isComplete]);
+
+  const profileBannerGraceExpired = isProfileBannerGraceExpired(
+    user?.createdAt,
+    extendedProfile?.isComplete ?? false,
+  );
+
+  const showProfileBannerSection =
     Boolean(user) &&
     extendedProfileLoaded &&
-    !extendedProfile?.isComplete &&
-    !profileBannerDismissed;
+    extendedProfile &&
+    !extendedProfile.isComplete &&
+    !profileBannerGraceExpired;
 
-  const showCheckInReminderBanner =
+  const showCheckInBannerSection =
     Boolean(user) &&
     checkInStatusLoaded &&
-    checkInStatus !== null &&
-    !shouldHideCheckInReminder(checkInStatus) &&
-    !checkInBannerDismissed;
+    checkInStatus &&
+    !shouldHideCheckInReminder(checkInStatus);
 
-  const showChannelSourceBanner =
-    Boolean(user) && !channelRewardClaimed && !channelBannerDismissed;
+  const hasReminderBannerContent =
+    showProfileBannerSection || showCheckInBannerSection;
 
-  // 完善资料 / 签到 / 渠道来源各自独占一行
-  const topBannerCount = Math.min(
-    3,
-    Number(showProfileCompletionBanner) +
-      Number(showCheckInReminderBanner) +
-      Number(showChannelSourceBanner),
-  ) as 0 | 1 | 2 | 3;
+  const reminderBannerPermanentlyDismissed =
+    isProfileCheckInBannerPermanentlyDismissed(user?.id);
+
+  const showReminderBanner =
+    reminderBannerVisible &&
+    hasReminderBannerContent &&
+    !reminderBannerPermanentlyDismissed;
+
+  const topBannerCount = (showReminderBanner ? 1 : 0) as 0 | 1;
 
   const headerTopClass = REMINDER_BANNER_STACK_TOP_CLASS[topBannerCount];
+
+  useEffect(() => {
+    if (!user?.id) {
+      setReminderBannerVisible(false);
+      setReminderBannerFading(false);
+      clearReminderBannerAutoHideTimers();
+      return;
+    }
+    if (!extendedProfileLoaded || !checkInStatusLoaded) return;
+    if (!hasReminderBannerContent) return;
+    if (reminderBannerPermanentlyDismissed) return;
+    if (authInitializing) return;
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      if (useAuthStore.getState().initializing) return;
+      if (!shouldAutoShowProfileCheckInBanner()) return;
+
+      markProfileCheckInBannerShown();
+      setReminderBannerFading(false);
+      setReminderBannerVisible(true);
+      scheduleReminderBannerAutoHide();
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      clearReminderBannerAutoHideTimers();
+    };
+  }, [
+    authInitializing,
+    clearReminderBannerAutoHideTimers,
+    checkInStatusLoaded,
+    extendedProfileLoaded,
+    hasReminderBannerContent,
+    reminderBannerPermanentlyDismissed,
+    scheduleReminderBannerAutoHide,
+    user?.id,
+  ]);
 
   // 闂傚倸鍊搁崐椋庣矆娓氣偓楠炲鍨鹃幇浣圭稁缂傚倷鐒﹁摫闁告瑥绻橀弻鐔碱敍閿濆洣姹楅悷婊呭鐢帡鎮欐繝鍐︿簻闁瑰搫绉堕ˇ锕€霉閻樿櫕銇濇慨濠冩そ濡啫鈽夋潏鈺佸綃缂傚倷鑳舵慨鐢稿垂閸ф绠栭柨鐔哄Т閸楁娊鏌曡箛銉х？闁?Google API Key 闂傚倸鍊峰ù鍥х暦閸偅鍙忕€规洖娲ㄩ惌鍡椕归敐鍫綈婵炲懐濮撮湁闁绘ê妯婇崕鎰版煕?
   useEffect(() => {
@@ -1499,10 +1569,6 @@ const FloatingHeader: React.FC = () => {
           <ProfileCompletionSettingsPanel
             onProfileUpdated={(profile) => {
               setExtendedProfile(profile);
-              if (profile.isComplete) {
-                clearProfileCompletionBannerDismissCache();
-                setProfileBannerDismissed(true);
-              }
             }}
           />
         );
@@ -2281,29 +2347,16 @@ const FloatingHeader: React.FC = () => {
 
   return (
     <>
-      {topBannerCount > 0 ? (
+      {showReminderBanner ? (
         <ReminderBannerStack>
-          {showProfileCompletionBanner ? (
-            <ProfileCompletionBanner
-              profile={extendedProfile}
-              onDismiss={() => setProfileBannerDismissed(true)}
-            />
-          ) : null}
-          {showCheckInReminderBanner && checkInStatus ? (
-            <CheckInReminderBanner
-              status={checkInStatus}
-              onDismiss={() => setCheckInBannerDismissed(true)}
-            />
-          ) : null}
-          {showChannelSourceBanner ? (
-            <ChannelSourceReminderBanner
-              onDismiss={() => setChannelBannerDismissed(true)}
-              onClaimed={() => {
-                setChannelRewardClaimed(true);
-                setChannelBannerDismissed(true);
-              }}
-            />
-          ) : null}
+          <ProfileCheckInReminderBanner
+            profile={extendedProfile}
+            checkInStatus={checkInStatus}
+            showProfile={showProfileBannerSection}
+            showCheckIn={showCheckInBannerSection}
+            fading={reminderBannerFading}
+            onDismiss={closeReminderBanner}
+          />
         </ReminderBannerStack>
       ) : null}
       <div

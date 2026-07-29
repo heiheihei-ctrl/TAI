@@ -15,6 +15,12 @@ function AnalysisOutputNodeInner({ id, data, selected }: Props) {
   const borderColor = selected ? '#2563eb' : '#e5e7eb';
   const boxShadow = selected ? '0 0 0 2px rgba(37,99,235,0.12)' : '0 1px 2px rgba(0,0,0,0.04)';
 
+  const handlePromptChange = React.useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    window.dispatchEvent(new CustomEvent('flow:updateNodeData', {
+      detail: { id, patch: { prompt: e.target.value } }
+    }));
+  }, [id]);
+
   return (
     <FlowResizableNodeShell
       id={id}
@@ -36,9 +42,13 @@ function AnalysisOutputNodeInner({ id, data, selected }: Props) {
     >
 
       <div style={{ fontWeight: 600 }}>{lt('提示词输出', 'Prompt output')}</div>
-      <div
+      <textarea
+        value={data.prompt || ''}
+        onChange={handlePromptChange}
+        placeholder={lt('分析结果将显示在这里', 'Analysis result will appear here')}
         style={{
           flex: 1,
+          width: '100%',
           overflowY: 'auto',
           border: '1px solid #e5e7eb',
           borderRadius: 6,
@@ -46,11 +56,12 @@ function AnalysisOutputNodeInner({ id, data, selected }: Props) {
           fontSize: 12,
           color: data.prompt ? '#374151' : '#9ca3af',
           background: '#f9fafb',
-          whiteSpace: 'pre-wrap',
+          resize: 'none',
+          outline: 'none',
+          fontFamily: 'inherit',
+          lineHeight: 1.5,
         }}
-      >
-        {data.prompt && data.prompt.trim().length ? data.prompt : lt('分析结果将显示在这里', 'Analysis result will appear here')}
-      </div>
+      />
 
       <Handle
         type="target"

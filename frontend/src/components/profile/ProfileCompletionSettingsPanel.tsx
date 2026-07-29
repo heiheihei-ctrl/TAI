@@ -9,6 +9,7 @@ import {
 import BirthdayPicker from "@/components/profile/BirthdayPicker";
 import RegionPicker from "@/components/profile/RegionPicker";
 import ProfileRewardCredits from "@/components/profile/ProfileRewardCredits";
+import { SOURCE_CHANNELS } from "@/constants/sourceChannels";
 import { isCompleteRegion } from "@/data/chinaRegions";
 
 type Props = {
@@ -32,6 +33,7 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
   const [occupation, setOccupation] = React.useState("");
   const [company, setCompany] = React.useState("");
   const [region, setRegion] = React.useState("");
+  const [sourceChannel, setSourceChannel] = React.useState("");
   const [feedback, setFeedback] = React.useState<React.ReactNode>(null);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -45,6 +47,7 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
     setOccupation(next.occupation || "");
     setCompany(next.company || "");
     setRegion(next.region || "");
+    setSourceChannel(next.sourceChannel || "");
   }, []);
 
   React.useEffect(() => {
@@ -114,6 +117,7 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
       occupation: occupation.trim(),
       company: company.trim(),
       region: region.trim(),
+      sourceChannel: sourceChannel.trim() || null,
     };
 
     setSaving(true);
@@ -244,6 +248,22 @@ export default function ProfileCompletionSettingsPanel({ onProfileUpdated }: Pro
             placeholder="请输入邮箱地址"
             maxLength={120}
           />
+        </label>
+
+        <label className="block space-y-1.5">
+          <span className="text-sm font-medium text-slate-700">来源渠道</span>
+          <select
+            className={inputClassName}
+            value={sourceChannel}
+            onChange={(event) => setSourceChannel(event.target.value)}
+          >
+            <option value="">请选择（选填）</option>
+            {SOURCE_CHANNELS.map((channel) => (
+              <option key={channel} value={channel}>
+                {channel}
+              </option>
+            ))}
+          </select>
         </label>
 
         <div className="space-y-1.5">
