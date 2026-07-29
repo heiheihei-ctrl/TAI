@@ -1062,19 +1062,21 @@ const FloatingHeader: React.FC = () => {
   const profilePermanentlyDismissed =
     isProfileCheckInBannerPermanentlyDismissed(user?.id) && profileBannerGraceExpired;
 
-  const showProfileBannerSection =
-    Boolean(user) &&
-    extendedProfileLoaded &&
-    extendedProfile &&
-    !extendedProfile.isComplete &&
-    !profileBannerGraceExpired &&
-    !profilePermanentlyDismissed;
+  const showProfileBannerSection = Boolean(
+    user &&
+      extendedProfileLoaded &&
+      extendedProfile &&
+      !extendedProfile.isComplete &&
+      !profileBannerGraceExpired &&
+      !profilePermanentlyDismissed,
+  );
 
-  const showCheckInBannerSection =
-    Boolean(user) &&
-    checkInStatusLoaded &&
-    checkInStatus &&
-    !shouldHideCheckInReminder(checkInStatus);
+  const showCheckInBannerSection = Boolean(
+    user &&
+      checkInStatusLoaded &&
+      checkInStatus &&
+      !shouldHideCheckInReminder(checkInStatus),
+  );
 
   const hasReminderBannerContent =
     showProfileBannerSection || showCheckInBannerSection;
