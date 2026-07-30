@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { UpdateExtendedProfileDto } from './dto/update-extended-profile.dto';
 
@@ -333,75 +334,74 @@ export class UsersService {
   }
 
   async updateExtendedProfile(userId: string, dto: UpdateExtendedProfileDtoInput) {
-    const existing = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        profileRealName: true,
-        profileNickname: true,
-        profileGender: true,
-        profileBirthday: true,
-        profileEmail: true,
-        profileOccupation: true,
-        profileCompany: true,
-        profileRegion: true,
-        sourceChannel: true,
-        profileCompletedAt: true,
-        profileRewardClaimed: true,
-      },
-    });
-    if (!existing) {
-      throw new NotFoundException('用户不存在');
-    }
-
-    const sourceChannel =
-      dto.sourceChannel !== undefined
-        ? this.normalizeSourceChannel(dto.sourceChannel)
-        : this.normalizeSourceChannel(existing.sourceChannel);
-    this.assertValidSourceChannel(sourceChannel);
-
-    const realName = (dto.realName ?? existing.profileRealName ?? '').trim();
-    const nickname = (dto.nickname ?? existing.profileNickname ?? '').trim();
-    const gender = (dto.gender ?? existing.profileGender ?? '').trim();
-    const birthdayInput =
-      dto.birthday !== undefined
-        ? dto.birthday
-        : this.formatBirthday(existing.profileBirthday);
-    const email = (dto.email ?? existing.profileEmail ?? '').trim().toLowerCase();
-    const occupation = (dto.occupation ?? existing.profileOccupation ?? '').trim();
-    const company = (dto.company ?? existing.profileCompany ?? '').trim();
-    const region = (dto.region ?? existing.profileRegion ?? '').trim();
-
-    if (
-      !realName ||
-      !nickname ||
-      !gender ||
-      !birthdayInput ||
-      !email ||
-      !occupation ||
-      !company ||
-      !region
-    ) {
-      throw new BadRequestException(
-        '请填写完整资料：姓名、昵称、性别、生日、邮箱、职业、公司与所在地区',
-      );
-    }
-
-    const birthday = this.parseBirthdayInput(birthdayInput);
-
-    const isComplete = Boolean(
-      realName &&
-        nickname &&
-        gender &&
-        birthday &&
-        email &&
-        occupation &&
-        company &&
-        region,
-    );
-    const shouldGrantReward = isComplete && !existing.profileRewardClaimed;
-
     const result = await this.prisma.$transaction(async (tx) => {
+      // 锁用户行，避免并发保存重复发放完善资料奖励
+      await tx.$queryRaw<Array<{ id: string }>>(
+        Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`,
+      );
+
+      const existing = await tx.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          profileRealName: true,
+          profileNickname: true,
+          profileGender: true,
+          profileBirthday: true,
+          profileEmail: true,
+          profileOccupation: true,
+          profileCompany: true,
+          profileRegion: true,
+          sourceChannel: true,
+          profileCompletedAt: true,
+          profileRewardClaimed: true,
+        },
+      });
+      if (!existing) {
+        throw new NotFoundException('用户不存在');
+      }
+
+      const sourceChannel =
+        dto.sourceChannel !== undefined
+          ? this.normalizeSourceChannel(dto.sourceChannel)
+          : this.normalizeSourceChannel(existing.sourceChannel);
+      this.assertValidSourceChannel(sourceChannel);
+
+      const realName = (dto.realName ?? existing.profileRealName ?? '').trim();
+      const nickname = (dto.nickname ?? existing.profileNickname ?? '').trim();
+      const gender = (dto.gender ?? existing.profileGender ?? '').trim();
+      const birthdayInput =
+        dto.birthday !== undefined
+          ? dto.birthday
+          : this.formatBirthday(existing.profileBirthday);
+      const email = (dto.email ?? existing.profileEmail ?? '').trim().toLowerCase();
+      const occupation = (dto.occupation ?? existing.profileOccupation ?? '').trim();
+      const company = (dto.company ?? existing.profileCompany ?? '').trim();
+      const region = (dto.region ?? existing.profileRegion ?? '').trim();
+
+      // 保存接口不允许提交空字段：无法通过「清空再填写」绕过
+      if (
+        !realName ||
+        !nickname ||
+        !gender ||
+        !birthdayInput ||
+        !email ||
+        !occupation ||
+        !company ||
+        !region
+      ) {
+        throw new BadRequestException(
+          '请填写完整资料：姓名、昵称、性别、生日、邮箱、职业、公司与所在地区',
+        );
+      }
+
+      const birthday = this.parseBirthdayInput(birthdayInput);
+      // 发奖唯一依据：永久标记 profileRewardClaimed，与字段是否曾经为空无关
+      const shouldGrantReward = !existing.profileRewardClaimed;
+      const profileCompletedAt = existing.profileCompletedAt ?? new Date();
+      const profileRewardClaimed =
+        existing.profileRewardClaimed || shouldGrantReward;
+
       const updated = await tx.user.update({
         where: { id: userId },
         data: {
@@ -414,8 +414,9 @@ export class UsersService {
           profileCompany: company,
           profileRegion: region,
           sourceChannel,
-          profileCompletedAt: isComplete ? existing.profileCompletedAt ?? new Date() : null,
-          profileRewardClaimed: shouldGrantReward ? true : existing.profileRewardClaimed,
+          // 一旦完成/领奖，不再回写为 null / false
+          profileCompletedAt,
+          profileRewardClaimed,
         },
         select: {
           profileRealName: true,

@@ -1,50 +1,25 @@
 import { getLocalDateKey } from "@/utils/contactPopupStorage";
 
-const PENDING_KEY = "tai:profile-checkin-banner-pending";
 const SHOWN_DAY_KEY = "tai:profile-checkin-banner-shown-day";
-const DISMISS_DAY_KEY = "tai:profile-checkin-banner-dismissed-day";
 const PERMANENT_DISMISS_PREFIX = "tai:profile-checkin-banner-permanent-dismiss:";
 
 function permanentDismissKey(userId: string): string {
   return `${PERMANENT_DISMISS_PREFIX}${userId}`;
 }
 
-/** 显式登录成功后调用：要求进画布时自动展示一次 */
-export function requestProfileCheckInBannerOnNextEnter(): void {
-  try {
-    window.localStorage.setItem(PENDING_KEY, "1");
-  } catch {
-    /* ignore */
-  }
-}
-
+/** 今天是否已经展示过（含自动淡出 / 手动关闭） */
 export function shouldAutoShowProfileCheckInBanner(): boolean {
   try {
-    if (window.localStorage.getItem(PENDING_KEY) === "1") {
-      return true;
-    }
     return window.localStorage.getItem(SHOWN_DAY_KEY) !== getLocalDateKey();
   } catch {
     return true;
   }
 }
 
-/** 真正展示后再标记，避免认证 init 闪屏挂载时误标记 */
+/** 真正展示后再标记，当天刷新不再出现 */
 export function markProfileCheckInBannerShown(): void {
   try {
-    window.localStorage.removeItem(PENDING_KEY);
     window.localStorage.setItem(SHOWN_DAY_KEY, getLocalDateKey());
-  } catch {
-    /* ignore */
-  }
-}
-
-/** 退出登录：清当天记录并挂起，确保下次登录必展示 */
-export function clearProfileCheckInBannerShownDay(): void {
-  try {
-    window.localStorage.removeItem(SHOWN_DAY_KEY);
-    window.localStorage.removeItem(DISMISS_DAY_KEY);
-    window.localStorage.setItem(PENDING_KEY, "1");
   } catch {
     /* ignore */
   }
@@ -61,42 +36,7 @@ export function isProfileCheckInBannerPermanentlyDismissed(
   }
 }
 
-/** 今日是否已手动关闭广告条 */
-export function isProfileCheckInBannerDismissedToday(): boolean {
-  try {
-    return window.localStorage.getItem(DISMISS_DAY_KEY) === getLocalDateKey();
-  } catch {
-    return false;
-  }
-}
-
-/** 手动关闭广告条（仅当日有效） */
-export function dismissProfileCheckInBannerForToday(): void {
-  try {
-    window.localStorage.setItem(DISMISS_DAY_KEY, getLocalDateKey());
-  } catch {
-    /* ignore */
-  }
-}
-
-/** 退出登录时清理手动关闭记录 */
-export function clearProfileCheckInBannerDismissDay(): void {
-  try {
-    window.localStorage.removeItem(DISMISS_DAY_KEY);
-  } catch {
-    /* ignore */
-  }
-}
-
-/** 资料已完善时清除 3 天永久标记，避免误挡签到提示 */
-export function clearProfileCheckInBannerPermanentDismiss(userId: string): void {
-  try {
-    window.localStorage.removeItem(permanentDismissKey(userId));
-  } catch {
-    /* ignore */
-  }
-}
-
+/** 注册满 3 天仍未完善资料 → 永久不再展示整条广告 */
 export function isProfileBannerGraceExpired(
   createdAt: string | null | undefined,
   isComplete: boolean,
@@ -108,10 +48,18 @@ export function isProfileBannerGraceExpired(
   return Date.now() - created.getTime() >= graceMs;
 }
 
-/** 注册满 3 天仍未完善资料时永久不再展示 */
 export function markProfileCheckInBannerPermanentlyDismissed(userId: string): void {
   try {
     window.localStorage.setItem(permanentDismissKey(userId), "1");
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 资料已完善后清除永久标记，签到提醒可继续按日展示 */
+export function clearProfileCheckInBannerPermanentDismiss(userId: string): void {
+  try {
+    window.localStorage.removeItem(permanentDismissKey(userId));
   } catch {
     /* ignore */
   }

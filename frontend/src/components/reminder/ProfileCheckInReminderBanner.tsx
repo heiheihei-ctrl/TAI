@@ -8,11 +8,12 @@ import {
 } from "@/services/extendedProfileApi";
 import type { CheckInStatus } from "@/services/referralApi";
 import {
-  REMINDER_BANNER_ACTIONS_COMPACT_CLASS,
   REMINDER_BANNER_HEIGHT_CLASS,
-  REMINDER_BANNER_INNER_COMPACT_CLASS,
   REMINDER_BANNER_SHELL_SIDE_CLASS,
 } from "@/components/reminder/reminderBannerLayout";
+
+const BANNER_INNER_CENTER_CLASS =
+  "mx-auto flex h-full w-full max-w-xl items-center justify-center gap-3 px-3 sm:px-4";
 
 type Props = {
   profile: ExtendedProfile | null;
@@ -68,7 +69,7 @@ export default function ProfileCheckInReminderBanner({
               "border-b-0 border-r border-violet-200/50 bg-gradient-to-r from-violet-50 via-white to-indigo-50/90",
           )}
         >
-          <div className={REMINDER_BANNER_INNER_COMPACT_CLASS}>
+          <div className={BANNER_INNER_CENTER_CLASS}>
             <div className="flex min-w-0 items-center gap-2">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-600">
                 <Gift className="h-4 w-4" />
@@ -82,15 +83,13 @@ export default function ProfileCheckInReminderBanner({
                 积分
               </p>
             </div>
-            <div className={REMINDER_BANNER_ACTIONS_COMPACT_CLASS}>
-              <button
-                type="button"
-                onClick={() => openSettingsSection("profile")}
-                className="rounded-full bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-violet-700 sm:text-sm"
-              >
-                去完善
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => openSettingsSection("profile")}
+              className="shrink-0 rounded-full bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-violet-700 sm:text-sm"
+            >
+              去完善
+            </button>
           </div>
         </div>
       ) : null}
@@ -105,7 +104,7 @@ export default function ProfileCheckInReminderBanner({
               "bg-gradient-to-r from-amber-50 via-white to-orange-50/90",
           )}
         >
-          <div className={REMINDER_BANNER_INNER_COMPACT_CLASS}>
+          <div className={BANNER_INNER_CENTER_CLASS}>
             <div className="flex min-w-0 items-center gap-2">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
                 <Calendar className="h-4 w-4" />
@@ -126,15 +125,13 @@ export default function ProfileCheckInReminderBanner({
                 {t("workspace.checkInReminder.creditsSuffix")}
               </p>
             </div>
-            <div className={REMINDER_BANNER_ACTIONS_COMPACT_CLASS}>
-              <button
-                type="button"
-                onClick={() => openSettingsSection("referral")}
-                className="rounded-full bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-amber-700 sm:text-sm"
-              >
-                {t("workspace.checkInReminder.action")}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => openSettingsSection("referral")}
+              className="shrink-0 rounded-full bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-amber-700 sm:text-sm"
+            >
+              {t("workspace.checkInReminder.action")}
+            </button>
           </div>
         </div>
       ) : null}

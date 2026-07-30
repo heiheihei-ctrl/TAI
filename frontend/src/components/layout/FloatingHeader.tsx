@@ -115,14 +115,10 @@ import {
 } from "@/utils/contactPopupStorage";
 import {
   clearProfileCheckInBannerPermanentDismiss,
-  clearProfileCheckInBannerShownDay,
-  dismissProfileCheckInBannerForToday,
   isProfileBannerGraceExpired,
-  isProfileCheckInBannerDismissedToday,
   isProfileCheckInBannerPermanentlyDismissed,
   markProfileCheckInBannerPermanentlyDismissed,
   markProfileCheckInBannerShown,
-  requestProfileCheckInBannerOnNextEnter,
   shouldAutoShowProfileCheckInBanner,
 } from "@/utils/profileCheckInBannerStorage";
 import {
@@ -454,9 +450,9 @@ const FloatingHeader: React.FC = () => {
     }
   }, []);
 
-  const closeReminderBanner = useCallback((dismissForToday = false) => {
-    if (dismissForToday) {
-      dismissProfileCheckInBannerForToday();
+  const closeReminderBanner = useCallback((markAsShownToday = false) => {
+    if (markAsShownToday) {
+      markProfileCheckInBannerShown();
     }
     clearReminderBannerAutoHideTimers();
     setReminderBannerFading(true);
@@ -997,12 +993,6 @@ const FloatingHeader: React.FC = () => {
   }, [user]);
 
   useEffect(() => {
-    if (!user?.id) return;
-    if (isProfileCheckInBannerDismissedToday()) return;
-    requestProfileCheckInBannerOnNextEnter();
-  }, [user?.id]);
-
-  useEffect(() => {
     if (typeof window === "undefined") return;
     const handleOpenSettingsSection = (event: Event) => {
       const detail = (event as CustomEvent<{ section?: string }>).detail;
@@ -1059,32 +1049,34 @@ const FloatingHeader: React.FC = () => {
     extendedProfile?.isComplete ?? false,
   );
 
-  const profilePermanentlyDismissed =
-    isProfileCheckInBannerPermanentlyDismissed(user?.id) && profileBannerGraceExpired;
+  /** 注册满 3 天仍未完善 → 整条广告永久不显示；资料已完善则不受此限制 */
+  const bannerPermanentlyHidden =
+    !extendedProfile?.isComplete &&
+    (profileBannerGraceExpired ||
+      isProfileCheckInBannerPermanentlyDismissed(user?.id));
 
   const showProfileBannerSection = Boolean(
     user &&
       extendedProfileLoaded &&
       extendedProfile &&
       !extendedProfile.isComplete &&
-      !profileBannerGraceExpired &&
-      !profilePermanentlyDismissed,
+      !extendedProfile.rewardClaimed &&
+      !bannerPermanentlyHidden,
   );
 
   const showCheckInBannerSection = Boolean(
     user &&
       checkInStatusLoaded &&
       checkInStatus &&
-      !shouldHideCheckInReminder(checkInStatus),
+      !shouldHideCheckInReminder(checkInStatus) &&
+      !bannerPermanentlyHidden,
   );
 
   const hasReminderBannerContent =
     showProfileBannerSection || showCheckInBannerSection;
 
   const showReminderBanner =
-    reminderBannerVisible &&
-    hasReminderBannerContent &&
-    !isProfileCheckInBannerDismissedToday();
+    reminderBannerVisible && hasReminderBannerContent;
 
   const topBannerCount = (showReminderBanner ? 1 : 0) as 0 | 1;
 
@@ -1099,13 +1091,14 @@ const FloatingHeader: React.FC = () => {
     }
     if (!extendedProfileLoaded || !checkInStatusLoaded) return;
     if (!hasReminderBannerContent) return;
-    if (isProfileCheckInBannerDismissedToday()) return;
+    if (bannerPermanentlyHidden) return;
     if (authInitializing) return;
 
     let cancelled = false;
     const timer = window.setTimeout(() => {
       if (cancelled) return;
       if (useAuthStore.getState().initializing) return;
+      // 当天已展示过则不再出现（刷新也不会再弹）
       if (!shouldAutoShowProfileCheckInBanner()) return;
 
       markProfileCheckInBannerShown();
@@ -1120,7 +1113,9 @@ const FloatingHeader: React.FC = () => {
     };
   }, [
     authInitializing,
+    bannerPermanentlyHidden,
     checkInStatusLoaded,
+    clearReminderBannerAutoHideTimers,
     extendedProfileLoaded,
     hasReminderBannerContent,
     scheduleReminderBannerAutoHide,
