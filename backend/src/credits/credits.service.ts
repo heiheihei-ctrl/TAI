@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, Inject, forwardRef, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Inject, forwardRef, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
@@ -15,7 +15,10 @@ import {
   buildDailyRewardCreditLotData,
   buildFreeMonthlyQuotaCreditLotData,
   buildManualCreditLotData,
+  buildSignupCreditLotData,
 } from './credit-lot-grants';
+import { TeamCreditsPublisher } from '../team-collab/team-credits-publisher.service';
+import { CollabEventBus, channelForUser } from '../team-collab/collab-event-bus.service';
 import {
   applyLotDeductionsToSnapshots,
   applyLotRestorationsToSnapshots,
@@ -76,6 +79,7 @@ const DEFAULT_FREE_USER_DAILY_IMAGE_LIMIT = 20;
 const DEFAULT_FREE_USER_DAILY_VIDEO_LIMIT = 3;
 const DEFAULT_FREE_USER_MONTHLY_IMAGE_LIMIT = 100;
 const DEFAULT_FREE_USER_MONTHLY_VIDEO_LIMIT = 10;
+const SIGNUP_BONUS_CREDITS = 500;
 const PREVIEW_CREDITS_CACHE_TTL_SEC = 30;
 const GPT_IMAGE2_SERVICE_TYPE = 'gpt-image-2';
 const GPT_IMAGE2_CREDITS = 20;
@@ -407,6 +411,8 @@ export class CreditsService {
     private readonly businessPolicyService: BusinessPolicyService,
     @Inject(forwardRef(() => ReferralService))
     private referralService: ReferralService,
+    @Optional() private readonly teamCreditsPublisher?: TeamCreditsPublisher,
+    @Optional() private readonly collabEventBus?: CollabEventBus,
   ) {
     const redisUrl = this.configService.get<string>('REDIS_URL');
     if (redisUrl && IORedis) {
@@ -2850,39 +2856,19 @@ export class CreditsService {
    * 使用双重检查锁定模式（Double-Checked Locking）避免并发创建冲突
    */
   async getOrCreateAccount(userId: string) {
-    let userCreatedAt: Date | undefined;
-
     // 第一次检查：快速路径，绝大多数场景直接命中
     let account = await this.prisma.creditAccount.findUnique({
       where: { userId },
     });
 
     if (account) {
-      userCreatedAt = (
-        await this.prisma.user.findUnique({
-          where: { id: userId },
-          select: { createdAt: true },
-        })
-      )?.createdAt;
-      const granted = await this.grantFreeUserMonthlyQuotaIfNeeded({
-        userId,
-        account,
-        userCreatedAt,
-      });
-      if (!granted) {
-        return account;
-      }
-
-      return this.prisma.creditAccount.findUniqueOrThrow({
-        where: { userId },
-      });
+      return account;
     }
 
     // 第二次检查：在事务内部再次检查，避免并发创建冲突
     try {
       account = await this.prisma.$transaction(async (tx) => {
         // 在事务中再次查询，确保在创建前账户不存在
-        // 这样可以避免两个并发请求同时创建的情况
         const existingAccount = await tx.creditAccount.findUnique({
           where: { userId },
         });
@@ -2891,40 +2877,47 @@ export class CreditsService {
           return existingAccount;
         }
 
-        const user = await tx.user.findUnique({
-          where: { id: userId },
-          select: { createdAt: true },
-        });
-        userCreatedAt = user?.createdAt;
-
-        // 新用户不再发放注册积分；仅初始化账户，后续按免费用户月度额度规则补发。
+        // 创建新账户并发放注册积分
         const newAccount = await tx.creditAccount.create({
           data: {
             userId,
-            balance: 0,
-            totalEarned: 0,
+            balance: SIGNUP_BONUS_CREDITS,
+            totalEarned: SIGNUP_BONUS_CREDITS,
+          },
+        });
+
+        // 发放注册积分 lot
+        const lot = await tx.creditLot.create({
+          data: buildSignupCreditLotData({
+            accountId: newAccount.id,
+            amount: SIGNUP_BONUS_CREDITS,
+            metadata: {
+              grantedBy: 'signup_bonus',
+            },
+          }),
+        });
+
+        // 创建注册积分交易记录
+        await tx.creditTransaction.create({
+          data: {
+            accountId: newAccount.id,
+            type: TransactionType.EARN,
+            amount: SIGNUP_BONUS_CREDITS,
+            balanceBefore: 0,
+            balanceAfter: SIGNUP_BONUS_CREDITS,
+            description: '新用户注册赠送积分',
+            creditLotId: lot.id,
+            businessType: 'signup_bonus',
           },
         });
 
         return newAccount;
       }, {
-        // 设置事务超时和隔离级别
-        timeout: 10000, // 10秒超时
+        timeout: 10000,
         isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
       });
 
-      const granted = await this.grantFreeUserMonthlyQuotaIfNeeded({
-        userId,
-        account,
-        userCreatedAt,
-      });
-      if (!granted) {
-        return account;
-      }
-
-      return this.prisma.creditAccount.findUniqueOrThrow({
-        where: { userId },
-      });
+      return account;
     } catch (error) {
       // 如果仍然发生唯一约束冲突（理论上不应该，但作为最后的安全网）
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -2933,27 +2926,22 @@ export class CreditsService {
           where: { userId },
         });
         if (!existingAccount) {
-          // 如果仍然找不到，记录错误并抛出
           this.logger.error(`P2002错误后未找到账户 userId=${userId}`);
           throw error;
         }
-        const granted = await this.grantFreeUserMonthlyQuotaIfNeeded({
-          userId,
-          account: existingAccount,
-        });
-        if (!granted) {
-          return existingAccount;
-        }
-
-        return this.prisma.creditAccount.findUniqueOrThrow({
-          where: { userId },
-        });
+        return existingAccount;
       }
       throw error;
     }
   }
 
   async issueFreeUserMonthlyQuotaCredits(now = new Date()) {
+    // 月度额度已停用（freeUserMonthlyQuotaCredits = 0），直接返回
+    const policy = await this.businessPolicyService.getMembershipCreditPolicy();
+    if (policy.freeUserMonthlyQuotaCredits <= 0) {
+      return { affectedUsers: 0, grantedCredits: 0, createdLots: 0 };
+    }
+
     const activeSubscriptionUserIds = new Set(
       (
         await this.prisma.userMembershipSubscription.findMany({
@@ -2998,7 +2986,6 @@ export class CreditsService {
         continue;
       }
 
-      const policy = await this.businessPolicyService.getMembershipCreditPolicy();
       affectedUsers += 1;
       grantedCredits += policy.freeUserMonthlyQuotaCredits;
       createdLots += 1;
@@ -4459,7 +4446,7 @@ export class CreditsService {
    * API 调用失败时退还积分
    */
   async refundCredits(userId: string, apiUsageId: string): Promise<AddCreditsResult> {
-    return await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // 获取 API 使用记录
       const apiUsage = await tx.apiUsageRecord.findUnique({
         where: { id: apiUsageId },
@@ -4500,6 +4487,8 @@ export class CreditsService {
             success: true,
             newBalance: teamAccount.balance,
             transactionId: existingTeamRefund.id,
+            teamId: billingTeamId,
+            creditsToRefund: 0, // 已退过，不再通知
           };
         }
 
@@ -4544,11 +4533,13 @@ export class CreditsService {
         }
 
         return {
-          success: true,
-          newBalance: newTeamBalance,
-          transactionId: refundLedger.id,
-        };
-      }
+        success: true,
+        newBalance: newTeamBalance,
+        transactionId: refundLedger.id,
+        teamId: billingTeamId,
+        creditsToRefund,
+      };
+    }
 
       const account = await tx.creditAccount.findUnique({
         where: { userId },
@@ -4572,6 +4563,8 @@ export class CreditsService {
           success: true,
           newBalance: account.balance,
           transactionId: existingRefund.id,
+          teamId: undefined,
+          creditsToRefund: 0, // 已退过，不再通知
         };
       }
 
@@ -4674,8 +4667,57 @@ export class CreditsService {
         success: true,
         newBalance,
         transactionId: transaction.id,
+        teamId: undefined,
+        creditsToRefund,
       };
     });
+
+    // 发送实时通知（事务外）
+    if (result.success) {
+      try {
+        if (result.teamId && this.teamCreditsPublisher) {
+          // 团队积分退还：通知团队成员
+          await this.teamCreditsPublisher.publish({
+            teamId: result.teamId,
+            delta: result.creditsToRefund,
+            reason: 'release',
+            actorUserId: userId,
+          });
+          this.logger.debug(
+            `Team credits refund notification sent: teamId=${result.teamId}, amount=${result.creditsToRefund}`,
+          );
+        } else if (!result.teamId && this.collabEventBus) {
+          // 个人积分退还：通知用户
+          const account = await this.prisma.creditAccount.findUnique({
+            where: { userId },
+            select: { balance: true },
+          });
+          if (account) {
+            const envelope = {
+              type: 'user_credits_changed' as const,
+              payload: {
+                userId,
+                delta: result.creditsToRefund,
+                balance: account.balance,
+                reason: 'refund',
+              },
+              ts: Date.now(),
+            };
+            await this.collabEventBus.publishTo(channelForUser(userId), envelope);
+            this.logger.debug(
+              `User credits refund notification sent: userId=${userId}, amount=${result.creditsToRefund}`,
+            );
+          }
+        }
+      } catch (notifyError) {
+        // 通知失败不影响退款成功
+        this.logger.warn(
+          `Failed to send credits refund notification: ${notifyError instanceof Error ? notifyError.message : String(notifyError)}`,
+        );
+      }
+    }
+
+    return result;
   }
 
   /**

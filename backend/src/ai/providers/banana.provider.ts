@@ -130,6 +130,9 @@ export class BananaProvider implements IAIProvider {
     "banana-gemini-3.1-pro": "gemini-3-flash-preview",
     "gemini-3.1-pro-preview-official": "gemini-3-flash-preview",
     "banana-gemini-3.1-pro-preview-official": "gemini-3-flash-preview",
+    "gemini-2.5-flash-image-preview": "gemini-3-flash-preview",
+    "gemini-2.5-flash-image": "gemini-3-flash-preview",
+    "gemini-3.1-flash-image-preview": "gemini-3-flash-preview",
   };
   private readonly DEFAULT_TIMEOUT = 900000; // 15鍒嗛挓
   private readonly TEXT_TIMEOUT = 45000; // 鏂囨湰鎺ュ彛鏇村揩澶辫触锛屼究浜庨€氶亾蹇€熷垏鎹?
@@ -470,6 +473,15 @@ export class BananaProvider implements IAIProvider {
       normalized === "gemini-3.1-pro-preview" ||
       normalized === "gemini-3.1-pro" ||
       normalized === "gemini-3.1-pro-preview-official"
+    ) {
+      return "gemini-3-flash-preview";
+    }
+    // Image models not supported by Tencent text channel - convert to text model
+    if (
+      normalized === "gemini-2.5-flash-image-preview" ||
+      normalized === "gemini-2.5-flash-image" ||
+      normalized === "gemini-3.1-flash-image-preview" ||
+      normalized === "gemini-3-pro-image-preview"
     ) {
       return "gemini-3-flash-preview";
     }

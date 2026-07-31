@@ -2925,8 +2925,8 @@ export const useAIChatStore = create<AIChatState>()(
       };
 
       return {
-        // 初始状态
-        isVisible: true,
+        // 初始状态：默认隐藏，需点击工具栏打开
+        isVisible: false,
         isMaximized: false, // 默认不最大化
         currentInput: "",
         currentSessionId: null,

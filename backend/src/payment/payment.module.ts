@@ -8,7 +8,13 @@ import { MembershipModule } from '../membership/membership.module';
 import { BusinessPolicyModule } from '../business-policy/business-policy.module';
 
 @Module({
-  imports: [PrismaModule, CreditsModule, ReferralModule, forwardRef(() => MembershipModule), BusinessPolicyModule],
+  imports: [
+    PrismaModule,
+    forwardRef(() => CreditsModule),
+    forwardRef(() => ReferralModule),
+    forwardRef(() => MembershipModule),
+    BusinessPolicyModule,
+  ],
   controllers: [PaymentController],
   providers: [PaymentService],
   exports: [PaymentService],

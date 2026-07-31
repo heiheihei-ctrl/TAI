@@ -31,7 +31,7 @@ export interface UpdateMembershipCreditPolicyInput {
 export const DEFAULT_MEMBERSHIP_CREDIT_POLICY: MembershipCreditPolicyConfig = {
   dailyGiftDecayCredits: 50,
   fixedCreditExpireDays: 730,
-  freeUserMonthlyQuotaCredits: 500,
+  freeUserMonthlyQuotaCredits: 0,
   dailyRewardCredits: 50,
   consecutive7DayRewardMultiplier: 3,
   membershipRefreshCycleDays: 30,

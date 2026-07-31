@@ -8,7 +8,12 @@ import { MembershipService } from './membership.service';
 import { MembershipSchedulerService } from './membership-scheduler.service';
 
 @Module({
-  imports: [PrismaModule, CreditsModule, forwardRef(() => PaymentModule), BusinessPolicyModule],
+  imports: [
+    PrismaModule,
+    forwardRef(() => CreditsModule),
+    forwardRef(() => PaymentModule),
+    BusinessPolicyModule,
+  ],
   controllers: [MembershipController],
   providers: [MembershipService, MembershipSchedulerService],
   exports: [MembershipService],

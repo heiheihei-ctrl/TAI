@@ -740,21 +740,27 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
         transform: `translateY(-50%) translateY(-${toolbarExtraUpPx}px)`,
       }}
     >
-      {/* AI 对话开关 - 暂时隐藏 */}
-      {false && (
-        <Button
-          variant={isAIDialogVisible ? 'default' : 'outline'}
-          size="sm"
-          className={cn(
-            "p-0 h-8 w-8 rounded-full",
-            getActiveButtonStyle(isAIDialogVisible)
-          )}
-          onClick={toggleDialog}
-          title={isAIDialogVisible ? lt("关闭 AI 对话", "Close AI chat") : lt("打开 AI 对话", "Open AI chat")}
-        >
-          <Sparkles className="w-4 h-4" />
-        </Button>
-      )}
+      {/* AI 对话开关 */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant={isAIDialogVisible ? 'default' : 'outline'}
+            size="sm"
+            className={cn(
+              "p-0 h-8 w-8 rounded-full",
+              getActiveButtonStyle(isAIDialogVisible)
+            )}
+            onClick={toggleDialog}
+          >
+            <Sparkles className="w-4 h-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="right">
+          {isAIDialogVisible
+            ? lt("关闭 AI 对话", "Close AI chat")
+            : lt("打开 AI 对话", "Open AI chat")}
+        </TooltipContent>
+      </Tooltip>
 
       {/* 长宽比选择移至底部 AI 对话框；左侧工具栏不再展示 */}
 

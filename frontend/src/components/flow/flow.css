@@ -85,6 +85,15 @@ body.tanva-flow-multi-resizing .tanva-flow-overlay .react-flow__pane {
   overflow: hidden;
 }
 
+/* textPrompt 节点不使用 overflow: hidden，允许内容溢出 */
+.react-flow__node-textPrompt .flow-resizable-node {
+  overflow: visible !important;
+}
+
+.react-flow__node-textPrompt .flow-resizable-node__body--fixed {
+  overflow: visible !important;
+}
+
 .tanva-textnote-editor--scroll {
   flex: 1 1 auto;
   min-height: 0;

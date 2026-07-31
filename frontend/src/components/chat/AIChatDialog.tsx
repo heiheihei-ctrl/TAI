@@ -2985,9 +2985,6 @@ const AIChatDialog: React.FC = () => {
     };
   }, [hasActiveAuraForEffect]);
 
-  // 如果对话框不可见，不渲染（统一画板下始终可见时显示）
-  if (!isVisible) return null;
-
   // 🔥 修改发送按钮的禁用条件：允许在生成中继续发送（并行模式）
   const currentMentionedImageCount = resolveImageMentionUrls(
     currentInput,
@@ -3029,6 +3026,10 @@ const AIChatDialog: React.FC = () => {
       ),
     [sourceImagesForBlending]
   );
+
+  // 如果对话框不可见，不渲染（必须放在全部 hooks 之后，避免切换可见性时触发 Hooks 顺序错误）
+  if (!isVisible) return null;
+
   // 最大化时不显示顶部横条指示器
   const showHistoryHoverIndicator = !isMaximized;
   const historyHoverIndicatorExpanded =

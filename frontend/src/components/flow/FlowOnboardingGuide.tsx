@@ -189,69 +189,6 @@ function buildConnectGuideVisuals(
   return [];
 }
 
-function ringKey(rect: Rect): string {
-  return `${Math.round(rect.left)}:${Math.round(rect.top)}:${Math.round(rect.width)}:${Math.round(rect.height)}`;
-}
-
-function collectConnectRings(
-  visuals: ConnectGuideVisual[]
-): Array<{
-  rect: Rect;
-  labelZh: string;
-  labelEn: string;
-  color: string;
-}> {
-  const rings: Array<{
-    rect: Rect;
-    labelZh: string;
-    labelEn: string;
-    color: string;
-  }> = [];
-  const seen = new Set<string>();
-
-  for (const visual of visuals) {
-    const sourceKey = `s:${ringKey(visual.sourceRing)}`;
-    if (!seen.has(sourceKey)) {
-      seen.add(sourceKey);
-      rings.push({
-        rect: visual.sourceRing,
-        labelZh: visual.sourceLabelZh,
-        labelEn: visual.sourceLabelEn,
-        color: visual.arrowColor,
-      });
-    }
-  }
-
-  // 目标节点共用一个环，避免绿/橙双环叠字
-  const first = visuals[0];
-  if (first) {
-    const targetKey = `t:${ringKey(first.targetRing)}`;
-    if (!seen.has(targetKey)) {
-      seen.add(targetKey);
-      rings.push({
-        rect: first.targetRing,
-        labelZh: first.targetLabelZh,
-        labelEn: first.targetLabelEn,
-        color: visuals.length > 1 ? TEXT_HANDLE_COLOR : first.arrowColor,
-      });
-    }
-  }
-
-  return rings;
-}
-
-function arrowPath(arrow: ConnectGuideVisual['arrow']): string {
-  const midX = (arrow.x1 + arrow.x2) / 2;
-  return `M ${arrow.x1} ${arrow.y1} C ${midX} ${arrow.y1}, ${midX} ${arrow.y2}, ${arrow.x2} ${arrow.y2}`;
-}
-
-function ringTintStyle(color: string): React.CSSProperties {
-  return {
-    borderColor: color,
-    boxShadow: `0 0 0 6px ${color}24, 0 10px 28px ${color}33`,
-  };
-}
-
 function getTargetRect(
   stepTarget: FlowOnboardingStepTarget,
   textPromptNodeId: string | null,
@@ -422,92 +359,60 @@ function hasImageToTargetConnection(
   });
 }
 
-function buildCardStyle(
+function buildCardStyle(): React.CSSProperties {
+  // 固定在屏幕居中正下方
+  return {
+    bottom: 24,
+    left: '50%',
+    right: 'auto',
+    top: 'auto',
+    transform: 'translateX(-50%)',
+  };
+}
+
+function fingerStyleForTarget(
   stepTarget: FlowOnboardingStepTarget,
   spotRect: Rect | null,
-  connectBounds: Rect | null = null
-): React.CSSProperties {
-  const isConnectTarget =
+  _connectVisuals: ConnectGuideVisual[]
+): React.CSSProperties | null {
+  // 文本输入：输入框内闪烁示例，不用小手
+  if (stepTarget === 'text-prompt-input') {
+    return null;
+  }
+  // 连线步骤：只用虚线指引，不用小手
+  if (
     stepTarget === 'connect-nodes' ||
     stepTarget === 'connect-image-nodes' ||
     stepTarget === 'connect-img2img-nodes' ||
-    stepTarget === 'connect-img2video-nodes';
-
-  // 连线步骤：弹窗固定在底部，避免居中遮挡节点
-  if (isConnectTarget) {
-    const bounds = connectBounds || spotRect;
-    if (bounds) {
-      const cardWidth = Math.min(340, window.innerWidth - 32);
-      const spaceRight = window.innerWidth - (bounds.left + bounds.width);
-      const spaceLeft = bounds.left;
-      // 优先放到底部；若节点贴近底部则改放到左右空位
-      const nearBottom = bounds.top + bounds.height > window.innerHeight - 220;
-      if (nearBottom && spaceRight >= cardWidth + 24) {
-        return {
-          top: Math.max(16, bounds.top),
-          left: Math.min(bounds.left + bounds.width + 16, window.innerWidth - cardWidth - 16),
-          bottom: 'auto',
-          transform: 'none',
-        };
-      }
-      if (nearBottom && spaceLeft >= cardWidth + 24) {
-        return {
-          top: Math.max(16, bounds.top),
-          left: Math.max(16, bounds.left - cardWidth - 16),
-          bottom: 'auto',
-          transform: 'none',
-        };
-      }
-    }
-    return {
-      bottom: 24,
-      left: '50%',
-      top: 'auto',
-      transform: 'translateX(-50%)',
-    };
+    stepTarget === 'connect-img2video-nodes'
+  ) {
+    return null;
   }
 
-  if (stepTarget === 'canvas-center' && spotRect) {
-    return {
-      bottom: 24,
-      left: '50%',
-      top: 'auto',
-      transform: 'translateX(-50%)',
-    };
-  }
+  if (!spotRect) return null;
 
-  if (spotRect) {
-    if (spotRect.top > window.innerHeight * 0.55) {
-      return {
-        top: Math.max(16, spotRect.top - 12),
-        left: Math.min(Math.max(16, spotRect.left), window.innerWidth - 360),
-        transform: 'translateY(-100%)',
-      };
-    }
+  // 选择节点步骤：鼠标放在节点右侧（有文字描述的位置）
+  const isNodePaletteStep = stepTarget.startsWith('node-palette-');
+  if (isNodePaletteStep) {
     return {
-      top: Math.min(spotRect.top + spotRect.height + 16, window.innerHeight - 180),
-      left: Math.min(Math.max(16, spotRect.left), window.innerWidth - 360),
+      top: spotRect.top + spotRect.height / 2 - 8,
+      left: spotRect.left + spotRect.width + 16,
     };
   }
 
   return {
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
+    top: spotRect.top + spotRect.height * 0.55 - 8,
+    left: spotRect.left + spotRect.width / 2 - 14,
   };
 }
 
-function rectToStyle(rect: Rect): React.CSSProperties {
-  return {
-    top: rect.top,
-    left: rect.left,
-    width: rect.width,
-    height: rect.height,
-  };
+function arrowPath(arrow: ConnectGuideVisual['arrow']): string {
+  const midX = (arrow.x1 + arrow.x2) / 2;
+  return `M ${arrow.x1} ${arrow.y1} C ${midX} ${arrow.y1}, ${midX} ${arrow.y2}, ${arrow.x2} ${arrow.y2}`;
 }
 
-/** 底部引导弹窗占用高度，fitView 需额外预留避免节点被遮挡 */
-const ONBOARDING_CARD_RESERVE_BOTTOM = 260;
+/** 右侧固定引导卡，fitView 预留下方空间即可 */
+const ONBOARDING_CARD_RESERVE_BOTTOM = 80;
 
 function scrollPaletteTargetIntoView(selector: string) {
   const el = document.querySelector(selector);
@@ -992,47 +897,6 @@ export default function FlowOnboardingGuide({
 
   React.useEffect(() => {
     if (!active || phase !== 'guide') return;
-
-    const selectorMap: Partial<Record<FlowOnboardingStepTarget, string>> = {
-      'node-palette-textPrompt': '[data-flow-onboarding-target="textPrompt"]',
-      'node-palette-image': '[data-flow-onboarding-target="image"]',
-      'node-palette-generate': '[data-flow-onboarding-target="generate"]',
-      'node-palette-generateRef': '[data-flow-onboarding-target="generateRef"]',
-      'node-palette-klingVideo': '[data-flow-onboarding-target="klingVideo"]',
-      'node-palette-doubaoVideo': '[data-flow-onboarding-target="doubaoVideo"]',
-      'text-prompt-input': '[data-flow-onboarding="text-prompt-input"]',
-      'image-node-upload': '[data-flow-onboarding="image-node-upload"]',
-      'image-node-preview': '[data-flow-onboarding="image-node-preview"]',
-      'generate-run-button': '[data-flow-onboarding="generate-run-button"]',
-      'kling-run-button': '[data-flow-onboarding="kling-run-button"]',
-    };
-
-    const selector = selectorMap[stepTarget];
-    if (!selector) return;
-
-    let cancelled = false;
-    let currentEl: Element | null = null;
-
-    const apply = () => {
-      if (cancelled) return;
-      const el = document.querySelector(selector);
-      if (el === currentEl) return;
-      if (currentEl) currentEl.classList.remove('flow-onboarding-pulse');
-      currentEl = el;
-      if (currentEl) currentEl.classList.add('flow-onboarding-pulse');
-    };
-
-    apply();
-    const interval = window.setInterval(apply, 300);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-      if (currentEl) currentEl.classList.remove('flow-onboarding-pulse');
-    };
-  }, [active, phase, stepTarget]);
-
-  React.useEffect(() => {
-    if (!active || phase !== 'guide') return;
     if (
       stepTarget !== 'generate-run-button' &&
       stepTarget !== 'kling-run-button'
@@ -1155,65 +1019,53 @@ export default function FlowOnboardingGuide({
 
   if (!currentStep) return null;
 
-  const connectRings = collectConnectRings(connectVisuals);
-  const connectBounds = connectRings.length
-    ? mergeRects(connectRings.map((ring) => ring.rect))
-    : null;
-  const cardStyle = buildCardStyle(stepTarget, spotRect, connectBounds);
+  const isTextInputStep = stepTarget === 'text-prompt-input';
+  const fingerStyle = fingerStyleForTarget(stepTarget, spotRect, connectVisuals);
+  const cardStyle = buildCardStyle();
   const connectHintFallback = connectVisuals[0];
 
   return createPortal(
     <div className="flow-onboarding-root" aria-live="polite">
-      {isConnectStep ? (
-        <>
-          <div className="flow-onboarding-backdrop" />
-          {connectVisuals.length > 0 ? (
-            <>
-              {connectRings.map((ring) => (
-                <div
-                  key={ringKey(ring.rect)}
-                  className="flow-onboarding-node-ring"
-                  style={{
-                    ...rectToStyle(ring.rect),
-                    ...ringTintStyle(ring.color),
-                  }}
-                >
-                  <span
-                    className="flow-onboarding-node-label"
-                    style={{ background: ring.color }}
-                  >
-                    {lt(ring.labelZh, ring.labelEn)}
-                  </span>
-                </div>
-              ))}
-              <svg className="flow-onboarding-connect-line" aria-hidden="true">
-                {connectVisuals.map((visual) => (
-                  <path
-                    key={`${visual.arrowColor}:${visual.arrow.x1}:${visual.arrow.y1}:${visual.arrow.x2}:${visual.arrow.y2}`}
-                    d={arrowPath(visual.arrow)}
-                    stroke={visual.arrowColor}
-                  />
-                ))}
-              </svg>
-            </>
-          ) : null}
-        </>
-      ) : spotRect ? (
-        <div
-          className={`flow-onboarding-spotlight${
-            isCanvasCenterStep ? ' flow-onboarding-spotlight-center' : ''
-          }`}
-          style={{
-            top: spotRect.top,
-            left: spotRect.left,
-            width: spotRect.width,
-            height: spotRect.height,
-          }}
-        />
-      ) : (
-        <div className="flow-onboarding-backdrop" />
-      )}
-      <div className="flow-onboarding-card" style={cardStyle}>
+      {/* 连线步骤：只保留虚线连接，不聚焦节点框、不显示鼠标指引 */}
+      {isConnectStep && connectVisuals.length > 0 ? (
+        <svg className="flow-onboarding-connect-line" aria-hidden="true">
+          {connectVisuals.map((visual) => (
+            <path
+              key={`${visual.arrowColor}:${visual.arrow.x1}:${visual.arrow.y1}:${visual.arrow.x2}:${visual.arrow.y2}`}
+              d={arrowPath(visual.arrow)}
+              stroke={visual.arrowColor}
+            />
+          ))}
+        </svg>
+      ) : null}
+
+      {/* 其它操作：标准鼠标箭头上下移动指引（文本输入步除外） */}
+      {!isTextInputStep && !isConnectStep && fingerStyle ? (
+        <div className="flow-onboarding-cursor" style={fingerStyle} aria-hidden="true">
+          <svg
+            className="flow-onboarding-cursor-icon"
+            viewBox="0 0 24 24"
+            width="24"
+            height="24"
+            aria-hidden="true"
+          >
+            {/* 绿色鼠标箭头 */}
+            <path
+              fill="#ffffff"
+              stroke="#16a34a"
+              strokeWidth="1.2"
+              strokeLinejoin="round"
+              d="M5.5 3.2 18.8 12.4l-5.4 1.3 3.1 6.5-2.6 1.2-3.2-6.7-4.4 3.6z"
+            />
+            <path
+              fill="#16a34a"
+              d="M6.6 5.1 16.2 12.2l-4.3 1 2.7 5.7-1.3.6-2.8-5.9-3.6 2.9z"
+            />
+          </svg>
+        </div>
+      ) : null}
+
+      <div className="flow-onboarding-card flow-onboarding-card-fixed-right" style={cardStyle}>
         <div className="flow-onboarding-card-header">
           <span className="flow-onboarding-step-badge">
             {track
@@ -1232,11 +1084,6 @@ export default function FlowOnboardingGuide({
           ) : null}
         </div>
         <p className="flow-onboarding-text">{lt(currentStep.zh, currentStep.en)}</p>
-        {currentStep.hintZh && !isConnectStep ? (
-          <div className="flow-onboarding-hint flow-onboarding-hint-muted flow-onboarding-prompt-hint">
-            {lt(currentStep.hintZh, currentStep.hintEn || currentStep.hintZh)}
-          </div>
-        ) : null}
         {isConnectStep && connectHintFallback ? (
           <div className="flow-onboarding-hint">
             {connectVisuals.map((visual) => (
@@ -1255,6 +1102,14 @@ export default function FlowOnboardingGuide({
         {isCanvasCenterStep ? (
           <div className="flow-onboarding-hint flow-onboarding-hint-muted">
             {lt('在画布空白处双击即可', 'Double-click on empty canvas space')}
+          </div>
+        ) : null}
+        {isTextInputStep ? (
+          <div className="flow-onboarding-hint flow-onboarding-hint-muted">
+            {lt(
+              '请在左侧输入框中参考闪烁示例文案输入',
+              'Follow the blinking example text in the prompt box',
+            )}
           </div>
         ) : null}
         {!isLastStep ? (

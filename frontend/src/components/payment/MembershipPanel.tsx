@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Check, CheckCircle, Clock, Crown, FileText, Loader2, RefreshCw, XCircle } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft, Check, CheckCircle, Clock, Crown, FileText, Loader2, RefreshCw, Wallet, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import PaymentPanel from "@/components/payment/PaymentPanel";
 import PaymentSuccessView from "@/components/payment/PaymentSuccessView";
@@ -153,6 +154,7 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
   publicBrowse = false,
   onRequireLogin,
 }) => {
+  const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const canPurchase = !publicBrowse && Boolean(user);
   const [plans, setPlans] = useState<PaymentMembershipPlan[]>([]);
@@ -456,6 +458,19 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                 订单记录
               </button>
             ) : null}
+            <button
+              type="button"
+              onClick={() => navigate("/my-credits")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm transition-colors",
+                isWhite
+                  ? "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  : "text-zinc-400 hover:bg-zinc-800/80 hover:text-zinc-100",
+              )}
+            >
+              <Wallet className="h-4 w-4" />
+              积分详情
+            </button>
           </div>
         )}
       </div>

@@ -6,9 +6,15 @@ import { CreditsAnomalyService } from './credits-anomaly.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ReferralModule } from '../referral/referral.module';
 import { BusinessPolicyModule } from '../business-policy/business-policy.module';
+import { TeamCollabModule } from '../team-collab/team-collab.module';
 
 @Module({
-  imports: [PrismaModule, forwardRef(() => ReferralModule), BusinessPolicyModule],
+  imports: [
+    PrismaModule,
+    forwardRef(() => ReferralModule),
+    BusinessPolicyModule,
+    forwardRef(() => TeamCollabModule),
+  ],
   controllers: [CreditsController],
   providers: [CreditsService, CreditsSchedulerService, CreditsAnomalyService],
   exports: [CreditsService, CreditsAnomalyService],

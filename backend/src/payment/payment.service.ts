@@ -1,10 +1,12 @@
 import {
   Injectable,
+  Inject,
   BadRequestException,
   HttpException,
   NotFoundException,
   OnModuleInit,
   Logger,
+  forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -46,7 +48,9 @@ export class PaymentService implements OnModuleInit {
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService,
+    @Inject(forwardRef(() => ReferralService))
     private referralService: ReferralService,
+    @Inject(forwardRef(() => MembershipService))
     private membershipService: MembershipService,
     private readonly businessPolicyService: BusinessPolicyService,
   ) { }

@@ -3,7 +3,7 @@ import { Handle, Position, useReactFlow, useStore, useUpdateNodeInternals, type 
 import { resolveTextFromSourceNode } from '../utils/textSource';
 import { collectPromptNodeImageMentionItems } from '../utils/imageMentionCandidates';
 import { useLocaleText } from '@/utils/localeText';
-import { useFlowOnboardingStore } from '@/stores/flowOnboardingStore';
+import { useFlowOnboardingStore, getFlowOnboardingSteps } from '@/stores/flowOnboardingStore';
 import { useCanvasStore } from '@/stores';
 import FlowResizableNodeShell from './FlowResizableNodeShell';
 import InlineImageMentionEditor from '@/components/common/InlineImageMentionEditor';
@@ -19,6 +19,9 @@ const DEFAULT_TITLE = 'Prompt';
 function TextPromptNodeInner({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
   const onboardingActive = useFlowOnboardingStore((s) => s.active);
+  const onboardingPhase = useFlowOnboardingStore((s) => s.phase);
+  const onboardingTrack = useFlowOnboardingStore((s) => s.track);
+  const onboardingStep = useFlowOnboardingStore((s) => s.step);
   const onboardingTextId = useFlowOnboardingStore((s) => s.textPromptNodeId);
   const rf = useReactFlow();
   const edges = useStore((state: ReactFlowState) => state.edges);
@@ -26,6 +29,25 @@ function TextPromptNodeInner({ id, data, selected }: Props) {
   const [hover, setHover] = React.useState<string | null>(null);
   const [incomingTexts, setIncomingTexts] = React.useState<string[]>([]);
   const edgesRef = React.useRef<Edge[]>(edges);
+  const onboardingInputHint = React.useMemo(() => {
+    if (!onboardingActive || onboardingPhase !== 'guide' || onboardingTextId !== id) {
+      return null;
+    }
+    const steps = getFlowOnboardingSteps(onboardingTrack);
+    const current = steps[onboardingStep];
+    if (!current || current.target !== 'text-prompt-input') return null;
+    if ((value || '').trim().length > 0) return null;
+    return current.hintZh || current.hintEn || null;
+  }, [
+    id,
+    onboardingActive,
+    onboardingPhase,
+    onboardingStep,
+    onboardingTextId,
+    onboardingTrack,
+    value,
+  ]);
+
   const borderColor = selected ? '#2563eb' : '#e5e7eb';
   const boxShadow = selected ? '0 0 0 2px rgba(37,99,235,0.12)' : '0 1px 2px rgba(0,0,0,0.04)';
   const normalizedTitle = typeof data.title === 'string' && data.title.trim().length
@@ -286,14 +308,19 @@ function TextPromptNodeInner({ id, data, selected }: Props) {
             ? 'text-prompt-input'
             : undefined
         }
-        style={{ display: 'flex', flex: 1, minHeight: 0 }}
+        style={{ display: 'flex', flex: 1, minHeight: 0, position: 'relative' }}
       >
+      {onboardingInputHint ? (
+        <div className="flow-onboarding-input-hint" aria-hidden="true">
+          {onboardingInputHint}
+        </div>
+      ) : null}
       <InlineImageMentionEditor
         value={value}
         items={imageMentionItems}
         onChange={commitValue}
         emptyText={lt("下游模型暂无已连接图片", "No connected images")}
-        placeholder={lt("输入提示词", "Enter prompt")}
+        placeholder={onboardingInputHint ? '' : lt("输入提示词", "Enter prompt")}
         menuStyle={{ position: 'absolute', left: 8, bottom: 8 }}
         containerStyle={{
           display: 'flex',

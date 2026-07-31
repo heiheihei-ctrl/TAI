@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { TeamCoreModule } from '../team-core/team-core.module';
 import { PaymentModule } from '../payment/payment.module';
@@ -11,7 +11,7 @@ import { TeamSeatPackageService } from './team-seat-package.service';
 import { TeamCreditsTopupService } from './team-credits-topup.service';
 
 @Module({
-  imports: [PrismaModule, TeamCoreModule, PaymentModule, CreditsModule],
+  imports: [PrismaModule, TeamCoreModule, forwardRef(() => PaymentModule), forwardRef(() => CreditsModule)],
   controllers: [TeamCreditsController],
   providers: [
     TeamCreditsService,

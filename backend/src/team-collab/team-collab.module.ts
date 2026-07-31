@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -18,7 +18,7 @@ import { TeamRealtimeController } from './team-realtime.controller';
     PrismaModule,
     ConfigModule,
     TeamCoreModule,
-    TeamCreditsModule,
+    forwardRef(() => TeamCreditsModule),
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
