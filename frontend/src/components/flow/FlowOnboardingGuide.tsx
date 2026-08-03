@@ -391,15 +391,7 @@ function fingerStyleForTarget(
 
   if (!spotRect) return null;
 
-  // 选择节点步骤：鼠标放在节点右侧（有文字描述的位置）
-  const isNodePaletteStep = stepTarget.startsWith('node-palette-');
-  if (isNodePaletteStep) {
-    return {
-      top: spotRect.top + spotRect.height / 2 - 8,
-      left: spotRect.left + spotRect.width + 16,
-    };
-  }
-
+  // 指向目标中心（选择节点等同其它操作步）
   return {
     top: spotRect.top + spotRect.height * 0.55 - 8,
     left: spotRect.left + spotRect.width / 2 - 14,
