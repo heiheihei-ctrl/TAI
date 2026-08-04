@@ -11,7 +11,6 @@ import {
   isArchitectureSecondaryCategory,
   isTemplateParentCategory,
   normalizeCategoryParentGroups,
-  reconcileCategoryParentGroups,
   TEMPLATE_CATEGORIES_KEY,
   TEMPLATE_CATEGORY_PARENT_GROUPS_KEY,
   TEMPLATE_PARENT_CATEGORIES,
@@ -356,41 +355,35 @@ export class TemplateService {
       where: { key: TEMPLATE_CATEGORY_PARENT_GROUPS_KEY },
     });
 
-    let allSecondary = [...secondary];
-    if (setting?.value) {
-      try {
-        const parsed = normalizeCategoryParentGroups(JSON.parse(setting.value));
-        allSecondary = Array.from(
-          new Set([...allSecondary, ...flattenSecondaryCategories(parsed)]),
-        );
-      } catch {
-        // ignore
-      }
-    }
-
-    const reconciled = reconcileCategoryParentGroups(allSecondary);
-
     if (setting?.value) {
       try {
         const stored = normalizeCategoryParentGroups(JSON.parse(setting.value));
-        const storedFlat = sortPublicTemplateCategories(flattenSecondaryCategories(stored));
-        const reconciledFlat = sortPublicTemplateCategories(flattenSecondaryCategories(reconciled));
-        const sameGroups =
-          sortPublicTemplateCategories(stored.建筑).join('\0') ===
-            sortPublicTemplateCategories(reconciled.建筑).join('\0') &&
-          sortPublicTemplateCategories(stored.其他).join('\0') ===
-            sortPublicTemplateCategories(reconciled.其他).join('\0') &&
-          storedFlat.join('\0') === reconciledFlat.join('\0');
-        if (sameGroups) {
-          return stored;
-        }
-      } catch {
-        // fall through to persist reconciled
-      }
-    }
+        const known = new Set(flattenSecondaryCategories(stored));
+        let changed = false;
 
-    if (reconciled.建筑.length || reconciled.其他.length) {
-      return this.persistCategoryParentGroups(reconciled);
+        for (const raw of secondary) {
+          const cat = typeof raw === 'string' ? raw.trim() : '';
+          if (!cat || isTemplateParentCategory(cat) || known.has(cat)) continue;
+          // 仅对「尚未归属」的旧数据做启发式；已保存的自定义归属不覆盖
+          if (isArchitectureSecondaryCategory(cat)) {
+            stored.建筑.push(cat);
+          } else {
+            stored.其他.push(cat);
+          }
+          known.add(cat);
+          changed = true;
+        }
+
+        stored.建筑 = sortPublicTemplateCategories(stored.建筑);
+        stored.其他 = sortPublicTemplateCategories(stored.其他);
+
+        if (changed) {
+          return this.persistCategoryParentGroups(stored);
+        }
+        return stored;
+      } catch {
+        // fall through to defaults
+      }
     }
 
     const defaults = buildDefaultCategoryParentGroups(secondary);
@@ -405,8 +398,8 @@ export class TemplateService {
     if (isTemplateParentCategory(trimmed)) {
       throw new Error('二级分类名称不能与一级分类重名');
     }
-    if (parentCategory === '建筑' && !isArchitectureSecondaryCategory(trimmed)) {
-      throw new Error('仅「建筑设计」「空间设计」可归属建筑一级分类');
+    if (!isTemplateParentCategory(parentCategory)) {
+      throw new Error('一级分类无效');
     }
 
     const groups = await this.getCategoryParentGroups();
