@@ -481,9 +481,9 @@ const PersonalLibraryPanel: React.FC<PersonalLibraryPanelProps> = ({
       alert(lt("资源缺少可用的链接，无法发送到画板", "This asset has no usable URL and cannot be sent to canvas."));
       return;
     }
-    const asPersonal: PersonalLibraryAsset = {
+
+    const base = {
       id: asset.id,
-      type: (asset.assetType as PersonalAssetType) || "2d",
       name: asset.name,
       url: asset.url,
       thumbnail: asset.thumbnail || asset.url,
@@ -493,6 +493,26 @@ const PersonalLibraryPanel: React.FC<PersonalLibraryPanelProps> = ({
       createdAt: Date.parse(asset.createdAt) || Date.now(),
       updatedAt: Date.parse(asset.updatedAt) || Date.now(),
     };
+    const assetType = (asset.assetType || "2d").toLowerCase();
+
+    let asPersonal: PersonalLibraryAsset;
+    if (assetType === "3d") {
+      const lowerName = asset.name.toLowerCase();
+      const format = lowerName.endsWith(".gltf") ? "gltf" : "glb";
+      asPersonal = {
+        ...base,
+        type: "3d",
+        format,
+        path: asset.url,
+      };
+    } else if (assetType === "svg") {
+      asPersonal = { ...base, type: "svg" };
+    } else if (assetType === "video") {
+      asPersonal = { ...base, type: "video" };
+    } else {
+      asPersonal = { ...base, type: "2d" };
+    }
+
     await handleSendToCanvas(asPersonal);
   };
 

@@ -628,13 +628,15 @@ export default function Home() {
                 >
                   {t("home.header.actions.membership")}
                 </button>
-                <button
-                  type="button"
-                  className="hidden rounded-full border border-teal-400/40 bg-teal-500/15 px-3 py-1 text-xs text-teal-100 transition-colors hover:bg-teal-500/25 sm:inline-flex"
-                  onClick={() => navigate("/enterprise")}
-                >
-                  企业版
-                </button>
+                {SHOW_ENTERPRISE_CONSOLE ? (
+                  <button
+                    type="button"
+                    className="hidden rounded-full border border-teal-400/40 bg-teal-500/15 px-3 py-1 text-xs text-teal-100 transition-colors hover:bg-teal-500/25 sm:inline-flex"
+                    onClick={() => navigate("/enterprise")}
+                  >
+                    企业版
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="px-2 text-sm text-white/70 transition-colors hover:text-white"
@@ -1090,13 +1092,15 @@ export default function Home() {
             >
               <span>{t("home.hero.otherIndustry")}</span>
             </button>
-            <button
-              type="button"
-              onClick={() => navigate("/enterprise")}
-              className="inline-flex h-11 items-center justify-center rounded-full border border-teal-300/50 bg-teal-500/20 px-6 text-sm font-medium text-teal-50 backdrop-blur-sm transition hover:bg-teal-500/30"
-            >
-              企业版
-            </button>
+            {SHOW_ENTERPRISE_CONSOLE ? (
+              <button
+                type="button"
+                onClick={() => navigate("/enterprise")}
+                className="inline-flex h-11 items-center justify-center rounded-full border border-teal-300/50 bg-teal-500/20 px-6 text-sm font-medium text-teal-50 backdrop-blur-sm transition hover:bg-teal-500/30"
+              >
+                企业版
+              </button>
+            ) : null}
           </div>
         </div>
       </section>

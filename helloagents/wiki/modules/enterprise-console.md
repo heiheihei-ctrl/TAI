@@ -4,9 +4,16 @@
 
 ## 入口
 
-- 首页「企业版」→ `/enterprise` **企业账号登录页**
+- 首页「企业版」→ `/enterprise` **企业账号登录页**（由 `SHOW_ENTERPRISE_CONSOLE` / `VITE_SHOW_ENTERPRISE` 控制显示）
 - 首页其他入口进 `/app` 时切回**个人工作区**；画布顶栏保留「个人 / 企业」切换（`SHOW_WORKSPACE_SWITCHER`）
-- 个人版默认关闭实时协同 UI（`SHOW_TEAM_COLLABORATION=false`），但不隐藏工作区切换
+- 个人版默认关闭实时协同 UI（`SHOW_TEAM_COLLABORATION` / `VITE_SHOW_TEAM_COLLABORATION`），但不隐藏工作区切换（仅企业版开启时）
+
+### Feature flags
+
+| 开关 | 环境变量 | 默认 | 作用 |
+|------|----------|------|------|
+| `SHOW_TEAM_COLLABORATION` | `VITE_SHOW_TEAM_COLLABORATION` | `false` | 实时协同 UI |
+| `SHOW_ENTERPRISE_CONSOLE` | `VITE_SHOW_ENTERPRISE` | `false` | 企业版入口与路由 |
 
 ## 组织口径（表级分离）
 
