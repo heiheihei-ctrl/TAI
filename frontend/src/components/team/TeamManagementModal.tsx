@@ -64,6 +64,18 @@ export function TeamManagementModal({ teamId, onClose, initialTab }: Props) {
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
               {canManage ? '成员管理 / 配额设置' : '成员与配额'}
+              {' · '}
+              <a
+                href={`/enterprise/${encodeURIComponent(teamId)}`}
+                className="text-teal-600 hover:underline"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onClose();
+                  window.location.assign(`/enterprise/${encodeURIComponent(teamId)}`);
+                }}
+              >
+                打开企业后台
+              </a>
             </p>
           </div>
           <button

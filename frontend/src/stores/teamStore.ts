@@ -7,6 +7,9 @@ export interface TeamInfo {
   id: string;
   name: string;
   isPersonal: boolean;
+  enterpriseEnabled?: boolean;
+  displayName?: string | null;
+  logoUrl?: string | null;
   myRole: 'owner' | 'admin' | 'member';
   memberCount: number;
   availableCredits: number;

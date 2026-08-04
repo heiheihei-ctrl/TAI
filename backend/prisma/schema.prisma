@@ -55,7 +55,10 @@ model User {
   refreshTokens              RefreshToken[]
   wechatLoginSessions        WechatLoginSession[]
   ownedTeams                 Team[]           @relation("TeamOwner")
+  ownedEnterprises           Enterprise[]     @relation("EnterpriseOwner")
   teamMemberships            TeamMembership[]
+  teamAssetsUploaded         TeamAsset[]      @relation("TeamAssetUploader")
+  teamJoinRequests           TeamJoinRequest[] @relation("TeamJoinApplicant")
   invitedBy                  User?                  @relation("UserInvitedBy", fields: [invitedById], references: [id])
   invites                    User[]                 @relation("UserInvitedBy")
 
@@ -128,6 +131,7 @@ model Project {
   id             String   @id @default(uuid())
   userId         String
   teamId         String?
+  enterpriseId   String?
   name           String
   ossPrefix      String
   mainKey        String
@@ -138,6 +142,7 @@ model Project {
   updatedAt      DateTime @updatedAt
   user           User     @relation(fields: [userId], references: [id])
   team           Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  enterprise     Enterprise? @relation(fields: [enterpriseId], references: [id], onDelete: SetNull)
   workflowHistory     WorkflowHistory[]
   teamShares          TeamProjectShare[]
   commentThreads      CanvasCommentThread[]
@@ -146,7 +151,29 @@ model Project {
   @@index([userId, createdAt])     // 用户项目列表，按创建时间倒序
   @@index([userId, updatedAt])     // 用户项目列表，按更新时间倒序
   @@index([teamId, updatedAt])     // 团队项目列表
+  @@index([enterpriseId, updatedAt])
   @@index([createdAt])             // 全局项目统计
+}
+
+/// 平台派发的企业账户（与 Team 工作区、Project 画布项目分离）
+model Enterprise {
+  id              String   @id @default(uuid())
+  name            String
+  displayName     String?
+  logoUrl         String?
+  ownerId         String
+  workspaceTeamId String   @unique
+  maxSeats        Int      @default(10)
+  status          String   @default("active")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  owner         User      @relation("EnterpriseOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  workspaceTeam Team      @relation(fields: [workspaceTeamId], references: [id], onDelete: Cascade)
+  projects      Project[]
+
+  @@index([ownerId])
+  @@index([status, createdAt])
 }
 
 model CanvasCommentThread {
@@ -189,25 +216,74 @@ model CanvasComment {
 }
 
 model Team {
-  id          String   @id @default(uuid())
-  name        String
-  ownerId     String
-  owner       User     @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Restrict)
-  isPersonal  Boolean  @default(false)
-  maxSeats    Int      @default(10)
-  status      String   @default("active")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                String   @id @default(uuid())
+  name              String
+  ownerId           String
+  owner             User     @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  isPersonal        Boolean  @default(false)
+  enterpriseEnabled Boolean  @default(false)
+  displayName       String?
+  logoUrl           String?
+  maxSeats          Int      @default(10)
+  status            String   @default("active")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   memberships   TeamMembership[]
   invites       TeamInvite[]
+  joinRequests  TeamJoinRequest[]
   projectShares TeamProjectShare[]
   subscriptions TeamSubscription[]
   creditAccount TeamCreditAccount?
   seatPackages  TeamSeatPackage[]
   projects      Project[]
+  assets        TeamAsset[]
+  assetFolders  TeamAssetFolder[]
+  enterpriseAccount Enterprise?
 
   @@index([ownerId, isPersonal])
+  @@index([enterpriseEnabled, status])
+}
+
+model TeamAssetFolder {
+  id        String   @id @default(uuid())
+  teamId    String
+  name      String
+  parentId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team    Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  parent  TeamAssetFolder?  @relation("TeamAssetFolderTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children TeamAssetFolder[] @relation("TeamAssetFolderTree")
+  assets  TeamAsset[]
+
+  @@index([teamId, parentId])
+}
+
+model TeamAsset {
+  id          String   @id @default(uuid())
+  teamId      String
+  uploaderId  String
+  folderId    String?
+  name        String
+  url         String
+  ossKey      String?
+  mime        String?
+  size        Int?
+  thumbnail   String?
+  assetType   String   @default("2d") // 2d | 3d | svg | video
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  team     Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  uploader User             @relation("TeamAssetUploader", fields: [uploaderId], references: [id], onDelete: Restrict)
+  folder   TeamAssetFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
+  @@index([teamId, createdAt(sort: Desc)])
+  @@index([teamId, folderId])
+  @@index([uploaderId])
 }
 
 model TeamMembership {
@@ -243,9 +319,31 @@ model TeamInvite {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  team         Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  joinRequests TeamJoinRequest[]
 
   @@index([teamId, status])
+}
+
+model TeamJoinRequest {
+  id              String    @id @default(uuid())
+  teamId          String
+  inviteId        String?
+  applicantUserId String
+  status          String    @default("pending") // pending | approved | rejected | cancelled
+  message         String?
+  reviewedById    String?
+  reviewedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  team      Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  invite    TeamInvite?  @relation(fields: [inviteId], references: [id], onDelete: SetNull)
+  applicant User         @relation("TeamJoinApplicant", fields: [applicantUserId], references: [id], onDelete: Cascade)
+
+  @@index([teamId, status, createdAt(sort: Desc)])
+  @@index([applicantUserId, status])
+  @@index([inviteId])
 }
 
 model TeamCreditAccount {

@@ -21,6 +21,15 @@ import { useProjectStore } from '@/stores/projectStore';
 import { refreshTeams } from '@/stores/teamStore';
 import Workspace from '@/pages/Workspace';
 import { initializeRuntimeStability } from '@/bootstrap/runtimeStability';
+import { SHOW_ENTERPRISE_CONSOLE } from '@/config/featureFlags';
+import EnterpriseLoginPage from '@/pages/enterprise/EnterpriseLoginPage';
+import EnterpriseLayout from '@/pages/enterprise/EnterpriseLayout';
+import EnterpriseDashboard from '@/pages/enterprise/EnterpriseDashboard';
+import EnterpriseMembersPage from '@/pages/enterprise/EnterpriseMembersPage';
+import EnterpriseAssetsPage from '@/pages/enterprise/EnterpriseAssetsPage';
+import EnterpriseSettingsPage from '@/pages/enterprise/EnterpriseSettingsPage';
+import EnterpriseJoinRequestsPage from '@/pages/enterprise/EnterpriseJoinRequestsPage';
+import EnterpriseProjectsPage from '@/pages/enterprise/EnterpriseProjectsPage';
 
 function RootRoutes() {
   const user = useAuthStore((s) => s.user);
@@ -44,12 +53,26 @@ function RootRoutes() {
       <Route path="/legal/privacy" element={<PrivacyPolicy />} />
       <Route path="/legal/community" element={<CommunityGuidelines />} />
       <Route path="/oss" element={<OSSDemo />} />
+      {SHOW_ENTERPRISE_CONSOLE ? (
+        <Route path="/enterprise" element={<EnterpriseLoginPage />} />
+      ) : null}
       <Route element={<ProtectedRoute />}>
         <Route path="/workspace" element={<Workspace />} />
         <Route path="/app" element={<App />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/my-credits" element={<MyCredits />} />
         <Route path="/membership" element={<MembershipSubscribePage />} />
+        {SHOW_ENTERPRISE_CONSOLE ? (
+          <Route path="/enterprise/:teamId" element={<EnterpriseLayout />}>
+            <Route index element={<EnterpriseDashboard />} />
+            <Route path="projects" element={<EnterpriseProjectsPage />} />
+            <Route path="members" element={<EnterpriseMembersPage />} />
+            <Route path="requests" element={<EnterpriseJoinRequestsPage />} />
+            <Route path="assets" element={<EnterpriseAssetsPage />} />
+            <Route path="credits" element={<Navigate to=".." replace />} />
+            <Route path="settings" element={<EnterpriseSettingsPage />} />
+          </Route>
+        ) : null}
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

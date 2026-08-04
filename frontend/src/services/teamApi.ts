@@ -66,15 +66,83 @@ export const teamApi = {
     return json<TeamInfo[]>("/api/teams");
   },
 
-  async getInviteInfo(code: string): Promise<{ teamName: string }> {
-    return json<{ teamName: string }>(
+  async getInviteInfo(code: string): Promise<{ teamName: string; teamId?: string }> {
+    return json<{ teamName: string; teamId?: string }>(
       `/api/invites/${encodeURIComponent(code)}`
     );
   },
 
-  async acceptInvite(code: string): Promise<{ teamId: string }> {
-    return json<{ teamId: string }>(
-      `/api/invites/${encodeURIComponent(code)}/accept`,
+  async acceptInvite(code: string): Promise<{
+    requestId?: string;
+    teamId: string;
+    status?: string;
+    message?: string;
+  }> {
+    return json(`/api/invites/${encodeURIComponent(code)}/apply`, {
+      method: "POST",
+    });
+  },
+
+  async applyInvite(
+    code: string,
+    message?: string
+  ): Promise<{
+    requestId: string;
+    teamId: string;
+    status: string;
+    message?: string;
+  }> {
+    return json(`/api/invites/${encodeURIComponent(code)}/apply`, {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ message }),
+    });
+  },
+
+  async joinByCode(
+    code: string,
+    message?: string
+  ): Promise<{
+    requestId: string;
+    teamId: string;
+    status: string;
+    message?: string;
+  }> {
+    return json(`/api/join-by-code`, {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ code, message }),
+    });
+  },
+
+  async listJoinRequests(teamId: string): Promise<
+    Array<{
+      id: string;
+      status: string;
+      message?: string | null;
+      createdAt: string;
+      applicant: {
+        id: string;
+        name?: string | null;
+        phone?: string | null;
+        email?: string | null;
+        avatarUrl?: string | null;
+      };
+    }>
+  > {
+    return json(`/api/teams/${encodeURIComponent(teamId)}/join-requests`);
+  },
+
+  async approveJoinRequest(teamId: string, requestId: string): Promise<void> {
+    await request(
+      `/api/teams/${encodeURIComponent(teamId)}/join-requests/${encodeURIComponent(requestId)}/approve`,
+      { method: "POST" }
+    );
+  },
+
+  async rejectJoinRequest(teamId: string, requestId: string): Promise<void> {
+    await request(
+      `/api/teams/${encodeURIComponent(teamId)}/join-requests/${encodeURIComponent(requestId)}/reject`,
       { method: "POST" }
     );
   },
@@ -151,5 +219,52 @@ export const teamApi = {
     await request(`/api/teams/${encodeURIComponent(teamId)}`, {
       method: "DELETE",
     });
+  },
+
+  async updateTeam(
+    teamId: string,
+    body: { name?: string; displayName?: string | null; logoUrl?: string | null }
+  ): Promise<TeamInfo> {
+    return json<TeamInfo>(`/api/teams/${encodeURIComponent(teamId)}`, {
+      method: "PATCH",
+      headers: JSON_HEADERS,
+      body: JSON.stringify(body),
+    });
+  },
+
+  async transferOwnership(teamId: string, newOwnerId: string): Promise<void> {
+    await request(
+      `/api/teams/${encodeURIComponent(teamId)}/transfer-ownership`,
+      {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ newOwnerId }),
+      }
+    );
+  },
+
+  async getEnterpriseDashboard(teamId: string): Promise<{
+    id: string;
+    name: string;
+    displayName: string;
+    logoUrl: string | null;
+    enterpriseEnabled: boolean;
+    status: string;
+    memberCount: number;
+    projectCount: number;
+    assetCount: number;
+    folderCount: number;
+    maxSeats: number;
+    availableCredits: number;
+    recentProjects: Array<{
+      id: string;
+      name: string;
+      updatedAt: string;
+      thumbnailUrl?: string | null;
+    }>;
+  }> {
+    return json(
+      `/api/teams/${encodeURIComponent(teamId)}/enterprise-dashboard`
+    );
   },
 };

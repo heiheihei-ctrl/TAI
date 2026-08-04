@@ -31,6 +31,12 @@ import {
 } from "@/stores/personalLibraryStore";
 import type { StoredImageAsset } from "@/types/canvas";
 import { useLocaleText } from "@/utils/localeText";
+import { SHOW_ENTERPRISE_CONSOLE } from "@/config/featureFlags";
+import { useTeamStore } from "@/stores/teamStore";
+import {
+  teamLibraryApi,
+  type TeamLibraryAsset,
+} from "@/services/teamLibraryApi";
 
 interface PersonalLibraryPanelProps {
   padding?: string | number;
@@ -53,6 +59,20 @@ const PersonalLibraryPanel: React.FC<PersonalLibraryPanelProps> = ({
   const { lt } = useLocaleText();
   const [activeType, setActiveType] = React.useState<PersonalAssetType>("2d");
   const [isUploading, setUploading] = React.useState(false);
+  const activeTeamId = useTeamStore((s) => s.activeTeamId);
+  const teams = useTeamStore((s) => s.teams);
+  const enterpriseTeamId = React.useMemo(() => {
+    if (!SHOW_ENTERPRISE_CONSOLE || !activeTeamId) return undefined;
+    const team = teams.find((t) => t.id === activeTeamId);
+    return team && !team.isPersonal ? team.id : undefined;
+  }, [SHOW_ENTERPRISE_CONSOLE, activeTeamId, teams]);
+  const [libraryScope, setLibraryScope] = React.useState<"personal" | "enterprise">(
+    "personal"
+  );
+  const [enterpriseAssets, setEnterpriseAssets] = React.useState<TeamLibraryAsset[]>(
+    []
+  );
+  const [enterpriseLoading, setEnterpriseLoading] = React.useState(false);
   const addAsset = usePersonalLibraryStore((state) => state.addAsset);
   const removeAsset = usePersonalLibraryStore((state) => state.removeAsset);
   const updateAsset = usePersonalLibraryStore((state) => state.updateAsset);
@@ -100,6 +120,34 @@ const PersonalLibraryPanel: React.FC<PersonalLibraryPanelProps> = ({
       cancelled = true;
     };
   }, [mergeAssets]);
+
+  React.useEffect(() => {
+    if (!enterpriseTeamId) {
+      setLibraryScope("personal");
+      setEnterpriseAssets([]);
+      return;
+    }
+    if (libraryScope !== "enterprise") return;
+    let cancelled = false;
+    setEnterpriseLoading(true);
+    void teamLibraryApi
+      .listAssets(enterpriseTeamId)
+      .then((list) => {
+        if (!cancelled) setEnterpriseAssets(list);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.warn("[TeamLibrary] 拉取企业素材失败:", error);
+          setEnterpriseAssets([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setEnterpriseLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [enterpriseTeamId, libraryScope]);
 
   const accept =
     activeType === "2d"
@@ -428,6 +476,26 @@ const PersonalLibraryPanel: React.FC<PersonalLibraryPanelProps> = ({
     }
   };
 
+  const handleSendEnterpriseToCanvas = async (asset: TeamLibraryAsset) => {
+    if (!asset.url) {
+      alert(lt("资源缺少可用的链接，无法发送到画板", "This asset has no usable URL and cannot be sent to canvas."));
+      return;
+    }
+    const asPersonal: PersonalLibraryAsset = {
+      id: asset.id,
+      type: (asset.assetType as PersonalAssetType) || "2d",
+      name: asset.name,
+      url: asset.url,
+      thumbnail: asset.thumbnail || asset.url,
+      fileName: asset.name,
+      fileSize: asset.size ?? undefined,
+      contentType: asset.mime ?? undefined,
+      createdAt: Date.parse(asset.createdAt) || Date.now(),
+      updatedAt: Date.parse(asset.updatedAt) || Date.now(),
+    };
+    await handleSendToCanvas(asPersonal);
+  };
+
   return (
     <div
       style={{
@@ -457,7 +525,7 @@ const PersonalLibraryPanel: React.FC<PersonalLibraryPanelProps> = ({
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          {showUploadButton && (
+          {libraryScope === "personal" && showUploadButton && (
             <button
               onClick={triggerUpload}
               disabled={isUploading}
@@ -493,6 +561,105 @@ const PersonalLibraryPanel: React.FC<PersonalLibraryPanelProps> = ({
       {/* 分隔线 */}
       <div style={{ height: 1, background: "#e5e7eb", marginBottom: 16 }} />
 
+      {enterpriseTeamId ? (
+        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+          {(
+            [
+              { id: "personal" as const, label: lt("个人素材", "Personal") },
+              { id: "enterprise" as const, label: lt("企业素材", "Enterprise") },
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setLibraryScope(tab.id)}
+              style={{
+                padding: "6px 12px",
+                borderRadius: 999,
+                border:
+                  libraryScope === tab.id
+                    ? "1px solid #0f766e"
+                    : "1px solid #e5e7eb",
+                background: libraryScope === tab.id ? "#ccfbf1" : "#fff",
+                color: libraryScope === tab.id ? "#115e59" : "#6b7280",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {libraryScope === "enterprise" && enterpriseTeamId ? (
+        <div>
+          {enterpriseLoading ? (
+            <div style={{ color: "#9ca3af", fontSize: 13 }}>
+              {lt("加载企业素材…", "Loading enterprise assets...")}
+            </div>
+          ) : enterpriseAssets.length === 0 ? (
+            <div style={{ color: "#9ca3af", fontSize: 13 }}>
+              {lt(
+                "企业素材库为空，请到企业后台上传",
+                "Enterprise library is empty. Upload assets in the enterprise console."
+              )}
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+                gap: 12,
+              }}
+            >
+              {enterpriseAssets.map((asset) => (
+                <div
+                  key={asset.id}
+                  style={{
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 12,
+                    overflow: "hidden",
+                    background: "#fff",
+                  }}
+                >
+                  <div style={{ aspectRatio: "4/3", background: "#f8fafc" }}>
+                    <SmartImage
+                      src={asset.thumbnail || asset.url}
+                      alt={asset.name}
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  </div>
+                  <div style={{ padding: 8 }}>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {asset.name}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleSendEnterpriseToCanvas(asset)}
+                      className="personal-library-action-button personal-library-action-button--send"
+                      style={{ marginTop: 8, width: "100%" }}
+                    >
+                      <Send size={14} />
+                      {lt("发送到画布", "Send to canvas")}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
       <div
         style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}
       >
@@ -774,6 +941,8 @@ const PersonalLibraryPanel: React.FC<PersonalLibraryPanelProps> = ({
             );
           })}
         </div>
+      )}
+        </>
       )}
     </div>
   );

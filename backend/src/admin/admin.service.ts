@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException, NotImplementedException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiResponseStatus } from '../credits/dto/credits.dto';
 import {
@@ -1793,6 +1794,109 @@ export class AdminService {
 
   // ── 团队管理 ─────────────────────────────────────────────────────
 
+  async adminCreateEnterprise(params: {
+    name: string;
+    ownerPhone: string;
+    ownerPassword?: string;
+    ownerName?: string;
+    maxSeats?: number;
+  }) {
+    const name = String(params.name || '').trim();
+    const phone = String(params.ownerPhone || '').trim();
+    if (name.length < 2) throw new BadRequestException('企业名称至少 2 个字符');
+    if (!/^1\d{10}$/.test(phone)) throw new BadRequestException('管理员手机号格式不正确');
+
+    const maxSeats = Math.max(2, Number(params.maxSeats) || 10);
+    let owner = await this.prisma.user.findUnique({ where: { phone } });
+
+    if (!owner) {
+      const password = String(params.ownerPassword || '').trim();
+      if (password.length < 6) {
+        throw new BadRequestException('新建管理员账号时，初始密码至少 6 位');
+      }
+      const passwordHash = await bcrypt.hash(password, 10);
+      owner = await this.prisma.user.create({
+        data: {
+          phone,
+          passwordHash,
+          name: params.ownerName?.trim() || `企业管理员_${phone.slice(-4)}`,
+          role: 'user',
+          status: 'active',
+        },
+      });
+    } else if (params.ownerPassword?.trim()) {
+      const passwordHash = await bcrypt.hash(params.ownerPassword.trim(), 10);
+      owner = await this.prisma.user.update({
+        where: { id: owner.id },
+        data: {
+          passwordHash,
+          ...(params.ownerName?.trim() ? { name: params.ownerName.trim() } : {}),
+        },
+      });
+    }
+
+    const personal = await this.prisma.team.findFirst({
+      where: { ownerId: owner.id, isPersonal: true },
+      select: { id: true },
+    });
+    if (!personal) {
+      await this.prisma.team.create({
+        data: {
+          name: '我的工作区',
+          ownerId: owner.id,
+          isPersonal: true,
+          maxSeats: 1,
+          memberships: { create: { userId: owner.id, role: 'owner' } },
+          creditAccount: { create: {} },
+        },
+      });
+    }
+
+    const team = await this.prisma.team.create({
+      data: {
+        name,
+        displayName: name,
+        ownerId: owner.id,
+        isPersonal: false,
+        enterpriseEnabled: true,
+        maxSeats,
+        memberships: { create: { userId: owner.id, role: 'owner' } },
+        creditAccount: { create: {} },
+      },
+      include: {
+        owner: { select: { id: true, name: true, phone: true, email: true } },
+        _count: { select: { memberships: true } },
+      },
+    });
+
+    const enterprise = await this.prisma.enterprise.create({
+      data: {
+        name,
+        displayName: name,
+        ownerId: owner.id,
+        workspaceTeamId: team.id,
+        maxSeats,
+        status: 'active',
+      },
+    });
+
+    return {
+      id: team.id,
+      enterpriseId: enterprise.id,
+      name: team.name,
+      displayName: team.displayName,
+      ownerId: team.ownerId,
+      owner: team.owner,
+      maxSeats: team.maxSeats,
+      memberCount: team._count.memberships,
+      usedSeats: team._count.memberships,
+      projectCount: 0,
+      status: team.status,
+      enterpriseEnabled: true,
+      createdAt: enterprise.createdAt,
+    };
+  }
+
   async adminListTeams(params: {
     search?: string;
     page: number;
@@ -1800,45 +1904,135 @@ export class AdminService {
   }) {
     const { search, page = 1, pageSize = 20 } = params;
 
-    const where: any = { isPersonal: false };
+    // 企业列表：读独立 Enterprise 表，不再把普通 Team/项目壳当企业
+    const where: any = {};
     if (search) {
       where.OR = [
         { name: { contains: search } },
+        { displayName: { contains: search } },
         { owner: { phone: { contains: search } } },
         { owner: { email: { contains: search } } },
         { owner: { name: { contains: search } } },
       ];
     }
 
-    const [teams, total] = await Promise.all([
-      this.prisma.team.findMany({
+    const [enterprises, total] = await Promise.all([
+      this.prisma.enterprise.findMany({
         where,
         include: {
-          _count: { select: { memberships: true } },
-          creditAccount: { select: { balance: true, frozenBalance: true } },
           owner: { select: { id: true, name: true, phone: true, email: true } },
+          workspaceTeam: {
+            include: {
+              _count: { select: { memberships: true, projects: true } },
+              creditAccount: { select: { balance: true, frozenBalance: true } },
+            },
+          },
+          _count: { select: { projects: true } },
         },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
-      this.prisma.team.count({ where }),
+      this.prisma.enterprise.count({ where }),
     ]);
 
     return {
-      teams: teams.map((team) => ({
-        id: team.id,
-        name: team.name,
-        ownerId: team.ownerId,
-        owner: team.owner,
-        maxSeats: team.maxSeats,
-        memberCount: team._count.memberships,
-        status: team.status,
-        balance: team.creditAccount?.balance || 0,
-        frozenBalance: team.creditAccount?.frozenBalance || 0,
-        availableCredits: (team.creditAccount?.balance || 0) - (team.creditAccount?.frozenBalance || 0),
-        createdAt: team.createdAt,
-        updatedAt: team.updatedAt,
+      teams: enterprises.map((ent) => {
+        const team = ent.workspaceTeam;
+        const memberCount = team?._count?.memberships ?? 0;
+        const projectCount = ent._count.projects || team?._count?.projects || 0;
+        const balance = team?.creditAccount?.balance || 0;
+        const frozenBalance = team?.creditAccount?.frozenBalance || 0;
+        return {
+          id: team?.id || ent.workspaceTeamId,
+          enterpriseId: ent.id,
+          name: ent.name,
+          displayName: ent.displayName ?? ent.name,
+          enterpriseEnabled: true,
+          ownerId: ent.ownerId,
+          owner: ent.owner,
+          maxSeats: ent.maxSeats,
+          memberCount,
+          usedSeats: memberCount,
+          projectCount,
+          status: ent.status,
+          balance,
+          frozenBalance,
+          availableCredits: balance - frozenBalance,
+          createdAt: ent.createdAt,
+          updatedAt: ent.updatedAt,
+        };
+      }),
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    };
+  }
+
+  async adminListProjects(params: {
+    search?: string;
+    scope?: 'all' | 'personal' | 'enterprise';
+    enterpriseId?: string;
+    page: number;
+    pageSize: number;
+  }) {
+    const { search, scope = 'all', enterpriseId, page = 1, pageSize = 20 } = params;
+    const where: any = {};
+    const and: any[] = [];
+
+    if (scope === 'personal') {
+      and.push({ enterpriseId: null });
+      and.push({ OR: [{ teamId: null }, { team: { isPersonal: true } }] });
+    } else if (scope === 'enterprise') {
+      and.push({ enterpriseId: { not: null } });
+    }
+    if (enterpriseId) and.push({ enterpriseId });
+    if (search) {
+      and.push({
+        OR: [
+          { name: { contains: search } },
+          { user: { phone: { contains: search } } },
+          { user: { name: { contains: search } } },
+          { enterprise: { name: { contains: search } } },
+        ],
+      });
+    }
+    if (and.length) where.AND = and;
+
+    const [projects, total] = await Promise.all([
+      this.prisma.project.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          userId: true,
+          teamId: true,
+          enterpriseId: true,
+          thumbnailUrl: true,
+          createdAt: true,
+          updatedAt: true,
+          user: { select: { id: true, name: true, phone: true, email: true } },
+          team: { select: { id: true, name: true, isPersonal: true, enterpriseEnabled: true } },
+          enterprise: { select: { id: true, name: true, displayName: true } },
+        },
+        orderBy: { updatedAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.project.count({ where }),
+    ]);
+
+    return {
+      projects: projects.map((p) => ({
+        ...p,
+        scope: p.enterpriseId
+          ? 'enterprise'
+          : p.team?.isPersonal || !p.teamId
+            ? 'personal'
+            : 'team',
       })),
       pagination: {
         page,
@@ -1846,6 +2040,46 @@ export class AdminService {
         total,
         totalPages: Math.ceil(total / pageSize),
       },
+    };
+  }
+
+  async adminDeleteProject(projectId: string) {
+    const project = await this.prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) throw new NotFoundException('项目不存在');
+    await this.prisma.project.delete({ where: { id: projectId } });
+    return { success: true, id: projectId };
+  }
+
+  async adminAssignProjectEnterprise(projectId: string, enterpriseId: string | null) {
+    const project = await this.prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) throw new NotFoundException('项目不存在');
+
+    if (!enterpriseId) {
+      await this.prisma.project.update({
+        where: { id: projectId },
+        data: { enterpriseId: null },
+      });
+      return { success: true, id: projectId, enterpriseId: null };
+    }
+
+    const enterprise = await this.prisma.enterprise.findUnique({
+      where: { id: enterpriseId },
+      select: { id: true, workspaceTeamId: true },
+    });
+    if (!enterprise) throw new NotFoundException('企业不存在');
+
+    await this.prisma.project.update({
+      where: { id: projectId },
+      data: {
+        enterpriseId: enterprise.id,
+        teamId: enterprise.workspaceTeamId,
+      },
+    });
+    return {
+      success: true,
+      id: projectId,
+      enterpriseId: enterprise.id,
+      teamId: enterprise.workspaceTeamId,
     };
   }
 
@@ -1973,11 +2207,18 @@ export class AdminService {
       throw new BadRequestException('席位数必须大于0');
     }
 
-    return this.prisma.team.update({
-      where: { id: teamId },
-      data: { maxSeats },
-      select: { id: true, name: true, maxSeats: true },
-    });
+    const [team] = await this.prisma.$transaction([
+      this.prisma.team.update({
+        where: { id: teamId },
+        data: { maxSeats },
+        select: { id: true, name: true, maxSeats: true },
+      }),
+      this.prisma.enterprise.updateMany({
+        where: { workspaceTeamId: teamId },
+        data: { maxSeats },
+      }),
+    ]);
+    return team;
   }
 
   async adminUpdateTeamStatus(teamId: string, status: string) {
@@ -1986,11 +2227,18 @@ export class AdminService {
       throw new BadRequestException(`状态必须是 ${validStatuses.join(', ')} 之一`);
     }
 
-    return this.prisma.team.update({
-      where: { id: teamId },
-      data: { status },
-      select: { id: true, name: true, status: true },
-    });
+    const [team] = await this.prisma.$transaction([
+      this.prisma.team.update({
+        where: { id: teamId },
+        data: { status },
+        select: { id: true, name: true, status: true },
+      }),
+      this.prisma.enterprise.updateMany({
+        where: { workspaceTeamId: teamId },
+        data: { status },
+      }),
+    ]);
+    return team;
   }
 
   async adminDeleteTeam(teamId: string) {

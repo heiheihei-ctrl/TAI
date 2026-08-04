@@ -31,18 +31,89 @@ export class TeamCoreService {
   }
 
   async createTeam(userId: string, dto: CreateTeamDto) {
-    return this.prisma.team.create({
-      data: {
-        name: dto.name,
-        ownerId: userId,
-        isPersonal: false,
-        maxSeats: 2,
-        memberships: {
-          create: { userId, role: 'owner' },
+    // 企业仅由平台 Admin 派发，用户侧禁止自助创建
+    throw new ForbiddenException('企业由平台开通，无法自助创建');
+  }
+
+  generateInviteCode(): string {
+    return `tai_${randomBytes(10).toString('base64url')}`;
+  }
+
+  async updateTeam(
+    teamId: string,
+    requestingUserId: string,
+    dto: { name?: string; displayName?: string | null; logoUrl?: string | null },
+  ) {
+    await this.assertRole(teamId, requestingUserId, ['owner', 'admin']);
+    const team = await this.prisma.team.findUniqueOrThrow({ where: { id: teamId } });
+    if (team.isPersonal) throw new ForbiddenException('个人团队不可修改企业设置');
+
+    const data: Record<string, unknown> = {};
+    if (dto.name !== undefined) data.name = dto.name.trim();
+    if (dto.displayName !== undefined) {
+      data.displayName =
+        dto.displayName === null ? null : String(dto.displayName).trim() || null;
+    }
+    if (dto.logoUrl !== undefined) {
+      data.logoUrl = dto.logoUrl === null ? null : String(dto.logoUrl).trim() || null;
+    }
+    if (!Object.keys(data).length) {
+      return team;
+    }
+
+    return this.prisma.team.update({
+      where: { id: teamId },
+      data,
+    });
+  }
+
+  async getEnterpriseDashboard(teamId: string, requestingUserId: string) {
+    await this.assertMember(teamId, requestingUserId);
+    const team = await this.prisma.team.findUniqueOrThrow({
+      where: { id: teamId },
+      include: {
+        _count: {
+          select: {
+            memberships: true,
+            projects: true,
+            assets: true,
+            assetFolders: true,
+          },
         },
-        creditAccount: { create: {} },
+        creditAccount: { select: { balance: true, frozenBalance: true } },
       },
     });
+    if (team.isPersonal) throw new ForbiddenException('个人工作区不是企业版');
+
+    const seatCapacity = await this.getSeatCapacity(teamId);
+    const recentProjects = await this.prisma.project.findMany({
+      where: { teamId },
+      orderBy: { updatedAt: 'desc' },
+      take: 8,
+      select: {
+        id: true,
+        name: true,
+        updatedAt: true,
+        thumbnailUrl: true,
+      },
+    });
+
+    return {
+      id: team.id,
+      name: team.name,
+      displayName: team.displayName ?? team.name,
+      logoUrl: team.logoUrl,
+      enterpriseEnabled: team.enterpriseEnabled,
+      status: team.status,
+      memberCount: team._count.memberships,
+      projectCount: team._count.projects,
+      assetCount: team._count.assets,
+      folderCount: team._count.assetFolders,
+      maxSeats: seatCapacity,
+      availableCredits:
+        (team.creditAccount?.balance ?? 0) - (team.creditAccount?.frozenBalance ?? 0),
+      recentProjects,
+    };
   }
 
   async getSeatCapacity(teamId: string, db: any = this.prisma): Promise<number> {
@@ -320,9 +391,5 @@ export class TeamCoreService {
     await this.prisma.teamMembership.delete({
       where: { teamId_userId: { teamId: team.id, userId } },
     });
-  }
-
-  generateInviteCode(): string {
-    return randomBytes(12).toString('base64url');
   }
 }

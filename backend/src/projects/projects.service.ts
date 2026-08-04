@@ -145,10 +145,21 @@ export class ProjectsService {
     }
 
     await this.ensureThumbnailColumn();
+
+    let enterpriseId: string | null = null;
+    if (teamId) {
+      const enterprise = await this.prisma.enterprise.findUnique({
+        where: { workspaceTeamId: teamId },
+        select: { id: true },
+      });
+      enterpriseId = enterprise?.id ?? null;
+    }
+
     const project = await this.prisma.project.create({
       data: {
         userId,
         teamId: teamId || null,
+        enterpriseId,
         name: name || '未命名项目',
         ossPrefix: '',
         mainKey: '',

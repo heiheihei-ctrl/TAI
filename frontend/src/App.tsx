@@ -11,7 +11,7 @@ import KeyboardShortcuts from '@/components/KeyboardShortcuts';
 import LoginModal from '@/components/auth/LoginModal';
 import EventSettingsModalHost from '@/components/home/EventSettingsModalHost';
 import ExportWatermarkModalHost from '@/components/export/ExportWatermarkModalHost';
-import { SHOW_TEAM_COLLABORATION } from '@/config/featureFlags';
+import { SHOW_TEAM_COLLABORATION, SHOW_ENTERPRISE_CONSOLE } from '@/config/featureFlags';
 import { TeamInviteConfirmModal } from '@/components/team/TeamInviteConfirmModal';
 import { tokenRefreshManager } from '@/services/tokenRefreshManager';
 import { useAuthStore } from '@/stores/authStore';
@@ -88,6 +88,7 @@ const App: React.FC = () => {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const paramProjectId = searchParams.get('projectId');
+  const paramTeamId = searchParams.get('teamId');
   const inviteCodeParam =
     searchParams.get('inviteCode') ||
     searchParams.get('teamInvite') ||
@@ -99,6 +100,7 @@ const App: React.FC = () => {
   const currentProjectId = useProjectStore((state) => state.currentProjectId);
   const projectSwitching = useProjectContentStore((state) => state.switching);
   const setActiveTeamId = useTeamStore((s) => s.setActiveTeamId);
+  const teams = useTeamStore((s) => s.teams);
 
   // 获取认证状态用于显示加载指示器
   const { user, loading: authLoading } = useAuthStore();
@@ -107,9 +109,25 @@ const App: React.FC = () => {
   const lastOpenedProjectIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!SHOW_TEAM_COLLABORATION || !user || !teamInviteCode) return;
+    if (!SHOW_ENTERPRISE_CONSOLE || !user || !teamInviteCode) return;
     setTeamInviteOpen(true);
   }, [user, teamInviteCode]);
+
+  // 企业后台「进入创作」：按 URL teamId 切换工作区
+  useEffect(() => {
+    if (!paramTeamId || !user) return;
+    const match = teams.find((t) => t.id === paramTeamId && !t.isPersonal);
+    if (match) {
+      setActiveTeamId(match.id);
+      return;
+    }
+    void refreshTeams()
+      .then((list) => {
+        const found = list.find((t) => t.id === paramTeamId && !t.isPersonal);
+        if (found) setActiveTeamId(found.id);
+      })
+      .catch(() => {});
+  }, [paramTeamId, user, teams, setActiveTeamId]);
 
   const clearTeamInviteQuery = () => {
     const next = new URLSearchParams(searchParams);
@@ -220,19 +238,16 @@ const App: React.FC = () => {
       <EventSettingsModalHost />
       <ExportWatermarkModalHost />
 
-      {SHOW_TEAM_COLLABORATION && teamInviteOpen && teamInviteCode && user && (
+      {SHOW_ENTERPRISE_CONSOLE && teamInviteOpen && teamInviteCode && user && (
         <TeamInviteConfirmModal
           code={teamInviteCode}
           onClose={() => {
             setTeamInviteOpen(false);
             clearTeamInviteQuery();
           }}
-          onJoined={async (teamId) => {
+          onApplied={() => {
             setTeamInviteOpen(false);
             clearTeamInviteQuery();
-            await refreshTeams();
-            setActiveTeamId(teamId);
-            await useProjectStore.getState().load();
           }}
         />
       )}

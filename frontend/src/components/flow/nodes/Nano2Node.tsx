@@ -301,10 +301,7 @@ function Nano2NodeInner({ id, data, selected }: Props) {
       value: ratio,
       label: ratio,
     }));
-    if (!isGptImage2Node && !isGptImage24K) {
-      return [{ value: "", label: lt("自动", "Auto") }, ...base];
-    }
-    return base;
+    return [{ value: "", label: lt("自动", "Auto") }, ...base];
   }, [isGptImage24K, isGptImage2Node, lt, resolvedAspectRatioOptions]);
   const googleSearchValue =
     typeof data.googleSearch === "boolean"
@@ -395,7 +392,7 @@ function Nano2NodeInner({ id, data, selected }: Props) {
     (value: string) => {
       window.dispatchEvent(
         new CustomEvent("flow:updateNodeData", {
-          detail: { id, patch: { aspectRatio: value || undefined } },
+          detail: { id, patch: { aspectRatio: value } },
         })
       );
     },
@@ -410,7 +407,9 @@ function Nano2NodeInner({ id, data, selected }: Props) {
       if (resolvedNodeType === "gptImage2" && normalizedResolution === "4K") {
         const currentAspectRatio =
           typeof aspectRatioValue === "string" ? aspectRatioValue.trim() : "";
-        if (!GPT_IMAGE_2_4K_ASPECT_RATIO_SET.has(currentAspectRatio)) {
+        if (!currentAspectRatio) {
+          // auto: allow empty to pass through
+        } else if (!GPT_IMAGE_2_4K_ASPECT_RATIO_SET.has(currentAspectRatio)) {
           patch.aspectRatio = GPT_IMAGE_2_4K_SUPPORTED_ASPECT_RATIOS[0];
         }
       }
@@ -454,6 +453,7 @@ function Nano2NodeInner({ id, data, selected }: Props) {
     if (!isGptImage24K) return;
     const currentAspectRatio =
       typeof aspectRatioValue === "string" ? aspectRatioValue.trim() : "";
+    if (currentAspectRatio === "") return;
     if (GPT_IMAGE_2_4K_ASPECT_RATIO_SET.has(currentAspectRatio)) return;
     window.dispatchEvent(
       new CustomEvent("flow:updateNodeData", {
@@ -490,15 +490,7 @@ function Nano2NodeInner({ id, data, selected }: Props) {
     const currentAspectRatio =
       typeof aspectRatioValue === "string" ? aspectRatioValue.trim() : "";
     if (currentAspectRatio) return;
-    const fallbackAspectRatio = resolvedAspectRatioOptions[0] || "1:1";
-    window.dispatchEvent(
-      new CustomEvent("flow:updateNodeData", {
-        detail: {
-          id,
-          patch: { aspectRatio: fallbackAspectRatio },
-        },
-      })
-    );
+    return;
   }, [aspectRatioValue, id, isGptImage2Node, resolvedAspectRatioOptions]);
 
   const updateGoogleSearch = React.useCallback(

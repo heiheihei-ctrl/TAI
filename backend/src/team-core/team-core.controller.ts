@@ -9,6 +9,7 @@ import { CreateTeamDto } from './dto/create-team.dto';
 import { InviteMemberDto } from './dto/invite-member.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 import { SetMemberQuotaDto } from './dto/set-member-quota.dto';
+import { UpdateTeamDto } from './dto/update-team.dto';
 
 @ApiTags('teams')
 @ApiCookieAuth('access_token')
@@ -33,6 +34,20 @@ export class TeamCoreController {
   @Get('teams/:teamId')
   getTeam(@Req() req: any, @Param('teamId') teamId: string) {
     return this.teamCore.getTeam(teamId, req.user.sub);
+  }
+
+  @Get('teams/:teamId/enterprise-dashboard')
+  enterpriseDashboard(@Req() req: any, @Param('teamId') teamId: string) {
+    return this.teamCore.getEnterpriseDashboard(teamId, req.user.sub);
+  }
+
+  @Patch('teams/:teamId')
+  updateTeam(
+    @Req() req: any,
+    @Param('teamId') teamId: string,
+    @Body() dto: UpdateTeamDto,
+  ) {
+    return this.teamCore.updateTeam(teamId, req.user.sub, dto);
   }
 
   @Delete('teams/:teamId')
@@ -116,8 +131,46 @@ export class TeamCoreController {
     return this.teamInvite.getInviteInfo(code);
   }
 
+  @Post('invites/:code/apply')
+  applyInvite(@Req() req: any, @Param('code') code: string, @Body('message') message?: string) {
+    return this.teamInvite.applyByCode(code, req.user.sub, message);
+  }
+
+  /** 兼容旧客户端：改为提交申请 */
   @Post('invites/:code/accept')
   acceptInvite(@Req() req: any, @Param('code') code: string) {
-    return this.teamInvite.acceptInvite(code, req.user.sub);
+    return this.teamInvite.applyByCode(code, req.user.sub);
+  }
+
+  @Post('join-by-code')
+  joinByCode(
+    @Req() req: any,
+    @Body('code') code: string,
+    @Body('message') message?: string,
+  ) {
+    return this.teamInvite.applyByCodeBody(code, req.user.sub, message);
+  }
+
+  @Get('teams/:teamId/join-requests')
+  listJoinRequests(@Req() req: any, @Param('teamId') teamId: string) {
+    return this.teamInvite.listJoinRequests(teamId, req.user.sub);
+  }
+
+  @Post('teams/:teamId/join-requests/:requestId/approve')
+  approveJoinRequest(
+    @Req() req: any,
+    @Param('teamId') teamId: string,
+    @Param('requestId') requestId: string,
+  ) {
+    return this.teamInvite.approveJoinRequest(teamId, requestId, req.user.sub);
+  }
+
+  @Post('teams/:teamId/join-requests/:requestId/reject')
+  rejectJoinRequest(
+    @Req() req: any,
+    @Param('teamId') teamId: string,
+    @Param('requestId') requestId: string,
+  ) {
+    return this.teamInvite.rejectJoinRequest(teamId, requestId, req.user.sub);
   }
 }

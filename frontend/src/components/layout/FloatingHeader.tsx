@@ -27,6 +27,7 @@ import {
   Square,
   Menu,
   Activity,
+  Building2,
   History,
   Check,
   ChevronDown,
@@ -80,8 +81,9 @@ import ReferralRewards from "@/components/ReferralRewards";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useGlobalPaymentPoll } from "@/hooks/useGlobalPaymentPoll";
 import MembershipPanel from "@/components/payment/MembershipPanel";
-import { SHOW_TEAM_COLLABORATION } from "@/config/featureFlags";
+import { SHOW_TEAM_COLLABORATION, SHOW_ENTERPRISE_CONSOLE, SHOW_WORKSPACE_SWITCHER } from "@/config/featureFlags";
 import { TeamSwitcher, type TeamManageTab } from "@/components/team/TeamSwitcher";
+import { EnterpriseJoinCodeModal } from "@/components/team/EnterpriseJoinCodeModal";
 import { TeamManagementModal } from "@/components/team/TeamManagementModal";
 import { refreshTeams, useTeamStore } from "@/stores/teamStore";
 import {
@@ -348,6 +350,7 @@ const FloatingHeader: React.FC = () => {
   const [showHistoryDebug, setShowHistoryDebug] = useState(false);
   const [isMembershipOpen, setIsMembershipOpen] = useState(false);
   const [teamManagementId, setTeamManagementId] = useState<string | null>(null);
+  const [joinCodeModalOpen, setJoinCodeModalOpen] = useState(false);
   const [teamModalInitialTab, setTeamModalInitialTab] = useState<TeamManageTab>('members');
   const [teamMyQuota, setTeamMyQuota] = useState<MyTeamQuota | null>(null);
   const [teamMyQuotaLoading, setTeamMyQuotaLoading] = useState(false);
@@ -1289,9 +1292,14 @@ const FloatingHeader: React.FC = () => {
   }, [isTeamMode, teamMyQuota]);
 
   const handleOpenTeamManage = useCallback((teamId: string, tab?: TeamManageTab) => {
+    if (SHOW_ENTERPRISE_CONSOLE) {
+      // 完整管理引导到企业后台；画布内模态仅作兜底
+      navigate(`/enterprise/${encodeURIComponent(teamId)}${tab === 'subscription' ? '/settings' : '/members'}`);
+      return;
+    }
     setTeamModalInitialTab(tab ?? 'members');
     setTeamManagementId(teamId);
-  }, []);
+  }, [navigate]);
 
   const isEnglish = i18n.resolvedLanguage?.toLowerCase().startsWith("en");
   const isDarkTheme = chatTheme === "black";
@@ -2620,9 +2628,48 @@ const FloatingHeader: React.FC = () => {
               </Button>
             )}
 
-            {SHOW_TEAM_COLLABORATION && (
+            {SHOW_WORKSPACE_SWITCHER && (
               <TeamSwitcher onManage={handleOpenTeamManage} variant="header" />
             )}
+
+            {SHOW_ENTERPRISE_CONSOLE ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2.5 text-xs rounded-full border border-slate-200 bg-white/80 text-slate-700 hover:bg-slate-100 flex items-center gap-1.5"
+                onClick={() => setJoinCodeModalOpen(true)}
+                title="输入企业邀请码"
+              >
+                <Key className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">邀请码</span>
+              </Button>
+            ) : null}
+
+            {SHOW_ENTERPRISE_CONSOLE && isTeamMode && activeTeamForCredits?.id ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2.5 text-xs rounded-full border border-teal-200/70 bg-teal-50/60 text-teal-800 hover:bg-teal-100/80 flex items-center gap-1.5"
+                onClick={() =>
+                  navigate(`/enterprise/${encodeURIComponent(activeTeamForCredits.id)}`)
+                }
+                title="企业后台"
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">企业后台</span>
+              </Button>
+            ) : SHOW_ENTERPRISE_CONSOLE ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2.5 text-xs rounded-full border border-teal-200/70 bg-teal-50/60 text-teal-800 hover:bg-teal-100/80 flex items-center gap-1.5"
+                onClick={() => navigate("/enterprise")}
+                title="企业版"
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">企业版</span>
+              </Button>
+            ) : null}
 
             <TooltipProvider delayDuration={300}>
               <Tooltip>
@@ -3242,6 +3289,9 @@ const FloatingHeader: React.FC = () => {
             initialTab={teamModalInitialTab}
           />
         )}
+        {joinCodeModalOpen ? (
+          <EnterpriseJoinCodeModal onClose={() => setJoinCodeModalOpen(false)} />
+        ) : null}
       </div>
     </>
   );

@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   useRef,
   useState,
@@ -16,6 +16,10 @@ import EventSettingsModalHost from "@/components/home/EventSettingsModalHost";
 import MembershipModal from "@/components/home/MembershipModal";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { setStoredTemplateParentCategory } from "@/services/publicTemplateService";
+import { SHOW_ENTERPRISE_CONSOLE } from "@/config/featureFlags";
+import { isTeamInviteQueryParam } from "@/utils/teamInvite";
+import { TeamInviteConfirmModal } from "@/components/team/TeamInviteConfirmModal";
+import { useTeamStore } from "@/stores/teamStore";
 import titleImage from "@/assets/title.png";
 import logoImage from "@/assets/logo.png";
 import leftIconImage from "@/assets/left-icon.png";
@@ -335,6 +339,7 @@ function getConnectionDotClass(connection: string | null): string {
 export default function Home() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const connection = useAuthStore((s) => s.connection);
@@ -346,14 +351,50 @@ export default function Home() {
   const [membershipModalOpen, setMembershipModalOpen] = useState(false);
   const [activeSceneFilter, setActiveSceneFilter] =
     useState<SceneFilterKey>("all");
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+
+  const inviteCodeParam =
+    searchParams.get("inviteCode") ||
+    searchParams.get("teamInvite") ||
+    searchParams.get("team_invite");
+  const teamInviteCode = isTeamInviteQueryParam(inviteCodeParam)
+    ? inviteCodeParam
+    : null;
+
+  useEffect(() => {
+    if (!SHOW_ENTERPRISE_CONSOLE || !teamInviteCode || authInitializing) return;
+    if (!user) {
+      const returnTo = `${window.location.pathname}${window.location.search}`;
+      navigate("/auth/login", { replace: true, state: { from: returnTo } });
+      return;
+    }
+    setInviteModalOpen(true);
+  }, [SHOW_ENTERPRISE_CONSOLE, teamInviteCode, user, authInitializing, navigate]);
+
+  const clearInviteQuery = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("inviteCode");
+    next.delete("teamInvite");
+    next.delete("team_invite");
+    setSearchParams(next, { replace: true });
+    setInviteModalOpen(false);
+  };
 
   const openTemplatesWithParent = useCallback(
     (parentCategory: "建筑" | "其他") => {
       setStoredTemplateParentCategory(parentCategory);
+      const personal = useTeamStore.getState().getPersonalTeam();
+      if (personal) useTeamStore.getState().setActiveTeamId(personal.id);
       navigate("/app");
     },
     [navigate],
   );
+
+  const enterPersonalCanvas = useCallback(() => {
+    const personal = useTeamStore.getState().getPersonalTeam();
+    if (personal) useTeamStore.getState().setActiveTeamId(personal.id);
+    navigate("/app");
+  }, [navigate]);
 
   const featureCards = useMemo(
     () =>
@@ -586,6 +627,13 @@ export default function Home() {
                   onClick={openMembershipModal}
                 >
                   {t("home.header.actions.membership")}
+                </button>
+                <button
+                  type="button"
+                  className="hidden rounded-full border border-teal-400/40 bg-teal-500/15 px-3 py-1 text-xs text-teal-100 transition-colors hover:bg-teal-500/25 sm:inline-flex"
+                  onClick={() => navigate("/enterprise")}
+                >
+                  企业版
                 </button>
                 <button
                   type="button"
@@ -985,7 +1033,7 @@ export default function Home() {
             </div>
             <button
               type="button"
-              onClick={() => navigate("/app")}
+              onClick={enterPersonalCanvas}
               className="flex shrink-0 items-center gap-1 self-end text-sm text-white/70 transition-colors hover:text-white lg:self-auto"
             >
               <span>{t("home.scenes.more")}</span>
@@ -998,7 +1046,7 @@ export default function Home() {
               <button
                 key={`${item.title}-${index}`}
                 type="button"
-                onClick={() => navigate("/app")}
+                onClick={enterPersonalCanvas}
                 className="group relative aspect-[4/3] overflow-hidden rounded-xl border border-white/[0.06] text-left transition-transform duration-300 hover:scale-[1.02]"
               >
                 <img
@@ -1041,6 +1089,13 @@ export default function Home() {
               className={CTA_BTN_CLASS}
             >
               <span>{t("home.hero.otherIndustry")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/enterprise")}
+              className="inline-flex h-11 items-center justify-center rounded-full border border-teal-300/50 bg-teal-500/20 px-6 text-sm font-medium text-teal-50 backdrop-blur-sm transition hover:bg-teal-500/30"
+            >
+              企业版
             </button>
           </div>
         </div>
@@ -1122,6 +1177,13 @@ export default function Home() {
         open={membershipModalOpen}
         onClose={() => setMembershipModalOpen(false)}
       />
+      {SHOW_ENTERPRISE_CONSOLE && inviteModalOpen && teamInviteCode && user ? (
+        <TeamInviteConfirmModal
+          code={teamInviteCode}
+          onClose={clearInviteQuery}
+          onApplied={clearInviteQuery}
+        />
+      ) : null}
       <WeChatFloatingButton />
     </div>
   );

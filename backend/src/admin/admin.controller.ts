@@ -936,10 +936,27 @@ export class AdminController {
     return this.volcAssetService.cleanupGroupByDate(body?.date);
   }
 
-  // ── 团队管理 ─────────────────────────────────────────────────────
+  // ── 企业 / 团队管理 ─────────────────────────────────────────────────────
+
+  @Post('enterprises')
+  @ApiOperation({ summary: '创建企业并派发管理员账号（平台）' })
+  async adminCreateEnterprise(
+    @Request() req: AuthenticatedRequest,
+    @Body()
+    body: {
+      name: string;
+      ownerPhone: string;
+      ownerPassword?: string;
+      ownerName?: string;
+      maxSeats?: number;
+    },
+  ) {
+    this.checkAdmin(req, 'teams:list');
+    return this.adminService.adminCreateEnterprise(body);
+  }
 
   @Get('teams')
-  @ApiOperation({ summary: '获取所有团队列表（管理员）' })
+  @ApiOperation({ summary: '获取企业列表（管理员）' })
   async adminListTeams(
     @Request() req: AuthenticatedRequest,
     @Query('search') search?: string,
@@ -952,6 +969,50 @@ export class AdminController {
       page: page ? Number(page) : 1,
       pageSize: pageSize ? Number(pageSize) : 20,
     });
+  }
+
+  @Get('projects')
+  @ApiOperation({ summary: '获取项目管理列表（管理员）' })
+  async adminListProjects(
+    @Request() req: AuthenticatedRequest,
+    @Query('search') search?: string,
+    @Query('scope') scope?: 'all' | 'personal' | 'enterprise',
+    @Query('enterpriseId') enterpriseId?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    this.checkAdmin(req, 'teams:list');
+    return this.adminService.adminListProjects({
+      search,
+      scope: scope || 'all',
+      enterpriseId,
+      page: page ? Number(page) : 1,
+      pageSize: pageSize ? Number(pageSize) : 20,
+    });
+  }
+
+  @Delete('projects/:projectId')
+  @ApiOperation({ summary: '删除项目（管理员）' })
+  async adminDeleteProject(
+    @Request() req: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+  ) {
+    this.checkAdmin(req, 'teams:delete');
+    return this.adminService.adminDeleteProject(projectId);
+  }
+
+  @Patch('projects/:projectId/enterprise')
+  @ApiOperation({ summary: '将项目归属到企业（管理员）' })
+  async adminAssignProjectEnterprise(
+    @Request() req: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Body() body: { enterpriseId: string | null },
+  ) {
+    this.checkAdmin(req, 'teams:list');
+    return this.adminService.adminAssignProjectEnterprise(
+      projectId,
+      body?.enterpriseId ?? null,
+    );
   }
 
   @Get('teams/:teamId/members')

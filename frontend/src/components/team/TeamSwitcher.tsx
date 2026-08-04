@@ -17,11 +17,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { ChevronDown, Users, Plus, Settings, LogIn, X, FolderOpen, Loader2, User, Building2, CreditCard } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { SHOW_TEAM_COLLABORATION } from '@/config/featureFlags';
+import { SHOW_TEAM_COLLABORATION, SHOW_ENTERPRISE_CONSOLE } from '@/config/featureFlags';
 
-// 与 TAI 协同开关对齐；亦可单独用 VITE_ENABLE_TEAM 打开。
+// 工作区切换：企业控制台开启时也要能切回个人版；实时协同仍由 SHOW_TEAM_COLLABORATION 控制。
 const TEAM_UI_ENABLED =
   SHOW_TEAM_COLLABORATION ||
+  SHOW_ENTERPRISE_CONSOLE ||
   ['1', 'true', 'on', 'yes'].includes(
     String(import.meta.env.VITE_ENABLE_TEAM ?? '').toLowerCase(),
   );
@@ -263,7 +264,9 @@ export function TeamSwitcher({ onManage, variant = 'header', className }: Props)
   const [teamPickerTarget, setTeamPickerTarget] = useState<{ id: string; name: string; isPersonal?: boolean } | null>(null);
 
   const personalTeam = teams.find((t) => t.isPersonal);
-  const orgTeams = teams.filter((t) => !t.isPersonal);
+  const orgTeams = teams.filter(
+    (t) => !t.isPersonal && (SHOW_ENTERPRISE_CONSOLE ? t.enterpriseEnabled !== false : true),
+  );
   const activeTeam = teams.find((t) => t.id === activeTeamId);
   const isPersonalActive = !activeTeam || activeTeam.isPersonal;
 
@@ -373,7 +376,7 @@ export function TeamSwitcher({ onManage, variant = 'header', className }: Props)
         <>
           <DropdownMenuSeparator className="my-1" />
           <DropdownMenuLabel className="px-3 py-1 text-[10px] text-slate-400 font-normal uppercase tracking-wide">
-            团队账户
+            {SHOW_ENTERPRISE_CONSOLE ? '企业账户' : '团队账户'}
           </DropdownMenuLabel>
           {orgTeams.map((team) => (
             <DropdownMenuItem
@@ -419,13 +422,15 @@ export function TeamSwitcher({ onManage, variant = 'header', className }: Props)
         </>
       )}
 
-      <DropdownMenuItem
-        onClick={() => setModal('create')}
-        className="rounded-xl px-3 py-2 cursor-pointer text-sm flex items-center gap-2 text-slate-600"
-      >
-        <Plus className="w-3.5 h-3.5" />
-        新建团队
-      </DropdownMenuItem>
+      {!SHOW_ENTERPRISE_CONSOLE || SHOW_TEAM_COLLABORATION ? (
+        <DropdownMenuItem
+          onClick={() => setModal('create')}
+          className="rounded-xl px-3 py-2 cursor-pointer text-sm flex items-center gap-2 text-slate-600"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          新建团队
+        </DropdownMenuItem>
+      ) : null}
 
       <DropdownMenuItem
         onClick={() => setModal('join')}
@@ -468,7 +473,7 @@ export function TeamSwitcher({ onManage, variant = 'header', className }: Props)
               <span className="truncate">{displayName}</span>
               {isPersonalActive
                 ? <span className="text-[10px] text-gray-400 shrink-0">个人</span>
-                : <span className="text-[10px] font-medium text-teal-600 bg-teal-100 rounded-full px-1 py-0.5 leading-none shrink-0">团队</span>
+                : <span className="text-[10px] font-medium text-teal-600 bg-teal-100 rounded-full px-1 py-0.5 leading-none shrink-0">{SHOW_ENTERPRISE_CONSOLE ? '企业' : '团队'}</span>
               }
               <ChevronDown className="w-3 h-3 shrink-0 opacity-50" />
             </Button>

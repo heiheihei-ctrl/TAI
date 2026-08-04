@@ -1853,17 +1853,51 @@ export interface AdminTeamOwner {
 
 export interface AdminTeam {
   id: string;
+  enterpriseId?: string;
   name: string;
+  displayName?: string | null;
+  enterpriseEnabled?: boolean;
   ownerId: string;
   owner: AdminTeamOwner;
   maxSeats: number;
   memberCount: number;
+  usedSeats?: number;
+  projectCount?: number;
   status: string;
   balance: number;
   frozenBalance: number;
   availableCredits: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AdminProjectRow {
+  id: string;
+  name: string;
+  userId: string;
+  teamId: string | null;
+  enterpriseId: string | null;
+  thumbnailUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+  scope: "personal" | "enterprise" | "team";
+  user: {
+    id: string;
+    name: string | null;
+    phone: string;
+    email: string | null;
+  };
+  team: {
+    id: string;
+    name: string;
+    isPersonal: boolean;
+    enterpriseEnabled: boolean;
+  } | null;
+  enterprise: {
+    id: string;
+    name: string;
+    displayName: string | null;
+  } | null;
 }
 
 export interface AdminTeamMember {
@@ -1909,6 +1943,61 @@ export async function getAdminTeams(params?: {
   if (params?.pageSize) searchParams.set("pageSize", String(params.pageSize));
 
   const response = await request(`/api/admin/teams?${searchParams}`);
+  return response.json();
+}
+
+export async function getAdminProjects(params?: {
+  search?: string;
+  scope?: "all" | "personal" | "enterprise";
+  enterpriseId?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<{ projects: AdminProjectRow[]; pagination: Pagination }> {
+  const searchParams = new URLSearchParams();
+  if (params?.search) searchParams.set("search", params.search);
+  if (params?.scope) searchParams.set("scope", params.scope);
+  if (params?.enterpriseId) searchParams.set("enterpriseId", params.enterpriseId);
+  if (params?.page) searchParams.set("page", String(params.page));
+  if (params?.pageSize) searchParams.set("pageSize", String(params.pageSize));
+
+  const response = await request(`/api/admin/projects?${searchParams}`);
+  return response.json();
+}
+
+export async function adminDeleteProject(projectId: string): Promise<{ success: boolean }> {
+  const response = await request(`/api/admin/projects/${encodeURIComponent(projectId)}`, {
+    method: "DELETE",
+  });
+  return response.json();
+}
+
+export async function adminAssignProjectEnterprise(
+  projectId: string,
+  enterpriseId: string | null,
+): Promise<{ success: boolean }> {
+  const response = await request(
+    `/api/admin/projects/${encodeURIComponent(projectId)}/enterprise`,
+    {
+      method: "PATCH",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ enterpriseId }),
+    },
+  );
+  return response.json();
+}
+
+export async function adminCreateEnterprise(body: {
+  name: string;
+  ownerPhone: string;
+  ownerPassword?: string;
+  ownerName?: string;
+  maxSeats?: number;
+}): Promise<AdminTeam> {
+  const response = await request(`/api/admin/enterprises`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
   return response.json();
 }
 

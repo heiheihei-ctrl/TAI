@@ -148,7 +148,17 @@ export class Nano2Provider implements IAIProvider {
     const upstreamModel = useOfficialProfile ? GPT_IMAGE_2_OFFICIAL_MODEL : requestedModel;
     const requestedSize = (() => {
       const raw = request.aspectRatio ?? (isGptImage2Model ? '1:1' : '16:9');
-      return typeof raw === 'string' && raw.trim() ? raw.trim() : (isGptImage2Model ? '1:1' : '16:9');
+      if (typeof raw !== 'string' || !raw.trim()) {
+        const resolution = this.normalizeResolution(
+          request.resolution || request.imageSize || '1K',
+          isGptImage2Model,
+        );
+        if (isGptImage2Model && resolution === '4k') {
+          return GPT_IMAGE_2_4K_SIZE_SET.values().next().value ?? '16:9';
+        }
+        return isGptImage2Model ? '1:1' : '16:9';
+      }
+      return raw.trim();
     })();
 
     const normalizedResolution = this.normalizeResolution(
