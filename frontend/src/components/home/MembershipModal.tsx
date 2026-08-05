@@ -5,9 +5,18 @@ import MembershipPanel from "@/components/payment/MembershipPanel";
 type MembershipModalProps = {
   open: boolean;
   onClose: () => void;
+  /** 公开浏览（不可下单）；抢购入口请传 false */
+  publicBrowse?: boolean;
+  /** 进入时聚焦的月标价套餐（如 69） */
+  highlightMonthlyListPrice?: number;
 };
 
-export default function MembershipModal({ open, onClose }: MembershipModalProps) {
+export default function MembershipModal({
+  open,
+  onClose,
+  publicBrowse = true,
+  highlightMonthlyListPrice,
+}: MembershipModalProps) {
   if (!open || typeof document === "undefined") return null;
 
   return createPortal(
@@ -25,7 +34,11 @@ export default function MembershipModal({ open, onClose }: MembershipModalProps)
         onClick={(event) => event.stopPropagation()}
       >
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-0">
-          <MembershipPanel publicBrowse onBack={onClose} />
+          <MembershipPanel
+            publicBrowse={publicBrowse}
+            highlightMonthlyListPrice={highlightMonthlyListPrice}
+            onBack={onClose}
+          />
         </div>
       </div>
     </div>,

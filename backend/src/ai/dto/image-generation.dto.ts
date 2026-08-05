@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsArray, IsBoolean, IsEnum, IsObject, ValidateIf, IsNumber, ArrayMinSize, IsInt, Min, Max } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsArray, IsBoolean, IsEnum, IsObject, ValidateIf, IsNumber, ArrayMinSize, IsInt, Min, Max, IsIn } from 'class-validator';
 
 enum AspectRatio {
   'SQUARE' = '1:1',
@@ -569,4 +569,19 @@ export class ExpandImageDto {
   @IsOptional()
   @IsObject()
   providerOptions?: Record<string, any>;
+}
+
+export class UpscaleImageDto {
+  @IsString()
+  @IsNotEmpty()
+  imageUrl!: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['2k', '4k'])
+  resolution?: '2k' | '4k' = '4k';
+
+  @IsOptional()
+  @IsString()
+  filenamePrefix?: string;
 }

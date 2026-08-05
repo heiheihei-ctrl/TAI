@@ -10,6 +10,7 @@ import { useProjectContentStore } from '@/stores/projectContentStore';
 import KeyboardShortcuts from '@/components/KeyboardShortcuts';
 import LoginModal from '@/components/auth/LoginModal';
 import EventSettingsModalHost from '@/components/home/EventSettingsModalHost';
+import CanvasSummerPromoHost from '@/components/promo/CanvasSummerPromoHost';
 import ExportWatermarkModalHost from '@/components/export/ExportWatermarkModalHost';
 import { SHOW_TEAM_COLLABORATION, SHOW_ENTERPRISE_CONSOLE } from '@/config/featureFlags';
 import { TeamInviteConfirmModal } from '@/components/team/TeamInviteConfirmModal';
@@ -236,6 +237,7 @@ const App: React.FC = () => {
       <Canvas />
       <LoginModal />
       <EventSettingsModalHost />
+      <CanvasSummerPromoHost />
       <ExportWatermarkModalHost />
 
       {SHOW_ENTERPRISE_CONSOLE && teamInviteOpen && teamInviteCode && user && (

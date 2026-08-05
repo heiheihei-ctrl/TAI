@@ -39,6 +39,7 @@ import {
   MidjourneyModalDto,
   Convert2Dto3DDto,
   ExpandImageDto,
+  UpscaleImageDto,
 } from './dto/image-generation.dto';
 import { MinimaxSpeechDto } from './dto/minimax-speech.dto';
 import { MinimaxMusicDto } from './dto/minimax-music.dto';
@@ -4870,6 +4871,127 @@ export class AiController {
         metadata: {
           model,
           serviceType,
+        },
+        receivedAt: new Date().toISOString(),
+      });
+      throw error;
+    }
+  }
+
+  @Post('upscale-image')
+  async upscaleImage(@Body() dto: UpscaleImageDto, @Req() req: any) {
+    this.logger.log('🖼️ Upscale image request received');
+    const startTime = Date.now();
+    const userId = req.user?.id || req.user?.userId || req.user?.sub || 'anonymous';
+    const generationTaskId = `sync-upscale-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const traceId = this.getTraceId(req);
+    const parentRequestId = this.getRequestId(req);
+    const serviceType: ServiceType = 'gemini-image-edit';
+
+    void this.telemetryService.ingestGenerationTask({
+      traceId,
+      parentRequestId,
+      taskId: generationTaskId,
+      taskType: 'image-upscale',
+      stage: 'queued',
+      userId,
+      provider: 'upscale-image',
+      prompt: `高清放大 ${dto.resolution || '4k'}`,
+      status: 'queued',
+      metadata: {
+        serviceType,
+        resolution: dto.resolution || '4k',
+        filenamePrefix: dto.filenamePrefix || null,
+      },
+      receivedAt: new Date().toISOString(),
+    });
+
+    try {
+      void this.telemetryService.ingestGenerationTask({
+        traceId,
+        parentRequestId,
+        taskId: generationTaskId,
+        taskType: 'image-upscale',
+        stage: 'processing',
+        userId,
+        provider: 'upscale-image',
+        prompt: `高清放大 ${dto.resolution || '4k'}`,
+        status: 'processing',
+        metadata: {
+          serviceType,
+          resolution: dto.resolution || '4k',
+        },
+        receivedAt: new Date().toISOString(),
+      });
+
+      const result = await this.withCredits(req, serviceType, undefined, async () => {
+        const normalizedImageUrl = this.normalizeImageUrlForUpstream(dto.imageUrl);
+        const upscaled = await this.expandImageService.upscaleImage(
+          normalizedImageUrl,
+          dto.resolution || '4k',
+          dto.filenamePrefix,
+        );
+
+        const managed = await this.persistProviderImageUrlToManagedWithRetry(
+          upscaled.imageUrl,
+          req,
+          userId,
+        );
+
+        return {
+          success: true,
+          imageUrl: managed.url,
+          promptId: upscaled.promptId,
+          metadata: {
+            sourceImageUrl: managed.sourceImageUrl,
+            uploadedToManaged: managed.uploaded,
+            imageKey: managed.key,
+            mimeType: managed.mimeType,
+            bytes: managed.bytes,
+          },
+        };
+      }, 1, 1, false, this.buildCreditRequestParams(null, {
+        ...this.buildRequestPromptAndImageParams(dto.filenamePrefix || '高清放大', [dto.imageUrl]),
+      }));
+
+      void this.telemetryService.ingestGenerationTask({
+        traceId,
+        parentRequestId,
+        taskId: generationTaskId,
+        taskType: 'image-upscale',
+        stage: 'succeeded',
+        userId,
+        provider: 'upscale-image',
+        prompt: `高清放大 ${dto.resolution || '4k'}`,
+        status: 'succeeded',
+        durationMs: Date.now() - startTime,
+        metadata: {
+          serviceType,
+          resolution: dto.resolution || '4k',
+          imageUrl: result.imageUrl,
+          promptId: result.promptId,
+        },
+        receivedAt: new Date().toISOString(),
+      });
+
+      return result;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      void this.telemetryService.ingestGenerationTask({
+        traceId,
+        parentRequestId,
+        taskId: generationTaskId,
+        taskType: 'image-upscale',
+        stage: 'failed',
+        userId,
+        provider: 'upscale-image',
+        prompt: `高清放大 ${dto.resolution || '4k'}`,
+        status: 'failed',
+        durationMs: Date.now() - startTime,
+        error: errorMessage,
+        metadata: {
+          serviceType,
+          resolution: dto.resolution || '4k',
         },
         receivedAt: new Date().toISOString(),
       });

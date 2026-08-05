@@ -6,8 +6,15 @@ import PaymentPanel from "@/components/payment/PaymentPanel";
 import PaymentSuccessView from "@/components/payment/PaymentSuccessView";
 import {
   getPlanCreditsBreakdownForDisplay,
+  resolveMonthlyListPrice,
   resolvePlanDisplayTitle,
 } from "@/utils/membershipYearlyDisplay";
+import { getPlanMarketingCopy } from "@/utils/membershipPlanMarketingCopy";
+import {
+  CANVAS_SUMMER_PROMO_PURCHASED_EVENT,
+  isCanvasSummerPromoActive,
+  markCanvasSummerPromoPurchased,
+} from "@/config/canvasSummerPromo";
 import { useAIChatStore } from "@/stores/aiChatStore";
 import { useAuthStore } from "@/stores/authStore";
 import { fetchPublicMembershipPlans } from "@/services/settingsApi";
@@ -37,6 +44,8 @@ interface MembershipPanelProps {
   /** 首页等场景：公开套餐与价格展示，不含订阅支付与积分充值 */
   publicBrowse?: boolean;
   onRequireLogin?: () => void;
+  /** 从促销入口进入时，红框聚焦对应月标价套餐（如 69） */
+  highlightMonthlyListPrice?: number;
 }
 
 type BillingPeriod = "monthly" | "yearly";
@@ -140,8 +149,7 @@ function isRecommendedPlan(plan: PaymentMembershipPlan): boolean {
 }
 
 function isDailyCreationPlan(plan: PaymentMembershipPlan): boolean {
-  const name = (plan.name || "").trim().toLowerCase();
-  return name.includes("日常");
+  return resolveMonthlyListPrice(plan) === 69;
 }
 
 /** 套餐卡默认统一最小高度（免费 + 各档付费、选中/未选中一致，与视觉稿对齐） */
@@ -153,6 +161,7 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
   hideBackButton = false,
   publicBrowse = false,
   onRequireLogin,
+  highlightMonthlyListPrice,
 }) => {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
@@ -231,6 +240,12 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
   }, [canPurchase, publicBrowse]);
 
   useEffect(() => {
+    if (highlightMonthlyListPrice != null) {
+      setBillingPeriod("monthly");
+    }
+  }, [highlightMonthlyListPrice]);
+
+  useEffect(() => {
     if (!filteredPlans.length) {
       if (selectedPlanCode !== null) setSelectedPlanCode(null);
       return;
@@ -283,6 +298,9 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
     trackPendingPaymentOrder(null);
     await loadData();
     window.dispatchEvent(new CustomEvent("refresh-credits"));
+    const uid = useAuthStore.getState().user?.id;
+    if (uid) markCanvasSummerPromoPurchased(uid);
+    window.dispatchEvent(new CustomEvent(CANVAS_SUMMER_PROMO_PURCHASED_EVENT));
     setMembershipPaymentSuccess(true);
   }, [loadData]);
 
@@ -742,6 +760,9 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                     const { main, accent } = vipFeatureLines(plan);
                     const isRecommended = isRecommendedPlan(plan);
                     const isDailyCreation = !isRecommended && isDailyCreationPlan(plan);
+                    const isPromoHighlight =
+                      highlightMonthlyListPrice != null &&
+                      resolveMonthlyListPrice(plan) === highlightMonthlyListPrice;
                     const billingLabel =
                       plan.billingCycle === "yearly" ? "年费套餐 · 在月付价基础上 8 折" : "月费套餐";
                     const equivMonthly =
@@ -749,7 +770,12 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                         ? String(Math.round((plan.price / 12) * 100) / 100)
                         : null;
                     const creditsBreakdown = getPlanCreditsBreakdownForDisplay(plan);
+                    const marketingCopy = getPlanMarketingCopy(plan);
                     const periodLabel = plan.billingCycle === "yearly" ? "年" : "月";
+                    const totalCreditsDisplay =
+                      marketingCopy?.totalCredits ?? creditsBreakdown?.total ?? "—";
+                    const showDailyPromoBadge =
+                      isDailyCreation && isCanvasSummerPromoActive();
 
                     return (
                       <div
@@ -760,7 +786,9 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                           isWhite
                             ? "bg-white shadow-[0_12px_24px_rgba(15,23,42,0.08)]"
                             : "bg-[#0f0f18] shadow-[0_8px_32px_rgba(0,0,0,0.5)]",
-                          active
+                          isPromoHighlight
+                            ? "border-2 border-red-500 shadow-[0_0_28px_-10px_rgba(239,68,68,0.55)] ring-2 ring-red-500/80"
+                            : active
                             ? isDailyCreation
                               ? isWhite
                                 ? "border-emerald-300/75 shadow-[0_0_22px_-14px_rgba(16,185,129,0.35),inset_0_0_0_1px_rgba(16,185,129,0.16)]"
@@ -786,7 +814,16 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                             : null,
                         )}
                       >
-                        {isRecommended ? (
+                        {showDailyPromoBadge ? (
+                          <div className="absolute right-3 top-3 z-[1] rounded-full bg-gradient-to-r from-red-600 to-rose-500 px-4 py-1 text-center text-white shadow-lg shadow-red-950/50">
+                            <div className="text-[9px] font-medium leading-tight opacity-95">
+                              限时8月6日-8月21日
+                            </div>
+                            <div className="text-xs font-bold leading-tight tracking-wide">
+                              6.5折专享
+                            </div>
+                          </div>
+                        ) : isRecommended ? (
                           <div
                             className={cn(
                               "absolute right-3 top-3 rounded-full bg-gradient-to-r from-[#8E86F5] to-[#9aa8ef] px-2.5 py-0.5 text-[10px] font-semibold text-white shadow-lg shadow-violet-950/60",
@@ -850,9 +887,17 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                             )}
                           >
                             <span className={isWhite ? "text-indigo-500" : "text-violet-300"}>✦</span>{" "}
-                            {creditsBreakdown?.total ?? "—"} 预计{periodLabel}合计积分
+                            {totalCreditsDisplay} 预计{periodLabel}合计积分
                           </div>
-                          {creditsBreakdown ? (
+                          {marketingCopy ? (
+                            <ul
+                              className="mt-2 space-y-1 text-[11px] leading-relaxed text-[#4f46e5cc] sm:text-xs"
+                            >
+                              {marketingCopy.lines.map((line) => (
+                                <li key={line}>{line}</li>
+                              ))}
+                            </ul>
+                          ) : creditsBreakdown ? (
                             <ul
                               className="mt-2 space-y-1 text-[11px] leading-relaxed text-[#4f46e5cc] sm:text-xs"
                             >
@@ -1006,11 +1051,14 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                             </div>
                           </div>
                           {selectedPlan ? (() => {
+                            const marketing = getPlanMarketingCopy(selectedPlan);
                             const breakdown = getPlanCreditsBreakdownForDisplay(selectedPlan);
-                            if (!breakdown) return null;
+                            const total =
+                              marketing?.totalCredits ?? breakdown?.total ?? null;
+                            if (total == null) return null;
                             return (
                               <div className={cn("mt-2 text-xs", isWhite ? "text-slate-500" : "text-zinc-500")}>
-                                {breakdown.total} 预计{selectedPlan.billingCycle === "yearly" ? "年" : "月"}合计积分
+                                {total} 预计{selectedPlan.billingCycle === "yearly" ? "年" : "月"}合计积分
                               </div>
                             );
                           })() : null}

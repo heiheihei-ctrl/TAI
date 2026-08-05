@@ -30,9 +30,7 @@ export function resolveMonthlyListPrice(plan: PaymentMembershipPlan): number | n
   return null;
 }
 
-/** 展示用签到积分（旗舰尊享设计稿为 150/天） */
 function resolveDisplayDailyGiftCredits(plan: PaymentMembershipPlan): number {
-  if (resolveMonthlyListPrice(plan) === 599) return 150;
   return Math.max(0, Math.trunc(plan.dailyGiftCredits || 0));
 }
 
