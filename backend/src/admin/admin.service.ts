@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException, NotImplementedException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import ExcelJS from 'exceljs';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiResponseStatus } from '../credits/dto/credits.dto';
 import {
@@ -777,6 +778,84 @@ export class AdminService {
         totalPages: Math.ceil(total / pageSize),
       },
     };
+  }
+
+  /**
+   * 导出用户列表为 Excel（不受列表页 pageSize 上限限制）
+   */
+  async exportUsersExcel(options: { search?: string } = {}): Promise<{
+    filename: string;
+    buffer: Buffer;
+  }> {
+    const { search } = options;
+    const where: Prisma.UserWhereInput = {};
+    if (search?.trim()) {
+      const keyword = search.trim();
+      where.OR = [
+        { phone: { contains: keyword } },
+        { email: { contains: keyword } },
+        { name: { contains: keyword } },
+      ];
+    }
+
+    const users = await this.prisma.user.findMany({
+      where,
+      include: {
+        creditAccount: true,
+        _count: {
+          select: { apiUsageRecords: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const formatDateTime = (value: Date | null | undefined): string => {
+      if (!(value instanceof Date) || Number.isNaN(value.getTime())) return '';
+      const y = value.getFullYear();
+      const m = String(value.getMonth() + 1).padStart(2, '0');
+      const d = String(value.getDate()).padStart(2, '0');
+      const hh = String(value.getHours()).padStart(2, '0');
+      const mm = String(value.getMinutes()).padStart(2, '0');
+      const ss = String(value.getSeconds()).padStart(2, '0');
+      return `${y}-${m}-${d} ${hh}:${mm}:${ss}`;
+    };
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'TAI Admin';
+    workbook.created = new Date();
+    const sheet = workbook.addWorksheet('用户列表');
+
+    const headerRow = sheet.addRow([
+      '用户名',
+      '用户号码',
+      '积分',
+      '积分使用情况',
+      'API调用次数',
+      '绑定微信',
+    ]);
+    headerRow.font = { bold: true };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
+    for (const user of users) {
+      sheet.addRow([
+        user.name || '',
+        user.phone,
+        user.creditAccount?.balance || 0,
+        user.creditAccount?.totalSpent || 0,
+        user._count.apiUsageRecords,
+        user.wechatOfficialOpenId || user.wechatUnionId ? '是' : '否',
+      ]);
+    }
+
+    const widths = [20, 16, 12, 14, 14, 10];
+    widths.forEach((width, index) => {
+      sheet.getColumn(index + 1).width = width;
+    });
+
+    const stamp = formatDateTime(new Date()).replace(/[:\s]/g, '-');
+    const filename = `用户列表_${stamp}.xlsx`;
+    const arrayBuffer = await workbook.xlsx.writeBuffer();
+    return { filename, buffer: Buffer.from(arrayBuffer) };
   }
 
   /**

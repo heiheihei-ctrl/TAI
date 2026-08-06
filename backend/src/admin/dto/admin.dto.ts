@@ -42,6 +42,13 @@ export class UsersQueryDto {
   sortOrder?: 'asc' | 'desc' = 'desc';
 }
 
+export class UsersExportQueryDto {
+  @ApiPropertyOptional({ description: '搜索关键词（手机号/邮箱/昵称），与列表筛选一致' })
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
+
 export class ApiUsageStatsQueryDto {
   @ApiPropertyOptional({ description: '开始日期' })
   @IsOptional()

@@ -774,8 +774,11 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                     const periodLabel = plan.billingCycle === "yearly" ? "年" : "月";
                     const totalCreditsDisplay =
                       marketingCopy?.totalCredits ?? creditsBreakdown?.total ?? "—";
+                    // 仅月付展示限时折扣角标；年付不打折，不显示
                     const showDailyPromoBadge =
-                      isDailyCreation && isCanvasSummerPromoActive();
+                      isDailyCreation &&
+                      plan.billingCycle === "monthly" &&
+                      isCanvasSummerPromoActive();
 
                     return (
                       <div

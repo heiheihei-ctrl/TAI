@@ -10,7 +10,7 @@ export type PlanMarketingCopy = {
 
 type TierKey = 69 | 199 | 599;
 
-/** 月付：立即到账 = 月卡+档位赠送；签到 = daily×30 + 连签额外×4 */
+/** 月付：立即到账 = 月卡额度；签到 = daily×30 + 连签额外×4 */
 const MONTHLY_COPY: Record<TierKey, PlanMarketingCopy> = {
   69: {
     totalCredits: 10600,
@@ -39,16 +39,17 @@ const MONTHLY_COPY: Record<TierKey, PlanMarketingCopy> = {
 };
 
 /**
- * 年付展示：套餐按 12×月立即到账估算 + 全年签到（daily×365 + 连签额外×52）
- * 图片/视频上限按合计÷约 30 / 约 400 估算
+ * 年付展示（与月付立即到账对齐）：
+ * 套餐 = 月立即到账 × 12；签到 = daily×365 + 连签额外×52
+ * 左→右：日常 8700 / 专业 22000 / 旗舰 69000
  */
 const YEARLY_COPY: Record<TierKey, PlanMarketingCopy> = {
   69: {
-    totalCredits: 127850,
+    totalCredits: 111650,
     lines: [
-      "套餐立即到账104400积分（每日签到共奖励23450积分）",
-      "至多生成4261张图片",
-      "或319个视频",
+      "套餐立即到账88200积分（每日签到共奖励23450积分）",
+      "至多生成3721张图片",
+      "或279个视频",
     ],
   },
   199: {

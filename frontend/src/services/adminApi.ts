@@ -193,33 +193,47 @@ export async function exportDashboardReport(params: {
   if (params.endDate) searchParams.set("endDate", params.endDate);
 
   const response = await request(`/api/admin/dashboard/export?${searchParams.toString()}`);
+  await downloadBlobFromResponse(response, `系统概览_${params.reportType}.xlsx`);
+}
 
-  const blob = await response.blob();
-  const disposition = response.headers.get("Content-Disposition") || "";
-  let filename = `系统概览_${params.reportType}.xlsx`;
-  const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
-  const plainMatch = /filename="?([^";]+)"?/i.exec(disposition);
-  if (utf8Match?.[1]) {
-    try {
-      filename = decodeURIComponent(utf8Match[1]);
-    } catch {
-      filename = utf8Match[1];
+function downloadBlobFromResponse(response: Response, fallbackFilename: string): Promise<void> {
+  return (async () => {
+    const blob = await response.blob();
+    const disposition = response.headers.get("Content-Disposition") || "";
+    let filename = fallbackFilename;
+    const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+    const plainMatch = /filename="?([^";]+)"?/i.exec(disposition);
+    if (utf8Match?.[1]) {
+      try {
+        filename = decodeURIComponent(utf8Match[1]);
+      } catch {
+        filename = utf8Match[1];
+      }
+    } else if (plainMatch?.[1]) {
+      filename = plainMatch[1];
     }
-  } else if (plainMatch?.[1]) {
-    filename = plainMatch[1];
-  }
 
-  const objectUrl = URL.createObjectURL(blob);
-  try {
-    const link = document.createElement("a");
-    link.href = objectUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
+    const objectUrl = URL.createObjectURL(blob);
+    try {
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  })();
+}
+
+/** 导出用户列表 Excel（支持与列表相同的搜索筛选） */
+export async function exportUsers(params?: { search?: string }): Promise<void> {
+  const searchParams = new URLSearchParams();
+  if (params?.search?.trim()) searchParams.set("search", params.search.trim());
+  const qs = searchParams.toString();
+  const response = await request(`/api/admin/users/export${qs ? `?${qs}` : ""}`);
+  await downloadBlobFromResponse(response, `用户列表_${new Date().toLocaleDateString()}.xlsx`);
 }
 
 // 获取用户列表

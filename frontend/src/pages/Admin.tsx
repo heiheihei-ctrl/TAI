@@ -24,6 +24,7 @@ import {
   exportDashboardReport,
   type DashboardReportType,
   getUsers,
+  exportUsers,
   getApiUsageStats,
   getVolcengineMonthlyCreditStats,
   getApiUsageRecords,
@@ -4656,37 +4657,10 @@ function UsersTab({
   const handleExport = async () => {
     setExporting(true);
     try {
-      const result = await getUsers({ page: 1, pageSize: 10000, search });
-      const rows = result.users;
-      const header = ["用户名", "邮箱", "手机号", "角色", "状态", "积分余额", "总消费", "API调用次数", "微信绑定", "注册时间"];
-      const csvRows = [
-        header.join(","),
-        ...rows.map((u) =>
-          [
-            u.name || "",
-            u.email || "",
-            u.phone,
-            u.role,
-            u.status,
-            u.creditBalance,
-            u.totalSpent,
-            u.apiCallCount,
-            u.wechatBound ? "是" : "否",
-            new Date(u.createdAt).toLocaleDateString(),
-          ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")
-        ),
-      ];
-      const csvContent = "\uFEFF" + csvRows.join("\n");
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `用户列表_${new Date().toLocaleDateString()}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
+      await exportUsers({ search: search.trim() || undefined });
     } catch (error) {
       console.error("导出失败:", error);
-      alert("导出失败");
+      alert(error instanceof Error ? error.message : "导出失败");
     } finally {
       setExporting(false);
     }

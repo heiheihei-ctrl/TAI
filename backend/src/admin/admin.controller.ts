@@ -37,6 +37,7 @@ import { UsersService } from '../users/users.service';
 import {
   DashboardQueryDto,
   UsersQueryDto,
+  UsersExportQueryDto,
   ApiUsageStatsQueryDto,
   ApiUsageRecordsQueryDto,
   VolcengineMonthlyStatsQueryDto,
@@ -178,6 +179,31 @@ export class AdminController {
       sortBy: query.sortBy,
       sortOrder: query.sortOrder,
     });
+  }
+
+  @Get('users/export')
+  @ApiOperation({ summary: '导出用户列表（Excel）' })
+  async exportUsers(
+    @Request() req: AuthenticatedRequest,
+    @Query() query: UsersExportQueryDto,
+    @Res() res: FastifyReply,
+  ) {
+    this.checkAdmin(req, 'users:list');
+    const { filename, buffer } = await this.adminService.exportUsersExcel({
+      search: query.search,
+    });
+    const encoded = encodeURIComponent(filename);
+    res
+      .header(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      )
+      .header(
+        'Content-Disposition',
+        `attachment; filename="users-export.xlsx"; filename*=UTF-8''${encoded}`,
+      )
+      .header('Content-Length', String(buffer.length))
+      .send(buffer);
   }
 
   @Get('users/:userId')

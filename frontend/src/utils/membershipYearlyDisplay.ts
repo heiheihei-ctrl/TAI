@@ -61,7 +61,10 @@ function buildPlanCreditsBreakdown(
   plan: PaymentMembershipPlan,
   period: { days: number; weeks: number },
 ): PlanCreditsBreakdown {
-  const packageCredits = plan.monthlyQuotaCredits + plan.signupBonusCredits;
+  const monthlyPackage = plan.monthlyQuotaCredits + plan.signupBonusCredits;
+  // 年付展示：套餐按 12 个月额度合计；月付：当月额度
+  const packageCredits =
+    period.days === DAYS_PER_YEAR ? monthlyPackage * 12 : monthlyPackage;
   const dailyPerDay = resolveDisplayDailyGiftCredits(plan);
   const streakMultiplier = resolveStreakMultiplier(plan);
   const weeklyExtraPerWeek = dailyPerDay * (streakMultiplier - 1);
