@@ -31,7 +31,9 @@ export function TeamInviteConfirmModal({ code, onClose, onApplied }: Props) {
     try {
       const result = await teamApi.applyInvite(code);
       setDoneMessage(result.message || '申请已提交，请等待企业管理员审核');
+      // 仅通知父组件刷新；不要立刻清 URL，否则成功态弹窗会被卸掉
       onApplied({ teamId: result.teamId, message: result.message });
+      setSubmitting(false);
     } catch (e: any) {
       setSubmitError(e?.message || '提交申请失败');
       setSubmitting(false);

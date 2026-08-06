@@ -197,7 +197,7 @@ function MembersTab({
       .catch(() => {});
   }, [teamId]);
 
-  const usedSeats = members.length;
+  const usedSeats = members.filter((m) => !m.seatExempt).length;
   const seatTotal = totalSeats ?? Math.max(2, usedSeats);
 
   const handleInvite = async () => {

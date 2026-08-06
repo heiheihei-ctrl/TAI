@@ -17,9 +17,14 @@ import MembershipModal from "@/components/home/MembershipModal";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { setStoredTemplateParentCategory } from "@/services/publicTemplateService";
 import { SHOW_ENTERPRISE_CONSOLE } from "@/config/featureFlags";
-import { isTeamInviteQueryParam } from "@/utils/teamInvite";
+import {
+  buildTeamInviteHomePath,
+  clearPendingTeamInvite,
+  resolveActiveTeamInvite,
+  stashPendingTeamInvite,
+} from "@/utils/teamInvite";
 import { TeamInviteConfirmModal } from "@/components/team/TeamInviteConfirmModal";
-import { useTeamStore } from "@/stores/teamStore";
+import { refreshTeams, useTeamStore } from "@/stores/teamStore";
 import titleImage from "@/assets/title.png";
 import logoImage from "@/assets/logo.png";
 import leftIconImage from "@/assets/left-icon.png";
@@ -353,25 +358,24 @@ export default function Home() {
     useState<SceneFilterKey>("all");
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
 
-  const inviteCodeParam =
-    searchParams.get("inviteCode") ||
-    searchParams.get("teamInvite") ||
-    searchParams.get("team_invite");
-  const teamInviteCode = isTeamInviteQueryParam(inviteCodeParam)
-    ? inviteCodeParam
-    : null;
+  const teamInviteCode = resolveActiveTeamInvite(searchParams);
 
   useEffect(() => {
     if (!SHOW_ENTERPRISE_CONSOLE || !teamInviteCode || authInitializing) return;
+    stashPendingTeamInvite(teamInviteCode);
     if (!user) {
-      const returnTo = `${window.location.pathname}${window.location.search}`;
-      navigate("/auth/login", { replace: true, state: { from: returnTo } });
+      const returnTo = buildTeamInviteHomePath(teamInviteCode);
+      navigate("/auth/login", {
+        replace: true,
+        state: { from: returnTo },
+      });
       return;
     }
     setInviteModalOpen(true);
   }, [SHOW_ENTERPRISE_CONSOLE, teamInviteCode, user, authInitializing, navigate]);
 
   const clearInviteQuery = () => {
+    clearPendingTeamInvite();
     const next = new URLSearchParams(searchParams);
     next.delete("inviteCode");
     next.delete("teamInvite");
@@ -1185,7 +1189,9 @@ export default function Home() {
         <TeamInviteConfirmModal
           code={teamInviteCode}
           onClose={clearInviteQuery}
-          onApplied={clearInviteQuery}
+          onApplied={() => {
+            void refreshTeams().catch(() => {});
+          }}
         />
       ) : null}
       <WeChatFloatingButton />

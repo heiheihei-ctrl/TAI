@@ -84,6 +84,7 @@ import MembershipPanel from "@/components/payment/MembershipPanel";
 import { SHOW_TEAM_COLLABORATION, SHOW_ENTERPRISE_CONSOLE, SHOW_WORKSPACE_SWITCHER } from "@/config/featureFlags";
 import { TeamSwitcher } from "@/components/team/TeamSwitcher";
 import { refreshTeams, useTeamStore } from "@/stores/teamStore";
+import { canAccessEnterpriseConsole } from "@/utils/enterpriseAccess";
 import {
   teamMyQuotaApi,
   type MyTeamQuota,
@@ -134,6 +135,7 @@ import {
   type CheckInStatus,
 } from "@/services/referralApi";
 import gzhImg from "@/assets/gzh.png";
+import ForgotPasswordModal from "@/components/auth/ForgotPasswordModal";
 
 // Nano Banana 闂傚倸鍊搁崐鎼佸磹妞嬪孩顐介柨鐔哄Т绾惧鏌涘☉鍗炲箻闁哄棗妫濋弻娑樷槈濮楀牆濮涘銈傛櫆閻擄繝寮诲☉銏犵婵＄偠顕ф禍楣冩⒑缁嬫鍎愰柟鎼佺畺楠炲骞橀鑲╊槹濡炪倖鎸炬慨纾嬨亹鎼淬劍鈷掑ù锝堟鐢稓绱掗鎯р枅鐎规洖缍婇獮搴ㄦ寠婢跺鈧剙顪冮妶鍡樼５闁稿鎸婚〃銉╂倷鐎电顫ч梺鐟板槻閹虫ê鐣烽妸锔剧瘈閹煎瓨绻勯弫?
 type BananaPricingTier = "fast" | "pro" | "ultra";
@@ -347,6 +349,7 @@ const FloatingHeader: React.FC = () => {
   const [showMemoryDebug, setShowMemoryDebug] = useState(false);
   const [showHistoryDebug, setShowHistoryDebug] = useState(false);
   const [isMembershipOpen, setIsMembershipOpen] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [teamMyQuota, setTeamMyQuota] = useState<MyTeamQuota | null>(null);
   const [teamMyQuotaLoading, setTeamMyQuotaLoading] = useState(false);
   const [gridSizeInput, setGridSizeInput] = useState(String(gridSize));
@@ -2348,6 +2351,24 @@ const FloatingHeader: React.FC = () => {
             <div className='flex flex-col gap-3 p-5 border shadow-sm rounded-2xl border-slate-200 bg-white/90 backdrop-blur dark:border-slate-700 dark:bg-slate-800/90 sm:flex-row sm:items-center sm:justify-between'>
               <div>
                 <div className='text-sm font-medium text-slate-700 dark:text-slate-200'>
+                  {t("workspace.settings.advancedTab.changePassword.title")}
+                </div>
+                <div className='text-xs text-slate-500 dark:text-slate-400'>
+                  {t("workspace.settings.advancedTab.changePassword.desc")}
+                </div>
+              </div>
+              <Button
+                variant='outline'
+                className='text-sm rounded-xl'
+                onClick={() => setChangePasswordOpen(true)}
+              >
+                <Key className='w-4 h-4 mr-2' />
+                {t("workspace.settings.advancedTab.changePassword.button")}
+              </Button>
+            </div>
+            <div className='flex flex-col gap-3 p-5 border shadow-sm rounded-2xl border-slate-200 bg-white/90 backdrop-blur dark:border-slate-700 dark:bg-slate-800/90 sm:flex-row sm:items-center sm:justify-between'>
+              <div>
+                <div className='text-sm font-medium text-slate-700 dark:text-slate-200'>
                   {t("workspace.settings.advancedTab.logout.title")}
                 </div>
                 <div className='text-xs text-slate-500 dark:text-slate-400'>
@@ -2644,7 +2665,10 @@ const FloatingHeader: React.FC = () => {
               <TeamSwitcher variant="header" />
             )}
 
-            {SHOW_ENTERPRISE_CONSOLE && isTeamMode && activeTeamForCredits?.id ? (
+            {SHOW_ENTERPRISE_CONSOLE &&
+            isTeamMode &&
+            activeTeamForCredits?.id &&
+            canAccessEnterpriseConsole(activeTeamForCredits) ? (
               <Button
                 variant="ghost"
                 size="sm"
@@ -2655,7 +2679,7 @@ const FloatingHeader: React.FC = () => {
                 <Building2 className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">企业后台</span>
               </Button>
-            ) : SHOW_ENTERPRISE_CONSOLE ? (
+            ) : SHOW_ENTERPRISE_CONSOLE && !isTeamMode ? (
               <Button
                 variant="ghost"
                 size="sm"
@@ -3274,6 +3298,13 @@ const FloatingHeader: React.FC = () => {
         <PricingCatalogModal
           isOpen={isPricingCatalogOpen}
           onClose={() => setIsPricingCatalogOpen(false)}
+        />
+        <ForgotPasswordModal
+          isOpen={changePasswordOpen}
+          onClose={() => setChangePasswordOpen(false)}
+          defaultPhone={user?.phone || null}
+          lockedPhone
+          onSuccess={() => setChangePasswordOpen(false)}
         />
       </div>
     </>

@@ -665,7 +665,7 @@ function ImageNodeInner({ id, data, selected }: Props) {
           if (!baseRef) return null;
 
           const handle = typeof sourceHandle === "string" ? sourceHandle : "";
-          const match = handle ? /^image(\\d+)$/.exec(handle) : null;
+          const match = handle ? /^image(\d+)$/.exec(handle) : null;
           if (!match) return null;
           const idx = Math.max(0, Number(match[1]) - 1);
 

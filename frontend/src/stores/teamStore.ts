@@ -11,6 +11,8 @@ export interface TeamInfo {
   displayName?: string | null;
   logoUrl?: string | null;
   myRole: 'owner' | 'admin' | 'member';
+  /** 当前用户在该企业是否不计席（平台派发管理员） */
+  seatExempt?: boolean;
   memberCount: number;
   availableCredits: number;
 }

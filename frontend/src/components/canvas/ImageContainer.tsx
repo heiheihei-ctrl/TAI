@@ -48,6 +48,7 @@ import { globalImageHistoryApi, type GlobalImageHistoryItem } from "@/services/g
 import { loadImageElement } from "@/utils/imageHelper";
 import { imageUrlCache } from "@/services/imageUrlCache";
 import { imageUploadService } from "@/services/imageUploadService";
+import { useLocaleText } from "@/utils/localeText";
 import { optimizeHdImage } from "@/services/hdUpscaleService";
 import { isGroup, isRaster, projectToCanvasCssWithViewport } from "@/utils/paperCoords";
 import { editImageViaAPI } from "@/services/aiBackendAPI";
@@ -525,6 +526,7 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const enableVisibilityToggle = false; // Temporarily hide layer visibility control
+  const { lt } = useLocaleText();
 
   // 获取AI聊天状态
   const {
@@ -3503,8 +3505,10 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
   const toolbarActions: ToolbarAction[] = [
     {
       key: "removeBackground",
-      label: "智能抠图",
-      title: isRemovingBackground ? "正在抠图..." : "智能抠图",
+      label: lt("智能抠图", "Smart Cutout"),
+      title: isRemovingBackground
+        ? lt("正在抠图...", "Removing background...")
+        : lt("智能抠图", "Smart Cutout"),
       icon: Wand2,
       disabled:
         isPendingUpload ||
@@ -3519,8 +3523,10 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
     },
     {
       key: "layerSeparation",
-      label: "一键分层",
-      title: isSeparatingLayers ? "正在分层..." : "一键分层",
+      label: lt("一键分层", "One-click Layers"),
+      title: isSeparatingLayers
+        ? lt("正在分层...", "Separating layers...")
+        : lt("一键分层", "One-click Layers"),
       icon: Layers,
       disabled:
         isPendingUpload ||
@@ -3535,8 +3541,10 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
     },
     {
       key: "convertTo3D",
-      label: "2D转3D",
-      title: isConvertingTo3D ? "正在转换3D..." : "2D转3D",
+      label: lt("2D转3D", "2D to 3D"),
+      title: isConvertingTo3D
+        ? lt("正在转换3D...", "Converting to 3D...")
+        : lt("2D转3D", "2D to 3D"),
       icon: Rotate3d,
       disabled: isPendingUpload || isConvertingTo3D,
       loading: isConvertingTo3D,
@@ -3547,8 +3555,10 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
     },
     {
       key: "hdUpscale",
-      label: "高清放大",
-      title: isOptimizingHd ? "正在高清放大..." : "高清放大",
+      label: lt("高清放大", "HD Upscale"),
+      title: isOptimizingHd
+        ? lt("正在高清放大...", "Upscaling...")
+        : lt("高清放大", "HD Upscale"),
       icon: ImageUp,
       disabled: isPendingUpload || isOptimizingHd,
       loading: isOptimizingHd,
@@ -3559,12 +3569,12 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
     },
     {
       key: "expandImage",
-      label: "图片拓展",
+      label: lt("图片拓展", "Expand"),
       title: isExpandingImage
-        ? "正在扩图..."
+        ? lt("正在扩图...", "Expanding...")
         : showExpandSelector
-        ? "请选择扩图区域"
-        : "图片拓展",
+        ? lt("请选择扩图区域", "Select expand area")
+        : lt("图片拓展", "Expand"),
       icon: Crop,
       disabled: isPendingUpload || isExpandingImage || showExpandSelector,
       loading: isExpandingImage,
@@ -3575,8 +3585,11 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
     },
     {
       key: "cropImage",
-      label: "裁切",
-      title: isCropping || isApplyingCrop ? "裁切中..." : "裁切图片",
+      label: lt("裁切", "Crop"),
+      title:
+        isCropping || isApplyingCrop
+          ? lt("裁切中...", "Cropping...")
+          : lt("裁切图片", "Crop image"),
       icon: Crop,
       disabled: isPendingUpload || isApplyingCrop,
       loading: isApplyingCrop,
@@ -3587,12 +3600,12 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
     },
     {
       key: "editText",
-      label: "改文字",
+      label: lt("改文字", "Edit Text"),
       title: isRecognizingText
-        ? "正在识别文字..."
+        ? lt("正在识别文字...", "Recognizing text...")
         : isApplyingTextEdit
-        ? "正在修改文字..."
-        : "修改图片中的文字",
+        ? lt("正在修改文字...", "Updating text...")
+        : lt("修改图片中的文字", "Edit text in image"),
       icon: Type,
       disabled: isPendingUpload || isRecognizingText || isApplyingTextEdit,
       loading: isRecognizingText || isApplyingTextEdit,
@@ -3603,8 +3616,10 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
     },
     {
       key: "extractPalette",
-      label: "提取调色板",
-      title: isExtractingPalette ? "正在提取调色板..." : "提取调色板",
+      label: lt("提取调色板", "Palette"),
+      title: isExtractingPalette
+        ? lt("正在提取调色板...", "Extracting palette...")
+        : lt("提取调色板", "Extract palette"),
       icon: Palette,
       disabled: isPendingUpload || isExtractingPalette,
       loading: isExtractingPalette,
@@ -3615,8 +3630,8 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
     },
     {
       key: "generateNode",
-      label: "生成节点",
-      title: "生成节点",
+      label: lt("生成节点", "Create Node"),
+      title: lt("生成节点", "Create Node"),
       icon: ArrowRightLeft,
       disabled: isPendingUpload,
       onClick: (event) => {
@@ -3629,8 +3644,10 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
   if (showFastBackgroundRemovalButton) {
     toolbarActions.push({
       key: "fastRemoveBackground",
-      label: "极速抠图",
-      title: isFastRemovingBackground ? "正在极速抠图..." : "极速抠图",
+      label: lt("极速抠图", "Quick Cutout"),
+      title: isFastRemovingBackground
+        ? lt("正在极速抠图...", "Quick cutout in progress...")
+        : lt("极速抠图", "Quick Cutout"),
       icon: Zap,
       disabled:
         isPendingUpload ||
@@ -3897,10 +3914,10 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
                     variant='ghost'
                     size='sm'
                     className={sharedButtonClass}
-                    title='更多功能'
+                    title={lt("更多功能", "More tools")}
                   >
                     <MoreHorizontal className={sharedIconClass} />
-                    {showButtonText && <span>更多</span>}
+                    {showButtonText && <span>{lt("更多", "More")}</span>}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
@@ -3937,7 +3954,7 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
 
                   {moreToolbarActions.length === 0 && !enableVisibilityToggle && (
                     <DropdownMenuItem disabled className='px-3 py-2 text-sm dark:text-gray-400'>
-                      暂无更多功能
+                      {lt("暂无更多功能", "No more tools")}
                     </DropdownMenuItem>
                   )}
                 </DropdownMenuContent>

@@ -74,8 +74,8 @@ export default function EnterpriseMembersPage() {
       <div>
         <h1 className="text-2xl font-semibold text-slate-900">席位管理</h1>
         <p className="mt-1 text-sm text-slate-500">
-          已占用 {members.length}
-          {totalSeats != null ? ` / ${totalSeats}` : ""} 席 · 邀请码与角色
+          已占用 {members.filter((m) => !m.seatExempt).length}
+          {totalSeats != null ? ` / ${totalSeats}` : ""} 席 · 企业管理员不计席 · 邀请码与角色
         </p>
       </div>
 
@@ -161,6 +161,11 @@ export default function EnterpriseMembersPage() {
                   <div className="mt-0.5 flex items-center gap-1 text-xs text-slate-400">
                     {roleIcon(m.role)}
                     {m.role}
+                    {m.seatExempt ? (
+                      <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
+                        不计席
+                      </span>
+                    ) : null}
                   </div>
                 </div>
 

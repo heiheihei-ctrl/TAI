@@ -95,7 +95,7 @@ export default function EnterpriseDashboard() {
         </h1>
         <p className="mt-1 text-sm text-slate-500">
           {canManage
-            ? `企业总览 · 席位 ${data.memberCount}/${data.maxSeats} · 项目 ${data.projectCount}`
+            ? `企业总览 · 席位 ${data.usedSeats}/${data.maxSeats} · 项目 ${data.projectCount}`
             : "成员工作台 · 查看积分并切换参与的项目"}
         </p>
       </div>
@@ -117,7 +117,7 @@ export default function EnterpriseDashboard() {
       {canManage ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { label: "已用席位", value: `${data.memberCount} / ${data.maxSeats}` },
+            { label: "已用席位", value: `${data.usedSeats} / ${data.maxSeats}` },
             { label: "项目数", value: String(data.projectCount) },
             { label: "素材数", value: String(data.assetCount) },
             { label: "文件夹", value: String(data.folderCount) },

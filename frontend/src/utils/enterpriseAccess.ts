@@ -11,14 +11,24 @@ export function isEnterpriseMember(teams: Pick<TeamInfo, "isPersonal" | "enterpr
   return pickEnterprises(teams).length > 0;
 }
 
-/** 优先 owner/admin，否则取第一个企业 */
+export function canAccessEnterpriseConsole(
+  team: Pick<TeamInfo, "myRole"> | null | undefined,
+): boolean {
+  return team?.myRole === "owner" || team?.myRole === "admin";
+}
+
+/** 可进入企业后台的企业（仅 owner/admin；member 不可进后台） */
+export function pickConsoleEnterprises<
+  T extends Pick<TeamInfo, "id" | "myRole" | "isPersonal" | "enterpriseEnabled">,
+>(teams: T[]): T[] {
+  return pickEnterprises(teams).filter((t) => canAccessEnterpriseConsole(t));
+}
+
+/** 优先 owner，否则第一个可进后台的企业 */
 export function pickPreferredEnterprise<
   T extends Pick<TeamInfo, "id" | "myRole" | "isPersonal" | "enterpriseEnabled">,
 >(teams: T[]): T | null {
-  const enterprises = pickEnterprises(teams);
+  const enterprises = pickConsoleEnterprises(teams);
   if (enterprises.length === 0) return null;
-  return (
-    enterprises.find((t) => t.myRole === "owner" || t.myRole === "admin") ||
-    enterprises[0]
-  );
+  return enterprises.find((t) => t.myRole === "owner") || enterprises[0];
 }

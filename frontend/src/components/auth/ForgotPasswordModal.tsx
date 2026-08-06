@@ -10,6 +10,9 @@ type ForgotPasswordModalProps = {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  /** 已登录场景：预填并锁定手机号 */
+  defaultPhone?: string | null;
+  lockedPhone?: boolean;
 };
 
 type Step = "phone" | "verify" | "reset";
@@ -18,6 +21,8 @@ export default function ForgotPasswordModal({
   isOpen,
   onClose,
   onSuccess,
+  defaultPhone,
+  lockedPhone = false,
 }: ForgotPasswordModalProps) {
   const { i18n } = useTranslation();
   const isZh = (i18n.resolvedLanguage || i18n.language || "")
@@ -42,6 +47,15 @@ export default function ForgotPasswordModal({
     );
     return () => clearInterval(t);
   }, [sendCooldown]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const nextPhone = String(defaultPhone || "").trim();
+    if (nextPhone) {
+      setPhone(nextPhone);
+      setStep("phone");
+    }
+  }, [isOpen, defaultPhone]);
 
   const isSmsRateLimited = (message: string) => {
     const msg = String(message || "");
@@ -215,7 +229,9 @@ export default function ForgotPasswordModal({
               </button>
             )}
             <span className='text-lg text-slate-600'>
-              {lt("忘记密码", "Forgot Password")}
+              {lockedPhone || defaultPhone
+                ? lt("修改密码", "Change Password")
+                : lt("忘记密码", "Forgot Password")}
             </span>
           </div>
           <button
@@ -300,7 +316,8 @@ export default function ForgotPasswordModal({
                 placeholder={lt("请输入手机号", "Enter phone number")}
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                autoFocus
+                disabled={Boolean(lockedPhone && defaultPhone)}
+                autoFocus={!lockedPhone}
               />
 
               {error && <div className='text-red-500 text-sm'>{error}</div>}

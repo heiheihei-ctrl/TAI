@@ -36,6 +36,7 @@ async function json<T>(path: string, options: RequestInit = {}): Promise<T> {
 export interface TeamMember {
   userId: string;
   role: "owner" | "admin" | "member" | string;
+  seatExempt?: boolean;
   user?: {
     id?: string;
     name?: string;
@@ -251,6 +252,8 @@ export const teamApi = {
     enterpriseEnabled: boolean;
     status: string;
     memberCount: number;
+    /** 占用创作席位的成员数（不含企业账户 seatExempt） */
+    usedSeats: number;
     projectCount: number;
     assetCount: number;
     folderCount: number;

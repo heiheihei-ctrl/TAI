@@ -1901,6 +1901,8 @@ export class AdminService {
           name: params.ownerName?.trim() || `企业管理员_${phone.slice(-4)}`,
           role: 'user',
           status: 'active',
+          // 新建的企业管理员账号：不必是已有 TAI 个人账号
+          isEnterpriseAccount: true,
         },
       });
     } else if (params.ownerPassword?.trim()) {
@@ -1914,21 +1916,24 @@ export class AdminService {
       });
     }
 
-    const personal = await this.prisma.team.findFirst({
-      where: { ownerId: owner.id, isPersonal: true },
-      select: { id: true },
-    });
-    if (!personal) {
-      await this.prisma.team.create({
-        data: {
-          name: '我的工作区',
-          ownerId: owner.id,
-          isPersonal: true,
-          maxSeats: 1,
-          memberships: { create: { userId: owner.id, role: 'owner' } },
-          creditAccount: { create: {} },
-        },
+    // 仅对非企业专用账号补个人工作区；企业专用账号可不占用 / 不创建个人 Team
+    if (!owner.isEnterpriseAccount) {
+      const personal = await this.prisma.team.findFirst({
+        where: { ownerId: owner.id, isPersonal: true },
+        select: { id: true },
       });
+      if (!personal) {
+        await this.prisma.team.create({
+          data: {
+            name: '我的工作区',
+            ownerId: owner.id,
+            isPersonal: true,
+            maxSeats: 1,
+            memberships: { create: { userId: owner.id, role: 'owner' } },
+            creditAccount: { create: {} },
+          },
+        });
+      }
     }
 
     const team = await this.prisma.team.create({
@@ -1939,7 +1944,9 @@ export class AdminService {
         isPersonal: false,
         enterpriseEnabled: true,
         maxSeats,
-        memberships: { create: { userId: owner.id, role: 'owner' } },
+        memberships: {
+          create: { userId: owner.id, role: 'owner', seatExempt: true },
+        },
         creditAccount: { create: {} },
       },
       include: {
@@ -1959,6 +1966,10 @@ export class AdminService {
       },
     });
 
+    const usedSeats = await this.prisma.teamMembership.count({
+      where: { teamId: team.id, seatExempt: false },
+    });
+
     return {
       id: team.id,
       enterpriseId: enterprise.id,
@@ -1968,7 +1979,7 @@ export class AdminService {
       owner: team.owner,
       maxSeats: team.maxSeats,
       memberCount: team._count.memberships,
-      usedSeats: team._count.memberships,
+      usedSeats,
       projectCount: 0,
       status: team.status,
       enterpriseEnabled: true,
@@ -2003,6 +2014,10 @@ export class AdminService {
           workspaceTeam: {
             include: {
               _count: { select: { memberships: true, projects: true } },
+              memberships: {
+                where: { seatExempt: false },
+                select: { userId: true },
+              },
               creditAccount: { select: { balance: true, frozenBalance: true } },
             },
           },
@@ -2019,6 +2034,7 @@ export class AdminService {
       teams: enterprises.map((ent) => {
         const team = ent.workspaceTeam;
         const memberCount = team?._count?.memberships ?? 0;
+        const usedSeats = team?.memberships?.length ?? 0;
         const projectCount = ent._count.projects || team?._count?.projects || 0;
         const balance = team?.creditAccount?.balance || 0;
         const frozenBalance = team?.creditAccount?.frozenBalance || 0;
@@ -2032,7 +2048,7 @@ export class AdminService {
           owner: ent.owner,
           maxSeats: ent.maxSeats,
           memberCount,
-          usedSeats: memberCount,
+          usedSeats,
           projectCount,
           status: ent.status,
           balance,

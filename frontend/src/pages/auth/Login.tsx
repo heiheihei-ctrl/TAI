@@ -17,6 +17,10 @@ import {
 import { validateInviteCode } from "@/services/referralApi";
 import { useTranslation } from "react-i18next";
 import WelcomeShaderBackground from "@/components/background/WelcomeShaderBackground";
+import {
+  buildTeamInviteHomePath,
+  peekPendingTeamInvite,
+} from "@/utils/teamInvite";
 
 const WECHAT_LOGIN_HIDDEN_ORIGINS = new Set(["http://101.96.217.132:8080"]);
 
@@ -67,6 +71,11 @@ export default function LoginPage() {
     const candidate = fromState || fromQuery || "/app";
     if (!candidate.startsWith("/") || candidate.startsWith("//")) {
       return "/app";
+    }
+    // 有待处理的企业邀请时，登录后必须回到带邀请参数的首页，才能弹出同意/拒绝确认窗
+    const pendingInvite = peekPendingTeamInvite();
+    if (pendingInvite && !/[?&](teamInvite|inviteCode|team_invite)=/.test(candidate)) {
+      return buildTeamInviteHomePath(pendingInvite);
     }
     return candidate;
   }, [location.search, location.state]);

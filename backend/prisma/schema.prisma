@@ -28,6 +28,7 @@ model User {
   profileCompletedAt         DateTime?
   profileRewardClaimed       Boolean                @default(false)
   sourceChannel              String?
+  isEnterpriseAccount        Boolean                @default(false)
   sourceChannelRewardClaimed Boolean                @default(false)
   role                       String                 @default("user")
   status                     String                 @default("active")
@@ -290,6 +291,7 @@ model TeamMembership {
   teamId              String
   userId              String
   role                String   @default("member")
+  seatExempt          Boolean  @default(false)
   creditQuotaMonthly  Int?
   creditQuotaTotal    Int?
   creditUsedThisCycle Int      @default(0)
@@ -303,6 +305,7 @@ model TeamMembership {
 
   @@id([teamId, userId])
   @@index([userId])
+  @@index([teamId, seatExempt])
 }
 
 model TeamInvite {

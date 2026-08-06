@@ -68,7 +68,7 @@ export class TeamCoreService {
   }
 
   async getEnterpriseDashboard(teamId: string, requestingUserId: string) {
-    await this.assertMember(teamId, requestingUserId);
+    await this.assertRole(teamId, requestingUserId, ['owner', 'admin']);
     const team = await this.prisma.team.findUniqueOrThrow({
       where: { id: teamId },
       include: {
@@ -86,6 +86,7 @@ export class TeamCoreService {
     if (team.isPersonal) throw new ForbiddenException('个人工作区不是企业版');
 
     const seatCapacity = await this.getSeatCapacity(teamId);
+    const usedSeats = await this.countUsedSeats(teamId);
     const recentProjects = await this.prisma.project.findMany({
       where: { teamId },
       orderBy: { updatedAt: 'desc' },
@@ -106,6 +107,7 @@ export class TeamCoreService {
       enterpriseEnabled: team.enterpriseEnabled,
       status: team.status,
       memberCount: team._count.memberships,
+      usedSeats,
       projectCount: team._count.projects,
       assetCount: team._count.assets,
       folderCount: team._count.assetFolders,
@@ -114,6 +116,13 @@ export class TeamCoreService {
         (team.creditAccount?.balance ?? 0) - (team.creditAccount?.frozenBalance ?? 0),
       recentProjects,
     };
+  }
+
+  /** 占用创作席位的成员数（seatExempt=false） */
+  async countUsedSeats(teamId: string, db: any = this.prisma): Promise<number> {
+    return db.teamMembership.count({
+      where: { teamId, seatExempt: false },
+    });
   }
 
   async getSeatCapacity(teamId: string, db: any = this.prisma): Promise<number> {
@@ -140,7 +149,14 @@ export class TeamCoreService {
       select: { id: true },
     });
     if (!personal) {
-      await this.createPersonalTeam(userId);
+      const account = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { isEnterpriseAccount: true },
+      });
+      // 平台派发的企业账号不强制创建个人工作区
+      if (!account?.isEnterpriseAccount) {
+        await this.createPersonalTeam(userId);
+      }
     }
     const memberships = await this.prisma.teamMembership.findMany({
       where: { userId },
@@ -157,6 +173,7 @@ export class TeamCoreService {
     return memberships.map((m) => ({
       ...m.team,
       myRole: m.role,
+      seatExempt: m.seatExempt,
       memberCount: m.team._count.memberships,
       availableCredits:
         (m.team.creditAccount?.balance ?? 0) -
@@ -274,11 +291,11 @@ export class TeamCoreService {
       await tx.team.update({ where: { id: teamId }, data: { ownerId: newOwnerId } });
       await tx.teamMembership.update({
         where: { teamId_userId: { teamId, userId: requestingUserId } },
-        data: { role: 'member' },
+        data: { role: 'member', seatExempt: false },
       });
       await tx.teamMembership.update({
         where: { teamId_userId: { teamId, userId: newOwnerId } },
-        data: { role: 'owner' },
+        data: { role: 'owner', seatExempt: true },
       });
     });
   }

@@ -117,15 +117,16 @@ export class TeamInviteService {
         return;
       }
 
-      const memberCount = await tx.teamMembership.count({ where: { teamId } });
+      const usedSeats = await this.teamCore.countUsedSeats(teamId, tx);
       const seatLimit = await this.teamCore.getSeatCapacity(teamId, tx);
-      if (memberCount >= seatLimit) throw new BadRequestException('企业席位已满');
+      if (usedSeats >= seatLimit) throw new BadRequestException('企业席位已满');
 
       await tx.teamMembership.create({
         data: {
           teamId,
           userId: request.applicantUserId,
           role: 'member',
+          seatExempt: false,
         },
       });
 
@@ -216,11 +217,9 @@ export class TeamInviteService {
       };
     }
 
-    const memberCount = await this.prisma.teamMembership.count({
-      where: { teamId: params.teamId },
-    });
+    const usedSeats = await this.teamCore.countUsedSeats(params.teamId);
     const seatLimit = await this.teamCore.getSeatCapacity(params.teamId);
-    if (memberCount >= seatLimit) throw new BadRequestException('企业席位已满');
+    if (usedSeats >= seatLimit) throw new BadRequestException('企业席位已满');
 
     const created = await this.prisma.teamJoinRequest.create({
       data: {

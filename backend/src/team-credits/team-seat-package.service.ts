@@ -60,7 +60,7 @@ export class TeamSeatPackageService {
       select: { maxSeats: true },
     });
     const totalSeats = await this.teamCore.getSeatCapacity(teamId);
-    const usedSeats = await this.prisma.teamMembership.count({ where: { teamId } });
+    const usedSeats = await this.teamCore.countUsedSeats(teamId);
     const packageSeats = activePackages.reduce((sum, pkg) => sum + (pkg.seats || 0), 0);
     const adminGrantedSeats = Math.max(
       0,

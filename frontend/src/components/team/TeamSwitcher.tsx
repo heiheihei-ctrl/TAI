@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTeamStore } from '../../stores/teamStore';
 import { useAuthStore } from '../../stores/authStore';
-import { teamApi } from '../../services/teamApi';
 import { useProjectStore } from '../../stores/projectStore';
 import { projectApi, type Project } from '../../services/projectApi';
 import { TEAM_PROJECTS_CHANGED_EVENT } from '../../hooks/useTeamRealtime';
@@ -15,10 +14,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, Plus, X, FolderOpen, Loader2, User, Building2 } from 'lucide-react';
+import { ChevronDown, X, FolderOpen, Loader2, User, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SHOW_TEAM_COLLABORATION, SHOW_ENTERPRISE_CONSOLE } from '@/config/featureFlags';
-import { isEnterpriseMember } from '@/utils/enterpriseAccess';
 
 // 工作区切换：企业控制台开启时也要能切回个人版；实时协同仍由 SHOW_TEAM_COLLABORATION 控制。
 const TEAM_UI_ENABLED =
@@ -31,93 +29,6 @@ const TEAM_UI_ENABLED =
 interface Props {
   variant?: 'header' | 'home';
   className?: string;
-}
-
-function CreateTeamModal({
-  onClose,
-  onDone,
-}: {
-  onClose: () => void;
-  onDone: (teamId?: string) => void;
-}) {
-  const { setTeams } = useTeamStore();
-  const [value, setValue] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const val = value.trim();
-    if (!val || busy) return;
-    setBusy(true);
-    setError('');
-    try {
-      const team = await teamApi.createTeam(val);
-      const updated = await teamApi.getMyTeams();
-      setTeams(updated);
-      onDone(team.id);
-    } catch (err: any) {
-      setError(err?.message || '创建失败');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[1300] flex items-center justify-center bg-black/20 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-2xl shadow-[0_20px_60px_rgba(15,23,42,0.18)] border border-slate-200 p-5 w-80"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-slate-800">新建团队</h3>
-          <button
-            onClick={onClose}
-            className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-slate-100 text-slate-400"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-        <form onSubmit={handleSubmit}>
-          <input
-            autoFocus
-            className="w-full text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 transition-all"
-            placeholder="团队名称"
-            value={value}
-            onChange={(e) => {
-              setValue(e.target.value);
-              setError('');
-            }}
-          />
-          <p className="text-xs text-slate-400 mt-1.5">新建团队固定 2 席位起</p>
-          {error && <p className="text-xs text-red-500 mt-1.5">{error}</p>}
-          <div className="flex gap-2 mt-3">
-            <Button
-              type="submit"
-              size="sm"
-              disabled={busy || !value.trim()}
-              className="flex-1 rounded-xl"
-            >
-              {busy ? '…' : '创建'}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              className="rounded-xl text-slate-500"
-            >
-              取消
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>,
-    document.body,
-  );
 }
 
 function TeamProjectPickerModal({
@@ -234,7 +145,6 @@ export function TeamSwitcher({ variant = 'header', className }: Props) {
   const { teams, activeTeamId, setActiveTeamId } = useTeamStore();
   const user = useAuthStore((s) => s.user);
   const projectStore = useProjectStore();
-  const [createOpen, setCreateOpen] = useState(false);
   const [teamPickerTarget, setTeamPickerTarget] = useState<{ id: string; name: string; isPersonal?: boolean } | null>(null);
 
   const personalTeam = teams.find((t) => t.isPersonal);
@@ -292,11 +202,6 @@ export function TeamSwitcher({ variant = 'header', className }: Props) {
     if (!teamPickerTarget) return;
     completeSwitchTeam(teamPickerTarget.id, projectId);
     setTeamPickerTarget(null);
-  };
-
-  const handleCreateDone = (newTeamId?: string) => {
-    setCreateOpen(false);
-    if (newTeamId) switchTeam(newTeamId);
   };
 
   // 团队功能前端展示开关：默认隐藏（VITE_ENABLE_TEAM 未开启时不渲染）。
@@ -373,33 +278,11 @@ export function TeamSwitcher({ variant = 'header', className }: Props) {
           ))}
         </>
       )}
-
-      {/* 企业成员不可新建团队；成员管理 / 套餐 / 邀请码已迁出画布下拉 */}
-      {(!isEnterpriseMember(teams) &&
-        (!SHOW_ENTERPRISE_CONSOLE || SHOW_TEAM_COLLABORATION)) ? (
-        <>
-          <DropdownMenuSeparator className="my-1" />
-          <DropdownMenuItem
-            onClick={() => setCreateOpen(true)}
-            className="rounded-xl px-3 py-2 cursor-pointer text-sm flex items-center gap-2 text-slate-600"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            新建团队
-          </DropdownMenuItem>
-        </>
-      ) : null}
     </DropdownMenuContent>
   );
 
   return (
     <>
-      {createOpen ? (
-        <CreateTeamModal
-          onClose={() => setCreateOpen(false)}
-          onDone={handleCreateDone}
-        />
-      ) : null}
-
       {teamPickerTarget && (
         <TeamProjectPickerModal
           teamId={teamPickerTarget.id}

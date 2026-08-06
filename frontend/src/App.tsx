@@ -17,7 +17,11 @@ import { TeamInviteConfirmModal } from '@/components/team/TeamInviteConfirmModal
 import { tokenRefreshManager } from '@/services/tokenRefreshManager';
 import { useAuthStore } from '@/stores/authStore';
 import { refreshTeams, useTeamStore } from '@/stores/teamStore';
-import { isTeamInviteQueryParam } from '@/utils/teamInvite';
+import {
+  clearPendingTeamInvite,
+  resolveActiveTeamInvite,
+  stashPendingTeamInvite,
+} from '@/utils/teamInvite';
 import { AppLoadingIndicator } from '@/components/AppLoadingIndicator';
 import { useTranslation } from 'react-i18next';
 import Toast from '@/components/Toast';
@@ -90,13 +94,7 @@ const App: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const paramProjectId = searchParams.get('projectId');
   const paramTeamId = searchParams.get('teamId');
-  const inviteCodeParam =
-    searchParams.get('inviteCode') ||
-    searchParams.get('teamInvite') ||
-    searchParams.get('team_invite');
-  const teamInviteCode = isTeamInviteQueryParam(inviteCodeParam)
-    ? inviteCodeParam
-    : null;
+  const teamInviteCode = resolveActiveTeamInvite(searchParams);
   const [teamInviteOpen, setTeamInviteOpen] = useState(false);
   const currentProjectId = useProjectStore((state) => state.currentProjectId);
   const projectSwitching = useProjectContentStore((state) => state.switching);
@@ -111,6 +109,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!SHOW_ENTERPRISE_CONSOLE || !user || !teamInviteCode) return;
+    stashPendingTeamInvite(teamInviteCode);
     setTeamInviteOpen(true);
   }, [user, teamInviteCode]);
 
@@ -131,11 +130,13 @@ const App: React.FC = () => {
   }, [paramTeamId, user, teams, setActiveTeamId]);
 
   const clearTeamInviteQuery = () => {
+    clearPendingTeamInvite();
     const next = new URLSearchParams(searchParams);
     next.delete('inviteCode');
     next.delete('teamInvite');
     next.delete('team_invite');
     setSearchParams(next, { replace: true });
+    setTeamInviteOpen(false);
   };
 
   // 初始化 TokenRefreshManager
@@ -243,13 +244,9 @@ const App: React.FC = () => {
       {SHOW_ENTERPRISE_CONSOLE && teamInviteOpen && teamInviteCode && user && (
         <TeamInviteConfirmModal
           code={teamInviteCode}
-          onClose={() => {
-            setTeamInviteOpen(false);
-            clearTeamInviteQuery();
-          }}
+          onClose={clearTeamInviteQuery}
           onApplied={() => {
-            setTeamInviteOpen(false);
-            clearTeamInviteQuery();
+            void refreshTeams().catch(() => {});
           }}
         />
       )}

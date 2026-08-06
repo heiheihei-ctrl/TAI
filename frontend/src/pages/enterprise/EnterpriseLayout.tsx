@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { SHOW_ENTERPRISE_CONSOLE } from "@/config/featureFlags";
 import { useTeamStore, refreshTeams } from "@/stores/teamStore";
-import { pickEnterprises } from "@/utils/enterpriseAccess";
+import { pickConsoleEnterprises, canAccessEnterpriseConsole } from "@/utils/enterpriseAccess";
 import { cn } from "@/lib/utils";
 
 export default function EnterpriseLayout() {
@@ -23,15 +23,15 @@ export default function EnterpriseLayout() {
   const teams = useTeamStore((s) => s.teams);
   const setActiveTeamId = useTeamStore((s) => s.setActiveTeamId);
 
-  const enterprises = useMemo(() => pickEnterprises(teams), [teams]);
+  const enterprises = useMemo(() => pickConsoleEnterprises(teams), [teams]);
 
   const team = useMemo(
     () => enterprises.find((t) => t.id === teamId) ?? null,
     [enterprises, teamId],
   );
-  const canManage = team?.myRole === "owner" || team?.myRole === "admin";
+  const canManage = canAccessEnterpriseConsole(team);
 
-  // 全员可见：项目管理、素材库、总览；管理项仅 admin/owner
+  // 后台仅 owner/admin；member 不可进入
   const nav = useMemo(() => {
     const items: Array<{
       to: string;
@@ -41,16 +41,12 @@ export default function EnterpriseLayout() {
       { to: "projects", label: "项目管理", icon: FolderKanban },
       { to: "assets", label: "素材库", icon: FolderOpen },
       { to: "overview", label: "总览", icon: LayoutDashboard },
+      { to: "members", label: "席位管理", icon: Users },
+      { to: "requests", label: "加入申请", icon: ClipboardList },
+      { to: "settings", label: "企业设置", icon: Settings },
     ];
-    if (canManage) {
-      items.push(
-        { to: "members", label: "席位管理", icon: Users },
-        { to: "requests", label: "加入申请", icon: ClipboardList },
-        { to: "settings", label: "企业设置", icon: Settings },
-      );
-    }
     return items;
-  }, [canManage]);
+  }, []);
 
   useEffect(() => {
     if (!SHOW_ENTERPRISE_CONSOLE) {
@@ -71,6 +67,7 @@ export default function EnterpriseLayout() {
   }, [team, teamId, teams.length, navigate, setActiveTeamId]);
 
   if (!SHOW_ENTERPRISE_CONSOLE) return null;
+  if (teams.length > 0 && !team) return null;
 
   const enterWorkspace = () => {
     if (!teamId) return;

@@ -526,6 +526,11 @@ const enUS = {
           loading: "Logging out…",
           confirm: "Are you sure you want to log out?",
         },
+        changePassword: {
+          title: "Change Password",
+          desc: "Set a new login password with an SMS verification code",
+          button: "Change Password",
+        },
       },
     },
   },

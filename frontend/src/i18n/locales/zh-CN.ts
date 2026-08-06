@@ -524,6 +524,11 @@ const zhCN = {
           loading: "正在退出…",
           confirm: "确定要退出登录吗？",
         },
+        changePassword: {
+          title: "修改密码",
+          desc: "通过手机验证码设置新的登录密码",
+          button: "修改密码",
+        },
       },
     },
   },
