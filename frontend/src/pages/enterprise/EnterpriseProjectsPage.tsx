@@ -25,16 +25,13 @@ export default function EnterpriseProjectsPage() {
   };
 
   useEffect(() => {
-    if (!canManage) {
-      navigate(`/enterprise/${teamId}`, { replace: true });
-      return;
-    }
+    if (!teamId) return;
     reload().catch((err: any) => setError(err?.message || "加载失败"));
-  }, [teamId, canManage, navigate]);
+  }, [teamId]);
 
   const createProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!teamId || busy) return;
+    if (!teamId || busy || !canManage) return;
     setBusy(true);
     setError("");
     try {
@@ -51,8 +48,6 @@ export default function EnterpriseProjectsPage() {
     }
   };
 
-  if (!canManage) return null;
-
   return (
     <div className="space-y-6">
       <div>
@@ -68,27 +63,29 @@ export default function EnterpriseProjectsPage() {
         </div>
       ) : null}
 
-      <form
-        onSubmit={createProject}
-        className="flex flex-wrap items-end gap-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
-      >
-        <label className="min-w-[220px] flex-1 text-xs text-slate-500">
-          新建项目
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="项目名称"
-            className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-          />
-        </label>
-        <button
-          type="submit"
-          disabled={busy}
-          className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+      {canManage ? (
+        <form
+          onSubmit={createProject}
+          className="flex flex-wrap items-end gap-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
         >
-          {busy ? "创建中…" : "创建项目"}
-        </button>
-      </form>
+          <label className="min-w-[220px] flex-1 text-xs text-slate-500">
+            新建项目
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="项目名称"
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={busy}
+            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {busy ? "创建中…" : "创建项目"}
+          </button>
+        </form>
+      ) : null}
 
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         {projects.length === 0 ? (
@@ -115,7 +112,7 @@ export default function EnterpriseProjectsPage() {
                   onClick={() => {
                     setActiveTeamId(teamId);
                     navigate(
-                      `/app?projectId=${encodeURIComponent(p.id)}&teamId=${encodeURIComponent(teamId)}`
+                      `/app?projectId=${encodeURIComponent(p.id)}&teamId=${encodeURIComponent(teamId)}`,
                     );
                   }}
                   className="shrink-0 rounded-xl border border-slate-200 px-3 py-1.5 text-xs hover:bg-slate-50"

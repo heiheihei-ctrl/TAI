@@ -15,9 +15,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, Users, Plus, Settings, LogIn, X, FolderOpen, Loader2, User, Building2, CreditCard } from 'lucide-react';
+import { ChevronDown, Plus, X, FolderOpen, Loader2, User, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SHOW_TEAM_COLLABORATION, SHOW_ENTERPRISE_CONSOLE } from '@/config/featureFlags';
+import { isEnterpriseMember } from '@/utils/enterpriseAccess';
 
 // 工作区切换：企业控制台开启时也要能切回个人版；实时协同仍由 SHOW_TEAM_COLLABORATION 控制。
 const TEAM_UI_ENABLED =
@@ -27,26 +28,19 @@ const TEAM_UI_ENABLED =
     String(import.meta.env.VITE_ENABLE_TEAM ?? '').toLowerCase(),
   );
 
-export type TeamManageTab = 'members' | 'subscription';
-
 interface Props {
-  onManage?: (teamId: string, tab?: TeamManageTab) => void;
   variant?: 'header' | 'home';
   className?: string;
 }
 
-type ActiveModal = 'none' | 'create' | 'join';
-
-function TeamFormModal({
-  mode,
+function CreateTeamModal({
   onClose,
   onDone,
 }: {
-  mode: 'create' | 'join';
   onClose: () => void;
   onDone: (teamId?: string) => void;
 }) {
-  const { teams, setTeams } = useTeamStore();
+  const { setTeams } = useTeamStore();
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -58,20 +52,12 @@ function TeamFormModal({
     setBusy(true);
     setError('');
     try {
-      if (mode === 'create') {
-        const team = await teamApi.createTeam(val);
-        const updated = await teamApi.getMyTeams();
-        setTeams(updated);
-        onDone(team.id);
-      } else {
-        await teamApi.acceptInvite(val);
-        const updated = await teamApi.getMyTeams();
-        const joined = updated.find((t: any) => !teams.find((old) => old.id === t.id));
-        setTeams(updated);
-        onDone(joined?.id);
-      }
+      const team = await teamApi.createTeam(val);
+      const updated = await teamApi.getMyTeams();
+      setTeams(updated);
+      onDone(team.id);
     } catch (err: any) {
-      setError(err?.message || (mode === 'create' ? '创建失败' : '邀请码无效或已过期'));
+      setError(err?.message || '创建失败');
     } finally {
       setBusy(false);
     }
@@ -87,9 +73,7 @@ function TeamFormModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-slate-800">
-            {mode === 'create' ? '新建团队' : '使用邀请码加入'}
-          </h3>
+          <h3 className="text-sm font-semibold text-slate-800">新建团队</h3>
           <button
             onClick={onClose}
             className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-slate-100 text-slate-400"
@@ -101,24 +85,14 @@ function TeamFormModal({
           <input
             autoFocus
             className="w-full text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 transition-all"
-            placeholder={mode === 'create' ? '团队名称' : '粘贴邀请码或链接'}
+            placeholder="团队名称"
             value={value}
             onChange={(e) => {
-              let val = e.target.value;
-              if (mode === 'join') {
-                try {
-                  const url = new URL(val.trim());
-                  const code = url.searchParams.get('inviteCode');
-                  if (code) val = code;
-                } catch {}
-              }
-              setValue(val);
+              setValue(e.target.value);
               setError('');
             }}
           />
-          {mode === 'create' && (
-            <p className="text-xs text-slate-400 mt-1.5">新建团队固定 2 席位起</p>
-          )}
+          <p className="text-xs text-slate-400 mt-1.5">新建团队固定 2 席位起</p>
           {error && <p className="text-xs text-red-500 mt-1.5">{error}</p>}
           <div className="flex gap-2 mt-3">
             <Button
@@ -127,7 +101,7 @@ function TeamFormModal({
               disabled={busy || !value.trim()}
               className="flex-1 rounded-xl"
             >
-              {busy ? '…' : mode === 'create' ? '创建' : '加入'}
+              {busy ? '…' : '创建'}
             </Button>
             <Button
               type="button"
@@ -256,11 +230,11 @@ function TeamProjectPickerModal({
   );
 }
 
-export function TeamSwitcher({ onManage, variant = 'header', className }: Props) {
+export function TeamSwitcher({ variant = 'header', className }: Props) {
   const { teams, activeTeamId, setActiveTeamId } = useTeamStore();
   const user = useAuthStore((s) => s.user);
   const projectStore = useProjectStore();
-  const [modal, setModal] = useState<ActiveModal>('none');
+  const [createOpen, setCreateOpen] = useState(false);
   const [teamPickerTarget, setTeamPickerTarget] = useState<{ id: string; name: string; isPersonal?: boolean } | null>(null);
 
   const personalTeam = teams.find((t) => t.isPersonal);
@@ -320,8 +294,8 @@ export function TeamSwitcher({ onManage, variant = 'header', className }: Props)
     setTeamPickerTarget(null);
   };
 
-  const handleModalDone = (newTeamId?: string) => {
-    setModal('none');
+  const handleCreateDone = (newTeamId?: string) => {
+    setCreateOpen(false);
     if (newTeamId) switchTeam(newTeamId);
   };
 
@@ -400,57 +374,31 @@ export function TeamSwitcher({ onManage, variant = 'header', className }: Props)
         </>
       )}
 
-      <DropdownMenuSeparator className="my-1" />
-
-      {/* 当前活动团队的管理选项 */}
-      {activeTeam && !activeTeam.isPersonal && onManage && (
+      {/* 企业成员不可新建团队；成员管理 / 套餐 / 邀请码已迁出画布下拉 */}
+      {(!isEnterpriseMember(teams) &&
+        (!SHOW_ENTERPRISE_CONSOLE || SHOW_TEAM_COLLABORATION)) ? (
         <>
+          <DropdownMenuSeparator className="my-1" />
           <DropdownMenuItem
-            onClick={() => onManage(activeTeam.id, 'members')}
+            onClick={() => setCreateOpen(true)}
             className="rounded-xl px-3 py-2 cursor-pointer text-sm flex items-center gap-2 text-slate-600"
           >
-            <Users className="w-3.5 h-3.5 text-teal-600" />
-            成员管理 / 配额设置
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => onManage(activeTeam.id, 'subscription')}
-            className="rounded-xl px-3 py-2 cursor-pointer text-sm flex items-center gap-2 text-slate-600"
-          >
-            <CreditCard className="w-3.5 h-3.5 text-teal-600" />
-            套餐与账单
+            <Plus className="w-3.5 h-3.5" />
+            新建团队
           </DropdownMenuItem>
         </>
-      )}
-
-      {!SHOW_ENTERPRISE_CONSOLE || SHOW_TEAM_COLLABORATION ? (
-        <DropdownMenuItem
-          onClick={() => setModal('create')}
-          className="rounded-xl px-3 py-2 cursor-pointer text-sm flex items-center gap-2 text-slate-600"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          新建团队
-        </DropdownMenuItem>
       ) : null}
-
-      <DropdownMenuItem
-        onClick={() => setModal('join')}
-        className="rounded-xl px-3 py-2 cursor-pointer text-sm flex items-center gap-2 text-slate-600"
-      >
-        <LogIn className="w-3.5 h-3.5" />
-        使用邀请码加入
-      </DropdownMenuItem>
     </DropdownMenuContent>
   );
 
   return (
     <>
-      {modal !== 'none' && (
-        <TeamFormModal
-          mode={modal}
-          onClose={() => setModal('none')}
-          onDone={handleModalDone}
+      {createOpen ? (
+        <CreateTeamModal
+          onClose={() => setCreateOpen(false)}
+          onDone={handleCreateDone}
         />
-      )}
+      ) : null}
 
       {teamPickerTarget && (
         <TeamProjectPickerModal

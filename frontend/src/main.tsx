@@ -64,7 +64,8 @@ function RootRoutes() {
         <Route path="/membership" element={<MembershipSubscribePage />} />
         {SHOW_ENTERPRISE_CONSOLE ? (
           <Route path="/enterprise/:teamId" element={<EnterpriseLayout />}>
-            <Route index element={<EnterpriseDashboard />} />
+            <Route index element={<Navigate to="projects" replace />} />
+            <Route path="overview" element={<EnterpriseDashboard />} />
             <Route path="projects" element={<EnterpriseProjectsPage />} />
             <Route path="members" element={<EnterpriseMembersPage />} />
             <Route path="requests" element={<EnterpriseJoinRequestsPage />} />

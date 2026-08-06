@@ -82,9 +82,7 @@ import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useGlobalPaymentPoll } from "@/hooks/useGlobalPaymentPoll";
 import MembershipPanel from "@/components/payment/MembershipPanel";
 import { SHOW_TEAM_COLLABORATION, SHOW_ENTERPRISE_CONSOLE, SHOW_WORKSPACE_SWITCHER } from "@/config/featureFlags";
-import { TeamSwitcher, type TeamManageTab } from "@/components/team/TeamSwitcher";
-import { EnterpriseJoinCodeModal } from "@/components/team/EnterpriseJoinCodeModal";
-import { TeamManagementModal } from "@/components/team/TeamManagementModal";
+import { TeamSwitcher } from "@/components/team/TeamSwitcher";
 import { refreshTeams, useTeamStore } from "@/stores/teamStore";
 import {
   teamMyQuotaApi,
@@ -349,9 +347,6 @@ const FloatingHeader: React.FC = () => {
   const [showMemoryDebug, setShowMemoryDebug] = useState(false);
   const [showHistoryDebug, setShowHistoryDebug] = useState(false);
   const [isMembershipOpen, setIsMembershipOpen] = useState(false);
-  const [teamManagementId, setTeamManagementId] = useState<string | null>(null);
-  const [joinCodeModalOpen, setJoinCodeModalOpen] = useState(false);
-  const [teamModalInitialTab, setTeamModalInitialTab] = useState<TeamManageTab>('members');
   const [teamMyQuota, setTeamMyQuota] = useState<MyTeamQuota | null>(null);
   const [teamMyQuotaLoading, setTeamMyQuotaLoading] = useState(false);
   const [gridSizeInput, setGridSizeInput] = useState(String(gridSize));
@@ -1257,17 +1252,44 @@ const FloatingHeader: React.FC = () => {
     window.open(href, "_blank", "noopener,noreferrer");
   }, []);
 
-  /** 画板顶栏积分入口：个人模式打开会员弹窗，团队模式打开团队套餐 */
+  /** 画板顶栏积分入口：个人模式打开会员弹窗；企业模式新开企业后台 */
   const openMembershipHub = useCallback(() => {
     if (activeTeamForCredits && !activeTeamForCredits.isPersonal) {
-      setTeamModalInitialTab('subscription');
-      setTeamManagementId(activeTeamForCredits.id);
+      const base = import.meta.env.BASE_URL || "/";
+      const originWithBase = `${window.location.origin}${
+        base.endsWith("/") ? base : `${base}/`
+      }`;
+      const href = new URL(
+        `enterprise/${encodeURIComponent(activeTeamForCredits.id)}/projects`,
+        originWithBase,
+      ).href;
+      window.open(href, "_blank", "noopener,noreferrer");
       return;
     }
     setIsMembershipOpen(true);
   }, [activeTeamForCredits]);
 
+  const openEnterpriseConsole = useCallback((teamId?: string) => {
+    const base = import.meta.env.BASE_URL || "/";
+    const originWithBase = `${window.location.origin}${
+      base.endsWith("/") ? base : `${base}/`
+    }`;
+    const path = teamId
+      ? `enterprise/${encodeURIComponent(teamId)}/projects`
+      : "enterprise";
+    const href = new URL(path, originWithBase).href;
+    window.open(href, "_blank", "noopener,noreferrer");
+  }, []);
+
   const isTeamMode = !!(activeTeamForCredits && !activeTeamForCredits.isPersonal);
+  const brandLogoSrc =
+    isTeamMode && (activeTeamForCredits?.logoUrl || "").trim()
+      ? (activeTeamForCredits!.logoUrl as string).trim()
+      : "/TAI-logo-2.png";
+  const brandLogoAlt =
+    isTeamMode && activeTeamForCredits
+      ? activeTeamForCredits.displayName || activeTeamForCredits.name || "企业"
+      : "TAI";
 
   const topCreditsText = useMemo(() => {
     if (isTeamMode) {
@@ -1290,16 +1312,6 @@ const FloatingHeader: React.FC = () => {
     if (teamMyQuota.personalAvailable === null) return '不限·团队额度';
     return null;
   }, [isTeamMode, teamMyQuota]);
-
-  const handleOpenTeamManage = useCallback((teamId: string, tab?: TeamManageTab) => {
-    if (SHOW_ENTERPRISE_CONSOLE) {
-      // 完整管理引导到企业后台；画布内模态仅作兜底
-      navigate(`/enterprise/${encodeURIComponent(teamId)}${tab === 'subscription' ? '/settings' : '/members'}`);
-      return;
-    }
-    setTeamModalInitialTab(tab ?? 'members');
-    setTeamManagementId(teamId);
-  }, [navigate]);
 
   const isEnglish = i18n.resolvedLanguage?.toLowerCase().startsWith("en");
   const isDarkTheme = chatTheme === "black";
@@ -2396,9 +2408,9 @@ const FloatingHeader: React.FC = () => {
             title={t("workspace.header.backHome")}
           >
             <img
-              src="/TAI-logo-2.png"
-              className='tanva-brand-logo-img h-6 w-auto object-contain'
-              alt='TAI'
+              src={brandLogoSrc}
+              className='tanva-brand-logo-img h-6 w-auto max-w-[120px] object-contain'
+              alt={brandLogoAlt}
               draggable='false'
               style={{
                 imageRendering: "auto",
@@ -2629,30 +2641,15 @@ const FloatingHeader: React.FC = () => {
             )}
 
             {SHOW_WORKSPACE_SWITCHER && (
-              <TeamSwitcher onManage={handleOpenTeamManage} variant="header" />
+              <TeamSwitcher variant="header" />
             )}
-
-            {SHOW_ENTERPRISE_CONSOLE ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2.5 text-xs rounded-full border border-slate-200 bg-white/80 text-slate-700 hover:bg-slate-100 flex items-center gap-1.5"
-                onClick={() => setJoinCodeModalOpen(true)}
-                title="输入企业邀请码"
-              >
-                <Key className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">邀请码</span>
-              </Button>
-            ) : null}
 
             {SHOW_ENTERPRISE_CONSOLE && isTeamMode && activeTeamForCredits?.id ? (
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-7 px-2.5 text-xs rounded-full border border-teal-200/70 bg-teal-50/60 text-teal-800 hover:bg-teal-100/80 flex items-center gap-1.5"
-                onClick={() =>
-                  navigate(`/enterprise/${encodeURIComponent(activeTeamForCredits.id)}`)
-                }
+                onClick={() => openEnterpriseConsole(activeTeamForCredits.id)}
                 title="企业后台"
               >
                 <Building2 className="w-3.5 h-3.5" />
@@ -2663,7 +2660,7 @@ const FloatingHeader: React.FC = () => {
                 variant="ghost"
                 size="sm"
                 className="h-7 px-2.5 text-xs rounded-full border border-teal-200/70 bg-teal-50/60 text-teal-800 hover:bg-teal-100/80 flex items-center gap-1.5"
-                onClick={() => navigate("/enterprise")}
+                onClick={() => openEnterpriseConsole()}
                 title="企业版"
               >
                 <Building2 className="w-3.5 h-3.5" />
@@ -3278,20 +3275,6 @@ const FloatingHeader: React.FC = () => {
           isOpen={isPricingCatalogOpen}
           onClose={() => setIsPricingCatalogOpen(false)}
         />
-
-        {teamManagementId && (
-          <TeamManagementModal
-            teamId={teamManagementId}
-            onClose={() => {
-              setTeamManagementId(null);
-              setTeamModalInitialTab('members');
-            }}
-            initialTab={teamModalInitialTab}
-          />
-        )}
-        {joinCodeModalOpen ? (
-          <EnterpriseJoinCodeModal onClose={() => setJoinCodeModalOpen(false)} />
-        ) : null}
       </div>
     </>
   );

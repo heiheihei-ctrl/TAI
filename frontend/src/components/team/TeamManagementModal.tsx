@@ -16,6 +16,8 @@ interface Props {
   teamId: string;
   onClose: () => void;
   initialTab?: 'members' | 'subscription' | 'topup' | 'ledger';
+  /** 仅展示 initialTab 对应功能，不显示 Tab 切换 */
+  singleTab?: boolean;
 }
 
 type Tab = 'members' | 'subscription' | 'topup' | 'ledger';
@@ -30,7 +32,7 @@ const TAB_LABEL: Record<Tab, string> = {
   ledger: '记录',
 };
 
-export function TeamManagementModal({ teamId, onClose, initialTab }: Props) {
+export function TeamManagementModal({ teamId, onClose, initialTab, singleTab = false }: Props) {
   const { teams } = useTeamStore();
   const currentUser = useAuthStore((s) => s.user);
   const team = teams.find((t) => t.id === teamId);
@@ -38,14 +40,32 @@ export function TeamManagementModal({ teamId, onClose, initialTab }: Props) {
   const canManage = myRole === 'owner' || myRole === 'admin';
   const visibleTabs = canManage ? ALL_TABS : MEMBER_TABS;
   const resolvedInitialTab =
-    initialTab && visibleTabs.includes(initialTab) ? initialTab : 'members';
+    initialTab && (singleTab || visibleTabs.includes(initialTab))
+      ? initialTab
+      : 'members';
   const [tab, setTab] = useState<Tab>(resolvedInitialTab);
 
   useEffect(() => {
+    if (singleTab) {
+      setTab(resolvedInitialTab);
+      return;
+    }
     if (!visibleTabs.includes(tab)) {
       setTab('members');
     }
-  }, [tab, visibleTabs]);
+  }, [tab, visibleTabs, singleTab, resolvedInitialTab]);
+
+  const headerTitle =
+    singleTab && tab === 'subscription'
+      ? '购买席位'
+      : singleTab && tab === 'topup'
+        ? '积分充值'
+        : team?.name ?? '团队管理';
+  const headerSubtitle = singleTab
+    ? team?.name ?? ''
+    : canManage
+      ? '成员管理 / 配额设置'
+      : '成员与配额';
 
   return createPortal(
     <div
@@ -59,24 +79,28 @@ export function TeamManagementModal({ teamId, onClose, initialTab }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div>
-            <h2 className="text-base font-semibold text-slate-800">
-              {team?.name ?? '团队管理'}
-            </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {canManage ? '成员管理 / 配额设置' : '成员与配额'}
-              {' · '}
-              <a
-                href={`/enterprise/${encodeURIComponent(teamId)}`}
-                className="text-teal-600 hover:underline"
-                onClick={(e) => {
-                  e.preventDefault();
-                  onClose();
-                  window.location.assign(`/enterprise/${encodeURIComponent(teamId)}`);
-                }}
-              >
-                打开企业后台
-              </a>
-            </p>
+            <h2 className="text-base font-semibold text-slate-800">{headerTitle}</h2>
+            {headerSubtitle ? (
+              <p className="text-xs text-slate-400 mt-0.5">
+                {headerSubtitle}
+                {!singleTab ? (
+                  <>
+                    {' · '}
+                    <a
+                      href={`/enterprise/${encodeURIComponent(teamId)}`}
+                      className="text-teal-600 hover:underline"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        onClose();
+                        window.location.assign(`/enterprise/${encodeURIComponent(teamId)}`);
+                      }}
+                    >
+                      打开企业后台
+                    </a>
+                  </>
+                ) : null}
+              </p>
+            ) : null}
           </div>
           <button
             onClick={onClose}
@@ -86,23 +110,25 @@ export function TeamManagementModal({ teamId, onClose, initialTab }: Props) {
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex px-6 border-b border-slate-100 gap-4">
-          {visibleTabs.map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={cn(
-                'py-3 text-sm font-medium border-b-2 transition-colors',
-                tab === t
-                  ? 'border-slate-800 text-slate-800'
-                  : 'border-transparent text-slate-400 hover:text-slate-600',
-              )}
-            >
-              {TAB_LABEL[t]}
-            </button>
-          ))}
-        </div>
+        {/* Tabs — singleTab 时隐藏 */}
+        {!singleTab ? (
+          <div className="flex px-6 border-b border-slate-100 gap-4">
+            {visibleTabs.map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={cn(
+                  'py-3 text-sm font-medium border-b-2 transition-colors',
+                  tab === t
+                    ? 'border-slate-800 text-slate-800'
+                    : 'border-transparent text-slate-400 hover:text-slate-600',
+                )}
+              >
+                {TAB_LABEL[t]}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         <div className="max-h-[60vh] overflow-y-auto">
           {tab === 'members' ? (

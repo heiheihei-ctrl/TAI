@@ -92,9 +92,6 @@ import {
   type EventSettingsConfig,
   getAdminTeams,
   adminCreateEnterprise,
-  getAdminProjects,
-  adminDeleteProject,
-  adminAssignProjectEnterprise,
   getAdminTeamMembers,
   adminAddTeamCredits,
   adminDeductTeamCredits,
@@ -103,7 +100,6 @@ import {
   adminDeleteTeam,
   getAdminTeamCreditHistory,
   type AdminTeam,
-  type AdminProjectRow,
   type AdminTeamMember,
   type AdminTeamCreditHistory,
 } from "@/services/adminApi";
@@ -4579,7 +4575,7 @@ function UsersTab({
 }: {
   canManageSensitiveUserFields: boolean;
 }) {
-  const [usersSubTab, setUsersSubTab] = useState<"users" | "teams" | "projects">("users");
+  const [usersSubTab, setUsersSubTab] = useState<"users" | "teams">("users");
 
   const currentUserId = useAuthStore((state) => state.user?.id);
   const [users, setUsers] = useState<UserWithCredits[]>([]);
@@ -4939,13 +4935,12 @@ function UsersTab({
       <div className='rounded-lg border bg-white p-2 shadow-sm'>
         <div className='flex flex-wrap gap-2'>
           {[
-            { key: "users", label: "用户列表" },
-            { key: "teams", label: "企业列表" },
-            { key: "projects", label: "项目管理" },
+            { key: "users" as const, label: "用户列表" },
+            { key: "teams" as const, label: "企业列表" },
           ].map((tab) => (
             <button
               key={tab.key}
-              onClick={() => setUsersSubTab(tab.key as "users" | "teams" | "projects")}
+              onClick={() => setUsersSubTab(tab.key)}
               className={`rounded-md px-4 py-2 text-sm font-medium transition ${
                 usersSubTab === tab.key
                   ? "bg-blue-100 text-blue-700"
@@ -5780,9 +5775,6 @@ function UsersTab({
 
       {usersSubTab === "teams" && (
         <TeamsTab />
-      )}
-      {usersSubTab === "projects" && (
-        <ProjectsTab />
       )}
     </div>
   );
@@ -7328,239 +7320,6 @@ function TemplatesTab() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// 项目管理 Tab（平台后台，与企业账户分离）
-function ProjectsTab() {
-  const [projects, setProjects] = useState<AdminProjectRow[]>([]);
-  const [enterprises, setEnterprises] = useState<AdminTeam[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState("");
-  const [scope, setScope] = useState<"all" | "personal" | "enterprise">("all");
-  const [enterpriseId, setEnterpriseId] = useState("");
-  const [pagination, setPagination] = useState<Pagination>({
-    page: 1,
-    pageSize: 20,
-    total: 0,
-    totalPages: 0,
-  });
-  const [error, setError] = useState("");
-  const [assigningId, setAssigningId] = useState<string | null>(null);
-
-  const loadProjects = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const result = await getAdminProjects({
-        search: search || undefined,
-        scope,
-        enterpriseId: enterpriseId || undefined,
-        page: pagination.page,
-        pageSize: pagination.pageSize,
-      });
-      setProjects(result.projects);
-      setPagination((p) => ({ ...p, ...result.pagination }));
-    } catch (err) {
-      setError((err as Error).message || "加载项目失败");
-    } finally {
-      setLoading(false);
-    }
-  }, [search, scope, enterpriseId, pagination.page, pagination.pageSize]);
-
-  useEffect(() => {
-    void loadProjects();
-  }, [loadProjects]);
-
-  useEffect(() => {
-    void getAdminTeams({ page: 1, pageSize: 200 })
-      .then((res) => setEnterprises(res.teams))
-      .catch(() => setEnterprises([]));
-  }, []);
-
-  const handleDelete = async (project: AdminProjectRow) => {
-    if (!window.confirm(`确定删除项目「${project.name}」？此操作不可恢复。`)) return;
-    try {
-      await adminDeleteProject(project.id);
-      void loadProjects();
-    } catch (err) {
-      setError((err as Error).message || "删除失败");
-    }
-  };
-
-  const handleAssign = async (projectId: string, nextEnterpriseId: string) => {
-    setAssigningId(projectId);
-    setError("");
-    try {
-      await adminAssignProjectEnterprise(
-        projectId,
-        nextEnterpriseId ? nextEnterpriseId : null,
-      );
-      void loadProjects();
-    } catch (err) {
-      setError((err as Error).message || "归属调整失败");
-    } finally {
-      setAssigningId(null);
-    }
-  };
-
-  const scopeLabel = (scopeValue: string) => {
-    if (scopeValue === "enterprise") return "企业项目";
-    if (scopeValue === "personal") return "个人项目";
-    return "其他";
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h2 className="text-lg font-semibold">项目管理</h2>
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={scope}
-            onChange={(e) => {
-              setScope(e.target.value as "all" | "personal" | "enterprise");
-              setPagination((p) => ({ ...p, page: 1 }));
-            }}
-            className="h-9 rounded-md border px-2 text-sm"
-          >
-            <option value="all">全部范围</option>
-            <option value="personal">个人项目</option>
-            <option value="enterprise">企业项目</option>
-          </select>
-          <select
-            value={enterpriseId}
-            onChange={(e) => {
-              setEnterpriseId(e.target.value);
-              setPagination((p) => ({ ...p, page: 1 }));
-            }}
-            className="h-9 max-w-[200px] rounded-md border px-2 text-sm"
-          >
-            <option value="">全部企业</option>
-            {enterprises.map((ent) => (
-              <option key={ent.enterpriseId || ent.id} value={ent.enterpriseId || ""}>
-                {ent.displayName || ent.name}
-              </option>
-            ))}
-          </select>
-          <Input
-            placeholder="搜索项目名 / 用户 / 企业"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPagination((p) => ({ ...p, page: 1 }));
-            }}
-            className="w-64"
-          />
-          <Button onClick={() => void loadProjects()}>搜索</Button>
-        </div>
-      </div>
-
-      {error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-red-700">
-          {error}
-        </div>
-      ) : null}
-
-      <Card>
-        <CardContent className="p-0">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b bg-gray-50">
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">项目名称</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">归属</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">创建者</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">所属企业</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">更新时间</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="py-8 text-center">
-                    <LoadingSpinner />
-                  </td>
-                </tr>
-              ) : projects.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-8 text-center text-gray-500">
-                    暂无项目
-                  </td>
-                </tr>
-              ) : (
-                projects.map((project) => (
-                  <tr key={project.id} className="border-b hover:bg-gray-50">
-                    <td className="px-4 py-3">{project.name}</td>
-                    <td className="px-4 py-3 text-sm">{scopeLabel(project.scope)}</td>
-                    <td className="px-4 py-3">
-                      <div>{project.user.name || project.user.phone}</div>
-                      <div className="text-xs text-gray-400">{project.user.phone}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <select
-                        disabled={assigningId === project.id}
-                        value={project.enterpriseId || ""}
-                        onChange={(e) => void handleAssign(project.id, e.target.value)}
-                        className="h-8 max-w-[180px] rounded-md border px-2 text-xs"
-                      >
-                        <option value="">未归属企业</option>
-                        {enterprises.map((ent) => (
-                          <option
-                            key={ent.enterpriseId || ent.id}
-                            value={ent.enterpriseId || ""}
-                          >
-                            {ent.displayName || ent.name}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      {new Date(project.updatedAt).toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-600 hover:text-red-700"
-                        onClick={() => void handleDelete(project)}
-                      >
-                        删除
-                      </Button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </CardContent>
-        {pagination.total > 0 && (
-          <CardFooter className="flex items-center justify-between border-t bg-gray-50">
-            <span className="text-sm text-gray-500">共 {pagination.total} 条记录</span>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={pagination.page <= 1}
-                onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}
-              >
-                上一页
-              </Button>
-              <span className="text-sm">
-                {pagination.page} / {pagination.totalPages || 1}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={pagination.page >= pagination.totalPages}
-                onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}
-              >
-                下一页
-              </Button>
-            </div>
-          </CardFooter>
-        )}
-      </Card>
     </div>
   );
 }

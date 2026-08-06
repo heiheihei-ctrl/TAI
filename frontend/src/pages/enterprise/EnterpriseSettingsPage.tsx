@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Building2, Loader2, Upload } from "lucide-react";
 import { teamApi, type TeamMember } from "@/services/teamApi";
 import { teamCreditsApi, teamMyQuotaApi } from "@/services/teamCreditsApi";
 import { refreshTeams, useTeamStore } from "@/stores/teamStore";
 import { TeamManagementModal } from "@/components/team/TeamManagementModal";
+import { uploadToOSS } from "@/services/ossUploadService";
 
 export default function EnterpriseSettingsPage() {
   const { teamId = "" } = useParams<{ teamId: string }>();
@@ -12,16 +14,18 @@ export default function EnterpriseSettingsPage() {
   const myRole = team?.myRole;
   const canManage = myRole === "owner" || myRole === "admin";
   const isOwner = myRole === "owner";
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (team && !canManage) {
-      navigate(`/enterprise/${teamId}`, { replace: true });
+      navigate(`/enterprise/${teamId}/projects`, { replace: true });
     }
   }, [team, canManage, navigate, teamId]);
 
   const [name, setName] = useState(team?.name || "");
   const [displayName, setDisplayName] = useState(team?.displayName || team?.name || "");
   const [logoUrl, setLogoUrl] = useState(team?.logoUrl || "");
+  const [logoUploading, setLogoUploading] = useState(false);
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [transferTo, setTransferTo] = useState("");
   const [credits, setCredits] = useState(0);
@@ -53,6 +57,35 @@ export default function EnterpriseSettingsPage() {
       .then(([, , q]) => setQuota(q))
       .catch((err: any) => setError(err?.message || "加载失败"));
   }, [teamId]);
+
+  const handleLogoSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !canManage) return;
+    if (!file.type.startsWith("image/")) {
+      setError("请选择图片文件");
+      event.target.value = "";
+      return;
+    }
+    setLogoUploading(true);
+    setError("");
+    try {
+      const uploadResult = await uploadToOSS(file, {
+        dir: "uploads/enterprise-logos/",
+        fileName: file.name || `logo-${teamId || Date.now()}.png`,
+        contentType: file.type || "image/png",
+      });
+      if (!uploadResult.success || !uploadResult.url) {
+        throw new Error(uploadResult.error || "Logo 上传失败");
+      }
+      setLogoUrl(uploadResult.url);
+      setMessage("Logo 已上传，请点击保存生效");
+    } catch (err: any) {
+      setError(err?.message || "Logo 上传失败");
+    } finally {
+      setLogoUploading(false);
+      event.target.value = "";
+    }
+  };
 
   const saveProfile = async () => {
     if (!canManage || busy) return;
@@ -210,21 +243,64 @@ export default function EnterpriseSettingsPage() {
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50"
             />
           </label>
-          <label className="text-xs text-slate-500 md:col-span-2">
-            Logo URL
-            <input
-              value={logoUrl}
-              disabled={!canManage}
-              onChange={(e) => setLogoUrl(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50"
-              placeholder="https://..."
-            />
-          </label>
+          <div className="md:col-span-2">
+            <div className="text-xs text-slate-500">企业 Logo</div>
+            <p className="mt-1 text-[11px] text-slate-400">
+              上传后将显示在画布页左上角 Logo 位置（企业工作区）
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                {logoUrl ? (
+                  <img
+                    src={logoUrl}
+                    alt="企业 Logo"
+                    className="h-full w-full object-contain"
+                  />
+                ) : (
+                  <Building2 className="h-6 w-6 text-slate-300" />
+                )}
+              </div>
+              {canManage ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => void handleLogoSelect(e)}
+                  />
+                  <button
+                    type="button"
+                    disabled={logoUploading || busy}
+                    onClick={() => logoInputRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    {logoUploading ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Upload className="h-3.5 w-3.5" />
+                    )}
+                    {logoUploading ? "上传中…" : "上传图片"}
+                  </button>
+                  {logoUrl ? (
+                    <button
+                      type="button"
+                      disabled={logoUploading || busy}
+                      onClick={() => setLogoUrl("")}
+                      className="rounded-xl px-3 py-2 text-sm text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      清除
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
         </div>
         {canManage ? (
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || logoUploading}
             onClick={() => void saveProfile()}
             className="mt-4 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           >
@@ -275,6 +351,7 @@ export default function EnterpriseSettingsPage() {
         <TeamManagementModal
           teamId={teamId}
           initialTab={modalTab}
+          singleTab
           onClose={() => {
             setModalTab(null);
             void teamCreditsApi

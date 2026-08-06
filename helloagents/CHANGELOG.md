@@ -6,6 +6,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 ### Changed
+- Enterprise console: `/enterprise` 仅账号密码登录；默认落地项目管理；企业成员隐藏「新建团队」；Admin 用户管理去掉「项目管理」子 Tab（见 `enterprise-console.md`）。
 - Membership credits: VIP 弹窗「立即到账」与后端月卡额度对齐——`69/199/599` 分别为 `8700/22000/69000`（`signupBonusCredits=0`），`599` 每日签到 `150`（migration `202608050001_align_membership_plan_credits`）。
 - Profile completion: **真实姓名 → 昵称**，**年龄 → 生日（年月日）**，新增 **邮箱**，**所在地区** 改为省/市点选，完善资料奖励 **50 → 100 积分**（`User.profileNickname` / `profileBirthday` / `profileEmail` migration `202606230001_update_user_extended_profile_fields`）。
 - New API / Video Enhance: `volc-enhance-video` now supports direct Volcengine AI MediaKit routing through the `volcengine` adapter, while the older Tencent VOD procedure path remains only as a compatibility option for existing mappings.

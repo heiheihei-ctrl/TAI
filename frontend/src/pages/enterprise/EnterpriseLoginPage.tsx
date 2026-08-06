@@ -1,26 +1,22 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Building2, Eye, EyeOff, Loader2, LogIn } from "lucide-react";
+import { Building2, Eye, EyeOff, Loader2 } from "lucide-react";
 import { SHOW_ENTERPRISE_CONSOLE } from "@/config/featureFlags";
 import { useAuthStore } from "@/stores/authStore";
 import { refreshTeams, useTeamStore } from "@/stores/teamStore";
-import { parseTeamInviteCode } from "@/utils/teamInvite";
-import { teamApi } from "@/services/teamApi";
+import { pickPreferredEnterprise } from "@/utils/enterpriseAccess";
 import WelcomeShaderBackground from "@/components/background/WelcomeShaderBackground";
 
-function pickEnterprises(teams: Awaited<ReturnType<typeof refreshTeams>>) {
-  return teams.filter((t) => !t.isPersonal && t.enterpriseEnabled !== false);
-}
-
 /**
- * 企业版入口：企业账号登录页。
- * 已登录且有企业权限时自动进入后台。
+ * 企业版入口：纯账号密码登录。
+ * 有企业权限 → 进该企业项目管理；否则留在本页继续用表单登录（不展示「非成员」引导页）。
  */
 export default function EnterpriseLoginPage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const authInitializing = useAuthStore((s) => s.initializing);
   const login = useAuthStore((s) => s.login);
+  const logout = useAuthStore((s) => s.logout);
   const error = useAuthStore((s) => s.error);
   const clearError = useAuthStore((s) => s.clearError);
   const setActiveTeamId = useTeamStore((s) => s.setActiveTeamId);
@@ -30,35 +26,27 @@ export default function EnterpriseLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
-  const [inviteBusy, setInviteBusy] = useState(false);
-  const [inviteMsg, setInviteMsg] = useState("");
-  const [noEnterprise, setNoEnterprise] = useState(false);
 
-  const enterConsole = async (teams?: Awaited<ReturnType<typeof refreshTeams>>) => {
-    const list = teams ?? (await refreshTeams().catch(() => useTeamStore.getState().teams));
-    const enterprises = pickEnterprises(list);
-    if (enterprises.length === 0) {
-      setNoEnterprise(true);
-      setLocalError("该账号尚未开通企业，请联系 TAI 平台或使用邀请码申请加入");
-      return false;
-    }
-    setNoEnterprise(false);
-    const preferred =
-      enterprises.find((t) => t.myRole === "owner" || t.myRole === "admin") ||
-      enterprises[0];
+  const tryEnterConsole = async (
+    teams?: Awaited<ReturnType<typeof refreshTeams>>,
+  ): Promise<boolean> => {
+    const list =
+      teams ?? (await refreshTeams().catch(() => useTeamStore.getState().teams));
+    const preferred = pickPreferredEnterprise(list);
+    if (!preferred) return false;
     setActiveTeamId(preferred.id);
-    navigate(`/enterprise/${preferred.id}`, { replace: true });
+    navigate(`/enterprise/${preferred.id}/projects`, { replace: true });
     return true;
   };
 
+  // 已登录且有企业 → 静默进后台；无企业 → 保持登录表单，不切「非成员」页
   useEffect(() => {
     if (!SHOW_ENTERPRISE_CONSOLE) {
       navigate("/app", { replace: true });
       return;
     }
     if (authInitializing || !user) return;
-    void enterConsole();
+    void tryEnterConsole();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, authInitializing]);
 
@@ -69,36 +57,23 @@ export default function EnterpriseLoginPage() {
     if (busy) return;
     setBusy(true);
     setLocalError("");
-    setInviteMsg("");
     clearError();
     try {
+      // 换号登录前先清掉当前会话，避免个人账号挡住企业表单
+      if (user) {
+        await logout().catch(() => undefined);
+      }
       await login(phone.trim(), password);
-      await enterConsole();
-    } catch (err: any) {
-      setLocalError(err?.message || error || "登录失败");
+      const entered = await tryEnterConsole();
+      if (!entered) {
+        setLocalError("账号或密码错误，或该账号无权进入企业后台");
+      }
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : error || "登录失败";
+      setLocalError(message);
     } finally {
       setBusy(false);
-    }
-  };
-
-  const handleApply = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const code = parseTeamInviteCode(inviteCode) || inviteCode.trim();
-    if (!code || inviteBusy) return;
-    if (!user) {
-      setInviteMsg("请先登录企业账号，再提交邀请码申请");
-      return;
-    }
-    setInviteBusy(true);
-    setInviteMsg("");
-    try {
-      const result = await teamApi.joinByCode(code);
-      setInviteMsg(result.message || "申请已提交，请等待企业管理员审核");
-      setInviteCode("");
-    } catch (err: any) {
-      setInviteMsg(err?.message || "提交失败");
-    } finally {
-      setInviteBusy(false);
     }
   };
 
@@ -113,115 +88,59 @@ export default function EnterpriseLoginPage() {
             <Building2 className="h-7 w-7" />
           </div>
           <h1 className="text-2xl font-semibold tracking-tight">企业版登录</h1>
-          <p className="mt-2 text-sm text-white/55">
-            使用平台派发的企业管理员账号，或已加入企业的成员账号登录
-          </p>
+          <p className="mt-2 text-sm text-white/55">请使用企业账号登录</p>
         </div>
 
-        {!user ? (
-          <form
-            onSubmit={handleSubmit}
-            className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-md"
-          >
-            <label className="mb-4 block text-xs text-white/50">
-              手机号
+        <form
+          onSubmit={handleSubmit}
+          className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-md"
+        >
+          <label className="mb-4 block text-xs text-white/50">
+            手机号
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="手机号"
+              className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-sm text-white outline-none placeholder:text-white/30 focus:border-teal-400/50"
+              autoComplete="username"
+            />
+          </label>
+          <label className="mb-4 block text-xs text-white/50">
+            密码
+            <div className="relative mt-1.5">
               <input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="企业账号手机号"
-                className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-sm text-white outline-none placeholder:text-white/30 focus:border-teal-400/50"
-                autoComplete="username"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="密码"
+                className="w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 pr-10 text-sm text-white outline-none placeholder:text-white/30 focus:border-teal-400/50"
+                autoComplete="current-password"
               />
-            </label>
-            <label className="mb-4 block text-xs text-white/50">
-              密码
-              <div className="relative mt-1.5">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="登录密码"
-                  className="w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 pr-10 text-sm text-white outline-none placeholder:text-white/30 focus:border-teal-400/50"
-                  autoComplete="current-password"
-                />
-                <button
-                  type="button"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40"
-                  onClick={() => setShowPassword((v) => !v)}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </label>
-
-            {(localError || error) && (
-              <p className="mb-3 text-center text-sm text-rose-300">{localError || error}</p>
-            )}
-
-            <button
-              type="submit"
-              disabled={busy || !phone.trim() || !password}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-teal-500 py-2.5 text-sm font-medium text-white disabled:opacity-50"
-            >
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {busy ? "登录中…" : "登录企业后台"}
-            </button>
-          </form>
-        ) : (
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-md">
-            <p className="text-sm text-white/70">
-              已登录为 {user.phone || user.name || "当前账号"}
-            </p>
-            {localError ? (
-              <p className="mt-3 text-sm text-rose-300">{localError}</p>
-            ) : (
-              <p className="mt-3 text-sm text-white/45">正在进入企业后台…</p>
-            )}
-            {noEnterprise ? (
               <button
                 type="button"
-                onClick={() => void enterConsole()}
-                className="mt-4 w-full rounded-xl border border-white/15 py-2 text-sm text-white/80 hover:bg-white/10"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40"
+                onClick={() => setShowPassword((v) => !v)}
               >
-                重新检查企业权限
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
-            ) : null}
-          </div>
-        )}
+            </div>
+          </label>
 
-        <form
-          onSubmit={handleApply}
-          className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-md"
-        >
-          <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-            <LogIn className="h-4 w-4" />
-            邀请码申请加入
-          </div>
-          <input
-            value={inviteCode}
-            onChange={(e) => setInviteCode(e.target.value)}
-            placeholder="输入邀请码或粘贴邀请链接"
-            className="mb-3 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm outline-none placeholder:text-white/30 focus:border-teal-400/50"
-          />
+          {(localError || error) && (
+            <p className="mb-3 text-center text-sm text-rose-300">{localError || error}</p>
+          )}
+
           <button
             type="submit"
-            disabled={inviteBusy || !inviteCode.trim()}
-            className="w-full rounded-xl border border-teal-400/40 bg-teal-500/20 py-2.5 text-sm font-medium text-teal-100 disabled:opacity-50"
+            disabled={busy || !phone.trim() || !password}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-teal-500 py-2.5 text-sm font-medium text-white disabled:opacity-50"
           >
-            {inviteBusy ? "提交中…" : "提交申请"}
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {busy ? "登录中…" : "登录"}
           </button>
-          {inviteMsg ? (
-            <p className="mt-3 text-center text-sm text-teal-200">{inviteMsg}</p>
-          ) : null}
         </form>
 
-        <div className="mt-6 space-y-2 text-center text-sm text-white/40">
-          <p>
-            个人创作请{" "}
-            <Link to="/auth/login" className="text-teal-300 hover:underline">
-              前往个人登录
-            </Link>
-          </p>
+        <div className="mt-6 text-center text-sm text-white/40">
           <button
             type="button"
             onClick={() => navigate("/")}

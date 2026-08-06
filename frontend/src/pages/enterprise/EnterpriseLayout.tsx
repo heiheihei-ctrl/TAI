@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { SHOW_ENTERPRISE_CONSOLE } from "@/config/featureFlags";
 import { useTeamStore, refreshTeams } from "@/stores/teamStore";
+import { pickEnterprises } from "@/utils/enterpriseAccess";
 import { cn } from "@/lib/utils";
 
 export default function EnterpriseLayout() {
@@ -22,34 +23,31 @@ export default function EnterpriseLayout() {
   const teams = useTeamStore((s) => s.teams);
   const setActiveTeamId = useTeamStore((s) => s.setActiveTeamId);
 
-  const enterprises = useMemo(
-    () => teams.filter((t) => !t.isPersonal && t.enterpriseEnabled !== false),
-    [teams]
-  );
+  const enterprises = useMemo(() => pickEnterprises(teams), [teams]);
 
   const team = useMemo(
     () => enterprises.find((t) => t.id === teamId) ?? null,
-    [enterprises, teamId]
+    [enterprises, teamId],
   );
   const canManage = team?.myRole === "owner" || team?.myRole === "admin";
 
+  // 全员可见：项目管理、素材库、总览；管理项仅 admin/owner
   const nav = useMemo(() => {
     const items: Array<{
       to: string;
-      end?: boolean;
       label: string;
       icon: typeof LayoutDashboard;
     }> = [
-      { to: "", end: true, label: "总览", icon: LayoutDashboard },
+      { to: "projects", label: "项目管理", icon: FolderKanban },
       { to: "assets", label: "素材库", icon: FolderOpen },
+      { to: "overview", label: "总览", icon: LayoutDashboard },
     ];
     if (canManage) {
-      items.splice(1, 0,
-        { to: "projects", label: "项目管理", icon: FolderKanban },
+      items.push(
         { to: "members", label: "席位管理", icon: Users },
         { to: "requests", label: "加入申请", icon: ClipboardList },
+        { to: "settings", label: "企业设置", icon: Settings },
       );
-      items.push({ to: "settings", label: "企业设置", icon: Settings });
     }
     return items;
   }, [canManage]);
@@ -83,7 +81,7 @@ export default function EnterpriseLayout() {
   const switchEnterprise = (nextId: string) => {
     if (!nextId || nextId === teamId) return;
     setActiveTeamId(nextId);
-    navigate(`/enterprise/${nextId}`);
+    navigate(`/enterprise/${nextId}/projects`);
   };
 
   return (
@@ -104,48 +102,22 @@ export default function EnterpriseLayout() {
                 </div>
               </div>
             </div>
-
-            {enterprises.length > 1 ? (
-              <label className="block text-[11px] text-slate-400">
-                切换身份 / 企业
-                <div className="relative mt-1">
-                  <select
-                    value={teamId || ""}
-                    onChange={(e) => switchEnterprise(e.target.value)}
-                    className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 py-2 pl-3 pr-8 text-xs text-slate-700 outline-none"
-                  >
-                    {enterprises.map((ent) => (
-                      <option key={ent.id} value={ent.id}>
-                        {ent.displayName || ent.name}
-                        {ent.myRole === "owner" || ent.myRole === "admin"
-                          ? "（管理）"
-                          : "（成员）"}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                </div>
-              </label>
-            ) : null}
           </div>
 
           <nav className="flex flex-1 flex-col gap-1">
             {nav.map((item) => {
               const Icon = item.icon;
-              const path = item.to
-                ? `/enterprise/${teamId}/${item.to}`
-                : `/enterprise/${teamId}`;
+              const path = `/enterprise/${teamId}/${item.to}`;
               return (
                 <NavLink
                   key={item.label}
                   to={path}
-                  end={Boolean(item.end)}
                   className={({ isActive }) =>
                     cn(
                       "flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm transition-colors",
                       isActive
                         ? "bg-slate-900 text-white"
-                        : "text-slate-600 hover:bg-slate-100"
+                        : "text-slate-600 hover:bg-slate-100",
                     )
                   }
                 >
@@ -157,6 +129,25 @@ export default function EnterpriseLayout() {
           </nav>
 
           <div className="mt-4 space-y-2 border-t border-slate-100 pt-4">
+            {enterprises.length > 1 ? (
+              <label className="block px-1 text-[10px] text-slate-400">
+                其他企业
+                <div className="relative mt-1">
+                  <select
+                    value={teamId || ""}
+                    onChange={(e) => switchEnterprise(e.target.value)}
+                    className="w-full appearance-none rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-2.5 pr-7 text-[11px] text-slate-600 outline-none"
+                  >
+                    {enterprises.map((ent) => (
+                      <option key={ent.id} value={ent.id}>
+                        {ent.displayName || ent.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
+                </div>
+              </label>
+            ) : null}
             <button
               type="button"
               onClick={enterWorkspace}
