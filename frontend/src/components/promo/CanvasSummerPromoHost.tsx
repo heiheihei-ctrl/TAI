@@ -142,7 +142,7 @@ export default function CanvasSummerPromoHost() {
               <button
                 type="button"
                 onClick={handleCta}
-                className="absolute bottom-4 left-1/2 -translate-x-1/2 transition hover:brightness-110 active:scale-[0.98]"
+                className="absolute bottom-9 left-1/2 -translate-x-1/2 transition hover:brightness-110 active:scale-[0.98]"
               >
                 <img
                   src={payBtn}

@@ -71,24 +71,8 @@ export class MembershipSchedulerService {
 
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async handleGiftDecay() {
-    if (this.giftDecayJobRunning) {
-      this.logger.warn('跳过赠送积分衰减：上一次任务尚未完成');
-      return;
-    }
-
-    this.giftDecayJobRunning = true;
-    try {
-      const result = await this.membershipService.decayDailyGiftCredits();
-      if (result.affectedUsers > 0 || result.decayedCredits > 0) {
-        this.logger.log(
-          `赠送积分衰减完成: users=${result.affectedUsers}, decayedCredits=${result.decayedCredits}, updatedLots=${result.updatedLots}`,
-        );
-      }
-    } catch (error) {
-      this.logger.error('赠送积分衰减失败:', error);
-    } finally {
-      this.giftDecayJobRunning = false;
-    }
+    // Product policy: daily gift credit decay is disabled.
+    return;
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_5AM)
@@ -99,23 +83,7 @@ export class MembershipSchedulerService {
 
   @Cron(CronExpression.EVERY_DAY_AT_4AM)
   async handleYearlyQuotaRefresh() {
-    if (this.yearlyRefreshJobRunning) {
-      this.logger.warn('跳过年费会员月度额度刷新：上一次任务尚未完成');
-      return;
-    }
-
-    this.yearlyRefreshJobRunning = true;
-    try {
-      const result = await this.membershipService.refreshYearlySubscriptionQuotaLots();
-      if (result.refreshedSubscriptions > 0 || result.grantedCredits > 0) {
-        this.logger.log(
-          `年费会员月度额度刷新完成: subscriptions=${result.refreshedSubscriptions}, grantedCredits=${result.grantedCredits}, createdLots=${result.createdLots}`,
-        );
-      }
-    } catch (error) {
-      this.logger.error('年费会员月度额度刷新失败:', error);
-    } finally {
-      this.yearlyRefreshJobRunning = false;
-    }
+    // Product policy: yearly subscription monthly quota refresh is disabled.
+    return;
   }
 }
