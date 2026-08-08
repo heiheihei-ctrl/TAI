@@ -83,6 +83,7 @@ import { useGlobalPaymentPoll } from "@/hooks/useGlobalPaymentPoll";
 import MembershipPanel from "@/components/payment/MembershipPanel";
 import { SHOW_TEAM_COLLABORATION, SHOW_ENTERPRISE_CONSOLE, SHOW_WORKSPACE_SWITCHER } from "@/config/featureFlags";
 import { TeamSwitcher } from "@/components/team/TeamSwitcher";
+import { EnterpriseLedgerModal } from "@/components/team/EnterpriseLedgerModal";
 import { refreshTeams, useTeamStore } from "@/stores/teamStore";
 import { canAccessEnterpriseConsole } from "@/utils/enterpriseAccess";
 import {
@@ -349,6 +350,7 @@ const FloatingHeader: React.FC = () => {
   const [showMemoryDebug, setShowMemoryDebug] = useState(false);
   const [showHistoryDebug, setShowHistoryDebug] = useState(false);
   const [isMembershipOpen, setIsMembershipOpen] = useState(false);
+  const [teamLedgerOpen, setTeamLedgerOpen] = useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [teamMyQuota, setTeamMyQuota] = useState<MyTeamQuota | null>(null);
   const [teamMyQuotaLoading, setTeamMyQuotaLoading] = useState(false);
@@ -1255,18 +1257,10 @@ const FloatingHeader: React.FC = () => {
     window.open(href, "_blank", "noopener,noreferrer");
   }, []);
 
-  /** 画板顶栏积分入口：个人模式打开会员弹窗；企业模式新开企业后台 */
+  /** 画板顶栏积分入口：个人模式打开会员弹窗；企业模式打开团队积分流水弹窗 */
   const openMembershipHub = useCallback(() => {
     if (activeTeamForCredits && !activeTeamForCredits.isPersonal) {
-      const base = import.meta.env.BASE_URL || "/";
-      const originWithBase = `${window.location.origin}${
-        base.endsWith("/") ? base : `${base}/`
-      }`;
-      const href = new URL(
-        `enterprise/${encodeURIComponent(activeTeamForCredits.id)}/projects`,
-        originWithBase,
-      ).href;
-      window.open(href, "_blank", "noopener,noreferrer");
+      setTeamLedgerOpen(true);
       return;
     }
     setIsMembershipOpen(true);
@@ -2439,6 +2433,12 @@ const FloatingHeader: React.FC = () => {
               }}
             />
           </div>
+          {/* 企业显示名（显示在 Logo 右侧） */}
+          {isTeamMode && (activeTeamForCredits?.displayName || "").trim() && (
+            <span className='hidden sm:inline-block text-sm font-medium text-slate-700 max-w-[80px] truncate'>
+              {(activeTeamForCredits!.displayName as string).trim()}
+            </span>
+          )}
           {/* 闂傚倸鍊搁崐椋庣矆娓氣偓楠炲鏁嶉崟顒佹闂佸湱鍎ら崵锕€鈽夊Ο閿嬫杸闂佺硶鈧磭绠查柣蹇庣窔閹嘲顭ㄩ崟顒夋閻?*/}
           <div className='tanva-header-divider w-px h-5 bg-gray-300/40' />
 
@@ -3274,7 +3274,19 @@ const FloatingHeader: React.FC = () => {
             document.body
           )}
 
-        {/* 闂傚倸鍊搁崐椋庣矆娓氣偓楠炲鏁撻悩鑼槷闂佸搫娲㈤崹鍦不閻樿绠规繛锝庡墮婵′粙鏌涚€ｃ劌鈧繈寮婚弴鐔虹鐟滃秶鈧凹鍓熼、鏃堝煛閸涱喒鎷洪梺鍛婄☉閿曘倖鎱ㄩ敃鍌涚厱婵☆垵顕ч崝銈夊础闁秵鐓欓梻鍌氼嚟閸斿秹鏌嶉柨瀣诞闁哄本鐩、鏇㈡晲閸ワ絾顫嶉梻浣筋嚙濞存碍绂嶅┑鍫熷床?*/}
+        {/* 团队积分流水弹窗：企业模式点击积分徽章打开 */}
+        {teamLedgerOpen && activeTeamForCredits && !activeTeamForCredits.isPersonal && (
+          <EnterpriseLedgerModal
+            teamId={activeTeamForCredits.id}
+            onClose={() => {
+              setTeamLedgerOpen(false);
+              void refreshTeamMyQuota(activeTeamForCredits.id);
+              window.dispatchEvent(new CustomEvent("refresh-credits"));
+            }}
+          />
+        )}
+
+        {/* 闂傚倸鍊搁崐椋庣矆娓氣偓楠炲鏁撻悩鑼槷闂佸搫娲㈤崹鍦不閻樿绠规繛锝庡墮婵′粙鏌涚€ｃ劌鈧繈寮婚弴鐔虹鐟滃秶鈧凹鍓熼、鏃堝煛閸涱喒鎷洪梺鍛婄☉閿曘倖鎱ㄩ敃鍌涚厱婵☆垵顕ч崝銈夊础闁秵鐓欓梻鍌氼嚟閸斺秹鏌嶉柨瀣诞闁哄本鐩、鏇㈡晲閸ワ絾顫嶉梻浣筋嚙濞存碍绂嶅┑鍫熷床?*/}
         <MemoryDebugPanel
           isVisible={showMemoryDebug}
           onClose={() => setShowMemoryDebug(false)}

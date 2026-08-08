@@ -7616,9 +7616,9 @@ function TeamsTab() {
                 teams.map((team) => (
                   <tr key={team.id} className='border-b hover:bg-gray-50'>
                     <td className='px-4 py-3'>
-                      <div>{team.displayName || team.name}</div>
+                      <div>{team.name}</div>
                       {team.displayName && team.displayName !== team.name ? (
-                        <div className='text-xs text-gray-400'>{team.name}</div>
+                        <div className='text-xs text-gray-400'>显示名：{team.displayName}</div>
                       ) : null}
                     </td>
                     <td className='px-4 py-3'>

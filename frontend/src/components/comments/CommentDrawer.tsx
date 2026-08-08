@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import {
   ArrowDownUp,
   Check,
+  ChevronDown,
+  ChevronRight,
   ImageIcon,
   MessageCircle,
   Search,
@@ -10,7 +12,7 @@ import {
 import { useCanvasComments } from '@/contexts/CanvasCommentsContext';
 import { useCommentStore } from '@/stores/commentStore';
 import type { CanvasCommentThread } from '@/services/canvasCommentsApi';
-import { Avatar, relTime } from './CommentThreadPopup';
+import { Avatar, relTime, renderBody, CommentImages } from './CommentThreadPopup';
 import CommentComposer from './CommentComposer';
 
 function threadSummary(t: CanvasCommentThread) {
@@ -30,6 +32,7 @@ const CommentDrawer: React.FC = () => {
   const { threads, members, createThread, reply } = useCanvasComments();
   const [queryText, setQueryText] = useState('');
   const [sortDesc, setSortDesc] = useState(true);
+  const [expandedThreadId, setExpandedThreadId] = useState<string | null>(null);
 
   const list = useMemo(() => {
     const q = queryText.trim().toLowerCase();
@@ -52,6 +55,10 @@ const CommentDrawer: React.FC = () => {
     });
     return filtered;
   }, [threads, queryText, sortDesc]);
+
+  // 分为未解决（当前评论）和已解决（历史记录）
+  const activeList = list.filter((t) => !t.resolved);
+  const resolvedList = list.filter((t) => t.resolved);
 
   const selectedThread = openThreadId ? threads.find((thread) => thread.id === openThreadId) ?? null : null;
 
@@ -105,52 +112,210 @@ const CommentDrawer: React.FC = () => {
         {list.length === 0 && (
           <div style={emptyStyle}>{queryText ? '没有匹配的评论' : '还没有评论'}</div>
         )}
-        {list.map((thread) => {
-          const { first, replies, imageCount } = threadSummary(thread);
-          if (!first) return null;
-          const selected = openThreadId === thread.id;
-          return (
-            <button
-              key={thread.id}
-              type="button"
-              onClick={() => requestFocus(thread.id)}
-              style={{
-                ...itemStyle,
-                background: selected ? '#f4f6f8' : 'transparent',
-              }}
-            >
-              <div style={metaRowStyle}>
-                <Avatar
-                  name={first.author.name}
-                  url={first.author.avatarUrl}
-                  userId={first.author.id}
-                />
-                <span style={nameStyle}>{first.author.name ?? first.author.id.slice(0, 8)}</span>
-                <span style={timeStyle}>{relTime(first.createdAt)}</span>
-                {thread.resolved && (
-                  <span style={resolvedStyle}>
-                    <Check size={12} /> 已解决
-                  </span>
-                )}
-              </div>
-              <div style={bodyStyle}>{first.body || (imageCount > 0 ? '' : '（无内容）')}</div>
-              {(imageCount > 0 || replies > 1) && (
-                <div style={statsStyle}>
-                  {imageCount > 0 && (
-                    <span style={statItemStyle}>
-                      <ImageIcon size={12} /> {imageCount} 张图片
-                    </span>
-                  )}
-                  {replies > 1 && (
-                    <span style={statItemStyle}>
-                      <MessageCircle size={12} /> {replies}
-                    </span>
+        {activeList.length > 0 && (
+          <>
+            {activeList.map((thread) => {
+              const { first, replies, imageCount } = threadSummary(thread);
+              if (!first) return null;
+              const selected = openThreadId === thread.id;
+              const isExpanded = expandedThreadId === thread.id;
+              const allComments = [...thread.comments]
+                .filter((c) => !c.deleted)
+                .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+              return (
+                <div key={thread.id} style={{ marginBottom: 8 }}>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      setExpandedThreadId(isExpanded ? null : thread.id);
+                      requestFocus(thread.id);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        setExpandedThreadId(isExpanded ? null : thread.id);
+                        requestFocus(thread.id);
+                      }
+                    }}
+                    style={{
+                      ...itemStyle,
+                      background: selected ? '#f4f6f8' : 'transparent',
+                      display: 'block',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {isExpanded ? (
+                        <ChevronDown size={14} color="#94a3b8" />
+                      ) : (
+                        <ChevronRight size={14} color="#94a3b8" />
+                      )}
+                      <Avatar
+                        name={first.author.name}
+                        url={first.author.avatarUrl}
+                        userId={first.author.id}
+                      />
+                      <span style={nameStyle}>{first.author.name ?? first.author.id.slice(0, 8)}</span>
+                      <span style={timeStyle}>{relTime(first.createdAt)}</span>
+                    </div>
+                    <div style={{ ...bodyStyle, paddingLeft: 0 }}>
+                      {first.body || (imageCount > 0 ? '' : '（无内容）')}
+                    </div>
+                    {(imageCount > 0 || replies > 1) && (
+                      <div style={statsStyle}>
+                        {imageCount > 0 && (
+                          <span style={statItemStyle}>
+                            <ImageIcon size={12} /> {imageCount} 张图片
+                          </span>
+                        )}
+                        {replies > 1 && (
+                          <span style={statItemStyle}>
+                            <MessageCircle size={12} /> {replies} 条回复
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {isExpanded && allComments.length > 0 && (
+                    <div style={expandedContainerStyle}>
+                      {allComments.map((comment) => (
+                        <div key={comment.id} style={inlineCommentRowStyle}>
+                          <Avatar
+                            name={comment.author.name}
+                            url={comment.author.avatarUrl}
+                            userId={comment.author.id}
+                            size={20}
+                          />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={inlineCommentNameStyle}>
+                                {comment.author.name ?? comment.author.id.slice(0, 8)}
+                              </span>
+                              <span style={inlineCommentTimeStyle}>{relTime(comment.createdAt)}</span>
+                            </div>
+                            <div style={inlineCommentBodyStyle}>
+                              {comment.deleted ? '该评论已删除' : renderBody(comment.body)}
+                            </div>
+                            {!comment.deleted && comment.imageUrls && comment.imageUrls.length > 0 && (
+                              <div style={{ marginTop: 4 }}>
+                                <CommentImages urls={comment.imageUrls} />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
-              )}
-            </button>
-          );
-        })}
+              );
+            })}
+          </>
+        )}
+        {resolvedList.length > 0 && (
+          <>
+            <div style={sectionLabelStyle}>
+              <span>历史记录（已解决）</span>
+              <span style={sectionCountStyle}>{resolvedList.length}</span>
+            </div>
+            {resolvedList.map((thread) => {
+              const { first, replies, imageCount } = threadSummary(thread);
+              if (!first) return null;
+              const selected = openThreadId === thread.id;
+              const isExpanded = expandedThreadId === thread.id;
+              const allComments = [...thread.comments]
+                .filter((c) => !c.deleted)
+                .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+              return (
+                <div key={thread.id} style={{ marginBottom: 8 }}>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      setExpandedThreadId(isExpanded ? null : thread.id);
+                      requestFocus(thread.id);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        setExpandedThreadId(isExpanded ? null : thread.id);
+                        requestFocus(thread.id);
+                      }
+                    }}
+                    style={{
+                      ...itemStyle,
+                      ...resolvedItemStyle,
+                      background: selected ? '#f4f6f8' : 'transparent',
+                      display: 'block',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {isExpanded ? (
+                        <ChevronDown size={14} color="#94a3b8" />
+                      ) : (
+                        <ChevronRight size={14} color="#94a3b8" />
+                      )}
+                      <Avatar
+                        name={first.author.name}
+                        url={first.author.avatarUrl}
+                        userId={first.author.id}
+                      />
+                      <span style={nameStyle}>{first.author.name ?? first.author.id.slice(0, 8)}</span>
+                      <span style={timeStyle}>{relTime(first.createdAt)}</span>
+                      <span style={resolvedStyle}>
+                        <Check size={12} /> 已解决
+                      </span>
+                    </div>
+                    <div style={{ ...bodyStyle, paddingLeft: 0 }}>
+                      {first.body || (imageCount > 0 ? '' : '（无内容）')}
+                    </div>
+                    {(imageCount > 0 || replies > 1) && (
+                      <div style={statsStyle}>
+                        {imageCount > 0 && (
+                          <span style={statItemStyle}>
+                            <ImageIcon size={12} /> {imageCount} 张图片
+                          </span>
+                        )}
+                        {replies > 1 && (
+                          <span style={statItemStyle}>
+                            <MessageCircle size={12} /> {replies} 条回复
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {isExpanded && allComments.length > 0 && (
+                    <div style={expandedContainerStyle}>
+                      {allComments.map((comment) => (
+                        <div key={comment.id} style={inlineCommentRowStyle}>
+                          <Avatar
+                            name={comment.author.name}
+                            url={comment.author.avatarUrl}
+                            userId={comment.author.id}
+                            size={20}
+                          />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={inlineCommentNameStyle}>
+                                {comment.author.name ?? comment.author.id.slice(0, 8)}
+                              </span>
+                              <span style={inlineCommentTimeStyle}>{relTime(comment.createdAt)}</span>
+                            </div>
+                            <div style={inlineCommentBodyStyle}>
+                              {comment.deleted ? '该评论已删除' : renderBody(comment.body)}
+                            </div>
+                            {!comment.deleted && comment.imageUrls && comment.imageUrls.length > 0 && (
+                              <div style={{ marginTop: 4 }}>
+                                <CommentImages urls={comment.imageUrls} />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </>
+        )}
       </div>
       <div style={composerWrapStyle}>
         {selectedThread && (
@@ -294,6 +459,31 @@ const resolvedStyle: React.CSSProperties = {
   fontSize: 11,
 };
 
+const sectionLabelStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '12px 10px 6px',
+  fontSize: 12,
+  fontWeight: 600,
+  color: '#64748b',
+  borderBottom: '1px solid #f1f5f9',
+  marginBottom: 4,
+};
+
+const sectionCountStyle: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 500,
+  color: '#94a3b8',
+  background: '#f1f5f9',
+  borderRadius: 8,
+  padding: '1px 6px',
+};
+
+const resolvedItemStyle: React.CSSProperties = {
+  opacity: 0.75,
+};
+
 const bodyStyle: React.CSSProperties = {
   fontSize: 13,
   color: '#1f2937',
@@ -368,6 +558,41 @@ const headerCloseBtnStyle: React.CSSProperties = {
   right: 16,
   top: '50%',
   transform: 'translateY(-50%)',
+};
+
+const expandedContainerStyle: React.CSSProperties = {
+  padding: '4px 10px 10px 42px',
+  marginTop: -4,
+  borderTop: '1px solid #f1f5f9',
+  borderBottom: '1px solid #f1f5f9',
+  background: '#f8fafc',
+  borderRadius: '0 0 8px 8px',
+};
+
+const inlineCommentRowStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: 6,
+  padding: '6px 0',
+  borderBottom: '1px solid #f1f5f9',
+};
+
+const inlineCommentNameStyle: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 600,
+  color: '#334155',
+};
+
+const inlineCommentTimeStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: '#94a3b8',
+};
+
+const inlineCommentBodyStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: '#475569',
+  marginTop: 2,
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-word',
 };
 
 export default CommentDrawer;

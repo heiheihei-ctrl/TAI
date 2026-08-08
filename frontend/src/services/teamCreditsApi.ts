@@ -37,6 +37,26 @@ export interface TeamCreditAccount {
   reserved?: number;
 }
 
+export interface TeamLedgerEntry {
+  id: string;
+  entryType: string;
+  amount: number;
+  taskId?: string;
+  taskKind?: string;
+  actorUserId?: string;
+  actorName?: string | null;
+  actorPhoneTail?: string | null;
+  note?: string;
+  createdAt: string;
+}
+
+export interface TeamLedgerFilters {
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  actorUserId?: string | null;
+  search?: string | null;
+}
+
 export interface TeamSeatPackageSummary {
   permanentSeats: number;
   packageSeats?: number;
@@ -87,23 +107,17 @@ export const teamCreditsApi = {
   async getLedger(
     teamId: string,
     take: number,
-    skip: number
-  ): Promise<
-    Array<{
-      id: string;
-      entryType: string;
-      amount: number;
-      taskId?: string;
-      taskKind?: string;
-      actorUserId?: string;
-      note?: string;
-      createdAt: string;
-    }>
-  > {
+    skip: number,
+    filters?: TeamLedgerFilters,
+  ): Promise<TeamLedgerEntry[]> {
     const params = new URLSearchParams({
       take: String(take),
       skip: String(skip),
     });
+    if (filters?.dateFrom) params.set('dateFrom', filters.dateFrom);
+    if (filters?.dateTo) params.set('dateTo', filters.dateTo);
+    if (filters?.actorUserId) params.set('actorUserId', filters.actorUserId);
+    if (filters?.search) params.set('search', filters.search);
     return json(
       `/api/teams/${encodeURIComponent(teamId)}/credits/ledger?${params}`
     );

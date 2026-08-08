@@ -28,8 +28,17 @@ export class TeamCreditsController {
     @Param('teamId') teamId: string,
     @Query('take') take = '50',
     @Query('skip') skip = '0',
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('actorUserId') actorUserId?: string,
+    @Query('search') search?: string,
   ) {
-    return this.svc.getLedger(teamId, req.user.sub, +take, +skip);
+    return this.svc.getLedger(teamId, req.user.sub, +take, +skip, {
+      dateFrom: dateFrom || null,
+      dateTo: dateTo || null,
+      actorUserId: actorUserId || null,
+      search: search || null,
+    });
   }
 
   @Get('credits/members')

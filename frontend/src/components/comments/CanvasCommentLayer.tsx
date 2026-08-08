@@ -4,6 +4,8 @@ import { Check } from 'lucide-react';
 import { useCanvasComments } from '@/contexts/CanvasCommentsContext';
 import { useCommentStore } from '@/stores/commentStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useProjectStore } from '@/stores/projectStore';
+import { isThreadRead } from '@/utils/commentReadTracker';
 import CommentThreadPopup, { Avatar } from './CommentThreadPopup';
 import CommentComposer from './CommentComposer';
 import type { CanvasCommentThread } from '@/services/canvasCommentsApi';
@@ -70,14 +72,14 @@ const CanvasCommentLayer: React.FC = () => {
   // 抽屉点击某条评论 → 把该 pin 居中并展开。
   useEffect(() => {
     if (!focusThreadId) return;
-    const t = positioned.find((x) => x.id === focusThreadId);
+    const t = threads.find((x) => x.id === focusThreadId);
     if (t && typeof t.x === 'number' && typeof t.y === 'number') {
       try {
         rf.setCenter(t.x, t.y, { zoom, duration: 300 });
       } catch {}
     }
     consumeFocus();
-  }, [focusThreadId, positioned, rf, zoom, consumeFocus]);
+  }, [focusThreadId, threads, rf, zoom, consumeFocus]);
 
   // ESC 关闭 popup / 取消草稿。
   useEffect(() => {
@@ -181,7 +183,7 @@ const CanvasCommentLayer: React.FC = () => {
     setDragOverlay(null);
   };
 
-  const openThreadData = openThreadId ? positioned.find((t) => t.id === openThreadId) ?? null : null;
+  const openThreadData = openThreadId ? threads.find((t) => t.id === openThreadId) ?? null : null;
 
   // popup/草稿面板定位：放在 pin 下方（pin 在 anchor 上方，下方区域不挡 pin），
   // 水平靠近 pin 并夹进容器；下方放不下则翻到 pin 上方。
@@ -250,6 +252,11 @@ const CanvasCommentLayer: React.FC = () => {
         const replies = t.comments.filter((c) => !c.deleted).length;
         const isOpen = openThreadId === t.id;
         const pos = isDragging ? { x: dragOverlay.x, y: dragOverlay.y } : anchor;
+        // 已读判断：当前用户已点开过的线程不显示未读徽章
+        const projectId = useProjectStore.getState().currentProjectId;
+        const readSet = projectId && currentUserId
+          ? isThreadRead(projectId, currentUserId, t.id)
+          : false;
         return (
           <button
             key={t.id}
@@ -302,7 +309,7 @@ const CanvasCommentLayer: React.FC = () => {
                   <Check size={9} color="white" />
                 </span>
               )}
-              {!t.resolved && replies > 1 && (
+              {!t.resolved && !readSet && replies > 1 && (
                 <span
                   style={{
                     position: 'absolute',
@@ -332,10 +339,10 @@ const CanvasCommentLayer: React.FC = () => {
 
       {/* 已打开的线程 popup */}
       {openThreadData &&
-        typeof openThreadData.x === 'number' &&
-        typeof openThreadData.y === 'number' &&
         (() => {
-          const anchor = toScreen(openThreadData.x, openThreadData.y);
+          const hasCoords = typeof openThreadData.x === 'number' && typeof openThreadData.y === 'number';
+          if (!hasCoords) return null;
+          const anchor = toScreen(openThreadData.x as number, openThreadData.y as number);
           const { left, top } = clampPanelBesidePin(anchor.x, anchor.y);
           return (
             <div

@@ -9,6 +9,7 @@ import {
 } from '@/utils/teamQuotaDisplay';
 import { CREDITS_REFRESH_EVENT } from '@/utils/creditsEvents';
 import { TeamManagementModal } from './TeamManagementModal';
+import { EnterpriseLedgerModal } from './EnterpriseLedgerModal';
 import { SHOW_TEAM_COLLABORATION } from '@/config/featureFlags';
 
 export default function TeamQuotaBadge() {
@@ -20,6 +21,7 @@ export default function TeamQuotaBadge() {
   const [quota, setQuota] = useState<PersonalTeamQuota | null>(null);
   const [loading, setLoading] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
+  const [ledgerOpen, setLedgerOpen] = useState(false);
   const loadSeqRef = useRef(0);
 
   useEffect(() => {
@@ -80,7 +82,7 @@ export default function TeamQuotaBadge() {
     <>
       <button
         type="button"
-        onClick={() => setManageOpen(true)}
+        onClick={() => setLedgerOpen(true)}
         className={cn(
           'inline-flex h-7 items-center gap-1.5 rounded-full border border-liquid-glass-light',
           'bg-liquid-glass-light px-2.5 text-xs text-gray-700 backdrop-blur-minimal',
@@ -95,6 +97,24 @@ export default function TeamQuotaBadge() {
           {display.text}
         </span>
       </button>
+
+      {ledgerOpen && (
+        <EnterpriseLedgerModal
+          teamId={activeTeam.id}
+          onClose={() => {
+            setLedgerOpen(false);
+            void teamApi
+              .getMyQuota(activeTeam.id)
+              .then((data) => {
+                setQuota(data);
+                if (typeof data.teamBalance === 'number' && Number.isFinite(data.teamBalance)) {
+                  patchTeamCredits(activeTeam.id, Math.max(0, data.teamBalance));
+                }
+              })
+              .catch(() => {});
+          }}
+        />
+      )}
 
       {manageOpen && (
         <TeamManagementModal

@@ -26,11 +26,48 @@ export class TeamCreditsService {
     };
   }
 
-  async getLedger(teamId: string, requestingUserId: string, take = 50, skip = 0) {
+  async getLedger(
+    teamId: string,
+    requestingUserId: string,
+    take = 50,
+    skip = 0,
+    filters?: {
+      dateFrom?: string | null;
+      dateTo?: string | null;
+      actorUserId?: string | null;
+      search?: string | null;
+    },
+  ) {
     await this.teamCore.assertMember(teamId, requestingUserId);
     const acc = await this.prisma.teamCreditAccount.findUniqueOrThrow({ where: { teamId } });
+
+    const where: any = { teamAccId: acc.id };
+    if (filters?.actorUserId) {
+      where.actorUserId = filters.actorUserId;
+    }
+    if (filters?.dateFrom || filters?.dateTo) {
+      where.createdAt = {};
+      if (filters?.dateFrom) {
+        where.createdAt.gte = new Date(filters.dateFrom);
+      }
+      if (filters?.dateTo) {
+        // dateTo 视为当天的结束（含当天）
+        const end = new Date(filters.dateTo);
+        end.setHours(23, 59, 59, 999);
+        where.createdAt.lte = end;
+      }
+    }
+    if (filters?.search && filters.search.trim()) {
+      const kw = filters.search.trim();
+      where.OR = [
+        { note: { contains: kw, mode: 'insensitive' } },
+        { taskKind: { contains: kw, mode: 'insensitive' } },
+        { entryType: { contains: kw, mode: 'insensitive' } },
+      ];
+    }
+
     const entries = await this.prisma.teamCreditLedger.findMany({
-      where: { teamAccId: acc.id },
+      where,
       orderBy: { createdAt: 'desc' },
       take,
       skip,

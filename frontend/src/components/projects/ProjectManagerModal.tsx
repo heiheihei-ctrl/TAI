@@ -6,6 +6,7 @@ import SmartImage from '@/components/ui/SmartImage';
 import { Check, Trash2 } from 'lucide-react';
 import { usePendingUploadLeaveGuard } from '@/hooks/usePendingUploadLeaveGuard';
 import { useTranslation } from 'react-i18next';
+import { getDefaultProjectName, localizeProjectName } from '@/utils/projectName';
 
 function formatDate(iso: string, locale?: string) {
   try {
@@ -122,10 +123,10 @@ export default function ProjectManagerModal() {
     const targets = projects.filter((p) => selectedIds.has(p.id));
     const confirmMsg = lt(
       `确定删除以下 ${targets.length} 个项目？\n\n${targets
-        .map((p) => p.name || '未命名')
+        .map((p) => localizeProjectName(p.name))
         .join('\n')}`,
       `Delete the following ${targets.length} projects?\n\n${targets
-        .map((p) => p.name || 'Untitled')
+        .map((p) => localizeProjectName(p.name))
         .join('\n')}`
     );
     if (!confirm(confirmMsg)) return;
@@ -187,7 +188,7 @@ export default function ProjectManagerModal() {
                 guardLeave(async () => {
                   setCreating(true);
                   try {
-                    await create(lt('未命名', 'Untitled'));
+                    await create(getDefaultProjectName());
                   } finally {
                     setCreating(false);
                   }
@@ -331,8 +332,8 @@ export default function ProjectManagerModal() {
                         </div>
                         <div className="px-3 py-1.5 flex items-center justify-between gap-2">
                           <div className="min-w-0">
-                            <div className="text-sm font-medium truncate" title={p.name}>
-                              {p.name || lt('未命名', 'Untitled')}
+                            <div className="text-sm font-medium truncate" title={localizeProjectName(p.name)}>
+                              {localizeProjectName(p.name)}
                             </div>
                             <div className="text-[11px] leading-4 text-slate-500">
                               {lt('更新于', 'Updated')} {formatDate(p.updatedAt, locale)}

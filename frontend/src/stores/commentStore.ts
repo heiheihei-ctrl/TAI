@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { useAIChatStore } from './aiChatStore';
+import { useProjectStore } from './projectStore';
+import { useAuthStore } from './authStore';
+import { markThreadRead } from '@/utils/commentReadTracker';
 
 // 开启评论模式时确保对话框以「底部紧凑栏」形式可见（右侧展开面板由 AIChatDialog 监听 active 收起）。
 const ensureChatAtBottom = () => {
@@ -60,9 +63,25 @@ export const useCommentStore = create<CommentUIState>((set) => ({
   },
   forceClose: () => set({ active: false, draftPin: null, openThreadId: null }),
 
-  openThread: (threadId) => set({ openThreadId: threadId, draftPin: null }),
+  openThread: (threadId) => {
+    // 标记为已读：画布上的未读徽章消失
+    try {
+      const pid = useProjectStore.getState().currentProjectId;
+      const uid = useAuthStore.getState().user?.id;
+      if (pid && uid) markThreadRead(pid, uid, threadId);
+    } catch {}
+    set({ openThreadId: threadId, draftPin: null });
+  },
   closeThread: () => set({ openThreadId: null }),
   setDraftPin: (pin) => set(pin ? { draftPin: pin, openThreadId: null } : { draftPin: null }),
-  requestFocus: (threadId) => set({ focusThreadId: threadId, openThreadId: threadId }),
+  requestFocus: (threadId) => {
+    // 从抽屉点击评论时也标记为已读
+    try {
+      const pid = useProjectStore.getState().currentProjectId;
+      const uid = useAuthStore.getState().user?.id;
+      if (pid && uid) markThreadRead(pid, uid, threadId);
+    } catch {}
+    set({ focusThreadId: threadId, openThreadId: threadId });
+  },
   consumeFocus: () => set({ focusThreadId: null }),
 }));

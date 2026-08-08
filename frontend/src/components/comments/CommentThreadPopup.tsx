@@ -260,6 +260,9 @@ const CommentThreadPopup: React.FC<Props> = ({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const canDeleteThread =
     currentUserId != null && thread.createdById === currentUserId;
+  // 解决按钮仅创建者可见
+  const canResolveThread =
+    currentUserId != null && thread.createdById === currentUserId;
 
   // 删除某条评论：若删除后整条会话无存活评论，则直接删除整个线程（连带 pin）。
   const handleRemove = async (commentId: string) => {
@@ -354,6 +357,7 @@ const CommentThreadPopup: React.FC<Props> = ({
           </span>
         ) : (
           <>
+            {canResolveThread ? (
             <button
               onClick={() => void onResolve(thread.id, !thread.resolved)}
               title={thread.resolved ? '重新打开' : '标记为已解决'}
@@ -372,6 +376,9 @@ const CommentThreadPopup: React.FC<Props> = ({
               {thread.resolved ? <RotateCcw size={13} /> : <Check size={14} />}
               {thread.resolved ? '重开' : '解决'}
             </button>
+            ) : (
+              <span style={{ marginLeft: 'auto' }} />
+            )}
             {canDeleteThread && (
               <button
                 onClick={() => setConfirmDelete(true)}

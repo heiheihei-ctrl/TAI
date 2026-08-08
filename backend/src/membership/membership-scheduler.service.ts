@@ -19,24 +19,8 @@ export class MembershipSchedulerService {
 
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async handleFreeMonthlyQuotaIssue() {
-    if (this.freeMonthlyQuotaJobRunning) {
-      this.logger.warn('跳过免费用户月度额度发放：上一次任务尚未完成');
-      return;
-    }
-
-    this.freeMonthlyQuotaJobRunning = true;
-    try {
-      const result = await this.creditsService.issueFreeUserMonthlyQuotaCredits();
-      if (result.affectedUsers > 0 || result.grantedCredits > 0) {
-        this.logger.log(
-          `免费用户月度额度发放完成: users=${result.affectedUsers}, grantedCredits=${result.grantedCredits}, createdLots=${result.createdLots}`,
-        );
-      }
-    } catch (error) {
-      this.logger.error('免费用户月度额度发放失败:', error);
-    } finally {
-      this.freeMonthlyQuotaJobRunning = false;
-    }
+    // 已停用：免费用户不再发放月度额度
+    return;
   }
 
   @Cron(CronExpression.EVERY_HOUR)

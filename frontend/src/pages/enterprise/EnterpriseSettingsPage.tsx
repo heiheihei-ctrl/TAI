@@ -5,6 +5,7 @@ import { teamApi, type TeamMember } from "@/services/teamApi";
 import { teamCreditsApi, teamMyQuotaApi } from "@/services/teamCreditsApi";
 import { refreshTeams, useTeamStore } from "@/stores/teamStore";
 import { TeamManagementModal } from "@/components/team/TeamManagementModal";
+import { EnterpriseLedgerModal } from "@/components/team/EnterpriseLedgerModal";
 import { uploadToOSS } from "@/services/ossUploadService";
 
 export default function EnterpriseSettingsPage() {
@@ -32,13 +33,11 @@ export default function EnterpriseSettingsPage() {
   const [quota, setQuota] = useState<Awaited<
     ReturnType<typeof teamMyQuotaApi.getMyQuota>
   > | null>(null);
-  const [ledger, setLedger] = useState<
-    Awaited<ReturnType<typeof teamCreditsApi.getLedger>>
-  >([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [modalTab, setModalTab] = useState<"subscription" | "topup" | null>(null);
+  const [ledgerModalOpen, setLedgerModalOpen] = useState(false);
 
   useEffect(() => {
     setName(team?.name || "");
@@ -52,7 +51,6 @@ export default function EnterpriseSettingsPage() {
       teamApi.getMembers(teamId).then(setMembers),
       teamCreditsApi.getAccount(teamId).then((a) => setCredits(a.balance ?? 0)),
       teamMyQuotaApi.getMyQuota(teamId).catch(() => null),
-      teamCreditsApi.getLedger(teamId, 20, 0).then(setLedger).catch(() => []),
     ])
       .then(([, , q]) => setQuota(q))
       .catch((err: any) => setError(err?.message || "加载失败"));
@@ -182,8 +180,19 @@ export default function EnterpriseSettingsPage() {
 
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-xl bg-slate-50 px-4 py-4">
-            <div className="text-xs text-slate-400">企业可用积分</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-900">{credits}</div>
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-slate-400">企业可用积分</div>
+              <button
+                type="button"
+                onClick={() => setLedgerModalOpen(true)}
+                className="text-xs text-teal-600 hover:text-teal-700 hover:underline font-medium"
+              >
+                查看详情
+              </button>
+            </div>
+            <div className="mt-1 text-2xl font-semibold text-slate-900">
+              {credits.toLocaleString()}
+            </div>
           </div>
           <div className="rounded-xl bg-slate-50 px-4 py-4">
             <div className="text-xs text-slate-400">我的可用额度</div>
@@ -200,26 +209,6 @@ export default function EnterpriseSettingsPage() {
             </div>
           </div>
         </div>
-
-        <div className="mt-4 max-h-56 overflow-y-auto rounded-xl border border-slate-100">
-          {ledger.length === 0 ? (
-            <p className="px-3 py-4 text-xs text-slate-400">暂无流水</p>
-          ) : (
-            <ul className="divide-y divide-slate-100 text-xs">
-              {ledger.map((row) => (
-                <li key={row.id} className="flex justify-between px-3 py-2">
-                  <span>
-                    {row.entryType}
-                    {row.note ? ` · ${row.note}` : ""}
-                  </span>
-                  <span className={row.amount >= 0 ? "text-teal-600" : "text-rose-600"}>
-                    {row.amount}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -235,10 +224,11 @@ export default function EnterpriseSettingsPage() {
             />
           </label>
           <label className="text-xs text-slate-500">
-            显示名
+            显示名（最多 6 个字，显示在画布页左上角 Logo 右侧）
             <input
               value={displayName}
               disabled={!canManage}
+              maxLength={6}
               onChange={(e) => setDisplayName(e.target.value)}
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50"
             />
@@ -358,11 +348,14 @@ export default function EnterpriseSettingsPage() {
               .getAccount(teamId)
               .then((a) => setCredits(a.balance ?? 0))
               .catch(() => null);
-            void teamCreditsApi
-              .getLedger(teamId, 20, 0)
-              .then(setLedger)
-              .catch(() => []);
           }}
+        />
+      ) : null}
+
+      {ledgerModalOpen && teamId ? (
+        <EnterpriseLedgerModal
+          teamId={teamId}
+          onClose={() => setLedgerModalOpen(false)}
         />
       ) : null}
     </div>
