@@ -460,6 +460,59 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
     }
   };
 
+  const renderPackageButton = (pkg: RechargePackage, index: number) => {
+    const localizedTag = localizePackageBadge(pkg.tag);
+    const localizedBonus = localizePackageBadge(pkg.bonus);
+    return (
+      <button
+        key={pkg.price}
+        onClick={() => handlePackageSelect(index)}
+        className={cn(
+          "relative rounded-xl border-2 p-4 text-left transition-all",
+          selectedPackage === index && !customAmountMode
+            ? isWhite
+              ? "border-blue-400 bg-blue-50/50 shadow-[0_0_24px_-8px_rgba(59,130,246,0.3)]"
+              : "border-[#8E86F5]/70 bg-violet-500/15 shadow-[0_0_24px_-8px_rgba(142,134,245,0.5)]"
+            : isWhite
+              ? "border-slate-200 bg-white hover:border-slate-300"
+              : "border-zinc-700/80 bg-[#0f0f18] hover:border-zinc-600",
+        )}
+      >
+        {localizedTag && (
+          <span
+            className={cn(
+              "absolute -right-3 -top-3 rounded-full border px-3.5 py-1.5 text-xs font-semibold leading-none shadow-[0_8px_18px_rgba(239,68,68,0.22)]",
+              isWhite
+                ? "border-amber-300 bg-amber-50 text-red-600"
+                : "border-amber-300/70 bg-[#20170a] text-red-300",
+            )}
+          >
+            {localizedTag}
+          </span>
+        )}
+        <div className={cn("text-2xl font-semibold", isWhite ? "text-slate-800" : "text-zinc-100")}>¥{pkg.price}</div>
+        <div className={cn("mt-1 text-sm", isWhite ? "text-slate-500" : "text-zinc-500")}>
+          {pkg.credits.toLocaleString()}
+          <span className="text-xs">{lt("积分", "credits")}</span>
+        </div>
+        {localizedBonus && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {localizedBonus && (
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-xs",
+                  isWhite ? "bg-purple-100 text-purple-600" : "bg-violet-500/20 text-violet-200",
+                )}
+              >
+                {localizedBonus}
+              </span>
+            )}
+          </div>
+        )}
+      </button>
+    );
+  };
+
   return (
     <div
       className={cn(
@@ -588,58 +641,7 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
         <div className={cn("min-w-0 pb-4 md:pb-6", isWhite ? "w-full shrink-0 xl:flex-1 xl:min-w-0" : "flex-1")}>
           {/* 套餐网格 */}
           <div className="mb-3 grid grid-cols-3 gap-3">
-            {packages.map((pkg, index) => {
-              const localizedTag = localizePackageBadge(pkg.tag);
-              const localizedBonus = localizePackageBadge(pkg.bonus);
-              return (
-                <button
-                  key={pkg.price}
-                  onClick={() => handlePackageSelect(index)}
-                  className={cn(
-                    "relative rounded-xl border-2 p-4 text-left transition-all",
-                    selectedPackage === index && !customAmountMode
-                      ? isWhite
-                        ? "border-blue-400 bg-blue-50/50 shadow-[0_0_24px_-8px_rgba(59,130,246,0.3)]"
-                        : "border-[#8E86F5]/70 bg-violet-500/15 shadow-[0_0_24px_-8px_rgba(142,134,245,0.5)]"
-                      : isWhite
-                        ? "border-slate-200 bg-white hover:border-slate-300"
-                        : "border-zinc-700/80 bg-[#0f0f18] hover:border-zinc-600",
-                  )}
-                >
-                  {localizedTag && (
-                    <span
-                      className={cn(
-                        "absolute -right-3 -top-3 rounded-full border px-3.5 py-1.5 text-xs font-semibold leading-none shadow-[0_8px_18px_rgba(239,68,68,0.22)]",
-                        isWhite
-                          ? "border-amber-300 bg-amber-50 text-red-600"
-                          : "border-amber-300/70 bg-[#20170a] text-red-300",
-                      )}
-                    >
-                      {localizedTag}
-                    </span>
-                  )}
-                  <div className={cn("text-2xl font-semibold", isWhite ? "text-slate-800" : "text-zinc-100")}>¥{pkg.price}</div>
-                  <div className={cn("mt-1 text-sm", isWhite ? "text-slate-500" : "text-zinc-500")}>
-                    {pkg.credits.toLocaleString()}
-                    <span className="text-xs">{lt("积分", "credits")}</span>
-                  </div>
-                  {localizedBonus && (
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      {localizedBonus && (
-                        <span
-                          className={cn(
-                            "rounded-full px-2 py-0.5 text-xs",
-                            isWhite ? "bg-purple-100 text-purple-600" : "bg-violet-500/20 text-violet-200",
-                          )}
-                        >
-                          {localizedBonus}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </button>
-              );
-            })}
+            {packages.map((pkg, index) => renderPackageButton(pkg, index))}
             <div
               className={cn(
                 "col-span-2 rounded-xl border-2 transition-all",

@@ -89,12 +89,9 @@ export interface PaymentStatusResponse {
 
 // 充值套餐配置（1 元 = 100 积分，无首充/限时折扣）
 export const RECHARGE_PACKAGES = [
-  { price: 25, credits: 2500, bonus: null, tag: null },
-  { price: 50, credits: 5000, bonus: null, tag: null },
   { price: 100, credits: 10000, bonus: null, tag: null },
   { price: 200, credits: 20000, bonus: null, tag: null },
   { price: 500, credits: 50000, bonus: null, tag: null },
-  { price: 1000, credits: 100000, bonus: null, tag: null },
 ];
 
 // 积分兑换比例：1元 = 100积分
