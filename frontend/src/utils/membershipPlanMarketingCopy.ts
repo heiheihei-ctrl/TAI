@@ -17,6 +17,7 @@ const MONTHLY_COPY: Record<TierKey, PlanMarketingCopy> = {
     lines: [
       "套餐立即到账8700积分",
       "原积分6900，现加送1800积分",
+      "每日签到共奖励1900积分",
       "至多生成353张图片",
       "或26个视频",
     ],

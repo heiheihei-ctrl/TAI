@@ -819,7 +819,7 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                       >
                         {showDailyPromoBadge ? (
                           <div className="absolute right-3 top-3 z-[1] rounded-full bg-gradient-to-r from-red-600 to-rose-500 px-4 py-1 text-center text-white shadow-lg shadow-red-950/50">
-                            <div className="text-sm font-bold leading-tight tracking-wide">
+                            <div className="text-base font-bold leading-tight tracking-wide">
                               现加送1800积分
                             </div>
                           </div>
@@ -864,7 +864,7 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                             / {plan.billingCycle === "yearly" ? "年" : "月"}
                           </span>
                           {showDailyPromoBadge ? (
-                            <span className="ml-1 self-center rounded-full px-2 py-0.5 text-[9px] font-medium leading-tight text-red-600">
+                            <span className="ml-1 self-center rounded-full px-2 py-0.5 text-xs font-medium leading-tight text-red-600">
                               限时8月6日-8月21日
                             </span>
                           ) : null}
