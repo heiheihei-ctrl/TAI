@@ -644,7 +644,7 @@ const PaymentPanel = forwardRef<PaymentPanelHandle, PaymentPanelProps>(function 
             {packages.map((pkg, index) => renderPackageButton(pkg, index))}
             <div
               className={cn(
-                "col-span-2 rounded-xl border-2 transition-all",
+                "col-span-3 rounded-xl border-2 transition-all",
                 customAmountMode
                   ? isWhite
                     ? "border-blue-400 bg-blue-50/50"
