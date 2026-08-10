@@ -84,8 +84,13 @@ import MembershipPanel from "@/components/payment/MembershipPanel";
 import { SHOW_TEAM_COLLABORATION, SHOW_ENTERPRISE_CONSOLE, SHOW_WORKSPACE_SWITCHER } from "@/config/featureFlags";
 import { TeamSwitcher } from "@/components/team/TeamSwitcher";
 import { EnterpriseLedgerModal } from "@/components/team/EnterpriseLedgerModal";
+import { EnterpriseJoinCodeModal } from "@/components/team/EnterpriseJoinCodeModal";
 import { refreshTeams, useTeamStore } from "@/stores/teamStore";
-import { canAccessEnterpriseConsole } from "@/utils/enterpriseAccess";
+import {
+  canAccessEnterpriseConsole,
+  isEnterpriseMember,
+  pickPreferredEnterprise,
+} from "@/utils/enterpriseAccess";
 import {
   teamMyQuotaApi,
   type MyTeamQuota,
@@ -352,6 +357,8 @@ const FloatingHeader: React.FC = () => {
   const [isMembershipOpen, setIsMembershipOpen] = useState(false);
   const [teamLedgerOpen, setTeamLedgerOpen] = useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [enterpriseEntryBusy, setEnterpriseEntryBusy] = useState(false);
+  const [joinCodeModalOpen, setJoinCodeModalOpen] = useState(false);
   const [teamMyQuota, setTeamMyQuota] = useState<MyTeamQuota | null>(null);
   const [teamMyQuotaLoading, setTeamMyQuotaLoading] = useState(false);
   const [gridSizeInput, setGridSizeInput] = useState(String(gridSize));
@@ -1277,6 +1284,24 @@ const FloatingHeader: React.FC = () => {
     const href = new URL(path, originWithBase).href;
     window.open(href, "_blank", "noopener,noreferrer");
   }, []);
+
+  const handleEnterpriseVersionClick = useCallback(async () => {
+    if (enterpriseEntryBusy) return;
+    setEnterpriseEntryBusy(true);
+    try {
+      const teams = await refreshTeams().catch(
+        () => useTeamStore.getState().teams
+      );
+      if (isEnterpriseMember(teams)) {
+        const preferred = pickPreferredEnterprise(teams);
+        openEnterpriseConsole(preferred?.id);
+        return;
+      }
+      openEnterpriseConsole();
+    } finally {
+      setEnterpriseEntryBusy(false);
+    }
+  }, [enterpriseEntryBusy, openEnterpriseConsole]);
 
   const isTeamMode = !!(activeTeamForCredits && !activeTeamForCredits.isPersonal);
   const brandLogoSrc =
@@ -2684,11 +2709,25 @@ const FloatingHeader: React.FC = () => {
                 variant="ghost"
                 size="sm"
                 className="h-7 px-2.5 text-xs rounded-full border border-teal-200/70 bg-teal-50/60 text-teal-800 hover:bg-teal-100/80 flex items-center gap-1.5"
-                onClick={() => openEnterpriseConsole()}
+                onClick={() => void handleEnterpriseVersionClick()}
+                disabled={enterpriseEntryBusy}
                 title="企业版"
               >
                 <Building2 className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">企业版</span>
+              </Button>
+            ) : null}
+
+            {SHOW_ENTERPRISE_CONSOLE && !isTeamMode ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2.5 text-xs rounded-full border border-liquid-glass-light bg-liquid-glass-light text-gray-700 hover:bg-liquid-glass-hover flex items-center gap-1.5"
+                onClick={() => setJoinCodeModalOpen(true)}
+                title="输入企业邀请码"
+              >
+                <Key className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">邀请码</span>
               </Button>
             ) : null}
 
@@ -3243,6 +3282,10 @@ const FloatingHeader: React.FC = () => {
             </div>,
             document.body
           )}
+
+        {SHOW_ENTERPRISE_CONSOLE && joinCodeModalOpen ? (
+          <EnterpriseJoinCodeModal onClose={() => setJoinCodeModalOpen(false)} />
+        ) : null}
 
         {isMembershipOpen &&
           typeof document !== "undefined" &&

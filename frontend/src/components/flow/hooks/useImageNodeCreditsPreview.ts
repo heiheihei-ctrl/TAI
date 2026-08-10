@@ -190,13 +190,20 @@ export const useImageNodeCreditsPreview = ({
     }
 
     if (nodeType === "gptImage2") {
+      const resolvedQuality =
+        quality === "low" || quality === "medium" || quality === "high"
+          ? quality
+          : bananaImageRoute === "stable"
+          ? quality || "auto"
+          : "low";
       return {
         serviceType: "gpt-image-2",
-        model: "gpt-image-2",
+        model:
+          bananaImageRoute === "stable" ? "gpt-image-2" : "gpt-image-2-vip",
         requestParams: {
           aiProvider: "nano2",
           imageSize: normalizeBananaImageSize(imageSize) || "1K",
-          quality: quality || "auto",
+          quality: resolvedQuality,
           aspectRatio: safeAspectRatio,
           referenceImageCount: safeReferenceCount,
           bananaImageRoute: bananaImageRoute || undefined,

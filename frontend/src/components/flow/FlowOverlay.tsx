@@ -1486,7 +1486,7 @@ const NODE_CREDITS_MAP: Record<string, number | string> = {
   midjourneyV7: 50, // Midjourney V7 生成
   niji7: 50, // Niji 7 生成
   nano2: 30, // Nano Banana 2 生图
-  gptImage2: 20, // Gpt-Imgae-2 生图（默认按普通 1K 兜底）
+  gptImage2: 20, // Gpt-Image-2 生图（默认按普通 1K + low 兜底）
   seedream5: 30, // Seedream 5.0 生图
   three: 200, // 三维节点 - convert-2d-to-3d
   sora2Video: "40-400", // 视频生成节点 - sora-sd (40) 或 sora-hd (400)
@@ -2035,12 +2035,28 @@ const BANANA_VIDEO_ANALYZE_ROUTE_PRICING: Record<
   },
 };
 
-// GPT-Image-2 在 Stable(尊享/腾讯) 路由下独立计费
-const GPT_IMAGE_2_NORMAL_ROUTE_PRICING: Record<"1K" | "2K" | "4K", number> = {
-  "1K": 20,
-  "2K": 30,
-  "4K": 40,
+// GPT-Image-2 普通路线（ToAPIs gpt-image-2-vip）：平台价(元)×100×1.2×10 向上取整
+const GPT_IMAGE_2_NORMAL_ROUTE_PRICING: Record<
+  "low" | "medium" | "high",
+  Record<"1K" | "2K" | "4K", number>
+> = {
+  low: {
+    "1K": 20,
+    "2K": 40,
+    "4K": 50,
+  },
+  medium: {
+    "1K": 150,
+    "2K": 320,
+    "4K": 400,
+  },
+  high: {
+    "1K": 570,
+    "2K": 1250,
+    "4K": 1590,
+  },
 };
+// GPT-Image-2 在 Stable(尊享) 路由下独立计费（勿改）
 const GPT_IMAGE_2_STABLE_ROUTE_PRICING: Record<
   "low" | "medium" | "high",
   Record<"1K" | "2K" | "4K", number>
@@ -2516,7 +2532,7 @@ const resolveStableRouteCredits = (params: {
     ][pricingTier];
   }
 
-  if (bananaImageRoute === "stable" && normalizedType === "gptImage2") {
+  if (normalizedType === "gptImage2") {
     const preferredSize =
       typeof nodeData?.resolution === "string" && nodeData.resolution.trim().length > 0
         ? nodeData.resolution
@@ -2525,21 +2541,11 @@ const resolveStableRouteCredits = (params: {
         : globalImageSize;
     const normalizedSize = normalizeGptImage2StableImageSize(preferredSize);
     const normalizedQuality = normalizeGptImage2Quality(nodeData?.quality);
-    const unitCredits = Number(
-      GPT_IMAGE_2_STABLE_ROUTE_PRICING[normalizedQuality][normalizedSize]
-    );
-    if (Number.isFinite(unitCredits) && unitCredits > 0) {
-      resolvedCredits = unitCredits;
-    }
-  } else if (normalizedType === "gptImage2") {
-    const preferredSize =
-      typeof nodeData?.resolution === "string" && nodeData.resolution.trim().length > 0
-        ? nodeData.resolution
-        : typeof nodeData?.imageSize === "string" && nodeData.imageSize.trim().length > 0
-        ? nodeData.imageSize
-        : globalImageSize;
-    const normalizedSize = normalizeGptImage2StableImageSize(preferredSize);
-    const unitCredits = Number(GPT_IMAGE_2_NORMAL_ROUTE_PRICING[normalizedSize]);
+    const pricingTable =
+      bananaImageRoute === "stable"
+        ? GPT_IMAGE_2_STABLE_ROUTE_PRICING
+        : GPT_IMAGE_2_NORMAL_ROUTE_PRICING;
+    const unitCredits = Number(pricingTable[normalizedQuality][normalizedSize]);
     if (Number.isFinite(unitCredits) && unitCredits > 0) {
       resolvedCredits = unitCredits;
     }
@@ -18770,12 +18776,18 @@ function FlowInner() {
             const value = pickStringValue(
               nodeData?.quality ?? defaultData?.quality
             )?.toLowerCase();
-            return value === "auto" ||
+            if (
               value === "low" ||
               value === "medium" ||
               value === "high"
-              ? value
-              : undefined;
+            ) {
+              return value;
+            }
+            if (value === "auto") {
+              // 尊享保留 auto；普通路线（vip）无 auto，按 low 计费/提交
+              return latestBananaImageRoute === "stable" ? "auto" : "low";
+            }
+            return latestBananaImageRoute === "stable" ? undefined : "low";
           })();
           const gptImage2Background = (() => {
             const value = pickStringValue(

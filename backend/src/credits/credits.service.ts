@@ -83,10 +83,26 @@ const SIGNUP_BONUS_CREDITS = 500;
 const PREVIEW_CREDITS_CACHE_TTL_SEC = 30;
 const GPT_IMAGE2_SERVICE_TYPE = 'gpt-image-2';
 const GPT_IMAGE2_CREDITS = 20;
-const GPT_IMAGE2_NORMAL_RESOLUTION_PRICING: Record<'1K' | '2K' | '4K', number> = {
-  '1K': 20,
-  '2K': 30,
-  '4K': 40,
+/** 普通路线（ToAPIs gpt-image-2-vip）：平台价(元)×100×1.2×10，向上取整 */
+const GPT_IMAGE2_NORMAL_QUALITY_PRICING: Record<
+  'low' | 'medium' | 'high',
+  Record<'1K' | '2K' | '4K', number>
+> = {
+  low: {
+    '1K': 20, // 0.0133 * 100 * 1.2 * 10
+    '2K': 40, // 0.0298 * 100 * 1.2 * 10
+    '4K': 50, // 0.0368 * 100 * 1.2 * 10
+  },
+  medium: {
+    '1K': 150, // 0.1183 * 100 * 1.2 * 10
+    '2K': 320, // 0.2608 * 100 * 1.2 * 10
+    '4K': 400, // 0.3308 * 100 * 1.2 * 10
+  },
+  high: {
+    '1K': 570, // 0.4725 * 100 * 1.2 * 10
+    '2K': 1250, // 1.04 * 100 * 1.2 * 10
+    '4K': 1590, // 1.32 * 100 * 1.2 * 10
+  },
 };
 const STALE_PENDING_IMAGE_SERVICE_TYPES: ServiceType[] = [
   'gemini-3-pro-image',
@@ -1635,14 +1651,16 @@ export class CreditsService {
         requestParams?.imageSize,
       );
       const normalizedQuality = this.normalizeGptImage2Quality(requestParams?.quality);
-      const stableQuality: Exclude<GptImage2Quality, 'auto'> =
+      const billableQuality: Exclude<GptImage2Quality, 'auto'> =
         normalizedQuality === 'auto' ? 'low' : normalizedQuality;
       const configuredCredits =
         route === 'stable'
           ? Number(
-              GPT_IMAGE2_TENCENT_QUALITY_PRICING[stableQuality][normalizedSize],
+              GPT_IMAGE2_TENCENT_QUALITY_PRICING[billableQuality][normalizedSize],
             )
-          : Number(GPT_IMAGE2_NORMAL_RESOLUTION_PRICING[normalizedSize]);
+          : Number(
+              GPT_IMAGE2_NORMAL_QUALITY_PRICING[billableQuality][normalizedSize],
+            );
       if (!Number.isFinite(configuredCredits) || configuredCredits <= 0) {
         return null;
       }

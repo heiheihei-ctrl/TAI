@@ -25,6 +25,10 @@ import {
 } from "@/utils/teamInvite";
 import { TeamInviteConfirmModal } from "@/components/team/TeamInviteConfirmModal";
 import { refreshTeams, useTeamStore } from "@/stores/teamStore";
+import {
+  isEnterpriseMember,
+  pickPreferredEnterprise,
+} from "@/utils/enterpriseAccess";
 import titleImage from "@/assets/title.png";
 import logoImage from "@/assets/logo.png";
 import leftIconImage from "@/assets/left-icon.png";
@@ -48,6 +52,7 @@ import BoxIcon2 from "@/assets/box2.jpg";
 import BoxIcon3 from "@/assets/box3.png";
 import Qrcode from "@/assets/group-erweima.jpg";
 import gzhImg from "@/assets/gzh.png";
+import kefuImage from "@/assets/kefu.png";
 
 
 const FEATURE_CARD_IMAGES = [
@@ -357,8 +362,43 @@ export default function Home() {
   const [activeSceneFilter, setActiveSceneFilter] =
     useState<SceneFilterKey>("all");
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [enterpriseEntryBusy, setEnterpriseEntryBusy] = useState(false);
 
   const teamInviteCode = resolveActiveTeamInvite(searchParams);
+
+  const openEnterpriseForMember = useCallback(
+    (teamId?: string) => {
+      if (teamId) {
+        navigate(`/enterprise/${encodeURIComponent(teamId)}/projects`);
+        return;
+      }
+      navigate("/enterprise");
+    },
+    [navigate]
+  );
+
+  /** 企业版入口：企业成员直接进入；否则跳转企业登录页 */
+  const handleEnterpriseVersionClick = useCallback(async () => {
+    if (enterpriseEntryBusy) return;
+    setEnterpriseEntryBusy(true);
+    try {
+      if (!user) {
+        navigate("/enterprise");
+        return;
+      }
+      const teams = await refreshTeams().catch(
+        () => useTeamStore.getState().teams
+      );
+      if (isEnterpriseMember(teams)) {
+        const preferred = pickPreferredEnterprise(teams);
+        openEnterpriseForMember(preferred?.id);
+        return;
+      }
+      navigate("/enterprise");
+    } finally {
+      setEnterpriseEntryBusy(false);
+    }
+  }, [enterpriseEntryBusy, navigate, openEnterpriseForMember, user]);
 
   useEffect(() => {
     if (!SHOW_ENTERPRISE_CONSOLE || !teamInviteCode || authInitializing) return;
@@ -596,6 +636,18 @@ export default function Home() {
 
           <div className="flex items-center gap-2 sm:gap-3">
             <LanguageSwitcher tone="dark" style="simple" compact />
+            {!user && SHOW_ENTERPRISE_CONSOLE ? (
+              <div className="relative hidden sm:block">
+                <button
+                  type="button"
+                  className="rounded-full border border-teal-400/40 bg-teal-500/15 px-3 py-1 text-xs text-teal-100 transition-colors hover:bg-teal-500/25"
+                  onClick={() => void handleEnterpriseVersionClick()}
+                  disabled={enterpriseEntryBusy}
+                >
+                  企业版
+                </button>
+              </div>
+            ) : null}
             {user ? (
               <div className="flex items-center gap-2 text-sm sm:gap-3">
                 <span className="hidden text-white/80 sm:inline">
@@ -633,13 +685,16 @@ export default function Home() {
                   {t("home.header.actions.membership")}
                 </button>
                 {SHOW_ENTERPRISE_CONSOLE ? (
-                  <button
-                    type="button"
-                    className="hidden rounded-full border border-teal-400/40 bg-teal-500/15 px-3 py-1 text-xs text-teal-100 transition-colors hover:bg-teal-500/25 sm:inline-flex"
-                    onClick={() => navigate("/enterprise")}
-                  >
-                    企业版
-                  </button>
+                  <div className="relative hidden sm:block">
+                    <button
+                      type="button"
+                      className="rounded-full border border-teal-400/40 bg-teal-500/15 px-3 py-1 text-xs text-teal-100 transition-colors hover:bg-teal-500/25"
+                      onClick={() => void handleEnterpriseVersionClick()}
+                      disabled={enterpriseEntryBusy}
+                    >
+                      企业版
+                    </button>
+                  </div>
                 ) : null}
                 <button
                   type="button"
@@ -1099,7 +1154,8 @@ export default function Home() {
             {SHOW_ENTERPRISE_CONSOLE ? (
               <button
                 type="button"
-                onClick={() => navigate("/enterprise")}
+                onClick={() => void handleEnterpriseVersionClick()}
+                disabled={enterpriseEntryBusy}
                 className="inline-flex h-11 items-center justify-center rounded-full border border-teal-300/50 bg-teal-500/20 px-6 text-sm font-medium text-teal-50 backdrop-blur-sm transition hover:bg-teal-500/30"
               >
                 企业版
@@ -1193,6 +1249,26 @@ export default function Home() {
             void refreshTeams().catch(() => {});
           }}
         />
+      ) : null}
+      {SHOW_ENTERPRISE_CONSOLE ? (
+        <aside
+          className="fixed right-4 top-1/2 z-40 hidden w-[148px] -translate-y-1/2 flex-col items-center rounded-2xl bg-[#1e2128] px-3 pb-3 pt-4 shadow-[0_12px_40px_rgba(0,0,0,0.45)] sm:flex md:right-6"
+          aria-label="企业版咨询客服微信"
+        >
+          <p className="mb-3 text-center text-[13px] font-medium leading-snug text-white">
+            企业版咨询
+            <br />
+            客服微信
+          </p>
+          <div className="w-full overflow-hidden rounded-xl bg-white p-2">
+            <img
+              src={kefuImage}
+              alt="企业版咨询客服微信"
+              className="block h-auto w-full object-contain"
+              draggable={false}
+            />
+          </div>
+        </aside>
       ) : null}
       <WeChatFloatingButton />
     </div>

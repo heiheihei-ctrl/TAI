@@ -112,7 +112,7 @@ const GPT_IMAGE_2_4K_SUPPORTED_ASPECT_RATIOS = [
 const GPT_IMAGE_2_4K_ASPECT_RATIO_SET = new Set<string>(
   GPT_IMAGE_2_4K_SUPPORTED_ASPECT_RATIOS
 );
-const GPT_IMAGE_2_QUALITY_OPTIONS = [
+const GPT_IMAGE_2_STABLE_QUALITY_OPTIONS = [
   {
     value: "auto" as const,
     title: "auto",
@@ -122,20 +122,30 @@ const GPT_IMAGE_2_QUALITY_OPTIONS = [
   {
     value: "low" as const,
     title: "low",
-    // descZh: "快速省钱，轮廓够用",
-    // descEn: "Fast and cheap",
   },
   {
     value: "medium" as const,
     title: "medium",
-    // descZh: "平衡",
-    // descEn: "Balanced",
   },
   {
     value: "high" as const,
     title: "high",
-    // descZh: "最高精度（4K + high 耗时 >120s）",
-    // descEn: "Highest quality (4K + high may take >120s)",
+  },
+];
+
+/** 普通路线（ToAPIs gpt-image-2-vip）仅支持 low/medium/high */
+const GPT_IMAGE_2_NORMAL_QUALITY_OPTIONS = [
+  {
+    value: "low" as const,
+    title: "low",
+  },
+  {
+    value: "medium" as const,
+    title: "medium",
+  },
+  {
+    value: "high" as const,
+    title: "high",
   },
 ];
 
@@ -281,7 +291,11 @@ function Nano2NodeInner({ id, data, selected }: Props) {
     resolutionOptions[0] ||
     "1K";
   const isGptImage2Node = resolvedNodeType === "gptImage2";
-  const showGptImage2QualitySelector = isGptImage2Node && bananaImageRoute === "stable";
+  const showGptImage2QualitySelector = isGptImage2Node;
+  const gptImage2QualityOptions =
+    bananaImageRoute === "stable"
+      ? GPT_IMAGE_2_STABLE_QUALITY_OPTIONS
+      : GPT_IMAGE_2_NORMAL_QUALITY_OPTIONS;
   const normalizedResolutionValue =
     typeof resolutionValue === "string" ? resolutionValue.trim().toUpperCase() : "";
   const isGptImage24K =
@@ -425,18 +439,20 @@ function Nano2NodeInner({ id, data, selected }: Props) {
   const normalizedQualityValue = React.useMemo<
     "auto" | "low" | "medium" | "high"
   >(() => {
+    const fallback = bananaImageRoute === "stable" ? "auto" : "low";
     const candidate =
       typeof data.quality === "string"
         ? data.quality
         : typeof defaultData?.quality === "string"
         ? defaultData.quality
-        : "auto";
+        : fallback;
     const normalized = candidate.trim().toLowerCase();
     if (normalized === "low") return "low";
     if (normalized === "medium") return "medium";
     if (normalized === "high") return "high";
-    return "auto";
-  }, [data.quality, defaultData?.quality]);
+    if (bananaImageRoute === "stable" && normalized === "auto") return "auto";
+    return fallback;
+  }, [bananaImageRoute, data.quality, defaultData?.quality]);
 
   const updateQuality = React.useCallback(
     (value: "auto" | "low" | "medium" | "high") => {
@@ -448,6 +464,23 @@ function Nano2NodeInner({ id, data, selected }: Props) {
     },
     [id]
   );
+
+  React.useEffect(() => {
+    if (!isGptImage2Node) return;
+    if (bananaImageRoute === "stable") return;
+    if (
+      normalizedQualityValue === "low" ||
+      normalizedQualityValue === "medium" ||
+      normalizedQualityValue === "high"
+    ) {
+      return;
+    }
+    window.dispatchEvent(
+      new CustomEvent("flow:updateNodeData", {
+        detail: { id, patch: { quality: "low" } },
+      })
+    );
+  }, [bananaImageRoute, id, isGptImage2Node, normalizedQualityValue]);
 
   React.useEffect(() => {
     if (!isGptImage24K) return;
@@ -584,10 +617,10 @@ function Nano2NodeInner({ id, data, selected }: Props) {
   }, [normalizedResolutionValue, resolutionOptions, resolutionValue]);
   const currentQualityOption = React.useMemo(() => {
     return (
-      GPT_IMAGE_2_QUALITY_OPTIONS.find((option) => option.value === normalizedQualityValue) ||
-      GPT_IMAGE_2_QUALITY_OPTIONS[0]
+      gptImage2QualityOptions.find((option) => option.value === normalizedQualityValue) ||
+      gptImage2QualityOptions[0]
     );
-  }, [normalizedQualityValue]);
+  }, [gptImage2QualityOptions, normalizedQualityValue]);
   const getDropdownItemStyle = React.useCallback(
     (isActive: boolean): React.CSSProperties => {
       if (isFlowDark) {
@@ -934,7 +967,7 @@ function Nano2NodeInner({ id, data, selected }: Props) {
               }}
             >
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {GPT_IMAGE_2_QUALITY_OPTIONS.map((option) => {
+                {gptImage2QualityOptions.map((option) => {
                   const isActive = option.value === normalizedQualityValue;
                   return (
                     <button

@@ -13,6 +13,8 @@ type GptImage2Moderation = 'auto' | 'low';
 type GptImage2OutputFormat = 'png' | 'jpeg' | 'webp';
 
 const GPT_IMAGE_2_OFFICIAL_MODEL = 'gpt-image-2-official';
+/** 普通路线：ToAPIs vip 渠道 */
+const GPT_IMAGE_2_VIP_MODEL = 'gpt-image-2-vip';
 const GPT_IMAGE_2_4K_SIZE_SET = new Set(['16:9', '9:16', '2:1', '1:2', '21:9', '9:21']);
 
 @Injectable()
@@ -145,7 +147,12 @@ export class Nano2Provider implements IAIProvider {
     const isGptImage2Model = this.isGptImage2Model(requestedModel);
     const userRoute = this.resolveUserRoute(request.providerOptions);
     const useOfficialProfile = isGptImage2Model && userRoute === 'stable';
-    const upstreamModel = useOfficialProfile ? GPT_IMAGE_2_OFFICIAL_MODEL : requestedModel;
+    const useVipProfile = isGptImage2Model && userRoute === 'normal';
+    const upstreamModel = useOfficialProfile
+      ? GPT_IMAGE_2_OFFICIAL_MODEL
+      : useVipProfile
+        ? GPT_IMAGE_2_VIP_MODEL
+        : requestedModel;
     const requestedSize = (() => {
       const raw = request.aspectRatio ?? (isGptImage2Model ? '1:1' : '16:9');
       if (typeof raw !== 'string' || !raw.trim()) {
@@ -213,10 +220,24 @@ export class Nano2Provider implements IAIProvider {
                 : {}),
               ...(maskUrl ? { mask_url: maskUrl } : {}),
             }
-          : {
-              official_fallback:
-                typeof request.officialFallback === 'boolean' ? request.officialFallback : false,
-            }
+          : useVipProfile
+            ? {
+                // ToAPIs gpt-image-2-vip：quality = low | medium | high
+                quality: (() => {
+                  const q = this.normalizeQuality(request.quality);
+                  return q === 'low' || q === 'medium' || q === 'high' ? q : 'low';
+                })(),
+                official_fallback:
+                  typeof request.officialFallback === 'boolean'
+                    ? request.officialFallback
+                    : false,
+              }
+            : {
+                official_fallback:
+                  typeof request.officialFallback === 'boolean'
+                    ? request.officialFallback
+                    : false,
+              }
         : {
             google_search: request.googleSearch,
             google_image_search: request.googleImageSearch,

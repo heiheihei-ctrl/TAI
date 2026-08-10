@@ -151,16 +151,40 @@ const quoteCases: QuoteCase[] = [
     expectedCredits: 160,
   },
   {
-    name: 'gpt-image-2 normal 2K',
+    name: 'gpt-image-2 normal low 2K',
     serviceType: 'gpt-image-2',
     requestParams: {
       aiProvider: 'gpt-image-2',
       imageSize: '2K',
       bananaImageRoute: 'normal',
       channelHint: 'apimart',
-      quality: 'auto',
+      quality: 'low',
     },
-    expectedCredits: 30,
+    expectedCredits: 40,
+  },
+  {
+    name: 'gpt-image-2 normal medium 1K',
+    serviceType: 'gpt-image-2',
+    requestParams: {
+      aiProvider: 'gpt-image-2',
+      imageSize: '1K',
+      bananaImageRoute: 'normal',
+      channelHint: 'apimart',
+      quality: 'medium',
+    },
+    expectedCredits: 150,
+  },
+  {
+    name: 'gpt-image-2 normal high 4K',
+    serviceType: 'gpt-image-2',
+    requestParams: {
+      aiProvider: 'gpt-image-2',
+      imageSize: '4K',
+      bananaImageRoute: 'normal',
+      channelHint: 'apimart',
+      quality: 'high',
+    },
+    expectedCredits: 1590,
   },
   {
     name: 'gpt-image-2 stable low 1K',
@@ -282,7 +306,7 @@ function runFrontendStaticAssertions() {
   );
   expectIncludes(
     'frontend/src/components/flow/hooks/useImageNodeCreditsPreview.ts',
-    'quality: quality || "auto"',
+    'quality: resolvedQuality',
     'image preview hook forwards gpt-image-2 quality',
   );
   expectIncludes(
