@@ -370,6 +370,18 @@ export default function ForgotPasswordModal({
                   ? lt("验证中...", "Verifying...")
                   : lt("验证验证码", "Verify code")}
               </Button>
+
+              <Button
+                type='button'
+                variant='outline'
+                onClick={handleSendSms}
+                className='w-full rounded-xl h-10'
+                disabled={sendCooldown > 0 || isSubmitting}
+              >
+                {sendCooldown > 0
+                  ? lt(`重新发送(${sendCooldown}s)`, `Resend (${sendCooldown}s)`)
+                  : lt("重新发送验证码", "Resend code")}
+              </Button>
             </div>
           )}
 

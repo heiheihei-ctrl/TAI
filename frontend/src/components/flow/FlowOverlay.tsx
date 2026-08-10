@@ -55,7 +55,11 @@ import {
   shouldAutoStartFlowOnboarding,
   useFlowOnboardingStore,
 } from "@/stores/flowOnboardingStore";
-import { SHOW_FLOW_ONBOARDING_TOOLBAR } from "@/config/featureFlags";
+import {
+  SHOW_FLOW_ONBOARDING_TOOLBAR,
+  SHOW_TEAM_COLLABORATION,
+} from "@/config/featureFlags";
+import { shouldHideForeignFlowNode } from "@/config/foreignFlowNodes";
 import { useAuthStore } from "@/stores/authStore";
 import TextPromptProNode from "./nodes/TextPromptProNode";
 import TextChatNode from "./nodes/TextChatNode";
@@ -126,7 +130,6 @@ import { useShallow } from "zustand/react/shallow";
 import { useProjectContentStore } from "@/stores/projectContentStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useTeamStore, resolveCollaborationTeam } from "@/stores/teamStore";
-import { SHOW_TEAM_COLLABORATION } from "@/config/featureFlags";
 import { useFlowCollabIntegration } from "@/hooks/useFlowCollabIntegration";
 import RemoteFlowSelectionOverlays from "@/components/collaboration/RemoteFlowSelectionOverlays";
 import CanvasCommentLayer from "@/components/comments/CanvasCommentLayer";
@@ -1824,7 +1827,9 @@ const normalizeFlowNodeType = (rawType?: string): FlowNodeType | null => {
 
 const isHiddenFlowNodeType = (rawType?: string): boolean => {
   const normalized = normalizeFlowNodeType(rawType);
-  return Boolean(normalized && HIDDEN_FLOW_NODE_TYPES.has(normalized));
+  if (!normalized) return false;
+  if (HIDDEN_FLOW_NODE_TYPES.has(normalized)) return true;
+  return shouldHideForeignFlowNode(normalized);
 };
 
 const SEED_3D_PALETTE_NAME_CANONICALS = new Set(["seed3d"]);
@@ -4049,7 +4054,9 @@ function FlowInner() {
       .filter((config) => !isSeed3DPaletteConfig(config))
       .filter((config) => {
         const resolvedType = resolveFlowNodeTypeFromConfig(config);
-        return !isHiddenFlowNodeType(resolvedType);
+        if (isHiddenFlowNodeType(resolvedType)) return false;
+        if (shouldHideForeignFlowNode(config.nodeKey)) return false;
+        return true;
       })
       .filter((config) => config.status !== "disabled");
 
@@ -8597,6 +8604,17 @@ function FlowInner() {
         );
         return null;
       }
+      if (shouldHideForeignFlowNode(type)) {
+        window.dispatchEvent(
+          new CustomEvent("toast", {
+            detail: {
+              message: "当前环境未开放国外节点",
+              type: "error",
+            },
+          })
+        );
+        return null;
+      }
       const size = FLOW_NODE_DEFAULT_SIZE[type];
       const id = `${type}_${Date.now()}`;
       const pos = { x: world.x - size.w / 2, y: world.y - size.h / 2 };
@@ -9272,11 +9290,13 @@ function FlowInner() {
 
     NODE_PALETTE_ITEMS.forEach((item) => {
       if (map.has(item.key)) return;
+      if (shouldHideForeignFlowNode(item.key)) return;
       map.set(item.key, { label: lt(item.zh, item.en), status: "normal" });
     });
 
     BETA_NODE_ITEMS.forEach((item) => {
       if (map.has(item.key)) return;
+      if (shouldHideForeignFlowNode(item.key)) return;
       map.set(item.key, { label: lt(item.zh, item.en), status: "normal" });
     });
 
@@ -9370,6 +9390,9 @@ function FlowInner() {
         if (HIDDEN_FLOW_NODE_TYPES.has(resolvedType as FlowNodeType)) {
           continue;
         }
+        if (shouldHideForeignFlowNode(resolvedType)) {
+          continue;
+        }
         if (
           status === "maintenance" ||
           status === "coming_soon" ||
@@ -9426,6 +9449,9 @@ function FlowInner() {
           resolvedType
         );
         if (HIDDEN_FLOW_NODE_TYPES.has(resolvedType as FlowNodeType)) {
+          continue;
+        }
+        if (shouldHideForeignFlowNode(resolvedType)) {
           continue;
         }
         if (

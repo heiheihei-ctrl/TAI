@@ -5,6 +5,9 @@ All notable changes to this knowledge base will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning (knowledge-base versioning).
 
 ## [Unreleased]
+### Added
+- Frontend feature flag: `VITE_SHOW_FOREIGN_NODES`（`SHOW_FOREIGN_NODES`，默认 `true`）控制节点面板与快捷连接是否展示国外模型节点；`false` 时隐藏，已落画布节点仍可使用。
+
 ### Changed
 - Enterprise: 平台生成的企业管理员 `seatExempt` 不计席；`member` 不可进企业后台；新建管理员可标记 `isEnterpriseAccount`（不必先有个人工作区）。
 - Enterprise console: `/enterprise` 仅账号密码登录；默认落地项目管理；企业成员隐藏「新建团队」；Admin 用户管理去掉「项目管理」子 Tab（见 `enterprise-console.md`）。

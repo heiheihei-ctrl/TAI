@@ -19,6 +19,7 @@
 |------|----------|------|------|
 | `SHOW_TEAM_COLLABORATION` | `VITE_SHOW_TEAM_COLLABORATION` | `false` | 实时协同 UI |
 | `SHOW_ENTERPRISE_CONSOLE` | `VITE_SHOW_ENTERPRISE` | `false` | 企业版入口与路由 |
+| `SHOW_FOREIGN_NODES` | `VITE_SHOW_FOREIGN_NODES` | `true` | 节点面板/快捷连接是否展示国外模型节点 |
 
 ## 席位与企业账号
 

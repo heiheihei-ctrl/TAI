@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Building2, Loader2, Upload } from "lucide-react";
+import { Building2, Key, Loader2, Upload } from "lucide-react";
 import { teamApi, type TeamMember } from "@/services/teamApi";
 import { teamCreditsApi, teamMyQuotaApi } from "@/services/teamCreditsApi";
 import { refreshTeams, useTeamStore } from "@/stores/teamStore";
+import { useAuthStore } from "@/stores/authStore";
 import { TeamManagementModal } from "@/components/team/TeamManagementModal";
 import { EnterpriseLedgerModal } from "@/components/team/EnterpriseLedgerModal";
+import ForgotPasswordModal from "@/components/auth/ForgotPasswordModal";
 import { uploadToOSS } from "@/services/ossUploadService";
 
 export default function EnterpriseSettingsPage() {
   const { teamId = "" } = useParams<{ teamId: string }>();
   const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
   const team = useTeamStore((s) => s.teams.find((t) => t.id === teamId));
   const myRole = team?.myRole;
   const canManage = myRole === "owner" || myRole === "admin";
@@ -38,6 +41,7 @@ export default function EnterpriseSettingsPage() {
   const [busy, setBusy] = useState(false);
   const [modalTab, setModalTab] = useState<"subscription" | "topup" | null>(null);
   const [ledgerModalOpen, setLedgerModalOpen] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
 
   useEffect(() => {
     setName(team?.name || "");
@@ -299,6 +303,31 @@ export default function EnterpriseSettingsPage() {
         ) : null}
       </section>
 
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="mb-1 text-sm font-semibold">账号安全</h2>
+        <p className="mb-4 text-xs text-slate-400">
+          通过手机验证码修改当前企业账号登录密码
+        </p>
+        <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-sm font-medium text-slate-800">修改密码</div>
+            <div className="mt-0.5 text-xs text-slate-500">
+              {user?.phone
+                ? `当前账号：${user.phone}`
+                : "将使用当前登录账号手机号验证"}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setChangePasswordOpen(true)}
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-800 hover:bg-slate-50"
+          >
+            <Key className="h-4 w-4" />
+            修改密码
+          </button>
+        </div>
+      </section>
+
       {isOwner ? (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="mb-4 text-sm font-semibold">所有权与解散</h2>
@@ -358,6 +387,17 @@ export default function EnterpriseSettingsPage() {
           onClose={() => setLedgerModalOpen(false)}
         />
       ) : null}
+
+      <ForgotPasswordModal
+        isOpen={changePasswordOpen}
+        onClose={() => setChangePasswordOpen(false)}
+        defaultPhone={user?.phone || null}
+        lockedPhone
+        onSuccess={() => {
+          setChangePasswordOpen(false);
+          setMessage("密码已修改成功");
+        }}
+      />
     </div>
   );
 }

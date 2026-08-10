@@ -9,6 +9,9 @@ interface ImportMetaEnv {
   readonly VITE_OPENOBSERVE_LOGS_URL_PROD?: string;
   readonly VITE_STORAGE_SCHEMA_VERSION?: string;
   readonly VITE_RUNTIME_ERROR_REPORTING?: string;
+  readonly VITE_SHOW_TEAM_COLLABORATION?: string;
+  readonly VITE_SHOW_ENTERPRISE?: string;
+  readonly VITE_SHOW_FOREIGN_NODES?: string;
 }
 
 interface ImportMeta {

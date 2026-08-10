@@ -23,6 +23,13 @@ export const SHOW_TEAM_COLLABORATION = readViteFlag(
 export const SHOW_ENTERPRISE_CONSOLE = readViteFlag("VITE_SHOW_ENTERPRISE", false);
 
 /**
+ * 是否在节点面板 / 快捷连接中展示国外模型节点（Google / OpenAI / Midjourney / Omni 等）。
+ * 默认展示；设为 `false` 时隐藏，已落在画布上的节点仍可继续使用。
+ * 环境变量：`VITE_SHOW_FOREIGN_NODES=true|false`
+ */
+export const SHOW_FOREIGN_NODES = readViteFlag("VITE_SHOW_FOREIGN_NODES", true);
+
+/**
  * 画布顶栏是否展示「个人 / 企业」工作区切换。
  * 企业版开启时也应保留，避免从首页进画布后卡在企业工作区。
  */
