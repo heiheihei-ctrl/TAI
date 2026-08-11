@@ -630,7 +630,7 @@ export class NodeConfigService {
     nodeKey: string,
     serviceType?: string | null,
   ): number | undefined {
-    if (nodeKey === 'gptImage2') return 20;
+    if (nodeKey === 'gptImage2') return 29;
     if (nodeKey === 'videoAnalyze') return 60;
     if (nodeKey === 'textChat') return 5;
     if (nodeKey === 'promptOptimize') return 5;
@@ -911,7 +911,7 @@ export class NodeConfigService {
         nameEn: 'Gpt-Imgae-2',
         category: 'image',
         sortOrder: 16,
-        creditsPerCall: 20,
+        creditsPerCall: 29,
         serviceType: 'gpt-image-2',
         priceYuan: 0.2,
         description: 'Gpt-Imgae-2，支持文生图/图生图，最多 16 张参考图',
@@ -919,7 +919,7 @@ export class NodeConfigService {
           type: 'gptImage2',
           flowNodeType: 'gptImage2',
           provider: 'nano2',
-          model: 'gpt-image-2-vip',
+          model: 'gpt-image-2-official',
           aspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '5:4', '4:5', '2:1', '1:2', '21:9', '9:21'],
           resolutions: ['1K', '2K', '4K'],
           showResolutionSelector: true,
@@ -928,10 +928,10 @@ export class NodeConfigService {
           maxReferenceImages: 16,
           defaultData: {
             modelProvider: 'nano2',
-            model: 'gpt-image-2-vip',
+            model: 'gpt-image-2-official',
             aspectRatio: '1:1',
             resolution: '1K',
-            quality: 'low',
+            quality: 'medium',
             officialFallback: false,
             maxReferenceImages: 16,
             googleSearch: false,
@@ -1577,7 +1577,7 @@ export class NodeConfigService {
         nameEn: 'Gpt-Imgae-2',
         category: 'image',
         sortOrder: 16,
-        creditsPerCall: 20,
+        creditsPerCall: 29,
         serviceType: 'gpt-image-2',
         priceYuan: 0.2,
         description: 'Gpt-Imgae-2 生图，支持文生图/图生图，最多 16 张参考图',
@@ -1585,7 +1585,7 @@ export class NodeConfigService {
           type: 'gptImage2',
           flowNodeType: 'gptImage2',
           provider: 'nano2',
-          model: 'gpt-image-2-vip',
+          model: 'gpt-image-2-official',
           aspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '5:4', '4:5', '2:1', '1:2', '21:9', '9:21'],
           resolutions: ['1K', '2K', '4K'],
           showResolutionSelector: true,
@@ -1594,10 +1594,10 @@ export class NodeConfigService {
           maxReferenceImages: 16,
           defaultData: {
             modelProvider: 'nano2',
-            model: 'gpt-image-2-vip',
+            model: 'gpt-image-2-official',
             aspectRatio: '1:1',
             resolution: '1K',
-            quality: 'low',
+            quality: 'medium',
             officialFallback: false,
             maxReferenceImages: 16,
             googleSearch: false,

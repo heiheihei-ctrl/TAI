@@ -7584,8 +7584,7 @@ function TeamsTab() {
         </div>
       )}
 
-      <Card>
-        <CardContent className='p-0'>
+      <div className='bg-white rounded-lg border overflow-hidden'>
           <table className='w-full'>
             <thead>
               <tr className='border-b bg-gray-50'>
@@ -7666,9 +7665,8 @@ function TeamsTab() {
               )}
             </tbody>
           </table>
-        </CardContent>
         {pagination.total > 0 && (
-          <CardFooter className='flex items-center justify-between border-t bg-gray-50'>
+          <div className='flex items-center justify-between border-t bg-gray-50 px-6 py-3'>
             <span className='text-sm text-gray-500'>
               共 {pagination.total} 条记录
             </span>
@@ -7693,9 +7691,9 @@ function TeamsTab() {
                 下一页
               </Button>
             </div>
-          </CardFooter>
+          </div>
         )}
-      </Card>
+      </div>
 
       {/* 成员列表弹窗 */}
       {showMembersModal && selectedTeam && (
@@ -8449,7 +8447,7 @@ function PaidUsersTab() {
             setSortBy(e.target.value as PaidUsersSortBy);
             setPage(1);
           }}
-          className='h-10 rounded-md border border-input bg-background px-3 py-2 text-sm'
+          className='h-10 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm'
         >
           <option value='amount'>按金额排序</option>
           <option value='registeredAt'>按注册时间排序</option>

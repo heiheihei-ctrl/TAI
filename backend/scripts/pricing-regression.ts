@@ -160,7 +160,7 @@ const quoteCases: QuoteCase[] = [
       channelHint: 'apimart',
       quality: 'low',
     },
-    expectedCredits: 40,
+    expectedCredits: 8,
   },
   {
     name: 'gpt-image-2 normal medium 1K',
@@ -172,7 +172,7 @@ const quoteCases: QuoteCase[] = [
       channelHint: 'apimart',
       quality: 'medium',
     },
-    expectedCredits: 150,
+    expectedCredits: 29,
   },
   {
     name: 'gpt-image-2 normal high 4K',
@@ -184,7 +184,7 @@ const quoteCases: QuoteCase[] = [
       channelHint: 'apimart',
       quality: 'high',
     },
-    expectedCredits: 1590,
+    expectedCredits: 318,
   },
   {
     name: 'gpt-image-2 stable low 1K',
@@ -286,7 +286,7 @@ function runFrontendStaticAssertions() {
   );
   expectIncludes(
     'frontend/src/components/flow/FlowOverlay.tsx',
-    'gptImage2: 20',
+    'gptImage2: 29',
     'flow overlay gptImage2 credits',
   );
   expectIncludes(
@@ -311,7 +311,7 @@ function runFrontendStaticAssertions() {
   );
   expectIncludes(
     'backend/src/admin/services/node-config.service.ts',
-    "if (nodeKey === 'gptImage2') return 20;",
+    "if (nodeKey === 'gptImage2') return 29;",
     'backend canonical gptImage2 credits',
   );
   expectIncludes(

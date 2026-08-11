@@ -195,11 +195,11 @@ export const useImageNodeCreditsPreview = ({
           ? quality
           : bananaImageRoute === "stable"
           ? quality || "auto"
-          : "low";
+          : "medium";
       return {
         serviceType: "gpt-image-2",
         model:
-          bananaImageRoute === "stable" ? "gpt-image-2" : "gpt-image-2-vip",
+          bananaImageRoute === "stable" ? "gpt-image-2" : "gpt-image-2-official",
         requestParams: {
           aiProvider: "nano2",
           imageSize: normalizeBananaImageSize(imageSize) || "1K",

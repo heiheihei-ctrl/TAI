@@ -101,7 +101,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Project cloud-save now validates newly introduced managed asset keys before persistence; if OSS objects are missing, save is blocked with `400` to prevent persisting broken references.
 
 ### Integration
-- GPT-Image-2 routing now follows global `normal/stable` route in `nano2`: `stable` uses official model/profile (`gpt-image-2-official` with official parameter set); `normal` uses ToAPIs `gpt-image-2-vip` with `quality` (`low`/`medium`/`high`) and credits = ceil(platformYuan × 100 × 1.2 × 10) by resolution×quality.
+- GPT-Image-2 routing now follows global `normal/stable` route in `nano2`: both routes use `gpt-image-2-official`; `stable` uses the official parameter profile; `normal` uses `quality` (`low`/`medium`/`high`) and credits = ceil(platformYuan × 1.2 × 100) by resolution×quality.
 - GPT-Image-2 official submission now includes clearer upstream error observability (`requestId` + raw body logging), transient 5xx submit retry, and a single automatic fallback from `4k` to `2k` for stable-route official requests when upstream 5xx occurs.
 
 ### Changed

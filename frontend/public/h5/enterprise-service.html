@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="description" content="天宫 TAI 企业版 — 面向建筑、教育、影视、内容创作行业的产业级 AIGC 数字化解决方案。" />
+  <title>天宫 TAI · 企业版服务</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700;900&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
+  <style>
+    :root {
+      --primary: #1a1a2e;
+      --accent: #38bdf8;
+      --accent-deep: #0ea5e9;
+      --text-main: #4a4a4a;
+      --text-sub: #9c9c9c;
+      --bg-main: #ffffff;
+      --bg-gray: #f8f9fa;
+      --border: #e5e7eb;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+      --shadow-hover: 0 8px 40px rgba(0, 0, 0, 0.1);
+      --max-w: 520px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #060b18;
+      color: var(--text-main);
+      line-height: 1.6;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    img {
+      display: block;
+      max-width: 100%;
+    }
+
+    a {
+      text-decoration: none;
+      color: inherit;
+    }
+
+    /* ===== Header / Nav ===== */
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: #060b18;
+    }
+
+    .header-inner {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--primary);
+    }
+
+    .logo img {
+      width: 68px;
+    }
+
+    .nav-btn {
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+      color: #fff;
+      border: none;
+      cursor: pointer;
+    }
+
+    /* ===== Stats ===== */
+    .stats-section {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 24px 16px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .stats-card {
+      background: var(--bg-main);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 8px;
+      text-align: center;
+      box-shadow: var(--shadow);
+      transition: transform 0.3s, box-shadow 0.3s;
+    }
+
+    .stats-card:active {
+      transform: scale(0.98);
+    }
+
+    .stats-icon {
+      width: 40px;
+      height: 40px;
+      margin: 0 auto 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      font-size: 18px;
+    }
+
+    .stats-icon.blue {
+      background: #e0f2fe;
+    }
+
+    .stats-icon.orange {
+      background: #fef3c7;
+    }
+
+    .stats-icon.green {
+      background: #d1fae5;
+    }
+
+    .stats-num {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--primary);
+      line-height: 1.2;
+    }
+
+    .stats-label {
+      font-size: 12px;
+      color: var(--text-sub);
+      margin-top: 4px;
+    }
+
+    /* ===== Section ===== */
+    .section {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 32px 16px;
+    }
+
+    .section-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-title .line {
+      width: 4px;
+      height: 20px;
+      border-radius: 2px;
+      background: linear-gradient(180deg, var(--accent), var(--accent-deep));
+    }
+
+    .section-sub {
+      font-size: 13px;
+      color: var(--text-sub);
+      margin-bottom: 20px;
+    }
+
+    /* ===== Service Cards ===== */
+    .service-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .service-card {
+      background: var(--bg-main);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 12px;
+      text-align: center;
+      box-shadow: var(--shadow);
+      transition: all 0.3s;
+    }
+
+    .service-card:active {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-hover);
+    }
+
+    .service-icon {
+      width: 44px;
+      height: 44px;
+      margin: 0 auto 10px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      background: linear-gradient(135deg, #e0f2fe, #f0f9ff);
+    }
+
+    .service-card h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--primary);
+      margin-bottom: 4px;
+    }
+
+    .service-card p {
+      font-size: 12px;
+      color: var(--text-sub);
+      line-height: 1.5;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      margin-left: 4px;
+      vertical-align: middle;
+    }
+
+    .tag.new {
+      background: #d1fae5;
+      color: #059669;
+    }
+
+    .tag.hot {
+      background: #fee2e2;
+      color: #dc2626;
+    }
+
+    /* ===== Intro content (from company-intro-02) ===== */
+    .intro-block {
+      margin-bottom: 28px;
+    }
+
+    .intro-block:last-child {
+      margin-bottom: 0;
+    }
+
+    .intro-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: 1fr;
+    }
+
+    .intro-card {
+      background: rgba(15, 23, 42, 0.72);
+      border: 1px solid rgba(148, 163, 184, 0.14);
+      border-radius: var(--radius);
+      padding: 16px;
+      text-align: left;
+    }
+
+    .intro-card .num-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .intro-card h3 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #f1f5f9;
+      margin-bottom: 8px;
+    }
+
+    .intro-card p {
+      font-size: 13px;
+      color: #94a3b8;
+      line-height: 1.7;
+    }
+
+    .advantage-group {
+      margin-bottom: 24px;
+    }
+
+    .advantage-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .advantage-group > h3 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #f1f5f9;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .advantage-group > h3 .tag {
+      margin-left: 0;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent);
+    }
+
+    .advantage-group.sales > h3 .tag {
+      background: rgba(251, 191, 36, 0.15);
+      color: #fbbf24;
+    }
+
+    .advantage-group.after > h3 .tag {
+      background: rgba(167, 139, 250, 0.15);
+      color: #a78bfa;
+    }
+
+    .advantage-group.service > h3 .tag {
+      background: rgba(52, 211, 153, 0.15);
+      color: #34d399;
+    }
+
+    /* ===== Gallery ===== */
+    .gallery-wrap {
+      overflow: hidden;
+      padding: 4px 0;
+    }
+
+    .gallery-track {
+      display: flex;
+      gap: 10px;
+      animation: scroll-left 20s linear infinite;
+    }
+
+    .gallery-track:hover {
+      animation-play-state: paused;
+    }
+
+    .gallery-track img {
+      width: 240px;
+      height: 260px;
+      object-fit: cover;
+      border-radius: var(--radius-sm);
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+
+    @keyframes scroll-left {
+      0% {
+        transform: translateX(0);
+      }
+
+      100% {
+        transform: translateX(-50%);
+      }
+    }
+
+    /* ===== CTA ===== */
+    .cta-section {
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      color: #fff;
+      padding: 40px 16px;
+      text-align: center;
+      margin-top: 16px;
+    }
+
+    .cta-section h2 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .cta-section p {
+      font-size: 14px;
+      opacity: 0.8;
+      margin-bottom: 20px;
+      max-width: var(--max-w);
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .cta-btn {
+      display: inline-block;
+      padding: 12px 36px;
+      border-radius: 28px;
+      font-size: 15px;
+      font-weight: 600;
+      background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+      color: #fff;
+      border: none;
+      box-shadow: 0 4px 16px rgba(56, 189, 248, 0.35);
+    }
+
+    .cta-btn:active {
+      transform: scale(0.97);
+    }
+
+    /* ===== Contact ===== */
+    .contact-section {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 32px 16px;
+    }
+
+    .contact-card {
+      background: var(--bg-main);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 16px;
+      box-shadow: var(--shadow);
+      text-align: center;
+    }
+
+    .contact-card h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 12px;
+    }
+
+    .contact-item {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 8px 0;
+      font-size: 14px;
+      color: var(--text-main);
+    }
+
+    .contact-item .icon {
+      font-size: 16px;
+    }
+
+    /* ===== Footer ===== */
+    .footer {
+      text-align: center;
+      padding: 24px 16px;
+      font-size: 12px;
+      color: var(--text-sub);
+      border-top: 1px solid var(--border);
+    }
+
+    .footer a {
+      color: var(--accent-deep);
+    }
+
+    /* ===== Float Button ===== */
+    .float-btn {
+      position: fixed;
+      right: 16px;
+      bottom: 24px;
+      z-index: 99;
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      box-shadow: 0 4px 16px rgba(56, 189, 248, 0.4);
+      border: none;
+      cursor: pointer;
+      animation: float-bounce 2s ease-in-out infinite;
+    }
+
+    @keyframes float-bounce {
+
+      0%,
+      100% {
+        transform: translateY(0);
+      }
+
+      50% {
+        transform: translateY(-6px);
+      }
+    }
+
+    /* ===== Service Swiper Nav ===== */
+    .service-swiper-wrap {
+      padding: 14px 0;
+    }
+
+    .service-swiper .swiper-slide {
+      width: fit-content !important;
+    }
+
+    .service-swiper .swiper-wrapper {
+      padding-left: 16px;
+    }
+
+    .service-swiper .swiper-slide:last-child {
+      margin-right: 16px !important;
+    }
+
+    .service-swiper-pill {
+      display: inline-flex;
+      align-items: center;
+      white-space: nowrap;
+      padding: 8px 22px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #fff;
+      background: rgba(255,255,255,.4);
+      cursor: pointer;
+      transition: all 0.25s;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .service-swiper-pill.active,
+    .service-swiper-pill:active {
+      background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+      color: #fff;
+      border-color: transparent;
+      box-shadow: 0 2px 8px rgba(56, 189, 248, 0.3);
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <a class="logo" href="https://tgtai.com">
+        <img src="../TAI-logo.png" alt="天宫 TAI">
+      </a>
+    </div>
+  </header>
+
+  <div style="display: flex;flex-direction: column;align-items: center;justify-content: center;">
+    <span style="font-size: 24px;font-weight: 700;color: #fff;margin: 30px 0 10px;">企业·学校·组织AI赋能</span>
+    <span style="font-size: 16px;color: #fff;margin: 0 0 40px;">免费宣讲培训</span>
+  </div>
+
+  <!-- Service Swiper Nav -->
+  <div class="service-swiper-wrap">
+    <div class="swiper service-swiper" id="serviceSwiper">
+      <div class="swiper-wrapper">
+        <div class="swiper-slide"><a class="service-swiper-pill" href="#section-tools">产品与服务</a></div>
+        <div class="swiper-slide"><a class="service-swiper-pill" href="#section-enterprise">AI设计展示</a></div>
+        <div class="swiper-slide"><a class="service-swiper-pill" href="#section-enterprise">企业版会员权益</a></div>
+        <div class="swiper-slide"><a class="service-swiper-pill" href="#section-contact">联系方式</a></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gallery Marquee -->
+  <section class="section" style="padding-top: 16px;">
+    <div class="gallery-wrap">
+      <div class="gallery-track">
+        <img src="./school/1.jpg" alt="案例1">
+        <img src="./school/2.jpg" alt="案例2">
+        <img src="./school/3.jpg" alt="案例3">
+        <img src="./school/1.jpg" alt="案例4">
+        <img src="./school/2.jpg" alt="案例5">
+        <img src="./school/3.jpg" alt="案例6">
+        <!-- Duplicate for seamless loop -->
+        <img src="./school/1.jpg" alt="案例1">
+        <img src="./school/2.jpg" alt="案例2">
+        <img src="./school/3.jpg" alt="案例3">
+        <img src="./school/1.jpg" alt="案例4">
+        <img src="./school/2.jpg" alt="案例5">
+        <img src="./school/3.jpg" alt="案例6">
+      </div>
+    </div>
+  </section>
+
+  <!-- 产品与服务 / 核心优势（来自 company-intro-02） -->
+  <section id="section-tools" class="section" style="margin-top: 0; padding-top: 32px;">
+    <div class="intro-block">
+      <div class="section-title">
+        <div class="line"></div>产品与服务
+      </div>
+      <div class="section-sub">基准：符合客户需求。聚焦应用场景与产品特性，提供标准化、定制化与配套增值服务。</div>
+      <div class="intro-grid">
+        <div class="intro-card"> 
+          <div class="num-badge">01</div>
+          <h3>标准化产品</h3>
+          <p>天宫 TAI 云端 AI 创作平台，适配建筑、教育、电商、影视等行业，提供 AI 出图、视频生成、通用模板与算力能力；企业版自带团队协同、权限管控、私有资产库、节点批注管理功能。</p>
+        </div>
+        <div class="intro-card">
+          <div class="num-badge">02</div>
+          <h3>定制化产品</h3>
+          <p>企业专属工作流定制、行业专项业务链路定制，大型企业可提供私有化部署方案，C 端个人使用版。</p>
+        </div>
+        <div class="intro-card">
+          <div class="num-badge">03</div>
+          <h3>配套增值服务</h3>
+          <p>落地培训、一对一运营陪跑、7×12 小时技术售后、商用版权保障、上下游生态配套资源服务。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="intro-block">
+      <div class="section-title">
+        <div class="line"></div>核心优势
+      </div>
+      <div class="section-sub">售前、售后、服务三位一体，覆盖从商务洽谈、落地培训到长期运维的全链路能力。</div>
+
+      <div class="advantage-group sales">
+        <h3><span class="tag">售前</span> 售前优势</h3>
+        <div class="intro-grid">
+          <div class="intro-card">
+            <h3>行业专属一站式解决方案</h3>
+            <p>针对建筑、美学教育、创意电商设计、影视短视频四大赛道预制专属工作流模板；建筑支持 CAD/草图一键转效果图、漫游动画；电商一键生成产品主图、场景图、详情页；影视快速出分镜、短视频漫剧、成片，一套平台覆盖全业务需求。</p>
+          </div>
+          <div class="intro-card">
+            <h3>轻量化零硬件门槛演示</h3>
+            <p>云端在线运行，无需本地高配显卡、无需翻墙、不用安装大型渲染软件，浏览器即可演示；现场上传手绘草图、户型图、产品白模，10 分钟出多版交付级方案（传统流程 7 天压缩至 2 天，渲染成本降低 92%）。</p>
+          </div>
+          <div class="intro-card">
+            <h3>可视化智能节点工作流</h3>
+            <p>独创「无限画布 + 智能节点」可视化架构，创作全流程可拆解、可追溯、可复用；向客户直观展示 AI 生成逻辑、多方案并行对比，凸显专业可控性，适配 B 端客户专业需求。</p>
+          </div>
+          <div class="intro-card">
+            <h3>成本 &amp; 效率数据化佐证</h3>
+            <p>自带行业测算模型：建筑 AI 制作效率翻倍、电商素材外包成本下降 80%、影视分镜产出时间缩短 90%；售前可直接输出客户专属成本节约测算表，用数据证明降本增效。</p>
+          </div>
+          <div class="intro-card">
+            <h3>免费试用 + 定制化试点</h3>
+            <p>支持全功能试用 500 积分，可按客户业务定制套餐（地产售楼漫剧、电商新品视觉、建筑竞赛展板、影视短片分镜）；中小工作室轻量化套餐，大型企业可先行项目试点再批量采购。</p>
+          </div>
+          <div class="intro-card">
+            <h3>企业专属私有数字资产库</h3>
+            <p>企业可自建专属素材、模板、工作流资产库，仅团队可见使用；建筑户型模板、电商产品场景、影视分镜脚本均可永久留存，打造企业独家数字化资产。</p>
+          </div>
+          <div class="intro-card">
+            <h3>一站式管理 + 协同一体化</h3>
+            <p>天宫 TAI 突出「AI 创作 + 团队管控 + 资产沉淀」一体化优势，针对多人团队型客户（设计院、连锁电商、影视工作室）形成独家谈单卖点，降低客户多方采购工具的成本。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="advantage-group after">
+        <h3><span class="tag">售后</span> 售后优势</h3>
+        <div class="intro-grid">
+          <div class="intro-card">
+            <h3>7×12 小时专属技术运维</h3>
+            <p>配备建筑/电商/影视分行业售后工程师，线上远程协助画布调试、节点报错修复、素材导出异常处理；复杂项目支持 1 对 1 远程操作演示，重大故障专项介入。</p>
+          </div>
+          <div class="intro-card">
+            <h3>账号 &amp; 资产永久云端存储</h3>
+            <p>所有项目画布、工作流模板、生成素材云端加密保存，支持历史版本无限回溯；企业版分级权限管理，离职员工一键回收权限，杜绝设计资产流失。</p>
+          </div>
+          <div class="intro-card">
+            <h3>持续模型 &amp; 功能迭代</h3>
+            <p>平台聚合多类顶尖文生图、图生视频模型，每月更新建筑材质库、电商商品模板、影视光影节点；新增行业功能全部开放，升级版本无二次付费。</p>
+          </div>
+          <div class="intro-card">
+            <h3>企业账号扩容、套餐灵活调整</h3>
+            <p>企业客户业务扩张可随时增购席位、算力额度；项目淡季可临时调整套餐规格，支持按月/按年灵活切换；到期前主动提醒续费，配套续费优惠、算力赠送福利。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="advantage-group service">
+        <h3><span class="tag">服务</span> 服务优势</h3>
+        <div class="intro-grid">
+          <div class="intro-card">
+            <h3>分行业标准化落地培训</h3>
+            <p>配套线上录播课 + 线下上门培训：建筑（草图渲染、竞赛排版、漫游视频）、电商（产品建模、场景主图、短视频种草）、影视（分镜生成、漫剧成片）；零基础设计师 3 天独立出交付成果。</p>
+          </div>
+          <div class="intro-card">
+            <h3>企业专属工作流定制服务</h3>
+            <p>针对设计院、品牌电商、影视工作室定制私有化节点流程；地产企业定制户型-效果图-营销漫剧一体化链路；电商定制新品拍摄-AI 修图-详情页主图-短视频批量产出流程等。</p>
+          </div>
+          <div class="intro-card">
+            <h3>云端多人实时协同服务</h3>
+            <p>无限画布支持异地多人同时在线批注、修改、共享素材；支持项目分区管理、任务节点分配、版本批注留痕，适配设计院、院校、电商运营、影视剧组跨岗位协作场景。</p>
+          </div>
+          <div class="intro-card">
+            <h3>行业社群 + 专属运营陪跑</h3>
+            <p>搭建建筑/电商/影视垂直用户社群，定期分享行业案例、AI 创作技巧；付费企业配备专属运营，每月输出行业落地案例、新功能使用方案，协助搭建 AI 常态化生产流程。</p>
+          </div>
+          <div class="intro-card">
+            <h3>全链路生态配套增值服务</h3>
+            <p>联动模型服务商、材料厂商提供配套资源；建筑客户可对接竞赛展板输出、地产动画投放；电商客户配套产品视觉全案、短视频带货素材包；影视客户提供分镜成片、短剧漫剧完整解决方案。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Enterprise Services -->
+  <section id="section-enterprise" class="section">
+    <div class="section-title">
+      <div class="line"></div>企业服务
+    </div>
+    <div class="section-sub">为企业提供专属培训、宣讲及权益方案</div>
+    <div class="service-grid" style="grid-template-columns: 1fr 1fr;">
+      <div class="service-card">
+        <div class="service-icon" style="background: linear-gradient(135deg,#fef3c7,#fffbeb);">&#128226;</div>
+        <h3>AI 功能宣讲</h3>
+        <p>产品功能交流</p>
+      </div>
+      <div class="service-card">
+        <div class="service-icon" style="background: linear-gradient(135deg,#e0e7ff,#eef2ff);">&#127891;</div>
+        <h3>AI 辅助培训</h3>
+        <p>设计技能培训</p>
+      </div>
+      <div class="service-card">
+        <div class="service-icon" style="background: linear-gradient(135deg,#fce7f3,#fdf2f8);">&#11088;</div>
+        <h3>企业版权益</h3>
+        <p>专属会员方案</p>
+      </div>
+      <div class="service-card">
+        <div class="service-icon" style="background: linear-gradient(135deg,#d1fae5,#ecfdf5);">&#128222;</div>
+        <h3>联系我们</h3>
+        <p>商务咨询</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Contact -->
+  <section id="section-contact" class="contact-section">
+    <div class="contact-card">
+      <h3>联系商务</h3>
+      <div class="contact-item">
+        <span class="icon">&#127760;</span>
+        <span>官网：<a href="https://tgtai.com" target="_blank">tgtai.com</a></span>
+      </div>
+      <div class="contact-item">
+        <span class="icon">&#128421;</span>
+        <span>天宫子午（深圳）科技有限公司</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>© 2023–2026 天宫子午（深圳）科技有限公司</p>
+    <p style="margin-top: 6px;">天宫开物（深圳）科技有限公司 控股</p>
+  </footer>
+
+  <!-- Float Button -->
+  <a href="https://tgtai.com" class="float-btn" title="立即访问">&#128640;</a>
+
+  <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+  <script>
+
+    /* ===== Service Swiper ===== */
+    new Swiper('#serviceSwiper', {
+      slidesPerView: 'auto',
+      spaceBetween: 20,
+      freeMode: true,
+      freeModeMomentumRatio: 0.4,
+    });
+
+    /* ===== Smooth scroll for anchor pills ===== */
+    document.querySelectorAll('.service-swiper-pill').forEach(pill => {
+      pill.addEventListener('click', function (e) {
+        e.preventDefault();
+        const targetId = this.getAttribute('href');
+        const target = document.querySelector(targetId);
+        if (target) {
+          const headerH = document.querySelector('.header').offsetHeight;
+          const swiperH = document.querySelector('.service-swiper-wrap').offsetHeight;
+          const top = target.getBoundingClientRect().top + window.pageYOffset - headerH - swiperH - 4;
+          window.scrollTo({ top, behavior: 'smooth' });
+
+          // highlight active
+          document.querySelectorAll('.service-swiper-pill').forEach(p => p.classList.remove('active'));
+          this.classList.add('active');
+          // auto reset after 600ms
+          setTimeout(() => this.classList.remove('active'), 600);
+        }
+      });
+    });
+  </script>
+</body>
+
+</html>

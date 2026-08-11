@@ -1489,7 +1489,7 @@ const NODE_CREDITS_MAP: Record<string, number | string> = {
   midjourneyV7: 50, // Midjourney V7 生成
   niji7: 50, // Niji 7 生成
   nano2: 30, // Nano Banana 2 生图
-  gptImage2: 20, // Gpt-Image-2 生图（默认按普通 1K + low 兜底）
+  gptImage2: 29, // Gpt-Image-2 生图（默认按普通 1K + medium 兜底）
   seedream5: 30, // Seedream 5.0 生图
   three: 200, // 三维节点 - convert-2d-to-3d
   sora2Video: "40-400", // 视频生成节点 - sora-sd (40) 或 sora-hd (400)
@@ -2040,25 +2040,25 @@ const BANANA_VIDEO_ANALYZE_ROUTE_PRICING: Record<
   },
 };
 
-// GPT-Image-2 普通路线（ToAPIs gpt-image-2-vip）：平台价(元)×100×1.2×10 向上取整
+// GPT-Image-2 普通路线（ToAPIs gpt-image-2-official）：平台价(元)×1.2×100 向上取整
 const GPT_IMAGE_2_NORMAL_ROUTE_PRICING: Record<
   "low" | "medium" | "high",
   Record<"1K" | "2K" | "4K", number>
 > = {
   low: {
-    "1K": 20,
-    "2K": 40,
-    "4K": 50,
+    "1K": 4, // 0.0269
+    "2K": 8, // 0.0592
+    "4K": 9, // 0.0736
   },
   medium: {
-    "1K": 150,
-    "2K": 320,
-    "4K": 400,
+    "1K": 29, // 0.2363
+    "2K": 63, // 0.5216
+    "4K": 80, // 0.6616
   },
   high: {
-    "1K": 570,
-    "2K": 1250,
-    "4K": 1590,
+    "1K": 114, // 0.945
+    "2K": 251, // 2.09
+    "4K": 318, // 2.65
   },
 };
 // GPT-Image-2 在 Stable(尊享) 路由下独立计费（勿改）
@@ -2149,9 +2149,9 @@ const normalizeGptImage2Quality = (
   rawQuality: unknown
 ): "low" | "medium" | "high" => {
   const normalized = typeof rawQuality === "string" ? rawQuality.trim().toLowerCase() : "";
-  if (normalized === "medium") return "medium";
+  if (normalized === "low") return "low";
   if (normalized === "high") return "high";
-  return "low";
+  return "medium";
 };
 
 const VIDEO_DYNAMIC_CREDIT_NODE_TYPES = new Set([
@@ -18810,10 +18810,10 @@ function FlowInner() {
               return value;
             }
             if (value === "auto") {
-              // 尊享保留 auto；普通路线（vip）无 auto，按 low 计费/提交
-              return latestBananaImageRoute === "stable" ? "auto" : "low";
+              // 尊享保留 auto；普通路线无 auto，默认中等质量
+              return latestBananaImageRoute === "stable" ? "auto" : "medium";
             }
-            return latestBananaImageRoute === "stable" ? undefined : "low";
+            return latestBananaImageRoute === "stable" ? undefined : "medium";
           })();
           const gptImage2Background = (() => {
             const value = pickStringValue(

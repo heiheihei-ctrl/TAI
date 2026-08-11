@@ -82,26 +82,26 @@ const DEFAULT_FREE_USER_MONTHLY_VIDEO_LIMIT = 10;
 const SIGNUP_BONUS_CREDITS = 500;
 const PREVIEW_CREDITS_CACHE_TTL_SEC = 30;
 const GPT_IMAGE2_SERVICE_TYPE = 'gpt-image-2';
-const GPT_IMAGE2_CREDITS = 20;
-/** 普通路线（ToAPIs gpt-image-2-vip）：平台价(元)×100×1.2×10，向上取整 */
+const GPT_IMAGE2_CREDITS = 29;
+/** 普通路线（ToAPIs gpt-image-2-official）：平台价(元)×1.2×100，向上取整 */
 const GPT_IMAGE2_NORMAL_QUALITY_PRICING: Record<
   'low' | 'medium' | 'high',
   Record<'1K' | '2K' | '4K', number>
 > = {
   low: {
-    '1K': 20, // 0.0133 * 100 * 1.2 * 10
-    '2K': 40, // 0.0298 * 100 * 1.2 * 10
-    '4K': 50, // 0.0368 * 100 * 1.2 * 10
+    '1K': 4, // ceil(0.0269 * 1.2 * 100)
+    '2K': 8, // ceil(0.0592 * 1.2 * 100)
+    '4K': 9, // ceil(0.0736 * 1.2 * 100)
   },
   medium: {
-    '1K': 150, // 0.1183 * 100 * 1.2 * 10
-    '2K': 320, // 0.2608 * 100 * 1.2 * 10
-    '4K': 400, // 0.3308 * 100 * 1.2 * 10
+    '1K': 29, // ceil(0.2363 * 1.2 * 100)
+    '2K': 63, // ceil(0.5216 * 1.2 * 100)
+    '4K': 80, // ceil(0.6616 * 1.2 * 100)
   },
   high: {
-    '1K': 570, // 0.4725 * 100 * 1.2 * 10
-    '2K': 1250, // 1.04 * 100 * 1.2 * 10
-    '4K': 1590, // 1.32 * 100 * 1.2 * 10
+    '1K': 114, // ceil(0.945 * 1.2 * 100)
+    '2K': 251, // ceil(2.09 * 1.2 * 100)
+    '4K': 318, // ceil(2.65 * 1.2 * 100)
   },
 };
 const STALE_PENDING_IMAGE_SERVICE_TYPES: ServiceType[] = [
@@ -1652,7 +1652,11 @@ export class CreditsService {
       );
       const normalizedQuality = this.normalizeGptImage2Quality(requestParams?.quality);
       const billableQuality: Exclude<GptImage2Quality, 'auto'> =
-        normalizedQuality === 'auto' ? 'low' : normalizedQuality;
+        normalizedQuality === 'auto'
+          ? route === 'normal'
+            ? 'medium'
+            : 'low'
+          : normalizedQuality;
       const configuredCredits =
         route === 'stable'
           ? Number(

@@ -133,7 +133,7 @@ const GPT_IMAGE_2_STABLE_QUALITY_OPTIONS = [
   },
 ];
 
-/** 普通路线（ToAPIs gpt-image-2-vip）仅支持 low/medium/high */
+/** 普通路线（ToAPIs gpt-image-2-official）仅支持 low/medium/high */
 const GPT_IMAGE_2_NORMAL_QUALITY_OPTIONS = [
   {
     value: "low" as const,
@@ -439,7 +439,7 @@ function Nano2NodeInner({ id, data, selected }: Props) {
   const normalizedQualityValue = React.useMemo<
     "auto" | "low" | "medium" | "high"
   >(() => {
-    const fallback = bananaImageRoute === "stable" ? "auto" : "low";
+    const fallback = bananaImageRoute === "stable" ? "auto" : "medium";
     const candidate =
       typeof data.quality === "string"
         ? data.quality
@@ -477,7 +477,7 @@ function Nano2NodeInner({ id, data, selected }: Props) {
     }
     window.dispatchEvent(
       new CustomEvent("flow:updateNodeData", {
-        detail: { id, patch: { quality: "low" } },
+        detail: { id, patch: { quality: "medium" } },
       })
     );
   }, [bananaImageRoute, id, isGptImage2Node, normalizedQualityValue]);

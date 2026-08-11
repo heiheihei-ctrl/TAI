@@ -211,8 +211,11 @@ const VIEW_APPEARANCE_STORAGE_KEY = "tanva-view-settings";
 const REFERRAL_NOTIFICATION_LAST_SEEN_DATE_STORAGE_KEY =
   "tanva-referral-notification-last-seen-date";
 const MAX_QUICK_PROJECTS = 5;
-const USER_MANUAL_URL =
+const USER_MANUAL_URL_ZH =
   "https://my.feishu.cn/wiki/QPrBw5l5OiS8LgkMHPmcNkfPnpd?from=from_copylink";
+/** 海外版 / 英文界面用户手册 */
+const USER_MANUAL_URL_EN =
+  "https://my.feishu.cn/docx/K7G2dwwN4oVxR3x7TipcU9ZonDd?from=from_copylink";
 
 const getTodayDateKey = () => {
   const now = new Date();
@@ -2659,10 +2662,10 @@ const FloatingHeader: React.FC = () => {
           />
         </div>
 
-        {/* 闂傚倸鍊搁崐椋庣矆娓氣偓楠炲鏁撻悩鍐蹭画闂侀潧顦弲娑㈠磼閵娾晜鐓涚€广儱楠搁獮鏍煟閵堝鐣洪柡灞剧洴椤㈡洟鏁愰崱娆樻К闂備礁鎲￠崝蹇涘磻閹剧粯鈷掑┑鐘查娴滄粍绻涚仦鍌氱伈鐎规洘娲栭悾鐑藉炊閳哄啫绠垫繝寰锋澘鈧洟骞婅箛娑欏亗闁哄洢鍨洪悡娑㈡煕閹扳晛濡奸柍褜鍓氶幃鍌氼嚕缁嬪簱鏋庨柟鎯ь嚟閸橀亶妫呴銏″婵☆偅鍨块幊鎾诲箰鎼搭喗顔旈梺缁樺姈濞兼瑦鎱ㄩ崼鈶╁亾閸偅绶查悗姘嵆閻涱噣宕堕澶嬫櫍闂佺粯鍔曞鍫曞极?*/}
+        {/* */}
         <div className='pointer-events-auto'>
           <div className='tanva-header-card tanva-header-card-right flex items-center gap-1.5 md:gap-2 px-4 md:px-6 py-2 h-[46px] rounded-2xl bg-liquid-glass backdrop-blur-minimal backdrop-saturate-125 shadow-liquid-glass-lg border border-liquid-glass transition-all duration-300'>
-            {/* 缂傚倸鍊搁崐鎼佸磹瀹勬噴褰掑炊閵娧屾锤濡炪倖甯婇悞锕傚矗韫囨稒鈷掗柛顐ゅ枍缁堕亶鏌ｉ幒鏇炐撳ǎ鍥э躬婵″爼宕熼鐐差瀴闂備胶顭堝ù鐑藉窗閺嶎厼钃熼柣鏂垮悑閸婇攱銇勯幒宥堝厡缂佸娲鐑樺濞嗘垹鏆犲銈庡幘閸忔ê顕?*/}
+            {/* */}
             {showLibraryButton && (
               <Button
                 onClick={toggleLibraryPanel}
@@ -2904,7 +2907,11 @@ const FloatingHeader: React.FC = () => {
                       type='button'
                       className='tanva-help-dropdown-item w-full h-9 px-3 rounded-xl text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300'
                       onClick={() => {
-                        window.open(USER_MANUAL_URL, "_blank", "noopener,noreferrer");
+                        window.open(
+                          isEnglish ? USER_MANUAL_URL_EN : USER_MANUAL_URL_ZH,
+                          "_blank",
+                          "noopener,noreferrer",
+                        );
                         setIsHelpMenuOpen(false);
                       }}
                     >

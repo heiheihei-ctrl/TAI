@@ -296,6 +296,6 @@ Flow 节点拖拽支持与其他节点进行边�?中心吸附，并显示对�
 - `gptImage2` aspect-ratio/resolution dropdowns are now rendered with the same visual style and interaction pattern as video-node dropdown menus (`video-dropdown` + `video-dropdown-menu`).
 
 ## 2026-08-10 Update
-- `gptImage2` 普通路线也展示质量选择（`low` / `medium` / `high`），上游模型为 ToAPIs `gpt-image-2-vip`，提交参数 `quality`。
-- 普通路线积分按「平台价(元) × 100 × 1.2 × 10」向上取整，矩阵：`low=20/40/50`、`medium=150/320/400`、`high=570/1250/1590`（对应 `1K/2K/4K`）。
+- `gptImage2` 普通路线也展示质量选择（`low` / `medium` / `high`），上游模型为 ToAPIs `gpt-image-2-official`，提交参数 `quality`。
+- 普通路线积分按「平台价(元) × 1.2 × 100」向上取整，矩阵：`low=4/8/9`、`medium=29/63/80`、`high=114/251/318`（对应 `1K/2K/4K`）。
 - 尊享路线（`stable` / `gpt-image-2-official`）质量选项与计价保持不变。
