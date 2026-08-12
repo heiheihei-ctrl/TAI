@@ -27,6 +27,7 @@ import {
   exportUsers,
   getApiUsageStats,
   getVolcengineMonthlyCreditStats,
+  getAllModelsMonthlyCreditStats,
   getApiUsageRecords,
   addCredits,
   deductCredits,
@@ -69,6 +70,7 @@ import {
   type UserWithCredits,
   type ApiUsageStats,
   type VolcengineMonthlyCreditStat,
+  type ModelMonthlyCreditStat,
   type ApiUsageRecord,
   type Pagination,
   type SystemSetting,
@@ -104,6 +106,7 @@ import {
   type AdminTeamCreditHistory,
 } from "@/services/adminApi";
 import VolcengineMonthlyCreditsChart from "@/components/admin/VolcengineMonthlyCreditsChart";
+import ModelMonthlyCreditsChart from "@/components/admin/ModelMonthlyCreditsChart";
 import { notifyNodeConfigsUpdated } from "@/services/nodeConfigService";
 import {
   fetchTemplates,
@@ -5783,11 +5786,33 @@ function UsersTab({
 // API 使用统计 Tab
 function ApiStatsTab() {
   const [stats, setStats] = useState<ApiUsageStats[]>([]);
-  const [volcMonthlyStats, setVolcMonthlyStats] = useState<VolcengineMonthlyCreditStat[]>([]);
+  const [modelMonthlyStats, setModelMonthlyStats] = useState<ModelMonthlyCreditStat[]>([]);
   const [loading, setLoading] = useState(false);
-  const [volcLoading, setVolcLoading] = useState(false);
+  const [modelLoading, setModelLoading] = useState(false);
   const [page, setPage] = useState(1);
   const pageSize = 10;
+
+  // 筛选条件（表单态）
+  const [providerFilter, setProviderFilter] = useState<string>('all');
+  const [timeRange, setTimeRange] = useState<'3m' | '6m' | '12m' | '24m' | 'custom'>('12m');
+  const [customStart, setCustomStart] = useState<string>('');
+  const [customEnd, setCustomEnd] = useState<string>('');
+
+  // 已应用的筛选（用于驱动实际请求）
+  const [appliedFilters, setAppliedFilters] = useState<{
+    provider: string;
+    timeRange: '3m' | '6m' | '12m' | '24m' | 'custom';
+    customStart: string;
+    customEnd: string;
+  }>({
+    provider: 'all',
+    timeRange: '12m',
+    customStart: '',
+    customEnd: '',
+  });
+
+  // 动态 provider 列表（来自最近一次的全量响应，确保用户能看到真实存在的 provider）
+  const [availableProviders, setAvailableProviders] = useState<string[]>([]);
 
   useEffect(() => {
     const loadStats = async () => {
@@ -5801,33 +5826,148 @@ function ApiStatsTab() {
         setLoading(false);
       }
     };
+    void loadStats();
+  }, []);
 
-    const loadVolcMonthlyStats = async () => {
-      setVolcLoading(true);
+  // 仅在已应用的筛选变化时重新拉取月度统计
+  useEffect(() => {
+    const loadAllModelsMonthlyStats = async () => {
+      setModelLoading(true);
       try {
-        const result = await getVolcengineMonthlyCreditStats({ months: 12 });
-        setVolcMonthlyStats(result);
+        const params: Parameters<typeof getAllModelsMonthlyCreditStats>[0] = {};
+        if (appliedFilters.timeRange === 'custom') {
+          if (appliedFilters.customStart) params.startDate = appliedFilters.customStart;
+          if (appliedFilters.customEnd) params.endDate = appliedFilters.customEnd;
+        } else {
+          const map: Record<string, number> = { '3m': 3, '6m': 6, '12m': 12, '24m': 24 };
+          params.months = map[appliedFilters.timeRange];
+        }
+        if (appliedFilters.provider && appliedFilters.provider !== 'all') {
+          params.provider = appliedFilters.provider;
+        }
+        const result = await getAllModelsMonthlyCreditStats(params);
+        setModelMonthlyStats(result);
+        // 收集所有出现过的 provider（仅在"全部模型"下拉打开时刷新）
+        if (appliedFilters.provider === 'all') {
+          const set = new Set<string>();
+          result.forEach((item) =>
+            item.byProvider.forEach((p) => set.add(p.provider)),
+          );
+          setAvailableProviders(Array.from(set).sort());
+        }
       } catch (error) {
-        console.error("加载火山引擎月度统计失败:", error);
+        console.error("加载全模型月度统计失败:", error);
       } finally {
-        setVolcLoading(false);
+        setModelLoading(false);
       }
     };
 
-    void loadStats();
-    void loadVolcMonthlyStats();
-  }, []);
+    if (
+      appliedFilters.timeRange === 'custom' &&
+      (!appliedFilters.customStart || !appliedFilters.customEnd)
+    ) {
+      return;
+    }
+    void loadAllModelsMonthlyStats();
+  }, [appliedFilters]);
+
+  const handleQuery = () => {
+    setAppliedFilters({
+      provider: providerFilter,
+      timeRange,
+      customStart,
+      customEnd,
+    });
+  };
 
   const totalPages = Math.max(1, Math.ceil(stats.length / pageSize));
   const pagedStats = stats.slice((page - 1) * pageSize, page * pageSize);
 
+  const rangeLabel: Record<string, string> = {
+    '3m': '最近 3 个月',
+    '6m': '最近 6 个月',
+    '12m': '最近 12 个月',
+    '24m': '最近 24 个月',
+    'custom':
+      customStart && customEnd ? `${customStart} ~ ${customEnd}` : '自定义区间',
+  };
+
+  const canQuery =
+    timeRange !== 'custom' || (!!customStart && !!customEnd);
+
   return (
     <div className='space-y-4'>
       <div className='bg-white rounded-lg border p-4'>
-        {volcLoading ? (
-          <div className='py-8 text-center text-sm text-gray-500'>加载火山引擎统计中...</div>
+        {/* 筛选区 */}
+        <div className='mb-4 flex flex-wrap items-end gap-3'>
+          <div>
+            <label className='mb-1 block text-xs text-gray-500'>模型范围</label>
+            <select
+              className='h-9 rounded-md border border-gray-300 bg-white px-3 text-sm'
+              value={providerFilter}
+              onChange={(e) => setProviderFilter(e.target.value)}
+            >
+              <option value='all'>全部模型</option>
+              {availableProviders.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className='mb-1 block text-xs text-gray-500'>时间段</label>
+            <select
+              className='h-9 rounded-md border border-gray-300 bg-white px-3 text-sm'
+              value={timeRange}
+              onChange={(e) => setTimeRange(e.target.value as typeof timeRange)}
+            >
+              <option value='3m'>最近 3 个月</option>
+              <option value='6m'>最近 6 个月</option>
+              <option value='12m'>最近 12 个月</option>
+              <option value='24m'>最近 24 个月</option>
+              <option value='custom'>自定义区间</option>
+            </select>
+          </div>
+          {timeRange === 'custom' && (
+            <>
+              <div>
+                <label className='mb-1 block text-xs text-gray-500'>开始日期</label>
+                <input
+                  type='date'
+                  className='h-9 rounded-md border border-gray-300 bg-white px-3 text-sm'
+                  value={customStart}
+                  onChange={(e) => setCustomStart(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className='mb-1 block text-xs text-gray-500'>结束日期</label>
+                <input
+                  type='date'
+                  className='h-9 rounded-md border border-gray-300 bg-white px-3 text-sm'
+                  value={customEnd}
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                />
+              </div>
+            </>
+          )}
+          <button
+            type='button'
+            className='h-9 rounded-md bg-[#1F2937] px-4 text-sm font-medium text-white transition-colors'
+            disabled={!canQuery || modelLoading}
+            onClick={handleQuery}
+          >
+            {modelLoading ? '查询中...' : '查询'}
+          </button>
+          <div className='ml-auto text-xs text-gray-500'>
+            当前筛选：{providerFilter === 'all' ? '全部模型' : providerFilter} · {rangeLabel[timeRange]}
+          </div>
+        </div>
+
+        {modelLoading ? (
+          <div className='py-8 text-center text-sm text-gray-500'>加载全模型统计中...</div>
         ) : (
-          <VolcengineMonthlyCreditsChart data={volcMonthlyStats} />
+          <ModelMonthlyCreditsChart data={modelMonthlyStats} />
         )}
       </div>
 

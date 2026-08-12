@@ -5,6 +5,7 @@ import ExcelJS from 'exceljs';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiResponseStatus } from '../credits/dto/credits.dto';
 import {
+  buildAllModelsMonthlySeries,
   buildVolcengineMonthlySeries,
   VOLCENGINE_API_SERVICE_TYPES,
   VolcengineMonthlyCreditStat,
@@ -1352,6 +1353,96 @@ export class AdminService {
       })),
       months,
     );
+  }
+
+  /**
+   * 全部模型月度积分消耗（按 provider 拆分）
+   */
+  async getAllModelsMonthlyCreditStats(options: {
+    months?: number;
+    startDate?: Date;
+    endDate?: Date;
+    provider?: string;
+  } = {}): Promise<VolcengineMonthlyCreditStat[]> {
+    // 复用返回类型结构（外层 month/totalCredits/totalCalls 相同），实际返回 ModelMonthlyCreditStat[]
+    const hasCustomRange = !!(options.startDate || options.endDate);
+    const months = Math.min(36, Math.max(1, options.months ?? 12));
+
+    let startDate: Date;
+    let endDate: Date | null = null;
+
+    if (hasCustomRange) {
+      startDate = options.startDate ?? new Date(0);
+      endDate = options.endDate ?? new Date();
+    } else {
+      startDate = new Date();
+      startDate.setUTCDate(1);
+      startDate.setUTCHours(0, 0, 0, 0);
+      startDate.setUTCMonth(startDate.getUTCMonth() - (months - 1));
+    }
+
+    const providerClause = options.provider
+      ? Prisma.sql`AND "provider" = ${options.provider}`
+      : Prisma.empty;
+    const endDateClause = endDate
+      ? Prisma.sql`AND "createdAt" <= ${endDate}`
+      : Prisma.empty;
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        month: string;
+        provider: string;
+        credits: bigint | number;
+        calls: bigint | number;
+      }>
+    >(Prisma.sql`
+      SELECT
+        to_char(date_trunc('month', "createdAt"), 'YYYY-MM') AS month,
+        COALESCE(NULLIF("provider", ''), 'unknown') AS provider,
+        COALESCE(SUM("creditsUsed"), 0) AS credits,
+        COUNT(*)::bigint AS calls
+      FROM "ApiUsageRecord"
+      WHERE "createdAt" >= ${startDate}
+        ${endDateClause}
+        ${providerClause}
+      GROUP BY date_trunc('month', "createdAt"), "provider"
+      ORDER BY month ASC
+    `);
+
+    if (hasCustomRange) {
+      // 自定义区间：直接按数据库返回的月份补齐中间缺失月份
+      return buildAllModelsMonthlySeries(
+        rows.map((row) => ({
+          month: row.month,
+          provider: row.provider,
+          credits: this.toNumber(row.credits),
+          calls: this.toNumber(row.calls),
+        })),
+        // 自定义区间下用 startDate/endDate 计算月数
+        this.diffMonthsInclusive(startDate, endDate ?? new Date()),
+      ) as unknown as VolcengineMonthlyCreditStat[];
+    }
+
+    return buildAllModelsMonthlySeries(
+      rows.map((row) => ({
+        month: row.month,
+        provider: row.provider,
+        credits: this.toNumber(row.credits),
+        calls: this.toNumber(row.calls),
+      })),
+      months,
+    ) as unknown as VolcengineMonthlyCreditStat[];
+  }
+
+  private diffMonthsInclusive(start: Date, end: Date): number {
+    const s = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+    const e = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1));
+    let count = 0;
+    while (s <= e) {
+      count += 1;
+      s.setUTCMonth(s.getUTCMonth() + 1);
+    }
+    return Math.max(1, count);
   }
 
   /**

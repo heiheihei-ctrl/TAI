@@ -108,6 +108,19 @@ export interface VolcengineMonthlyCreditStat {
   totalCalls: number;
 }
 
+export interface ModelMonthlyProviderCreditStat {
+  provider: string;
+  credits: number;
+  calls: number;
+}
+
+export interface ModelMonthlyCreditStat {
+  month: string;
+  totalCredits: number;
+  totalCalls: number;
+  byProvider: ModelMonthlyProviderCreditStat[];
+}
+
 export interface ApiUsageRecord {
   id: string;
   userId: string;
@@ -428,6 +441,30 @@ export async function getVolcengineMonthlyCreditStats(params?: {
   const query = searchParams.toString();
   const response = await request(
     `/api/admin/api-usage/volcengine-monthly${query ? `?${query}` : ''}`,
+  );
+  return response.json();
+}
+
+// 获取所有模型月度积分消耗（按 provider 拆分）
+export async function getAllModelsMonthlyCreditStats(params?: {
+  months?: number;
+  provider?: string;
+  startDate?: string;
+  endDate?: string;
+}): Promise<ModelMonthlyCreditStat[]> {
+  const searchParams = new URLSearchParams();
+  if (params?.startDate || params?.endDate) {
+    // 自定义日期区间优先
+    if (params?.startDate) searchParams.set('startDate', params.startDate);
+    if (params?.endDate) searchParams.set('endDate', params.endDate);
+  } else if (params?.months) {
+    searchParams.set('months', String(params.months));
+  }
+  if (params?.provider) searchParams.set('provider', params.provider);
+
+  const query = searchParams.toString();
+  const response = await request(
+    `/api/admin/api-usage/all-models-monthly${query ? `?${query}` : ''}`,
   );
   return response.json();
 }

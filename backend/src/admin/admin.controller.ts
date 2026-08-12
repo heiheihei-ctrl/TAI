@@ -41,6 +41,7 @@ import {
   ApiUsageStatsQueryDto,
   ApiUsageRecordsQueryDto,
   VolcengineMonthlyStatsQueryDto,
+  AllModelsMonthlyStatsQueryDto,
   UpdateUserStatusDto,
   UpdateUserRoleDto,
   CreditChangeRecordsQueryDto,
@@ -351,6 +352,21 @@ export class AdminController {
     this.checkAdmin(req, 'api-usage:stats');
     return this.adminService.getVolcengineMonthlyCreditStats({
       months: query.months,
+    });
+  }
+
+  @Get('api-usage/all-models-monthly')
+  @ApiOperation({ summary: '获取所有模型 API 月度积分消耗（按 provider 拆分）' })
+  async getAllModelsMonthlyCreditStats(
+    @Request() req: AuthenticatedRequest,
+    @Query() query: AllModelsMonthlyStatsQueryDto,
+  ) {
+    this.checkAdmin(req, 'api-usage:stats');
+    return this.adminService.getAllModelsMonthlyCreditStats({
+      months: query.months,
+      provider: query.provider,
+      startDate: query.startDate ? new Date(query.startDate) : undefined,
+      endDate: query.endDate ? new Date(query.endDate) : undefined,
     });
   }
 

@@ -70,6 +70,30 @@ export class VolcengineMonthlyStatsQueryDto {
   months?: number = 12;
 }
 
+export class AllModelsMonthlyStatsQueryDto {
+  @ApiPropertyOptional({ description: '统计最近几个月（含当月），与 startDate/endDate 二选一', default: 12 })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(36)
+  months?: number = 12;
+
+  @ApiPropertyOptional({ description: '自定义开始日期 YYYY-MM-DD（与 months 二选一）' })
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  @ApiPropertyOptional({ description: '自定义结束日期 YYYY-MM-DD（与 months 二选一）' })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+
+  @ApiPropertyOptional({ description: '按 provider 过滤（可选，留空=全部模型）' })
+  @IsOptional()
+  @IsString()
+  provider?: string;
+}
+
 export class ApiUsageRecordsQueryDto {
   @ApiPropertyOptional({ description: '页码', default: 1 })
   @IsOptional()
