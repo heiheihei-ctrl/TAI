@@ -9,6 +9,7 @@ type RunCreditBadgeProps = {
   inline?: boolean;
   runButton?: boolean;
   className?: string;
+  available?: boolean;
 };
 
 export default function RunCreditBadge({
@@ -17,11 +18,56 @@ export default function RunCreditBadge({
   inline = false,
   runButton = false,
   className = "",
+  available = true,
 }: RunCreditBadgeProps) {
   const { lt } = useLocaleText();
   const { credits: resolvedCredits } = useNodeRunCredits(credits);
   const value = Number(resolvedCredits);
-  const titleText = `${lt("Cost", "Cost")}: ${value} ${lt("credits", "credits")}`;
+  const titleText = available
+    ? `${lt("Cost", "Cost")}: ${value} ${lt("credits", "credits")}`
+    : lt("国际版暂不可用", "Unavailable in international edition");
+
+  if (!available) {
+    if (inline) {
+      return (
+        <span
+          title={titleText}
+          style={{
+            color: "#dc2626",
+            fontSize: compact ? 11 : 12,
+            fontWeight: 500,
+            lineHeight: 1,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {" · "}N/A
+        </span>
+      );
+    }
+    return (
+      <span
+        title={titleText}
+        className={`run-credit-badge run-credit-badge--unavailable ${className}`.trim()}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          height: compact ? 20 : 22,
+          padding: compact ? "0 6px" : "0 8px",
+          borderRadius: 999,
+          background: "#fee2e2",
+          border: "1px solid #fecaca",
+          color: "#b91c1c",
+          fontSize: compact ? 10 : 11,
+          fontWeight: 600,
+          lineHeight: 1,
+          whiteSpace: "nowrap",
+        }}
+      >
+        N/A
+      </span>
+    );
+  }
 
   if (!Number.isFinite(value) || value <= 0) {
     return null;

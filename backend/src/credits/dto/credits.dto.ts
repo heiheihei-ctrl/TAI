@@ -160,6 +160,14 @@ export class CreditsPreviewDto {
   @IsNumber()
   @Min(1)
   outputImageCount?: number;
+
+  @ApiPropertyOptional({
+    description: '定价版本（domestic=中文版默认；international=国际版英文）',
+    enum: ['domestic', 'international'],
+  })
+  @IsOptional()
+  @IsEnum(['domestic', 'international'] as const)
+  edition?: 'domestic' | 'international';
 }
 
 export class AdjustCreditsDto {

@@ -5,6 +5,9 @@ All notable changes to this knowledge base will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning (knowledge-base versioning).
 
 ## [Unreleased]
+### Changed
+- Prompt optimize (normal route): ToAPIs upstream model fixed to `gemini-2.5-flash-official`; stable route keeps existing text-model mapping.
+
 ### Added
 - Frontend feature flag: `VITE_SHOW_FOREIGN_NODES`（`SHOW_FOREIGN_NODES`，默认 `true`）控制节点面板与快捷连接是否展示国外模型节点；`false` 时隐藏，已落画布节点仍可使用。
 
@@ -117,6 +120,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Flow/HappyHorse: 快乐马视频生成改为前端 `taskId` 轮询恢复模式；后端创建 DashScope 任务后立即返回 `taskId/apiUsageId` 并保持积分 `pending`，前端成功回写、失败/超时退款，刷新页面后可从节点 `taskId` 继续轮询。
 - Auth Fetch: 403 responses are now treated as business authorization failures instead of expired login sessions, so paid-feature denials such as HappyHorse entitlement checks no longer force logout or open the login page (`frontend/src/services/authFetch.ts`).
 - Credits/Text Route Pricing: `gemini-text` and `gemini-prompt-optimize` now both use flat route pricing by channel for Fast/Pro/Ultra (`normal=5`, `stable=10`) in preview and deduction.
+- Prompt optimize on **normal** Banana route always calls ToAPIs `gemini-2.5-flash-official` (flow node + chat auto-optimize + `/ai/text-chat`); **stable** keeps the previous text-model mapping.
 - Flow/Text Nodes: `PromptOptimize` now has a working Fast/Pro/Ultra node-level model switch (synced to backend request params), and `PromptOptimize` + `TextChat` Run-button credit badge interaction is aligned with image-node behavior.
 - Credits/Tool Selection: `/api/ai/tool-selection` now skips credit deduction entirely; Gemini tool-routing no longer consumes user credits.
 - Credits Config: `gemini-tool-selection` default `creditsPerCall` is now `0` to prevent accidental charge paths.

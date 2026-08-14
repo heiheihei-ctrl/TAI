@@ -9266,6 +9266,10 @@ function ModelManagementTab() {
 }
 
 function SettingsTab() {
+  // 系统默认语言（"zh-CN" | "en-US"）
+  const [defaultLanguage, setDefaultLanguage] = useState<"zh-CN" | "en-US">("zh-CN");
+  const [savingDefaultLanguage, setSavingDefaultLanguage] = useState(false);
+
   const [settings, setSettings] = useState<SystemSetting[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -9311,12 +9315,33 @@ function SettingsTab() {
       if (groupSetting) {
         setGroupQrCode(groupSetting.value);
       }
+      const defaultLangSetting = result.find((s) => s.key === "default_language");
+      if (defaultLangSetting && (defaultLangSetting.value === "en-US" || defaultLangSetting.value === "zh-CN")) {
+        setDefaultLanguage(defaultLangSetting.value);
+      }
     } catch (error) {
       console.error("加载设置失败:", error);
     } finally {
       setLoading(false);
     }
   };
+
+  const saveDefaultLanguage = async (next: "zh-CN" | "en-US") => {
+    setSavingDefaultLanguage(true);
+    try {
+      await upsertSetting({
+        key: "default_language",
+        value: next,
+        description: "系统默认语言（用户未手动切换时的 fallback）",
+      });
+      setDefaultLanguage(next);
+    } catch (error) {
+      console.error("保存默认语言失败:", error);
+    } finally {
+      setSavingDefaultLanguage(false);
+    }
+  };
+
 
   useEffect(() => {
     loadSettings();
@@ -9622,6 +9647,50 @@ function SettingsTab() {
 
       {/* 当前设置列表 */}
       <div className='bg-white rounded-lg border p-6 shadow-sm'>
+              {/* 系统默认语言开关 */}
+      <div className='bg-white rounded-lg border p-6 shadow-sm'>
+        <div className='flex items-start justify-between gap-4'>
+          <div>
+            <h3 className='text-lg font-semibold mb-2'>系统默认语言</h3>
+            <p className='text-sm text-gray-500'>
+              控制新访客进入网站时优先显示的语言。已手动切换过语言的用户（localStorage 中有偏好）不受此设置影响。
+            </p>
+          </div>
+          <div className='flex items-center gap-2 shrink-0'>
+            <button
+              type='button'
+              disabled={savingDefaultLanguage}
+              onClick={() => saveDefaultLanguage("zh-CN")}
+              className={
+                "px-3 py-1.5 text-sm rounded-md border transition " +
+                (defaultLanguage === "zh-CN"
+                  ? "border-blue-500 bg-blue-50 text-blue-700 font-medium"
+                  : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50")
+              }
+            >
+              中文
+            </button>
+            <button
+              type='button'
+              disabled={savingDefaultLanguage}
+              onClick={() => saveDefaultLanguage("en-US")}
+              className={
+                "px-3 py-1.5 text-sm rounded-md border transition " +
+                (defaultLanguage === "en-US"
+                  ? "border-blue-500 bg-blue-50 text-blue-700 font-medium"
+                  : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50")
+              }
+            >
+              English
+            </button>
+          </div>
+        </div>
+        <p className='mt-3 text-xs text-gray-400'>
+          当前：{defaultLanguage === "en-US" ? "英文优先（en-US）" : "中文优先（zh-CN）"}
+          {savingDefaultLanguage ? "  · 保存中…" : ""}
+        </p>
+      </div>
+
         <h3 className='text-lg font-semibold mb-4'>所有系统设置</h3>
         {settings.length === 0 ? (
           <p className='text-gray-500'>暂无设置</p>

@@ -20,6 +20,8 @@ export const useBackendCreditsPreview = ({
   enabled = true,
 }: Params) => {
   const [credits, setCredits] = React.useState<number | undefined>(undefined);
+  const [available, setAvailable] = React.useState<boolean>(true);
+  const [unavailableReason, setUnavailableReason] = React.useState<string | null>(null);
   const requestSignature = React.useMemo(() => {
     if (!enabled || !serviceType) return "";
     return buildPreviewRequestSignature({
@@ -33,6 +35,8 @@ export const useBackendCreditsPreview = ({
   React.useEffect(() => {
     if (!enabled || !serviceType) {
       setCredits(undefined);
+      setAvailable(true);
+      setUnavailableReason(null);
       return;
     }
 
@@ -46,12 +50,23 @@ export const useBackendCreditsPreview = ({
       })
         .then((result) => {
           if (cancelled) return;
+          const isAvailable = result?.available !== false;
+          setAvailable(isAvailable);
+          setUnavailableReason(
+            isAvailable ? null : result?.unavailableReason ?? null,
+          );
           const nextCredits = Number(result?.credits);
-          setCredits(Number.isFinite(nextCredits) && nextCredits > 0 ? nextCredits : undefined);
+          setCredits(
+            isAvailable && Number.isFinite(nextCredits) && nextCredits > 0
+              ? nextCredits
+              : undefined,
+          );
         })
         .catch(() => {
           if (cancelled) return;
           setCredits(undefined);
+          setAvailable(true);
+          setUnavailableReason(null);
         });
     }, 120);
 
@@ -64,5 +79,7 @@ export const useBackendCreditsPreview = ({
   return {
     credits,
     hasCredits: typeof credits === "number" && credits > 0,
+    available,
+    unavailableReason,
   };
 };

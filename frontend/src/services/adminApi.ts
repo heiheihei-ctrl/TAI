@@ -2128,3 +2128,18 @@ export async function getAdminTeamCreditHistory(
   const response = await request(`/api/admin/teams/${teamId}/credits/history?${searchParams}`);
   return response.json();
 }
+
+
+/**
+ * 公开端点：拉取系统默认语言（zh-CN / en-US）
+ */
+export async function fetchDefaultLanguage(): Promise<"zh-CN" | "en-US"> {
+  try {
+    const response = await fetch(`${API_BASE}/api/settings/default-language`);
+    if (!response.ok) return "zh-CN";
+    const data = (await response.json()) as string;
+    return data === "en-US" ? "en-US" : "zh-CN";
+  } catch {
+    return "zh-CN";
+  }
+}

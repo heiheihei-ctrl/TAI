@@ -771,6 +771,10 @@ export class AiController {
       return 'midjourney-imagine';
     }
 
+    if (provider === 'seedream5Pro' || normalizedModel?.includes('seedream-5-0-pro')) {
+      return 'doubao-seedream-5-0-pro-260628';
+    }
+
     if (provider === 'seedream5' || normalizedModel?.includes('seedream')) {
       return 'doubao-seedream-5-0-260128';
     }
@@ -4348,10 +4352,17 @@ export class AiController {
   @Post('text-chat')
   async textChat(@Body() dto: TextChatDto, @Req() req: any) {
     const providerName = dto.aiProvider && dto.aiProvider !== 'gemini' ? dto.aiProvider : null;
-    const model = this.resolveTextModel(providerName, dto.model);
     const billingTag = dto.billingTag === 'prompt_optimize' ? 'prompt_optimize' : 'text_chat';
     const serviceType: ServiceType =
       billingTag === 'prompt_optimize' ? 'gemini-prompt-optimize' : 'gemini-text';
+    const bananaRoute = this.resolveBananaImageRouteFromProviderOptions(
+      dto.providerOptions,
+    );
+    // 普通路线提示词优化：固定走 ToAPIs gemini-2.5-flash-official
+    const model =
+      billingTag === 'prompt_optimize' && bananaRoute !== 'stable'
+        ? 'gemini-2.5-flash-official'
+        : this.resolveTextModel(providerName, dto.model);
 
     // 检查是否使用自定义 API Key（gemini 和 gemini-pro 都支持）
     const customApiKey = this.isGeminiProvider(providerName) ? await this.getUserCustomApiKey(req) : null;
@@ -4360,7 +4371,7 @@ export class AiController {
     return this.withCredits(req, serviceType, model, async () => {
       if (providerName && providerName !== 'gemini-pro') {
 
-        const provider = this.factory.getProvider(dto.model, providerName);
+        const provider = this.factory.getProvider(model, providerName);
         const result = await provider.generateText({
           prompt: dto.prompt,
           model,
@@ -4376,7 +4387,7 @@ export class AiController {
       }
 
       // gemini 和 gemini-pro 都使用默认的 Gemini 服务
-      return this.imageGeneration.generateTextResponse({ ...dto, customApiKey });
+      return this.imageGeneration.generateTextResponse({ ...dto, model, customApiKey });
     }, undefined, undefined, skipCredits, this.buildCreditRequestParams(providerName, {
       billingTag,
       model,

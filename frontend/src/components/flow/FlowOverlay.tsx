@@ -60,6 +60,10 @@ import {
   SHOW_TEAM_COLLABORATION,
 } from "@/config/featureFlags";
 import { shouldHideForeignFlowNode } from "@/config/foreignFlowNodes";
+import {
+  isAllowedForInternationalEdition,
+  isInternationalLanguage,
+} from "@/config/internationalEditionNodes";
 import { useAuthStore } from "@/stores/authStore";
 import TextPromptProNode from "./nodes/TextPromptProNode";
 import TextChatNode from "./nodes/TextChatNode";
@@ -113,6 +117,7 @@ import MinimaxMusicNode from "./nodes/MinimaxMusicNode";
 import TencentSpeechNode from "./nodes/TencentSpeechNode";
 import Nano2Node from "./nodes/Nano2Node";
 import Seedream5Node from "./nodes/Seedream5Node";
+import Seedream5ProNode from "./nodes/Seedream5ProNode";
 import NodeGroupNode from "./nodes/NodeGroupNode";
 import FlowMultiSelectionResizer from "./FlowMultiSelectionResizer";
 import { resolveFlowNodeSendAnchorClient } from "./utils/flowNodeSendAnchor";
@@ -957,6 +962,7 @@ const rawNodeTypes = {
   nano2: Nano2Node,
   gptImage2: Nano2Node,
   seedream5: Seedream5Node,
+  seedream5Pro: Seedream5ProNode,
   video: VideoNode,
   audioUpload: AudioNode,
   videoAnalyze: VideoAnalyzeNode,
@@ -1094,6 +1100,7 @@ const FLOW_GROUP_RUNNABLE_TYPES = new Set([
   "nano2",
   "gptImage2",
   "seedream5",
+  "seedream5Pro",
   "image",
   "imagePro",
   "sora2Video",
@@ -1404,6 +1411,7 @@ const QUICK_CONNECT_PRESETS: Record<
     { nodeType: "midjourneyV7", sourceHandle: "img" },
     { nodeType: "niji7", sourceHandle: "img" },
     { nodeType: "seedream5", sourceHandle: "img" },
+    { nodeType: "seedream5Pro", sourceHandle: "img" },
     { nodeType: "nano2", sourceHandle: "img" },
     { nodeType: "gptImage2", sourceHandle: "img" },
     { nodeType: "camera", sourceHandle: "img" },
@@ -1491,6 +1499,7 @@ const NODE_CREDITS_MAP: Record<string, number | string> = {
   nano2: 30, // Nano Banana 2 生图
   gptImage2: 29, // Gpt-Image-2 生图（默认按普通 1K + medium 兜底）
   seedream5: 30, // Seedream 5.0 生图
+  seedream5Pro: 90, // Seedream 5.0 Pro 生图（按 2K 90 积分兜底）
   three: 200, // 三维节点 - convert-2d-to-3d
   sora2Video: "40-400", // 视频生成节点 - sora-sd (40) 或 sora-hd (400)
   sora2Character: 0, // 角色生成节点 - 当前不单独计费
@@ -1913,6 +1922,7 @@ const IMAGE_DYNAMIC_CREDIT_NODE_TYPES = new Set<FlowNodeType>([
   "nano2",
   "gptImage2",
   "seedream5",
+  "seedream5Pro",
 ]);
 
 const resolveBananaPricingTierByProvider = (
@@ -3730,7 +3740,7 @@ function useFlowViewport() {
 // ];
 
 function FlowInner() {
-  const { lt, isZh } = useLocaleText();
+  const { lt, isZh, language } = useLocaleText();
   const flowUIEnabled = useUIStore((s) => s.flowUIEnabled);
   const authUser = useAuthStore((s) => s.user);
   const authInitializing = useAuthStore((s) => s.initializing);
@@ -4056,6 +4066,10 @@ function FlowInner() {
         const resolvedType = resolveFlowNodeTypeFromConfig(config);
         if (isHiddenFlowNodeType(resolvedType)) return false;
         if (shouldHideForeignFlowNode(config.nodeKey)) return false;
+        // 国际版（英文）下面板仅保留 Seedream / seedance / 免费节点
+        if (isInternationalLanguage(language)) {
+          if (!isAllowedForInternationalEdition(config)) return false;
+        }
         return true;
       })
       .filter((config) => config.status !== "disabled");
@@ -4090,7 +4104,7 @@ function FlowInner() {
     });
 
     return Array.from(dedupedByType.values());
-  }, [sortedNodeConfigs]);
+  }, [sortedNodeConfigs, language]);
 
   const nodeCreditsByType = React.useMemo(() => {
     const map = new Map<string, number>();
@@ -8865,6 +8879,17 @@ function FlowInner() {
               boxW: size.w,
               boxH: size.h,
             }
+          : type === "seedream5Pro"
+          ? {
+              status: "idle" as const,
+              images: [],
+              size: "2K",
+              batchMode: false,
+              batchCount: 4,
+              managedModelKey: "seedream5Pro",
+              boxW: size.w,
+              boxH: size.h,
+            }
           : type === "video"
           ? {
               status: "idle" as const,
@@ -10229,7 +10254,7 @@ function FlowInner() {
         }
         return false;
       }
-      if (targetNode.type === "seedream5") {
+      if (targetNode.type === "seedream5" || targetNode.type === "seedream5Pro") {
         if (targetHandle === "prompt") {
           return canSourceProvideText(sourceNode, sourceHandle);
         }
@@ -10630,7 +10655,7 @@ function FlowInner() {
         if (params.targetHandle === "text") return true; // 新线会替换旧线
       }
       // Seedream5 节点连接容量控制
-      if (targetNode?.type === "seedream5") {
+      if (targetNode?.type === "seedream5" || targetNode?.type === "seedream5Pro") {
         if (params.targetHandle === "prompt") return true; // 新线会替换旧线
         if (params.targetHandle === "img") return true; // 图片输入支持多条
       }
@@ -19215,6 +19240,211 @@ function FlowInner() {
         return;
       }
 
+      if (node.type === "seedream5Pro") {
+        // 复用 seedream5 的参数解析逻辑（句柄、参考图、prompt 提取引擎一致）
+        const promptEdge = currentEdges.find(
+          (e) => e.target === nodeId && e.targetHandle === "prompt"
+        );
+        let rawPromptText = "";
+        if (promptEdge) {
+          const promptNode = rf.getNode(promptEdge.source);
+          if (promptNode) {
+            const resolved = resolveTextFromSourceNode(promptNode, promptEdge.sourceHandle);
+            rawPromptText = resolved?.trim() || "";
+          }
+        }
+        const imageMentionItems = collectTargetNodeImageMentionItems(
+          nodeId,
+          currentEdges,
+          (id) => rf.getNode(id)
+        );
+        const promptMentionImageUrls = rawPromptText
+          ? resolveImageMentionUrls(rawPromptText, imageMentionItems)
+          : [];
+        const promptText = rawPromptText
+          ? stripImageMentionTokens(rawPromptText)
+          : "";
+
+        const totalImgEdges = currentEdges.filter(
+          (e) => e.target === nodeId && e.targetHandle === "img"
+        );
+        const connectedImageDatas = await resolveEdgesAsDataUrls(
+          totalImgEdges.slice(0, 5)
+        );
+        const imageDatas = Array.from(
+          new Set([...connectedImageDatas, ...promptMentionImageUrls])
+        ).slice(0, 5);
+
+        try {
+          await validateReferenceImageInputs(imageDatas);
+        } catch (sizeError) {
+          setNodes((ns) =>
+            ns.map((n) =>
+              n.id === nodeId
+                ? {
+                    ...n,
+                    data: {
+                      ...n.data,
+                      status: "failed",
+                      error:
+                        sizeError instanceof Error
+                          ? sizeError.message
+                          : "参考图文件过大，请选择小于 10MB 的图片",
+                    },
+                  }
+                : n
+            )
+          );
+          return;
+        }
+
+        const totalReferenceCount =
+          totalImgEdges.length + promptMentionImageUrls.length;
+        if (totalReferenceCount > 5) {
+          console.warn(
+            `Seedream5Pro: 最多支持5张参考图，当前输入了${totalReferenceCount}张，只使用前5张`
+          );
+        }
+
+        const hasValidPrompt = promptText && promptText.trim().length > 0;
+        if (!hasValidPrompt && imageDatas.length === 0) {
+          setNodes((ns) =>
+            ns.map((n) =>
+              n.id === nodeId
+                ? { ...n, data: { ...n.data, status: "failed", error: "需要提示词或参考图" } }
+                : n
+            )
+          );
+          return;
+        }
+
+        setNodes((ns) =>
+          ns.map((n) =>
+            n.id === nodeId
+              ? { ...n, data: { ...n.data, status: "running", error: undefined } }
+              : n
+          )
+        );
+
+        try {
+          const normalizeSeedreamProSizeForAPI = (raw: unknown): string => {
+            const value = typeof raw === "string" ? raw.trim() : "";
+            if (!value) return "2K";
+            const compact = value.replace(/\s+/g, "");
+            const upper = compact.toUpperCase();
+            if (upper === "1K" || upper === "1.5K" || upper === "2K") return upper;
+            console.warn(`Seedream5Pro: invalid size "${value}", fallback to 2K`);
+            return "2K";
+          };
+          const seedreamProSizeForAPI = normalizeSeedreamProSizeForAPI(
+            (node.data as any)?.size
+          );
+
+          const result = await generateImageViaAPI({
+            prompt: promptText || "",
+            aiProvider: "seedream5Pro",
+            imageSize: seedreamProSizeForAPI,
+            imageUrls: imageDatas.length > 0 ? imageDatas : undefined,
+            batchMode: false,
+            batchCount: 1,
+          });
+
+          if (!result.success || !result.data) {
+            const msg = result.error?.message || "Seedream 5.0 Pro 生成失败";
+            setNodes((ns) =>
+              ns.map((n) =>
+                n.id === nodeId
+                  ? { ...n, data: { ...n.data, status: "failed", error: msg } }
+                  : n
+              )
+            );
+            return;
+          }
+
+          const resolvedImageUrl = result.data.imageUrl || result.data.metadata?.imageUrl;
+          const imageData = resolvedImageUrl || result.data.imageData || result.data.imageUrl;
+          const imageUrls = result.data.imageUrls || result.data.metadata?.imageUrls;
+          const finalImagesRaw =
+            imageUrls && Array.isArray(imageUrls) && imageUrls.length > 0
+              ? imageUrls
+              : [imageData];
+
+          const stableFinalImages: string[] = [];
+          for (let i = 0; i < finalImagesRaw.length; i += 1) {
+            const item = finalImagesRaw[i];
+            if (typeof item !== "string" || !item.trim()) continue;
+            const trimmed = item.trim();
+            try {
+              stableFinalImages.push(
+                await uploadImageToStableUrl(
+                  trimmed,
+                  `flow_seedream5pro_${nodeId}_${i}_${Date.now()}.png`,
+                  { reuploadUnstableRemote: true }
+                )
+              );
+            } catch (persistErr) {
+              console.warn(
+                "[Flow] Seedream5Pro: failed to persist preview to stable storage",
+                persistErr
+              );
+              stableFinalImages.push(trimmed);
+            }
+          }
+
+          setNodes((ns) =>
+            ns.map((n) =>
+              n.id === nodeId
+                ? {
+                    ...n,
+                    data: {
+                      ...n.data,
+                      status: "succeeded",
+                      images: stableFinalImages,
+                      imageUrls: stableFinalImages,
+                      imageUrl: stableFinalImages[0],
+                      error: undefined,
+                    },
+                  }
+                : n
+            )
+          );
+
+          const historySource = stableFinalImages[0];
+          if (historySource) {
+            try {
+              const projectId = useProjectContentStore.getState().projectId;
+              const historyId = `${nodeId}-${Date.now()}`;
+              const historyRemote =
+                !isDataImageUrl(historySource) && !isBlobUrl(historySource);
+
+              void recordImageHistoryEntry({
+                id: historyId,
+                base64: historyRemote ? undefined : historySource,
+                remoteUrl: historyRemote ? historySource : undefined,
+                title: `Seedream 5.0 Pro ${new Date().toLocaleTimeString()}`,
+                nodeId,
+                nodeType: "generate",
+                fileName: `flow_seedream5pro_${historyId}.png`,
+                projectId,
+                keepThumbnail: false,
+                metadata: { provider: "seedream5Pro" },
+              });
+            } catch (err) {
+              console.warn("记录图片历史失败:", err);
+            }
+          }
+        } catch (err: any) {
+          setNodes((ns) =>
+            ns.map((n) =>
+              n.id === nodeId
+                ? { ...n, data: { ...n.data, status: "failed", error: err.message || "生成失败" } }
+                : n
+            )
+          );
+        }
+        return;
+      }
+
       if (
         node.type !== "generate" &&
         node.type !== "generate4" &&
@@ -21685,6 +21915,7 @@ function FlowInner() {
           n.type === "textChat" ||
           n.type === "promptOptimize" ||
           n.type === "seedream5" ||
+          n.type === "seedream5Pro" ||
           n.type === "minimaxSpeech" ||
           n.type === "tencentSpeech" ||
           n.type === "minimaxMusic" ||

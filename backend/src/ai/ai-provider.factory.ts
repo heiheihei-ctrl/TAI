@@ -7,6 +7,7 @@ import { RunningHubProvider } from './providers/runninghub.provider';
 import { MidjourneyProvider } from './providers/midjourney.provider';
 import { Nano2Provider } from './providers/nano2.provider';
 import { Seedream5Provider } from './providers/seedream5.provider';
+import { Seedream5ProProvider } from './providers/seedream5-pro.provider';
 
 
 @Injectable()
@@ -21,7 +22,8 @@ export class AIProviderFactory implements OnModuleInit {
     private readonly runningHubProvider: RunningHubProvider,
     private readonly midjourneyProvider: MidjourneyProvider,
     private readonly nano2Provider: Nano2Provider,
-    private readonly seedream5Provider: Seedream5Provider
+    private readonly seedream5Provider: Seedream5Provider,
+    private readonly seedream5ProProvider: Seedream5ProProvider,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -57,6 +59,10 @@ export class AIProviderFactory implements OnModuleInit {
     // 注册 Seedream5 提供商
     this.providers.set('seedream5', this.seedream5Provider);
     await this.seedream5Provider.initialize();
+
+    // 注册 Seedream5 Pro 提供商（doubao-seedream-5-0-pro-260628）
+    this.providers.set('seedream5Pro', this.seedream5ProProvider);
+    await this.seedream5ProProvider.initialize();
 
     // TODO: 在这里注册其他提供商 (OpenAI, Claude, StableDiffusion等)
     // 例如:
@@ -101,6 +107,8 @@ export class AIProviderFactory implements OnModuleInit {
         model.includes('gpt-image-2')
       ) {
         return this.providers.get('nano2') || this.providers.get('gemini')!;
+      } else if (model.includes('seedream-5-0-pro') || model.includes('seedream5-pro')) {
+        return this.providers.get('seedream5Pro') || this.providers.get('seedream5')!;
       } else if (model.includes('seedream') || model.includes('doubao-seedream')) {
         return this.providers.get('seedream5') || this.providers.get('gemini')!;
       } else if (model.includes('gpt') || model.includes('openai')) {

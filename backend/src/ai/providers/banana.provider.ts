@@ -130,6 +130,7 @@ export class BananaProvider implements IAIProvider {
     "banana-gemini-3.1-pro": "gemini-3-flash-preview",
     "gemini-3.1-pro-preview-official": "gemini-3-flash-preview",
     "banana-gemini-3.1-pro-preview-official": "gemini-3-flash-preview",
+    "gemini-2.5-flash-official": "gemini-3-flash-preview",
     "gemini-2.5-flash-image-preview": "gemini-3-flash-preview",
     "gemini-2.5-flash-image": "gemini-3-flash-preview",
     "gemini-3.1-flash-image-preview": "gemini-3-flash-preview",
@@ -155,6 +156,7 @@ export class BananaProvider implements IAIProvider {
     "banana-gemini-3.1-pro-preview": "gemini-3-flash-preview",
     "gemini-3.1-pro-preview-official": "gemini-3-flash-preview",
     "banana-gemini-3.1-pro-preview-official": "gemini-3-flash-preview",
+    "gemini-2.5-flash-official": "gemini-2.5-flash",
     "gemini-3-pro-image-preview": "gemini-2.5-flash-image",
     "gemini-3.1-flash-image-preview": "gemini-3-flash-preview",
     "banana-gemini-3.1-flash-image-preview": "gemini-3-flash-preview",
@@ -448,6 +450,10 @@ export class BananaProvider implements IAIProvider {
 
   private normalizeApimartTextModel(model: string): string {
     const normalized = this.normalizeModelName(model);
+    // 提示词优化普通路线：保留 ToAPIs official 模型名
+    if (normalized === "gemini-2.5-flash-official") {
+      return "gemini-2.5-flash-official";
+    }
     if (normalized === "gemini-3-pro-preview") {
       return "gemini-3-flash-preview";
     }
@@ -472,7 +478,8 @@ export class BananaProvider implements IAIProvider {
       normalized === "gemini-3-pro-preview" ||
       normalized === "gemini-3.1-pro-preview" ||
       normalized === "gemini-3.1-pro" ||
-      normalized === "gemini-3.1-pro-preview-official"
+      normalized === "gemini-3.1-pro-preview-official" ||
+      normalized === "gemini-2.5-flash-official"
     ) {
       return "gemini-3-flash-preview";
     }

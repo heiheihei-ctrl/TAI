@@ -78,10 +78,12 @@ function PromptOptimizeNodeInner({ id, data, selected }: Props) {
       providerToggleOptions[1],
     [currentProviderValue, providerToggleOptions]
   );
-  const textModel = React.useMemo(
-    () => getTextModelForProvider(effectiveProvider),
-    [effectiveProvider]
-  );
+  const textModel = React.useMemo(() => {
+    if (bananaImageRoute !== 'stable') {
+      return 'gemini-2.5-flash-official';
+    }
+    return getTextModelForProvider(effectiveProvider);
+  }, [bananaImageRoute, effectiveProvider]);
   const { credits: backendCredits } = useBackendCreditsPreview({
     serviceType: 'gemini-prompt-optimize',
     model: textModel,

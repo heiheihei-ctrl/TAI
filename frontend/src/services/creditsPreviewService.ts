@@ -1,11 +1,22 @@
 import { fetchWithAuth } from "./authFetch";
 import { getApiBaseUrl } from "@/utils/assetProxy";
+import i18n from "@/i18n";
+
+export type PricingEdition = "domestic" | "international";
+
+export const resolvePricingEdition = (
+  locale?: string | null,
+): PricingEdition => {
+  const value = String(locale ?? "").toLowerCase().trim();
+  return value.startsWith("en") ? "international" : "domestic";
+};
 
 export type CreditsPreviewRequest = {
   serviceType: string;
   model?: string;
   requestParams?: Record<string, any>;
   outputImageCount?: number;
+  edition?: PricingEdition;
 };
 
 export type CreditsPreviewResponse = {
@@ -31,6 +42,10 @@ export type CreditsPreviewResponse = {
     };
   } | null;
   requestParams?: Record<string, any> | null;
+  edition?: PricingEdition;
+  available?: boolean;
+  unavailableReason?: string;
+  internationalMultiplier?: number;
 };
 
 export const stableSerializePreviewPayload = (value: unknown): string => {
@@ -49,13 +64,17 @@ export const stableSerializePreviewPayload = (value: unknown): string => {
   return JSON.stringify(value);
 };
 
-export const buildPreviewRequestSignature = (payload: CreditsPreviewRequest): string =>
-  stableSerializePreviewPayload({
+export const buildPreviewRequestSignature = (payload: CreditsPreviewRequest): string => {
+  const edition =
+    payload.edition ?? resolvePricingEdition(i18n.resolvedLanguage ?? i18n.language);
+  return stableSerializePreviewPayload({
     serviceType: payload.serviceType,
     model: payload.model || null,
     requestParams: payload.requestParams || null,
     outputImageCount: payload.outputImageCount ?? null,
+    edition,
   });
+};
 
 const PREVIEW_CACHE_TTL_MS = 30000;
 const previewResponseCache = new Map<
@@ -67,7 +86,10 @@ const previewInflightCache = new Map<string, Promise<CreditsPreviewResponse>>();
 export async function previewCredits(
   payload: CreditsPreviewRequest
 ): Promise<CreditsPreviewResponse> {
-  const signature = buildPreviewRequestSignature(payload);
+  const edition =
+    payload.edition ?? resolvePricingEdition(i18n.resolvedLanguage ?? i18n.language);
+  const enrichedPayload: CreditsPreviewRequest = { ...payload, edition };
+  const signature = buildPreviewRequestSignature(enrichedPayload);
   const now = Date.now();
   const cached = previewResponseCache.get(signature);
   if (cached && cached.expiresAt > now) {
@@ -85,7 +107,7 @@ export async function previewCredits(
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(enrichedPayload),
   })
     .then(async (response) => {
       if (!response.ok) {

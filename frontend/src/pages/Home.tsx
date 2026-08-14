@@ -644,7 +644,7 @@ export default function Home() {
                   onClick={() => void handleEnterpriseVersionClick()}
                   disabled={enterpriseEntryBusy}
                 >
-                  企业版
+                  {t("enterprise.homeActions.enterprise")}
                 </button>
               </div>
             ) : null}
@@ -692,7 +692,7 @@ export default function Home() {
                       onClick={() => void handleEnterpriseVersionClick()}
                       disabled={enterpriseEntryBusy}
                     >
-                      企业版
+                      {t("enterprise.homeActions.enterprise")}
                     </button>
                   </div>
                 ) : null}
@@ -1158,7 +1158,7 @@ export default function Home() {
                 disabled={enterpriseEntryBusy}
                 className="inline-flex h-11 items-center justify-center rounded-full border border-teal-300/50 bg-teal-500/20 px-6 text-sm font-medium text-teal-50 backdrop-blur-sm transition hover:bg-teal-500/30"
               >
-                企业版
+                {t("enterprise.homeActions.enterprise")}
               </button>
             ) : null}
           </div>
@@ -1253,17 +1253,15 @@ export default function Home() {
       {SHOW_ENTERPRISE_CONSOLE ? (
         <aside
           className="fixed right-4 top-1/2 z-40 hidden w-[148px] -translate-y-1/2 flex-col items-center rounded-2xl bg-[#1e2128] px-3 pb-3 pt-4 shadow-[0_12px_40px_rgba(0,0,0,0.45)] sm:flex md:right-6"
-          aria-label="企业版咨询客服微信"
+          aria-label={t("enterprise.homeActions.enterpriseContactLabel")}
         >
           <p className="mb-3 text-center text-[13px] font-medium leading-snug text-white">
-            企业版咨询
-            <br />
-            客服微信
+            {t("enterprise.homeActions.enterpriseContactDesc")}
           </p>
           <div className="w-full overflow-hidden rounded-xl bg-white p-2">
             <img
               src={kefuImage}
-              alt="企业版咨询客服微信"
+              alt={t("enterprise.homeActions.enterpriseContactLabel")}
               className="block h-auto w-full object-contain"
               draggable={false}
             />

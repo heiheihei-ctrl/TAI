@@ -107,6 +107,7 @@ export class CreditsController {
       model: dto.model,
       requestParams: dto.requestParams,
       outputImageCount: dto.outputImageCount,
+      edition: dto.edition,
     });
   }
 

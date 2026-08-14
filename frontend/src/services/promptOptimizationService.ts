@@ -20,7 +20,21 @@ export interface PromptOptimizationResult {
 
 class PromptOptimizationService {
   private readonly DEFAULT_MODEL = 'gemini-3-flash-preview';
+  /** 普通路线：ToAPIs 官方 Flash */
+  private readonly NORMAL_ROUTE_MODEL = 'gemini-2.5-flash-official';
   private readonly REQUEST_TIMEOUT_MS = 25_000;
+
+  private resolveOptimizeModel(request: PromptOptimizationRequest): string {
+    const routeRaw =
+      request.providerOptions?.banana?.imageRoute ||
+      request.providerOptions?.bananaImageRoute;
+    const route =
+      typeof routeRaw === 'string' ? routeRaw.trim().toLowerCase() : '';
+    if (route === 'stable' || route === 'tencent') {
+      return request.model || this.DEFAULT_MODEL;
+    }
+    return this.NORMAL_ROUTE_MODEL;
+  }
 
   private async withRetry<T>(
     operation: (attempt: number) => Promise<T>,
@@ -134,7 +148,7 @@ class PromptOptimizationService {
     try {
       const instruction = this.buildInstruction({ ...request, input: trimmedInput });
       const language = request.language || '中文';
-      const modelToUse = request.model || this.DEFAULT_MODEL;
+      const modelToUse = this.resolveOptimizeModel(request);
 
       const result = await this.withRetry(async () => {
         const response = await this.withTimeout(

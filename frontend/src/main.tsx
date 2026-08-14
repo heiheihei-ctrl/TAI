@@ -3,6 +3,7 @@ import { StrictMode, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import '@/i18n';
+import { applyServerDefaultLanguage } from '@/i18n';
 import ProtectedRoute from '@/routes/ProtectedRoute';
 import './index.css';
 import App from './App.tsx';
@@ -81,6 +82,7 @@ function RootRoutes() {
 }
 
 initializeRuntimeStability();
+void applyServerDefaultLanguage();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

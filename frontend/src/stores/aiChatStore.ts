@@ -943,6 +943,7 @@ const TEXT_MODEL_BY_PROVIDER: Record<AIProviderType, string> = {
   midjourney: DEFAULT_TEXT_MODEL,
   nano2: BANANA_31_TEXT_MODEL,
   seedream5: DEFAULT_TEXT_MODEL,
+  seedream5Pro: DEFAULT_TEXT_MODEL,
 };
 
 export const getTextModelForProvider = (provider: AIProviderType): string => {

@@ -939,6 +939,33 @@ export class NodeConfigService {
           },
         },
       },
+      {
+        nodeKey: 'seedream5Pro',
+        nameZh: 'Seedream 5.0 Pro',
+        nameEn: 'Seedream 5.0 Pro',
+        category: 'image',
+        sortOrder: 17,
+        creditsPerCall: 90,
+        serviceType: 'doubao-seedream-5-0-pro-260628',
+        priceYuan: 0.9,
+        description: 'Seedream 5.0 Pro 图像生成（1K/1.5K/2K 档位），更强文字与编辑能力',
+        metadata: {
+          type: 'seedream5Pro',
+          flowNodeType: 'seedream5Pro',
+          provider: 'seedream5Pro',
+          model: 'doubao-seedream-5-0-pro-260628',
+          supportedResolutions: ['1K', '1.5K', '2K'],
+          maxReferenceImages: 5,
+          defaultData: {
+            aiProvider: 'seedream5Pro',
+            model: 'doubao-seedream-5-0-pro-260628',
+            size: '2K',
+            batchMode: false,
+            batchCount: 4,
+            managedModelKey: 'seedream5Pro',
+          },
+        },
+      },
 
       // 视频生成节点
       // {

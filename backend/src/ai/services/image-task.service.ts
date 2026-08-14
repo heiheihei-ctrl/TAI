@@ -31,6 +31,9 @@ function resolveTaskServiceType(
     case 'generate':
       if (normalizedModel?.includes('gpt-image-2')) return 'gpt-image-2';
       if (normalizedProvider === 'midjourney') return 'midjourney-imagine';
+      if (normalizedProvider === 'seedream5pro' || normalizedModel?.includes('seedream-5-0-pro')) {
+        return 'doubao-seedream-5-0-pro-260628';
+      }
       if (normalizedProvider === 'seedream5' || normalizedModel?.includes('seedream')) {
         return 'doubao-seedream-5-0-260128';
       }
@@ -38,6 +41,9 @@ function resolveTaskServiceType(
       if (normalizedModel?.includes('2.5')) return 'gemini-2.5-image';
       return 'gemini-3-pro-image';
     case 'edit':
+      if (normalizedProvider === 'seedream5pro' || normalizedModel?.includes('seedream-5-0-pro')) {
+        return 'doubao-seedream-5-0-pro-260628';
+      }
       if (normalizedProvider === 'seedream5' || normalizedModel?.includes('seedream')) {
         return 'doubao-seedream-5-0-260128';
       }
@@ -45,6 +51,9 @@ function resolveTaskServiceType(
       if (normalizedModel?.includes('2.5')) return 'gemini-2.5-image-edit';
       return 'gemini-image-edit';
     case 'blend':
+      if (normalizedProvider === 'seedream5pro' || normalizedModel?.includes('seedream-5-0-pro')) {
+        return 'doubao-seedream-5-0-pro-260628';
+      }
       if (normalizedProvider === 'seedream5' || normalizedModel?.includes('seedream')) {
         return 'doubao-seedream-5-0-260128';
       }

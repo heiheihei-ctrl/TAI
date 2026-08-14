@@ -102,7 +102,8 @@ export type SupportedAIProvider =
   | 'runninghub'
   | 'midjourney'
   | 'nano2'
-  | 'seedream5';
+  | 'seedream5'
+  | 'seedream5Pro';
 
 export interface AIImageGenerateRequest {
   prompt: string;

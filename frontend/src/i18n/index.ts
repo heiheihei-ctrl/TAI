@@ -56,4 +56,26 @@ if (!i18n.isInitialized) {
   }
 }
 
+
+/**
+ * 启动时异步拉取服务端默认语言，仅当用户没有 localStorage 偏好时应用
+ * 用户手动切换过的语言（"tanva-locale"）永远优先
+ */
+export async function applyServerDefaultLanguage(): Promise<void> {
+  if (typeof window === "undefined") return;
+  const hasUserPreference = Boolean(window.localStorage.getItem("tanva-locale"));
+  if (hasUserPreference) return;
+
+  try {
+    const { fetchDefaultLanguage } = await import("@/services/adminApi");
+    const serverDefault = await fetchDefaultLanguage();
+    const current = i18n.resolvedLanguage || i18n.language;
+    if (current !== serverDefault) {
+      await i18n.changeLanguage(serverDefault);
+    }
+  } catch (error) {
+    console.warn("[i18n] failed to apply server default language:", error);
+  }
+}
+
 export default i18n;

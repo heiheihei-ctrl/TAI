@@ -7,6 +7,7 @@ type ImageNodeType =
   | "generateRef"
   | "analysis"
   | "seedream5"
+  | "seedream5Pro"
   | "nano2"
   | "gptImage2"
   | "midjourney"
@@ -56,7 +57,13 @@ const normalizeSeedreamSize = (value?: string | null): string | undefined => {
   if (!raw) return "2K";
   const compact = raw.replace(/\s+/g, "");
   const upper = compact.toUpperCase();
-  if (upper === "2K" || upper === "3K" || upper === "4K" || upper === "1K") {
+  if (
+    upper === "1K" ||
+    upper === "1.5K" ||
+    upper === "2K" ||
+    upper === "3K" ||
+    upper === "4K"
+  ) {
     return upper;
   }
   const match = compact.match(/^(\d{3,5})[xX](\d{3,5})$/);
@@ -110,6 +117,7 @@ const resolveManagedModelKey = (
   const explicit = String(managedModelKey || "").trim();
   if (explicit) return explicit;
   if (nodeType === "seedream5") return "seedream5";
+  if (nodeType === "seedream5Pro") return "seedream5Pro";
   if (
     nodeType === "midjourney" ||
     nodeType === "midjourneyV7" ||
@@ -158,6 +166,23 @@ export const useImageNodeCreditsPreview = ({
         model: "doubao-seedream-5-0-260128",
         requestParams: {
           aiProvider: "seedream5",
+          imageSize: normalizeSeedreamSize(imageSize),
+          referenceImageCount: safeReferenceCount,
+          modelKey,
+          managedModelKey: modelKey,
+          vendorKey: vendorKey || undefined,
+          platformKey: platformKey || undefined,
+        },
+      };
+    }
+
+    if (nodeType === "seedream5Pro") {
+      const modelKey = resolveManagedModelKey(nodeType, provider, managedModelKey);
+      return {
+        serviceType: "doubao-seedream-5-0-pro-260628",
+        model: "doubao-seedream-5-0-pro-260628",
+        requestParams: {
+          aiProvider: "seedream5Pro",
           imageSize: normalizeSeedreamSize(imageSize),
           referenceImageCount: safeReferenceCount,
           modelKey,

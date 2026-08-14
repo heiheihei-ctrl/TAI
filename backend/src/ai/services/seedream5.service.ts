@@ -22,7 +22,7 @@ export class Seedream5Service {
   private readonly watchaEndpoint: string;
   private readonly watchaModel: string;
 
-  private static readonly SIZE_PRESETS = new Set(['1K', '2K', '3K', '4K']);
+  private static readonly SIZE_PRESETS = new Set(['1K', '1.5K', '2K', '3K', '4K']);
   private static readonly DIMENSION_PATTERN = /^(\d{3,5})\s*[xX]\s*(\d{3,5})$/;
 
   constructor(
@@ -138,7 +138,9 @@ export class Seedream5Service {
     return 'doubao';
   }
 
-  private async resolveProviderConfig(): Promise<Seedream5ProviderConfig> {
+  private async resolveProviderConfig(
+    overrideModel?: string,
+  ): Promise<Seedream5ProviderConfig> {
     const provider = await this.getConfiguredProvider();
 
     if (provider === 'watcha') {
@@ -151,7 +153,7 @@ export class Seedream5Service {
         provider: 'watcha',
         endpoint: this.watchaEndpoint,
         apiKey: this.watchaApiKey,
-        model: this.watchaModel,
+        model: overrideModel || this.watchaModel,
         generationPath: '/v3/images/generations',
       };
     }
@@ -163,17 +165,17 @@ export class Seedream5Service {
       provider: 'doubao',
       endpoint: this.doubaoEndpoint,
       apiKey: this.doubaoApiKey,
-      model: 'doubao-seedream-5-0-260128',
+      model: overrideModel || 'doubao-seedream-5-0-260128',
       generationPath: '/api/v3/images/generations',
     };
   }
 
-  async getProviderExecutionInfo(): Promise<{
+  async getProviderExecutionInfo(overrideModel?: string): Promise<{
     provider: Seedream5ProviderType;
     model: string;
     endpoint: string;
   }> {
-    const config = await this.resolveProviderConfig();
+    const config = await this.resolveProviderConfig(overrideModel);
     return {
       provider: config.provider,
       model: config.model,
@@ -187,26 +189,32 @@ export class Seedream5Service {
     image_urls?: string[];
     batchMode?: boolean;
     batchCount?: number;
+    model?: string;
   }): Promise<{ imageUrl?: string; imageUrls?: string[] }> {
-    const providerConfig = await this.resolveProviderConfig();
+    const providerConfig = await this.resolveProviderConfig(params.model);
     const normalizedSize = this.normalizeSizeForProvider(
       providerConfig.provider,
       this.normalizeSize(params.size),
     );
 
+    // Seedream 5.0 Pro 不支持 sequential_image_generation（文生组图），传 disabled 也会被拒绝
+    const isProModel = providerConfig.model.includes('-pro-');
+
     const payload: any = {
       model: providerConfig.model,
-      sequential_image_generation: params.batchMode ? 'auto' : 'disabled',
       response_format: 'url',
       size: normalizedSize,
       stream: false,
       watermark: false,
     };
 
-    if (params.batchMode && params.batchCount) {
-      payload.sequential_image_generation_options = {
-        max_images: Math.min(Math.max(params.batchCount, 2), 10),
-      };
+    if (!isProModel) {
+      payload.sequential_image_generation = params.batchMode ? 'auto' : 'disabled';
+      if (params.batchMode && params.batchCount) {
+        payload.sequential_image_generation_options = {
+          max_images: Math.min(Math.max(params.batchCount, 2), 10),
+        };
+      }
     }
 
     if (params.prompt) {

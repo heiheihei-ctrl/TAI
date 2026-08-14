@@ -2542,7 +2542,14 @@ const AIChatDialog: React.FC = () => {
             focus: promptSettings.focus || undefined,
             lengthPreference: promptSettings.lengthPreference,
             aiProvider,
-            model: textModel,
+            model:
+              bananaImageRoute === "stable"
+                ? textModel
+                : "gemini-2.5-flash-official",
+            providerOptions: {
+              banana: { imageRoute: bananaImageRoute },
+              bananaImageRoute,
+            },
           });
 
           if (response.success && response.data) {

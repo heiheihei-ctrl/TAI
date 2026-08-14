@@ -1313,7 +1313,7 @@ const FloatingHeader: React.FC = () => {
       : "/TAI-logo-2.png";
   const brandLogoAlt =
     isTeamMode && activeTeamForCredits
-      ? activeTeamForCredits.displayName || activeTeamForCredits.name || "企业"
+      ? activeTeamForCredits.displayName || activeTeamForCredits.name || t("enterprise.header.console")
       : "TAI";
 
   const topCreditsText = useMemo(() => {
@@ -1334,7 +1334,7 @@ const FloatingHeader: React.FC = () => {
 
   const teamUnlimitedBadge = useMemo(() => {
     if (!isTeamMode || !teamMyQuota) return null;
-    if (teamMyQuota.personalAvailable === null) return '不限·团队额度';
+    if (teamMyQuota.personalAvailable === null) return `${t("enterprise.header.unlimited")}·${t("enterprise.header.teamQuota")}`;
     return null;
   }, [isTeamMode, teamMyQuota]);
 
@@ -2702,10 +2702,10 @@ const FloatingHeader: React.FC = () => {
                 size="sm"
                 className="h-7 px-2.5 text-xs rounded-full border border-teal-200/70 bg-teal-50/60 text-teal-800 hover:bg-teal-100/80 flex items-center gap-1.5"
                 onClick={() => openEnterpriseConsole(activeTeamForCredits.id)}
-                title="企业后台"
+                title={t("enterprise.header.consoleTitle")}
               >
                 <Building2 className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">企业后台</span>
+                <span className="hidden sm:inline">{t("enterprise.header.console")}</span>
               </Button>
             ) : SHOW_ENTERPRISE_CONSOLE && !isTeamMode ? (
               <Button
@@ -2714,10 +2714,10 @@ const FloatingHeader: React.FC = () => {
                 className="h-7 px-2.5 text-xs rounded-full border border-teal-200/70 bg-teal-50/60 text-teal-800 hover:bg-teal-100/80 flex items-center gap-1.5"
                 onClick={() => void handleEnterpriseVersionClick()}
                 disabled={enterpriseEntryBusy}
-                title="企业版"
+                title={t("enterprise.header.enterpriseTitle")}
               >
                 <Building2 className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">企业版</span>
+                <span className="hidden sm:inline">{t("enterprise.header.enterprise")}</span>
               </Button>
             ) : null}
 
@@ -2727,10 +2727,10 @@ const FloatingHeader: React.FC = () => {
                 size="sm"
                 className="h-7 px-2.5 text-xs rounded-full border border-liquid-glass-light bg-liquid-glass-light text-gray-700 hover:bg-liquid-glass-hover flex items-center gap-1.5"
                 onClick={() => setJoinCodeModalOpen(true)}
-                title="输入企业邀请码"
+                title={t("enterprise.header.inviteCodeTitle")}
               >
                 <Key className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">邀请码</span>
+                <span className="hidden sm:inline">{t("enterprise.header.inviteCode")}</span>
               </Button>
             ) : null}
 
@@ -2746,7 +2746,7 @@ const FloatingHeader: React.FC = () => {
                         ? 'border-teal-200/70 bg-teal-50/60 text-teal-800 hover:bg-teal-100/80'
                         : 'border-liquid-glass-light bg-liquid-glass-light text-gray-700 hover:bg-liquid-glass-hover',
                     )}
-                    title={isTeamMode ? '团队额度' : t("workspace.header.myCredits")}
+                    title={isTeamMode ? t("enterprise.header.teamQuota") : t("workspace.header.myCredits")}
                     onClick={openMembershipHub}
                   >
                     {isTeamMode ? (
@@ -2763,14 +2763,14 @@ const FloatingHeader: React.FC = () => {
                     <span className='tabular-nums font-medium'>{topCreditsText}</span>
                     {teamUnlimitedBadge && (
                       <span className='ml-0.5 text-[10px] font-medium text-teal-600 bg-teal-100 rounded-full px-1.5 py-0.5 leading-none'>
-                        不限
+                        {t("enterprise.header.unlimited")}
                       </span>
                     )}
                   </Button>
                 </TooltipTrigger>
                 {isTeamMode && (
                   <TooltipContent side='bottom'>
-                    当前使用团队额度，显示为你的个人可用配额
+                    {t("enterprise.header.teamQuotaHint")}
                   </TooltipContent>
                 )}
               </Tooltip>

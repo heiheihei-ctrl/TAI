@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { Building2, Eye, EyeOff, Loader2 } from "lucide-react";
 import { SHOW_ENTERPRISE_CONSOLE } from "@/config/featureFlags";
@@ -12,6 +13,7 @@ import WelcomeShaderBackground from "@/components/background/WelcomeShaderBackgr
  * 有企业权限 → 进该企业项目管理；否则留在本页继续用表单登录（不展示「非成员」引导页）。
  */
 export default function EnterpriseLoginPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const authInitializing = useAuthStore((s) => s.initializing);
@@ -66,11 +68,11 @@ export default function EnterpriseLoginPage() {
       await login(phone.trim(), password);
       const entered = await tryEnterConsole();
       if (!entered) {
-        setLocalError("账号或密码错误，或该账号无权进入企业后台");
+        setLocalError("{t(\"enterprise.login.invalid\")}");
       }
     } catch (err: unknown) {
       const message =
-        err instanceof Error ? err.message : error || "登录失败";
+        err instanceof Error ? err.message : error || t("enterprise.login.submitting");
       setLocalError(message);
     } finally {
       setBusy(false);
@@ -87,8 +89,8 @@ export default function EnterpriseLoginPage() {
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10">
             <Building2 className="h-7 w-7" />
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">企业版登录</h1>
-          <p className="mt-2 text-sm text-white/55">请使用企业账号登录</p>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("enterprise.login.title")}</h1>
+          <p className="mt-2 text-sm text-white/55">{t("enterprise.login.subtitle")}</p>
         </div>
 
         <form
@@ -96,23 +98,23 @@ export default function EnterpriseLoginPage() {
           className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-md"
         >
           <label className="mb-4 block text-xs text-white/50">
-            手机号
+            {t("enterprise.login.phone")}
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="手机号"
+              placeholder={t("enterprise.login.phonePlaceholder")}
               className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-sm text-white outline-none placeholder:text-white/30 focus:border-teal-400/50"
               autoComplete="username"
             />
           </label>
           <label className="mb-4 block text-xs text-white/50">
-            密码
+            {t("enterprise.login.password")}
             <div className="relative mt-1.5">
               <input
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="密码"
+                placeholder={t("enterprise.login.passwordPlaceholder")}
                 className="w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 pr-10 text-sm text-white outline-none placeholder:text-white/30 focus:border-teal-400/50"
                 autoComplete="current-password"
               />
@@ -136,7 +138,7 @@ export default function EnterpriseLoginPage() {
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-teal-500 py-2.5 text-sm font-medium text-white disabled:opacity-50"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            {busy ? "登录中…" : "登录"}
+            {busy ? "{t(\"enterprise.login.submitting\")}" : "{t(\"enterprise.login.submit\")}"}
           </button>
         </form>
 
@@ -146,7 +148,7 @@ export default function EnterpriseLoginPage() {
             onClick={() => navigate("/")}
             className="hover:text-white/70"
           >
-            返回首页
+            {t("enterprise.login.backHome")}
           </button>
         </div>
       </div>

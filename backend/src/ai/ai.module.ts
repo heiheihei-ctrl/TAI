@@ -10,6 +10,7 @@ import { RunningHubProvider } from './providers/runninghub.provider';
 import { MidjourneyProvider } from './providers/midjourney.provider';
 import { Nano2Provider } from './providers/nano2.provider';
 import { Seedream5Provider } from './providers/seedream5.provider';
+import { Seedream5ProProvider } from './providers/seedream5-pro.provider';
 import { AIProviderFactory } from './ai-provider.factory';
 import { CostCalculatorService } from './services/cost-calculator.service';
 import { Convert2Dto3DService } from './services/convert-2d-to-3d.service';
@@ -57,6 +58,7 @@ import { ContentModerationModule } from '../content-moderation/content-moderatio
     MidjourneyProvider,
     Nano2Provider,
     Seedream5Provider,
+    Seedream5ProProvider,
     AIProviderFactory,
     CostCalculatorService, // 添加成本计算器
     Convert2Dto3DService, // 添加2D转3D服务

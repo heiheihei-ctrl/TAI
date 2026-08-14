@@ -192,10 +192,10 @@ export default function RegisterPage() {
                 className="px-4 text-sm text-blue-400 hover:text-blue-300 transition-colors disabled:text-blue-400/50 disabled:cursor-not-allowed whitespace-nowrap shrink-0 h-full"
               >
                 {codeCountdown > 0
-                  ? `${codeCountdown}秒后重新获取`
+                  ? t("auth.register.codeCountdown", { count: codeCountdown })
                   : hasSentCode
-                    ? "重新发送"
-                    : "发送"}
+                    ? t("auth.register.resend")
+                    : t("auth.register.send")}
               </button>
             </div>
 

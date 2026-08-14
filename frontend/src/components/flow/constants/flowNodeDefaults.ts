@@ -40,6 +40,7 @@ export const FLOW_NODE_DEFAULT_SIZE = {
   nano2: { w: 260, h: 200 },
   gptImage2: { w: 260, h: 200 },
   seedream5: { w: 260, h: 240 },
+  seedream5Pro: { w: 260, h: 240 },
   video: { w: 320, h: 280 },
   audioUpload: { w: 320, h: 128 },
   videoAnalyze: { w: 280, h: 360 },

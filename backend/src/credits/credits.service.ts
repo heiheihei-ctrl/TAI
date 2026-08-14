@@ -6,6 +6,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   CREDIT_PRICING_CONFIG,
   ServiceType,
+  getInternationalMultiplier,
+  isServiceTypeAvailableForEdition,
 } from './credits.config';
 import { TransactionType, ApiResponseStatus } from './dto/credits.dto';
 import { PricingResponseDto } from './dto/credits.dto';
@@ -255,6 +257,7 @@ interface PreviewCreditsParams {
   model?: string;
   requestParams?: any;
   outputImageCount?: number;
+  edition?: 'domestic' | 'international';
 }
 
 interface CachedPreviewQuotePayload {
@@ -459,6 +462,7 @@ export class CreditsService {
       model: params.model ?? null,
       requestParams: params.requestParams ?? null,
       outputImageCount: params.outputImageCount ?? null,
+      edition: params.edition ?? 'domestic',
     });
     const digest = createHash('sha256').update(signature).digest('hex');
     return `credits:preview:v2:${digest}`;
@@ -3930,6 +3934,27 @@ export class CreditsService {
   }
 
   async previewCredits(params: PreviewCreditsParams) {
+    const edition = params.edition ?? 'domestic';
+
+    // 国内专属模型在国际版下不可用（仍然需要查账户余额信息）
+    if (
+      edition === 'international' &&
+      !isServiceTypeAvailableForEdition(params.serviceType, 'international')
+    ) {
+      const account = await this.getOrCreateAccount(params.userId);
+      return {
+        serviceName: CREDIT_PRICING_CONFIG[params.serviceType as keyof typeof CREDIT_PRICING_CONFIG]?.serviceName ?? params.serviceType,
+        requestedProvider:
+          CREDIT_PRICING_CONFIG[params.serviceType as keyof typeof CREDIT_PRICING_CONFIG]?.provider ?? null,
+        creditsToDeduct: 0,
+        balance: account.balance,
+        sufficient: true,
+        edition,
+        available: false,
+        unavailableReason: 'domestic-only',
+      };
+    }
+
     const account = await this.getOrCreateAccount(params.userId);
     let cachedQuote = await this.getCachedPreviewQuote(params);
 
@@ -3986,16 +4011,26 @@ export class CreditsService {
       }
     }
 
+    // 国际版积分上浮
+    const multiplier = getInternationalMultiplier(params.serviceType, edition);
+    const finalCredits =
+      multiplier > 1
+        ? Math.ceil(cachedQuote.creditsToDeduct * multiplier)
+        : cachedQuote.creditsToDeduct;
+
     return {
       serviceType: params.serviceType,
       serviceName: cachedQuote.serviceName,
       provider: cachedQuote.requestedProvider,
       model: params.model ?? null,
-      credits: cachedQuote.creditsToDeduct,
+      credits: finalCredits,
       balance,
-      sufficient: balance >= cachedQuote.creditsToDeduct,
+      sufficient: balance >= finalCredits,
       managedPricing: cachedQuote.managedPricing,
       requestParams: cachedQuote.effectiveRequestParams ?? null,
+      edition,
+      available: true,
+      internationalMultiplier: multiplier,
     };
   }
 

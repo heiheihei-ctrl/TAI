@@ -43,33 +43,18 @@ const buildImageSrc = (value?: string): string | undefined => {
   return toRenderableImageSrc(trimmed) || undefined;
 };
 
-const SEEDREAM_PIXEL_SIZE_OPTIONS = [
-  { value: "2048x2048", label: "2K / 1:1 / 2048x2048" },
-  { value: "1728x2304", label: "2K / 3:4 / 1728x2304" },
-  { value: "2304x1728", label: "2K / 4:3 / 2304x1728" },
-  { value: "2848x1600", label: "2K / 16:9 / 2848x1600" },
-  { value: "1600x2848", label: "2K / 9:16 / 1600x2848" },
-  { value: "2496x1664", label: "2K / 3:2 / 2496x1664" },
-  { value: "1664x2496", label: "2K / 2:3 / 1664x2496" },
-  { value: "3136x1344", label: "2K / 21:9 / 3136x1344" },
-  { value: "3072x3072", label: "3K / 1:1 / 3072x3072" },
-  { value: "2592x3456", label: "3K / 3:4 / 2592x3456" },
-  { value: "3456x2592", label: "3K / 4:3 / 3456x2592" },
-  { value: "4096x2304", label: "3K / 16:9 / 4096x2304" },
-  { value: "2304x4096", label: "3K / 9:16 / 2304x4096" },
-  { value: "3744x2496", label: "3K / 3:2 / 3744x2496" },
-  { value: "2496x3744", label: "3K / 2:3 / 2496x3744" },
-  { value: "4704x2016", label: "3K / 21:9 / 4704x2016" },
-];
+const SEEDREAM_PRO_RESOLUTIONS = ["1K", "1.5K", "2K"] as const;
 
-const normalizeSeedreamDimensionSize = (value?: string): string | undefined => {
-  if (typeof value !== "string") return undefined;
-  const match = value.trim().match(/^(\d{3,5})\s*[xX]\s*(\d{3,5})$/);
-  if (!match) return undefined;
-  return `${match[1]}x${match[2]}`;
+const normalizeSeedreamProSize = (value?: string): string => {
+  if (typeof value !== "string") return "2K";
+  const compact = value.trim().replace(/\s+/g, "").toUpperCase();
+  if ((SEEDREAM_PRO_RESOLUTIONS as readonly string[]).includes(compact)) {
+    return compact;
+  }
+  return "2K";
 };
 
-function Seedream5Node({ id, data, selected }: Props) {
+function Seedream5ProNode({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
   const { status, error } = data;
 
@@ -92,11 +77,7 @@ function Seedream5Node({ id, data, selected }: Props) {
     typeof data.size === "string" && data.size.trim().length > 0
       ? data.size.trim()
       : "2K";
-  const normalizedPixelSize = normalizeSeedreamDimensionSize(rawSizeValue);
-  const sizePresetValue =
-    rawSizeValue.toUpperCase() === "3K" ? "3K" : "2K";
-  const sizePixelValue =
-    normalizedPixelSize || SEEDREAM_PIXEL_SIZE_OPTIONS[0].value;
+  const sizePresetValue = normalizeSeedreamProSize(rawSizeValue);
 
   const [hover, setHover] = React.useState<string | null>(null);
   const [showHelp, setShowHelp] = React.useState(false);
@@ -104,7 +85,6 @@ function Seedream5Node({ id, data, selected }: Props) {
   const [previewIndex, setPreviewIndex] = React.useState(0);
   const isFlowDark = useFlowNodeDarkTheme();
 
-  // 检测连接的图片数量
   const imageInputCount = useStore((state) => {
     const edges = state.edges || [];
     return edges.filter(
@@ -112,19 +92,10 @@ function Seedream5Node({ id, data, selected }: Props) {
     ).length;
   });
 
-  const hasPromptInput = useStore((state) => {
-    const edges = state.edges || [];
-    return edges.some(
-      (edge) => edge.target === id && edge.targetHandle === "prompt"
-    );
-  });
-  const hasImageInput = imageInputCount > 0;
-  // 尺寸模式：有 prompt 且无 image 输入时，支持选择具体像素尺寸
-  const usePixelSizeMode = hasPromptInput && !hasImageInput;
   const { credits: backendCredits, available: nodeAvailable } = useImageNodeCreditsPreview({
-    nodeType: "seedream5",
-    aiProvider: "seedream5",
-    imageSize: rawSizeValue,
+    nodeType: "seedream5Pro",
+    aiProvider: "seedream5Pro",
+    imageSize: sizePresetValue,
     referenceImageCount: imageInputCount,
     managedModelKey: data.managedModelKey,
     vendorKey: data.vendorKey,
@@ -165,7 +136,6 @@ function Seedream5Node({ id, data, selected }: Props) {
     data.onSend?.(id);
   }, [data, id]);
 
-  // 获取第一张图片用于预览
   const firstImage = images[0];
   const assetId = React.useMemo(() => parseFlowImageAssetRef(firstImage), [firstImage]);
   const assetUrl = useFlowImageAssetUrl(assetId);
@@ -176,7 +146,6 @@ function Seedream5Node({ id, data, selected }: Props) {
   }, []);
   const displaySrc = assetId ? assetUrl : resolvePreviewImageSrc(firstImage);
 
-  // 预览用集合
   const previewCollection = React.useMemo(
     () =>
       images.map((value, i) => ({
@@ -213,7 +182,7 @@ function Seedream5Node({ id, data, selected }: Props) {
           marginBottom: 6,
         }}
       >
-        <div style={{ fontWeight: 600 }}>Seedream</div>
+        <div style={{ fontWeight: 600 }}>Seedream 5.0 Pro</div>
         <div style={{ display: "flex", gap: 6 }}>
           <button
             onClick={() => setShowHelp(!showHelp)}
@@ -283,7 +252,6 @@ function Seedream5Node({ id, data, selected }: Props) {
         </div>
       </div>
 
-      {/* 玩法说明 */}
       {showHelp && (
         <div style={{
           fontSize: 11,
@@ -312,13 +280,16 @@ function Seedream5Node({ id, data, selected }: Props) {
             <strong>{lt("服装替换", "Outfit Change")}:</strong>{" "}
             {lt("将图1人物替换为图2风格服装", "Change person's outfit using reference")}
           </div>
+          <div style={{ marginBottom: 3 }}>
+            <strong>{lt("区域编辑", "Local Editing")}:</strong>{" "}
+            {lt("支持圈选、标注等局部编辑", "Local edit with boxes/annotations")}
+          </div>
           <div style={{ color: "#6b7280", fontSize: 10, marginTop: 4 }}>
             {lt("提示：多图输入可组合不同元素", "Tip: Multiple images can combine different elements")}
           </div>
         </div>
       )}
 
-      {/* 图片数量警告 */}
       {imageInputCount > 5 && (
         <div style={{
           fontSize: 11,
@@ -336,55 +307,31 @@ function Seedream5Node({ id, data, selected }: Props) {
         </div>
       )}
 
-      {/* 尺寸选择 */}
       <div style={{ marginBottom: 8 }}>
         <label style={{ display: "block", fontSize: 12, color: "#6b7280", marginBottom: 2 }}>
           {lt("尺寸大小", "Size")}
         </label>
-        {usePixelSizeMode ? (
-          <select
-            value={sizePixelValue}
-            onChange={(e) => updateData({ size: e.target.value })}
-            style={{
-              width: "100%",
-              fontSize: 12,
-              padding: "4px 6px",
-              borderRadius: 6,
-              border: "1px solid #e5e7eb",
-              outline: "none",
-              background: "#fff",
-            }}
-            onPointerDownCapture={stopNodeDrag}
-            onMouseDownCapture={stopNodeDrag}
-          >
-            {SEEDREAM_PIXEL_SIZE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <select
-            value={sizePresetValue}
-            onChange={(e) => updateData({ size: e.target.value })}
-            style={{
-              width: "100%",
-              fontSize: 12,
-              padding: "4px 6px",
-              borderRadius: 6,
-              border: "1px solid #e5e7eb",
-              outline: "none",
-              background: "#fff",
-            }}
-            onPointerDownCapture={stopNodeDrag}
-            onMouseDownCapture={stopNodeDrag}
-          >
-            <option value="2K">{lt("2K 超清", "2K HD")}</option>
-            <option value="3K">{lt("3K 高清", "3K Ultra HD")}</option>
-          </select>
-        )}
-        </div>
-      {/* 图片预览 */}
+        <select
+          value={sizePresetValue}
+          onChange={(e) => updateData({ size: e.target.value })}
+          style={{
+            width: "100%",
+            fontSize: 12,
+            padding: "4px 6px",
+            borderRadius: 6,
+            border: "1px solid #e5e7eb",
+            outline: "none",
+            background: "#fff",
+          }}
+          onPointerDownCapture={stopNodeDrag}
+          onMouseDownCapture={stopNodeDrag}
+        >
+          <option value="1K">{lt("1K 标清", "1K Standard")}</option>
+          <option value="1.5K">{lt("1.5K 增强", "1.5K Enhanced")}</option>
+          <option value="2K">{lt("2K 超清", "2K HD")}</option>
+        </select>
+      </div>
+
       <div
         className="nodrag nopan nowheel"
         onPointerDownCapture={stopNodeDrag}
@@ -481,7 +428,6 @@ function Seedream5Node({ id, data, selected }: Props) {
         </div>
       )}
 
-      {/* 输入句柄 */}
       <Handle
         type="target"
         position={Position.Left}
@@ -499,7 +445,6 @@ function Seedream5Node({ id, data, selected }: Props) {
         onMouseLeave={() => setHover(null)}
       />
 
-      {/* 输出句柄 */}
       <Handle
         type="source"
         position={Position.Right}
@@ -509,7 +454,6 @@ function Seedream5Node({ id, data, selected }: Props) {
         onMouseLeave={() => setHover(null)}
       />
 
-      {/* Tooltip */}
       {hover === "img-in" && (
         <div
           className="flow-tooltip"
@@ -535,11 +479,10 @@ function Seedream5Node({ id, data, selected }: Props) {
         </div>
       )}
 
-      {/* 图片预览弹窗 */}
       <ImagePreviewModal
         isOpen={preview}
         imageSrc={previewCollection[previewIndex]?.src || ""}
-        imageTitle={lt("Seedream 图片预览", "Seedream Image Preview")}
+        imageTitle={lt("Seedream 5.0 Pro 图片预览", "Seedream 5.0 Pro Image Preview")}
         onClose={() => setPreview(false)}
         imageCollection={previewCollection}
         currentImageId={previewCollection[previewIndex]?.id}
@@ -552,4 +495,4 @@ function Seedream5Node({ id, data, selected }: Props) {
   );
 }
 
-export default React.memo(Seedream5Node);
+export default React.memo(Seedream5ProNode);

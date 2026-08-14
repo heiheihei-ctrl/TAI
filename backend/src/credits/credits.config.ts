@@ -348,6 +348,17 @@ export const CREDIT_PRICING_CONFIG = {
       '4K': 60,
     },
   },
+  'doubao-seedream-5-0-pro-260628': {
+    serviceName: 'Seedream 5.0 Pro 图像生成',
+    provider: 'seedream5Pro',
+    creditsPerCall: 90,
+    description: '使用 Seedream 5.0 Pro 生成图像（更强编辑与文字能力）',
+    resolutionPricing: {
+      '1K': 65,
+      '1.5K': 65,
+      '2K': 90,
+    },
+  },
 } as const;
 
 export type ServiceType = string;
@@ -357,3 +368,76 @@ export const DAILY_LOGIN_REWARD_CREDITS = 50;
 
 // 连续签到7天额外奖励积分
 export const CONSECUTIVE_7_DAY_BONUS_CREDITS = 100;
+
+/**
+ * 国际版定价倍数（来自 Token 报价单 渠道阶梯价-国际版2.0）
+ *
+ * 渠道折扣档位 → 上浮倍数：
+ *   - 折扣 ≥ 110% → 1.6×
+ *   - 折扣 ≥ 100%（<110%） → 1.5×
+ *   - 折扣 < 100% → 1.0×（不变）
+ *
+ * 规则：未列出的 serviceType 默认为 1.0（不涨价）。
+ */
+export const INTERNATIONAL_PRICING_MULTIPLIER: Record<string, number> = {
+  // 阿里 / 通义
+  'happyhorse-r2v-video': 1.6, // 渠道 110-112%，原 1.2 → 1.6
+  // 火山引擎 / 豆包
+  'doubao-video': 1.6, // doubao-seedance-2-0 系列渠道 110-112%
+  // 智谱
+  'gemini-text': 1.5, // glm-5.2 渠道 100-102%（gemini-text 也涵盖智谱 text 通道）
+  // Deepseek
+  // 暂未在 serviceType 中暴露 deepseek-v4-pro，留待扩展
+};
+
+/**
+ * 国际版不可用的国内专属 serviceType（在英文版时隐藏）
+ *
+ * 规则（依据 Token 报价单）：
+ *   - 渠道折扣 ≥ 110%（如 happyhorse / doubao-seedance-2-0）→ 国际版以 1.6× 价格显示
+ *   - 渠道折扣 ≥ 100%（如 glm-5.2 / deepseek-v4-pro）→ 国际版以 1.5× 价格显示
+ *   - 其他国内模型（折扣 < 100%）→ 国际版完全隐藏
+ *
+ * 未列出的 serviceType 视为国际版可用（不阻塞，且按默认 1×）。
+ */
+export const DOMESTIC_ONLY_SERVICE_TYPES = new Set<string>([
+  'minimax-speech',                // MiniMax speech
+  'minimax-music',                 // MiniMax music
+  'tencent-speech',                // 腾讯语音
+  'gemini-text',                   // gemini-text 通道在国内版额外提供智谱 / Moonshot / Deepseek
+  // happyhorse-r2v-video / doubao-video / doubao-seedream-* 不在此处：保留国际版可见，
+  // 国际版价格走 INTERNATIONAL_PRICING_MULTIPLIER 倍数。
+  // 以下如有 serviceType 在国内版才可用，应补充
+]);
+
+/**
+ * 根据 serviceType 判断是否在指定版本下可用
+ * @param edition 'domestic'（默认）或 'international'
+ */
+export function isServiceTypeAvailableForEdition(
+  serviceType: string,
+  edition: 'domestic' | 'international',
+): boolean {
+  if (edition === 'domestic') return true;
+  return !DOMESTIC_ONLY_SERVICE_TYPES.has(serviceType);
+}
+
+/**
+ * 获取国际版积分倍数；国内版永远返回 1
+ */
+export function getInternationalMultiplier(
+  serviceType: string,
+  edition: 'domestic' | 'international',
+): number {
+  if (edition === 'domestic') return 1;
+  return INTERNATIONAL_PRICING_MULTIPLIER[serviceType] ?? 1;
+}
+
+/** 当前激活版本（基于 locale 推断） */
+export type PricingEdition = 'domestic' | 'international';
+
+/** locale → pricing edition */
+export function resolveEditionFromLocale(locale?: string | null): PricingEdition {
+  const value = String(locale || '').toLowerCase().trim();
+  return value.startsWith('en') ? 'international' : 'domestic';
+}
