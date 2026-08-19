@@ -1544,9 +1544,9 @@ const NODE_PALETTE_ITEMS = [
   { key: "video", zh: "视频节点", en: "Video Node", category: "input" },
   { key: "camera", zh: "截图节点", en: "Shot Node", category: "input" },
   // 生图节点
-  { key: "generate", zh: "生成节点", en: "Generate Node", category: "image" },
+  { key: "generate", zh: "生成节点", en: "Nano banana", category: "image" },
   { key: "generateRef", zh: "参考图生成节点", en: "Generate Refer", category: "image" },
-  { key: "generate4", zh: "生成多张图片节点", en: "Multi Generate", category: "image" },
+  { key: "generate4", zh: "生成多张图片节点", en: "Nano banana (4 images)", category: "image" },
   { key: "generatePro", zh: "自定义节点", en: "Agent", category: "image" },
   { key: "midjourney", zh: "Midjourney生成", en: "Midjourney", category: "image" },
   { key: "gptImage2", zh: "GPT-Image-2", en: "GPT-Image-2", category: "image" },

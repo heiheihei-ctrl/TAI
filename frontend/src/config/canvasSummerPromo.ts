@@ -25,6 +25,67 @@ export function isCanvasSummerPromoActive(now = new Date()): boolean {
   return t >= CANVAS_SUMMER_PROMO.start.getTime() && t <= CANVAS_SUMMER_PROMO.end.getTime();
 }
 
+const MS_HOUR = 60 * 60 * 1000;
+const MS_DAY = 24 * MS_HOUR;
+/** 剩余 ≤12 小时时切换为时分秒倒计时 */
+export const CANVAS_SUMMER_PROMO_COUNTDOWN_HMS_THRESHOLD_MS = 12 * MS_HOUR;
+
+export type CanvasSummerPromoCountdown =
+  | { active: false; remainingMs: 0 }
+  | {
+      active: true;
+      remainingMs: number;
+      mode: "days";
+      days: number;
+      label: string;
+    }
+  | {
+      active: true;
+      remainingMs: number;
+      mode: "hms";
+      hours: number;
+      minutes: number;
+      seconds: number;
+      label: string;
+    };
+
+function pad2(n: number): string {
+  return String(Math.max(0, Math.floor(n))).padStart(2, "0");
+}
+
+/** 活动倒计时：>12h 按天（向上取整），≤12h 用 HH:MM:SS */
+export function getCanvasSummerPromoCountdown(
+  now = new Date(),
+): CanvasSummerPromoCountdown {
+  const remainingMs = CANVAS_SUMMER_PROMO.end.getTime() - now.getTime();
+  if (remainingMs <= 0 || now.getTime() < CANVAS_SUMMER_PROMO.start.getTime()) {
+    return { active: false, remainingMs: 0 };
+  }
+  if (remainingMs <= CANVAS_SUMMER_PROMO_COUNTDOWN_HMS_THRESHOLD_MS) {
+    const totalSec = Math.floor(remainingMs / 1000);
+    const hours = Math.floor(totalSec / 3600);
+    const minutes = Math.floor((totalSec % 3600) / 60);
+    const seconds = totalSec % 60;
+    return {
+      active: true,
+      remainingMs,
+      mode: "hms",
+      hours,
+      minutes,
+      seconds,
+      label: `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`,
+    };
+  }
+  const days = Math.max(1, Math.ceil(remainingMs / MS_DAY));
+  return {
+    active: true,
+    remainingMs,
+    mode: "days",
+    days,
+    label: `${days}天`,
+  };
+}
+
 export function getCanvasSummerPromoProgress(now = new Date()): number {
   const start = CANVAS_SUMMER_PROMO.start.getTime();
   const end = CANVAS_SUMMER_PROMO.end.getTime();

@@ -115,6 +115,9 @@ import Qrcode from "@/assets/group-erweima.jpg";
 import ProfileCheckInReminderBanner from "@/components/reminder/ProfileCheckInReminderBanner";
 import ReminderBannerStack from "@/components/reminder/ReminderBannerStack";
 import { REMINDER_BANNER_STACK_TOP_CLASS } from "@/components/reminder/reminderBannerLayout";
+import CanvasPromoTopBanner, {
+  useCanvasPromoTopBannerVisible,
+} from "@/components/promo/CanvasPromoTopBanner";
 import ProfileCompletionSettingsPanel from "@/components/profile/ProfileCompletionSettingsPanel";
 import {
   markContactPopupShown,
@@ -1091,7 +1094,12 @@ const FloatingHeader: React.FC = () => {
   const showReminderBanner =
     reminderBannerVisible && hasReminderBannerContent;
 
-  const topBannerCount = (showReminderBanner ? 1 : 0) as 0 | 1;
+  const showPromoTopBanner = useCanvasPromoTopBannerVisible();
+
+  const topBannerCount = Math.min(
+    3,
+    (showPromoTopBanner ? 1 : 0) + (showReminderBanner ? 1 : 0),
+  ) as 0 | 1 | 2 | 3;
 
   const headerTopClass = REMINDER_BANNER_STACK_TOP_CLASS[topBannerCount];
 
@@ -2421,16 +2429,19 @@ const FloatingHeader: React.FC = () => {
 
   return (
     <>
-      {showReminderBanner ? (
+      {showPromoTopBanner || showReminderBanner ? (
         <ReminderBannerStack>
-          <ProfileCheckInReminderBanner
-            profile={extendedProfile}
-            checkInStatus={checkInStatus}
-            showProfile={showProfileBannerSection}
-            showCheckIn={showCheckInBannerSection}
-            fading={reminderBannerFading}
-            onDismiss={() => closeReminderBanner(true)}
-          />
+          {showPromoTopBanner ? <CanvasPromoTopBanner /> : null}
+          {showReminderBanner ? (
+            <ProfileCheckInReminderBanner
+              profile={extendedProfile}
+              checkInStatus={checkInStatus}
+              showProfile={showProfileBannerSection}
+              showCheckIn={showCheckInBannerSection}
+              fading={reminderBannerFading}
+              onDismiss={() => closeReminderBanner(true)}
+            />
+          ) : null}
         </ReminderBannerStack>
       ) : null}
       <div
