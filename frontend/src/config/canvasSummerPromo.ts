@@ -15,10 +15,14 @@ export const CANVAS_SUMMER_PROMO = {
   loginPendingStorageKey: "tai:canvas-summer-promo-login-pending:20260806",
   /** 活动期内购买过任意套餐：该用户不再弹出 */
   purchasedStorageKeyPrefix: "tai:canvas-summer-promo-purchased:20260806",
+  /** 顶部倒计时横幅关闭：当前会话不再显示 */
+  topBannerDismissStorageKey: "tai:canvas-summer-promo-top-banner-dismiss:20260806",
 } as const;
 
 /** 会员支付成功（任意套餐）时派发，海报宿主据此永久关闭 */
 export const CANVAS_SUMMER_PROMO_PURCHASED_EVENT = "canvas-summer-promo-purchased";
+export const CANVAS_SUMMER_PROMO_TOP_BANNER_DISMISS_EVENT =
+  "canvas-summer-promo-top-banner-dismiss";
 
 export function isCanvasSummerPromoActive(now = new Date()): boolean {
   const t = now.getTime();
@@ -132,6 +136,7 @@ export function clearCanvasSummerPromoSessionOnLogout(): void {
   try {
     sessionStorage.removeItem(CANVAS_SUMMER_PROMO.dismissStorageKey);
     sessionStorage.removeItem(CANVAS_SUMMER_PROMO.loginPendingStorageKey);
+    sessionStorage.removeItem(CANVAS_SUMMER_PROMO.topBannerDismissStorageKey);
   } catch {
     // ignore
   }
@@ -183,5 +188,31 @@ export function shouldShowCanvasSummerPromo(userId?: string | null): boolean {
   if (hasCanvasSummerPromoPurchased(userId)) return false;
   if (hasCanvasSummerPromoLoginPending()) return true;
   if (wasCanvasSummerPromoDismissed()) return false;
+  return true;
+}
+
+export function dismissCanvasSummerPromoTopBanner(): void {
+  try {
+    sessionStorage.setItem(CANVAS_SUMMER_PROMO.topBannerDismissStorageKey, "1");
+  } catch {
+    // ignore
+  }
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(CANVAS_SUMMER_PROMO_TOP_BANNER_DISMISS_EVENT));
+  }
+}
+
+export function wasCanvasSummerPromoTopBannerDismissed(): boolean {
+  try {
+    return sessionStorage.getItem(CANVAS_SUMMER_PROMO.topBannerDismissStorageKey) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function shouldShowCanvasSummerPromoTopBanner(now = new Date()): boolean {
+  if (!isCanvasSummerPromoActive(now)) return false;
+  if (!getCanvasSummerPromoCountdown(now).active) return false;
+  if (wasCanvasSummerPromoTopBannerDismissed()) return false;
   return true;
 }
