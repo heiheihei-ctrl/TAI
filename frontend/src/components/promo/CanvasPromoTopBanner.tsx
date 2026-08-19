@@ -9,18 +9,23 @@ import {
   type CanvasSummerPromoCountdown,
 } from "@/config/canvasSummerPromo";
 import MembershipModal from "@/components/home/MembershipModal";
-import {
-  REMINDER_BANNER_SHELL_CLASS,
-} from "@/components/reminder/reminderBannerLayout";
-import { reminderBannerRowClassName } from "@/components/reminder/ReminderBannerStack";
+import { REMINDER_BANNER_SHELL_CLASS } from "@/components/reminder/reminderBannerLayout";
 import { cn } from "@/lib/utils";
+
+/** 与 VIP 弹窗「专业进阶」套餐卡边框一致（浅色主题） */
+const PRO_TIER_BORDER_CLASS =
+  "border-[#8E86F5]/60 shadow-[0_0_24px_-14px_rgba(142,134,245,0.38)]";
+
+/** 与 VIP 弹窗「订阅月计划」按钮一致 */
+const SUBSCRIBE_MONTHLY_BUTTON_CLASS =
+  "shrink-0 rounded-xl bg-gradient-to-r from-[#8E86F5] to-[#9aa8ef] px-3 py-1.5 text-base font-semibold text-white shadow-lg shadow-violet-950/40 transition-transform hover:scale-[1.01] active:scale-[0.99] sm:px-4 sm:py-2 sm:text-lg";
 
 type Props = {
   className?: string;
 };
 
 /**
- * 画布顶部促销横幅：活动期内展示，点击打开 69 元套餐购买。
+ * 画布顶部促销横幅：活动期内展示，点击「订阅月计划」打开 69 元套餐购买。
  * 倒计时：剩余 >12h 显示「N 天」；≤12h 显示 HH:MM:SS。
  */
 export default function CanvasPromoTopBanner({ className }: Props) {
@@ -62,26 +67,33 @@ export default function CanvasPromoTopBanner({ className }: Props) {
       <div
         className={cn(
           REMINDER_BANNER_SHELL_CLASS,
-          reminderBannerRowClassName(
-            "border-amber-200/70 bg-gradient-to-r from-amber-50 via-white to-orange-50/90",
-          ),
+          "border-amber-200/70 bg-gradient-to-r from-amber-50 via-white to-orange-50/90 py-3 sm:py-3.5",
           className,
         )}
       >
-        <div className="relative mx-auto flex h-full w-full max-w-6xl items-center justify-center px-10 sm:px-12">
-          <button
-            type="button"
-            onClick={handleOpen}
-            className="min-w-0 truncate text-sm font-medium text-slate-900"
-            aria-label="专属福利，点击查看套餐"
+        <div className="relative mx-auto flex w-full max-w-6xl items-center justify-center px-10 sm:px-12">
+          <div
+            className={cn(
+              "flex min-w-0 max-w-full items-center gap-2 rounded-xl border px-2.5 py-1.5 sm:gap-3 sm:px-3 sm:py-2",
+              PRO_TIER_BORDER_CLASS,
+            )}
           >
-            专属福利 {CANVAS_SUMMER_PROMO.priceYuan} 元即得{" "}
-            <span className="font-semibold text-red-600">
-              {CANVAS_SUMMER_PROMO.dailyPlanMonthlyCredits} 积分
-            </span>
-            🔥｜
-            <span className="tabular-nums">{countdownLabel}</span>
-          </button>
+            <p className="min-w-0 truncate text-base font-medium text-slate-900 sm:text-lg">
+              专属福利 {CANVAS_SUMMER_PROMO.priceYuan} 元即得{" "}
+              <span className="font-semibold text-red-600">
+                {CANVAS_SUMMER_PROMO.dailyPlanMonthlyCredits} 积分
+              </span>
+              🔥｜
+              <span className="tabular-nums">{countdownLabel}</span>
+            </p>
+            <button
+              type="button"
+              onClick={handleOpen}
+              className={SUBSCRIBE_MONTHLY_BUTTON_CLASS}
+            >
+              立即订阅
+            </button>
+          </div>
           <button
             type="button"
             onClick={handleDismiss}

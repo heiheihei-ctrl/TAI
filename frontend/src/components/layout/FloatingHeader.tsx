@@ -114,7 +114,6 @@ import { uploadToOSS } from "@/services/ossUploadService";
 import Qrcode from "@/assets/group-erweima.jpg";
 import ProfileCheckInReminderBanner from "@/components/reminder/ProfileCheckInReminderBanner";
 import ReminderBannerStack from "@/components/reminder/ReminderBannerStack";
-import { REMINDER_BANNER_STACK_TOP_CLASS } from "@/components/reminder/reminderBannerLayout";
 import CanvasPromoTopBanner, {
   useCanvasPromoTopBannerVisible,
 } from "@/components/promo/CanvasPromoTopBanner";
@@ -1095,13 +1094,17 @@ const FloatingHeader: React.FC = () => {
     reminderBannerVisible && hasReminderBannerContent;
 
   const showPromoTopBanner = useCanvasPromoTopBannerVisible();
+  const [bannerStackHeight, setBannerStackHeight] = useState(0);
 
-  const topBannerCount = Math.min(
-    3,
-    (showPromoTopBanner ? 1 : 0) + (showReminderBanner ? 1 : 0),
-  ) as 0 | 1 | 2 | 3;
+  const handleBannerStackHeightChange = useCallback((height: number) => {
+    setBannerStackHeight(height);
+  }, []);
 
-  const headerTopClass = REMINDER_BANNER_STACK_TOP_CLASS[topBannerCount];
+  useEffect(() => {
+    if (!showPromoTopBanner && !showReminderBanner) {
+      setBannerStackHeight(0);
+    }
+  }, [showPromoTopBanner, showReminderBanner]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -2430,7 +2433,7 @@ const FloatingHeader: React.FC = () => {
   return (
     <>
       {showPromoTopBanner || showReminderBanner ? (
-        <ReminderBannerStack>
+        <ReminderBannerStack onHeightChange={handleBannerStackHeightChange}>
           {showPromoTopBanner ? <CanvasPromoTopBanner /> : null}
           {showReminderBanner ? (
             <ProfileCheckInReminderBanner
@@ -2448,10 +2451,13 @@ const FloatingHeader: React.FC = () => {
         aria-hidden={focusMode}
         className={cn(
           "tanva-header-shell fixed left-0 right-0 z-50 px-4 flex items-center justify-between gap-4 transition-all duration-[50ms] ease-out pointer-events-none",
-          headerTopClass,
+          bannerStackHeight <= 0 && "top-4",
           showLayerPanel ? "left-[306px]" : "left-0",
           focusMode && "hidden"
         )}
+        style={
+          bannerStackHeight > 0 ? { top: bannerStackHeight } : undefined
+        }
       >
         {/* 闂傚倷娴囬褎顨ラ崫銉х濠电姴鍋嗛悞浠嬫煠婵劕鈧澹曢懞銉﹀弿婵☆垱瀵х涵楣冩煟閵堝鐣洪柡灞剧洴椤㈡洟鏁愰崱娆樻К闂備礁鎲￠崝蹇涘磻閹剧粯鈷掑┑鐘查娴滄粍绻涚仦鍌氱伈鐎规洘娲栭悾鐑藉炊閳哄啫绠垫繝纰樺墲椤ㄥ牓銆侀崳淇?+ Beta + 婵犵數濮烽。顔炬閺囥垹纾婚柟杈剧畱绾惧綊鏌￠崶鈺佸壋闁兼澘娼￠弻娑樜旈崘褏闂梺缁樺灦閿氭い鏇憾閺屸剝寰勭€ｎ亞浼囬悶姘箞閺岋絾鎯旈敍鍕殯闂佺楠稿畷顒勫煝?*/}
         <div className='tanva-header-card tanva-header-card-left flex items-center gap-2 md:gap-3 px-4 md:px-6 py-2 h-[46px] rounded-2xl bg-liquid-glass backdrop-blur-minimal backdrop-saturate-125 shadow-liquid-glass-lg border border-liquid-glass transition-all duration-300 pointer-events-auto'>
