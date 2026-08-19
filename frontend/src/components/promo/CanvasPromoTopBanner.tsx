@@ -18,7 +18,7 @@ const PRO_TIER_BORDER_CLASS =
 
 /** 与 VIP 弹窗「订阅月计划」按钮一致 */
 const SUBSCRIBE_MONTHLY_BUTTON_CLASS =
-  "shrink-0 rounded-xl bg-gradient-to-r from-[#8E86F5] to-[#9aa8ef] px-3 py-1.5 text-base font-semibold text-white shadow-lg shadow-violet-950/40 transition-transform hover:scale-[1.01] active:scale-[0.99] sm:px-4 sm:py-2 sm:text-lg";
+  "shrink-0 rounded-xl bg-gradient-to-r from-[#8E86F5] to-[#9aa8ef] px-3 py-1.5 text-[14px] font-semibold text-white shadow-lg shadow-violet-950/40 transition-transform hover:scale-[1.01] active:scale-[0.99] sm:px-4 sm:py-2";
 
 type Props = {
   className?: string;
@@ -78,7 +78,7 @@ export default function CanvasPromoTopBanner({ className }: Props) {
               PRO_TIER_BORDER_CLASS,
             )}
           >
-            <p className="min-w-0 truncate text-base font-medium text-slate-900 sm:text-lg">
+            <p className="min-w-0 truncate text-[16px] font-medium leading-snug text-slate-900">
               专属福利 {CANVAS_SUMMER_PROMO.priceYuan} 元即得{" "}
               <span className="font-semibold text-red-600">
                 {CANVAS_SUMMER_PROMO.dailyPlanMonthlyCredits} 积分
