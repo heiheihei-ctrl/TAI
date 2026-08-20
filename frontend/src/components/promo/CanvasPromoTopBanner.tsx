@@ -18,7 +18,7 @@ const PRO_TIER_BORDER_CLASS =
 
 /** 与 VIP 弹窗「订阅月计划」按钮一致 */
 const SUBSCRIBE_MONTHLY_BUTTON_CLASS =
-  "shrink-0 rounded-xl bg-gradient-to-r from-[#8E86F5] to-[#9aa8ef] px-3 py-1.5 text-[14px] font-semibold text-white shadow-lg shadow-violet-950/40 transition-transform hover:scale-[1.01] active:scale-[0.99] sm:px-4 sm:py-2";
+  "shrink-0 rounded-[8px] bg-gradient-to-r from-[#8E86F5] to-[#9aa8ef] px-3 text-[12px] font-semibold text-white shadow-lg shadow-violet-950/40 transition-transform hover:scale-[1.01] active:scale-[0.99] sm:px-4 sm:py-1";
 
 type Props = {
   className?: string;
@@ -58,9 +58,23 @@ export default function CanvasPromoTopBanner({ className }: Props) {
   }
 
   const countdownLabel =
-    countdown.mode === "days"
-      ? `仅剩 ${countdown.days} 天⏰`
-      : `仅剩 ${countdown.label}⏰`;
+    countdown.mode === "days" ? (
+      <>
+        仅剩{" "}
+        <span className="text-[20px] font-semibold tabular-nums text-red-600">
+          {countdown.days}
+        </span>{" "}
+        天⏰
+      </>
+    ) : (
+      <>
+        仅剩{" "}
+        <span className="text-[20px] font-semibold tabular-nums text-red-600">
+          {countdown.label}
+        </span>
+        ⏰
+      </>
+    );
 
   return (
     <>
@@ -84,7 +98,7 @@ export default function CanvasPromoTopBanner({ className }: Props) {
                 {CANVAS_SUMMER_PROMO.dailyPlanMonthlyCredits} 积分
               </span>
               🔥｜
-              <span className="tabular-nums">{countdownLabel}</span>
+              <span>{countdownLabel}</span>
             </p>
             <button
               type="button"
