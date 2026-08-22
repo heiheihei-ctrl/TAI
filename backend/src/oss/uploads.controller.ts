@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   Post,
   UseGuards,
   UseInterceptors,
@@ -25,6 +26,7 @@ const SUPPORTED_VIDEO_TYPES = [
 
 const MAX_VIDEO_SIZE = 500 * 1024 * 1024; // 500MB
 const MAX_IMAGE_SIZE = 32 * 1024 * 1024; // 32MB
+const MAX_FILE_SIZE = 500 * 1024 * 1024; // 通用文件上限（本地模式）
 const SUPPORTED_IMAGE_TYPES = [
   'image/png',
   'image/jpeg',
@@ -53,7 +55,9 @@ function inferExtFromMime(mimeType?: string): string {
   if (value === 'image/webp') return 'webp';
   if (value === 'image/gif') return 'gif';
   if (value === 'image/svg+xml') return 'svg';
-  return 'png';
+  if (value === 'video/mp4') return 'mp4';
+  if (value === 'model/gltf-binary') return 'glb';
+  return 'bin';
 }
 
 @ApiTags('uploads')
@@ -62,17 +66,12 @@ export class UploadsController {
   private readonly logger = new Logger(UploadsController.name);
 
   constructor(private readonly oss: OssService) {}
-/*
-  @Post('presign')
-  @ApiCookieAuth('access_token')
-  @UseGuards(JwtAuthGuard)
-  presign(@Body() body: { dir?: string; maxSize?: number }) {
-    const dir = body?.dir ?? 'uploads/';
-    const max = body?.maxSize ?? 32 * 1024 * 1024;
-    const data = this.oss.presignPost(dir, 300, max);
-    return data;
+
+  @Get('storage-mode')
+  storageMode() {
+    return this.oss.getStorageInfo();
   }
-*/
+
   @Post('presign')
   @ApiCookieAuth('access_token')
   @UseGuards(JwtAuthGuard)
@@ -80,10 +79,10 @@ export class UploadsController {
     if (!body || !body.key) {
       throw new BadRequestException('上传路径(key)不能为空');
     }
-    // 调用新的 S3 预签名方法生成 PUT 链接
     const data = await this.oss.getPresignedPutUrl(body.key, body.contentType);
-    return data; // 返回 { uploadUrl: string, publicUrl: string }
+    return data;
   }
+
   @Post('image')
   @ApiCookieAuth('access_token')
   @UseGuards(JwtAuthGuard)
@@ -91,7 +90,7 @@ export class UploadsController {
   @ApiConsumes('multipart/form-data')
   async uploadImage(
     @UploadedFile() file: any,
-    @Body() body: { dir?: string; key?: string; fileName?: string }
+    @Body() body: { dir?: string; key?: string; fileName?: string },
   ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
@@ -104,10 +103,14 @@ export class UploadsController {
 
     const dir = normalizeUploadDir(body?.dir, 'uploads/images/');
     const explicitKey = typeof body?.key === 'string' ? body.key.trim().replace(/^\/+/, '') : '';
-    const safeFileName = sanitizeFileName(body?.fileName || file.originalname || `image.${inferExtFromMime(mimeType)}`);
+    const safeFileName = sanitizeFileName(
+      body?.fileName || file.originalname || `image.${inferExtFromMime(mimeType)}`,
+    );
     const key = (() => {
       if (explicitKey) return explicitKey;
-      const ext = safeFileName.includes('.') ? safeFileName.split('.').pop() || inferExtFromMime(mimeType) : inferExtFromMime(mimeType);
+      const ext = safeFileName.includes('.')
+        ? safeFileName.split('.').pop() || inferExtFromMime(mimeType)
+        : inferExtFromMime(mimeType);
       return `${dir}${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safeFileName.replace(/\.[^.]+$/, '')}.${ext}`;
     })();
 
@@ -119,7 +122,52 @@ export class UploadsController {
       },
     });
 
-    return { url: result.url, key: result.key };
+    return { url: result.url, key: result.key, mode: this.oss.getUploadMode() };
+  }
+
+  /**
+   * 通用文件上传（本地模式主路径；也可用于视频/3D 等经后端中转）
+   */
+  @Post('file')
+  @ApiCookieAuth('access_token')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_FILE_SIZE } }))
+  @ApiConsumes('multipart/form-data')
+  async uploadFile(
+    @UploadedFile() file: any,
+    @Body() body: { dir?: string; key?: string; fileName?: string },
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+
+    const mimeType = String(file.mimetype || 'application/octet-stream').toLowerCase();
+    const dir = normalizeUploadDir(body?.dir, 'uploads/');
+    const explicitKey = typeof body?.key === 'string' ? body.key.trim().replace(/^\/+/, '') : '';
+    const safeFileName = sanitizeFileName(
+      body?.fileName || file.originalname || `file.${inferExtFromMime(mimeType)}`,
+    );
+    const key = (() => {
+      if (explicitKey) return explicitKey;
+      const ext = safeFileName.includes('.')
+        ? safeFileName.split('.').pop() || inferExtFromMime(mimeType)
+        : inferExtFromMime(mimeType);
+      return `${dir}${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safeFileName.replace(/\.[^.]+$/, '')}.${ext}`;
+    })();
+
+    this.logger.log(
+      `[upload/file] mode=${this.oss.getUploadMode()} key=${key} size=${file.buffer?.length || 0}`,
+    );
+
+    const stream = Readable.from(file.buffer);
+    const result = await this.oss.putStream(key, stream, {
+      headers: {
+        'Content-Type': mimeType,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
+    });
+
+    return { url: result.url, key: result.key, mode: this.oss.getUploadMode() };
   }
 
   @Post('video')
@@ -134,7 +182,7 @@ export class UploadsController {
 
     if (!SUPPORTED_VIDEO_TYPES.includes(file.mimetype)) {
       throw new BadRequestException(
-        `Unsupported video format: ${file.mimetype}. Supported: ${SUPPORTED_VIDEO_TYPES.join(', ')}`
+        `Unsupported video format: ${file.mimetype}. Supported: ${SUPPORTED_VIDEO_TYPES.join(', ')}`,
       );
     }
 
@@ -146,7 +194,7 @@ export class UploadsController {
       headers: { 'Content-Type': file.mimetype },
     });
 
-    return { url: result.url, key: result.key };
+    return { url: result.url, key: result.key, mode: this.oss.getUploadMode() };
   }
 
   @Post('transfer-video')
@@ -176,9 +224,7 @@ export class UploadsController {
     });
 
     if (!response.ok) {
-      throw new BadRequestException(
-        `Failed to download video: HTTP ${response.status}`
-      );
+      throw new BadRequestException(`Failed to download video: HTTP ${response.status}`);
     }
 
     const contentType = response.headers.get('content-type') || 'video/mp4';
@@ -186,7 +232,7 @@ export class UploadsController {
 
     if (contentLength && parseInt(contentLength, 10) > MAX_VIDEO_SIZE) {
       throw new BadRequestException(
-        `Video too large: ${contentLength} bytes (max ${MAX_VIDEO_SIZE})`
+        `Video too large: ${contentLength} bytes (max ${MAX_VIDEO_SIZE})`,
       );
     }
 
@@ -200,7 +246,7 @@ export class UploadsController {
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    this.logger.log(`[transfer-video] Downloaded ${buffer.length} bytes, uploading to OSS as ${key}`);
+    this.logger.log(`[transfer-video] Downloaded ${buffer.length} bytes, uploading as ${key}`);
 
     const stream = Readable.from(buffer);
     const result = await this.oss.putStream(key, stream, {
@@ -209,6 +255,6 @@ export class UploadsController {
 
     this.logger.log(`[transfer-video] Upload complete: ${result.url}`);
 
-    return { url: result.url, key: result.key };
+    return { url: result.url, key: result.key, mode: this.oss.getUploadMode() };
   }
 }

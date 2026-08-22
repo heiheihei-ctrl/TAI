@@ -8,6 +8,7 @@ import {
   resolveManagedVendorPricingV2,
   type ManagedPricingVendorLike,
 } from '../../ai/services/model-pricing-resolver';
+import { getSeedream5ProResolutionPricing } from '../../credits/brand-credit-pricing';
 
 export interface NodeConfigDto {
   nodeKey: string;
@@ -888,6 +889,8 @@ export class NodeConfigService {
    * 批量初始化节点配置（用于首次部署）
    */
   async initializeDefaultConfigs() {
+    const seedream5ProResolutionPricing = getSeedream5ProResolutionPricing();
+
     const defaultConfigs: NodeConfigDto[] = [
       // 输入节点 - 免费
       { nodeKey: 'textPrompt', nameZh: '提示词节点', nameEn: 'Prompt', category: 'input', sortOrder: 1, creditsPerCall: 0, description: '输入文本提示词' },
@@ -945,7 +948,7 @@ export class NodeConfigService {
         nameEn: 'Seedream 5.0 Pro',
         category: 'image',
         sortOrder: 17,
-        creditsPerCall: 90,
+        creditsPerCall: seedream5ProResolutionPricing['2K'],
         serviceType: 'doubao-seedream-5-0-pro-260628',
         priceYuan: 0.9,
         description: 'Seedream 5.0 Pro 图像生成（1K/1.5K/2K 档位），更强文字与编辑能力',

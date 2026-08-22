@@ -41,6 +41,7 @@
 
 ### 环境变量与敏感信息
 - 后端使用 `.env`（见 `backend/src/app.module.ts` 的 `envFilePath` 配置：优先 `backend/.env`，其次 `../.env`）
+- 部署品牌（积分报价区分）：`DEPLOYMENT_BRAND=tai|linglong`（后端，默认 `tai`）；前端对应 `VITE_DEPLOYMENT_BRAND`
 - 不要提交密钥/凭据（`.gitignore` 已包含 `backend/.env` 等）
 
 ## AI Metadata 同步

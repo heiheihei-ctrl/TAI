@@ -160,6 +160,23 @@ export class AssetsController {
     }
 
     const managedKeyForLog = this.normalizeManagedAssetKey(key) || this.extractManagedAssetKey(url);
+
+    // 本地模式：优先直接读盘，兼容 nginx 静态目录与 /api/assets/proxy?key= 校验
+    if (managedKeyForLog) {
+      const local = await this.oss.openLocalReadStream(managedKeyForLog);
+      if (local) {
+        this.logger.log(`[assets/proxy] local file key=${managedKeyForLog}`);
+        reply.header('Access-Control-Allow-Origin', '*');
+        reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+        if (local.contentType) reply.header('Content-Type', local.contentType);
+        return reply.send(local.stream);
+      }
+      // local 模式且文件不存在：直接 404，避免再去拉 TOS
+      if (this.oss.isLocalMode()) {
+        throw new BadRequestException(`Local asset not found: ${managedKeyForLog}`);
+      }
+    }
+
     const initialUrl = await this.resolveTargetUrl({ url, key });
 
     let parsed: URL;

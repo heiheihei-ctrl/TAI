@@ -3,7 +3,13 @@ import { ConfigService } from '@nestjs/config';
 import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Upload } from '@aws-sdk/lib-storage';
+import { createReadStream, createWriteStream, existsSync } from 'fs';
+import { mkdir, readFile, writeFile, access } from 'fs/promises';
+import { dirname, resolve, sep } from 'path';
 import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
+
+export type UploadStorageMode = 'tos' | 'local';
 
 @Injectable()
 export class OssService {
@@ -13,6 +19,7 @@ export class OssService {
   private ossEnabledChecked = false;
   private ossEnabled = false;
   private loggedDisabled = false;
+  private loggedLocalMode = false;
 
   private get conf() {
     return {
@@ -26,7 +33,95 @@ export class OssService {
     };
   }
 
+  /** `tos` = 火山 TOS/S3；`local` = 写本地磁盘（配合 nginx 静态目录） */
+  getUploadMode(): UploadStorageMode {
+    const raw = String(
+      this.config.get<string>('UPLOAD_MODE') ||
+        this.config.get<string>('OSS_UPLOAD_MODE') ||
+        'tos',
+    )
+      .trim()
+      .toLowerCase();
+    return raw === 'local' || raw === 'disk' || raw === 'nginx' ? 'local' : 'tos';
+  }
+
+  isLocalMode(): boolean {
+    return this.getUploadMode() === 'local';
+  }
+
+  /**
+   * 本地落盘根目录。典型：nginx html 目录，例如 `/usr/share/nginx/html`
+   * 对象 key（如 `uploads/a.png`）会写成 `{root}/uploads/a.png`
+   */
+  getLocalRoot(): string {
+    const raw =
+      this.config.get<string>('LOCAL_UPLOAD_ROOT') ||
+      this.config.get<string>('UPLOAD_LOCAL_ROOT') ||
+      '';
+    const trimmed = String(raw || '').trim();
+    if (trimmed) return resolve(trimmed);
+    // 开发默认：backend/local-uploads
+    return resolve(process.cwd(), 'local-uploads');
+  }
+
+  /** 拼公开访问 URL 的 base（无尾斜杠），需与 nginx 对外域名一致 */
+  getLocalPublicBaseUrl(): string {
+    const raw =
+      this.config.get<string>('LOCAL_UPLOAD_PUBLIC_BASE_URL') ||
+      this.config.get<string>('UPLOAD_PUBLIC_BASE_URL') ||
+      this.config.get<string>('OSS_CDN_HOST') ||
+      '';
+    const trimmed = String(raw || '').trim().replace(/\/+$/, '');
+    if (!trimmed) return '';
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    return `https://${trimmed.replace(/^\/+/, '')}`;
+  }
+
+  private normalizeObjectKey(key: string): string {
+    return String(key || '')
+      .trim()
+      .replace(/^\/+/, '')
+      .replace(/\\/g, '/');
+  }
+
+  /** 将 object key 映射到本地绝对路径，并防止路径穿越 */
+  resolveLocalPath(key: string): string {
+    const normalizedKey = this.normalizeObjectKey(key);
+    if (!normalizedKey) {
+      throw new Error('Empty object key');
+    }
+    if (normalizedKey.includes('..')) {
+      throw new Error('Invalid object key');
+    }
+    const root = this.getLocalRoot();
+    const full = resolve(root, ...normalizedKey.split('/').filter(Boolean));
+    const rootWithSep = root.endsWith(sep) ? root : `${root}${sep}`;
+    if (full !== root && !full.startsWith(rootWithSep)) {
+      throw new Error('Invalid object key path');
+    }
+    return full;
+  }
+
+  private async ensureLocalParentDir(filePath: string): Promise<void> {
+    await mkdir(dirname(filePath), { recursive: true });
+  }
+
+  private logLocalModeOnce() {
+    if (this.loggedLocalMode) return;
+    this.loggedLocalMode = true;
+    // eslint-disable-next-line no-console
+    console.log(
+      `[OSS] UPLOAD_MODE=local root=${this.getLocalRoot()} publicBase=${this.getLocalPublicBaseUrl() || '(relative /key)'}`,
+    );
+  }
+
   private isOssEnabled(): boolean {
+    if (this.isLocalMode()) {
+      this.ossEnabled = true;
+      this.ossEnabledChecked = true;
+      this.logLocalModeOnce();
+      return true;
+    }
     if (this.ossEnabledChecked) return this.ossEnabled;
 
     const disable =
@@ -58,6 +153,17 @@ export class OssService {
 
   isEnabled(): boolean {
     return this.isOssEnabled();
+  }
+
+  getStorageInfo() {
+    return {
+      mode: this.getUploadMode(),
+      enabled: this.isEnabled(),
+      localRoot: this.isLocalMode() ? this.getLocalRoot() : null,
+      publicBaseUrl: this.isLocalMode()
+        ? this.getLocalPublicBaseUrl() || null
+        : this.conf.cdnHost || null,
+    };
   }
 
   private logDisabledOnce() {
@@ -133,35 +239,115 @@ export class OssService {
     return this.cachedClient;
   }
 
+  private async putLocalFromStream(
+    key: string,
+    stream: NodeJS.ReadableStream | Readable,
+  ): Promise<{ key: string; url: string }> {
+    const normalizedKey = this.normalizeObjectKey(key);
+    const filePath = this.resolveLocalPath(normalizedKey);
+    await this.ensureLocalParentDir(filePath);
+    await pipeline(stream as Readable, createWriteStream(filePath));
+    return { key: normalizedKey, url: this.publicUrl(normalizedKey) };
+  }
+
+  private async putLocalFromBuffer(
+    key: string,
+    buffer: Buffer,
+  ): Promise<{ key: string; url: string }> {
+    const normalizedKey = this.normalizeObjectKey(key);
+    const filePath = this.resolveLocalPath(normalizedKey);
+    await this.ensureLocalParentDir(filePath);
+    await writeFile(filePath, buffer);
+    return { key: normalizedKey, url: this.publicUrl(normalizedKey) };
+  }
+
+  async openLocalReadStream(key: string): Promise<{
+    stream: Readable;
+    contentType?: string;
+  } | null> {
+    const explicitRoot = String(
+      this.config.get<string>('LOCAL_UPLOAD_ROOT') ||
+        this.config.get<string>('UPLOAD_LOCAL_ROOT') ||
+        '',
+    ).trim();
+    // tos 模式且未配置本地根目录时，不探测磁盘
+    if (!this.isLocalMode() && !explicitRoot) return null;
+
+    const normalizedKey = this.normalizeObjectKey(key);
+    if (!normalizedKey) return null;
+    try {
+      const filePath = this.resolveLocalPath(normalizedKey);
+      await access(filePath);
+      const stream = createReadStream(filePath);
+      const ext = normalizedKey.split('.').pop()?.toLowerCase();
+      const contentType =
+        ext === 'png'
+          ? 'image/png'
+          : ext === 'jpg' || ext === 'jpeg'
+            ? 'image/jpeg'
+            : ext === 'webp'
+              ? 'image/webp'
+              : ext === 'gif'
+                ? 'image/gif'
+                : ext === 'mp4'
+                  ? 'video/mp4'
+                  : ext === 'json'
+                    ? 'application/json'
+                    : 'application/octet-stream';
+      return { stream, contentType };
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * 生成供前端 PUT 直传的预签名 URL（替代旧的 presignPost 表单策略）
+   * local 模式返回 mode=local，由前端改走后端 multipart。
    */
   async getPresignedPutUrl(key: string, contentType = 'application/octet-stream', expiresInSeconds = 300) {
+    const normalizedKey = this.normalizeObjectKey(key);
+    if (this.isLocalMode()) {
+      return {
+        mode: 'local' as const,
+        uploadUrl: '',
+        publicUrl: this.publicUrl(normalizedKey),
+        key: normalizedKey,
+        contentType,
+      };
+    }
+
     const client = this.client();
     const command = new PutObjectCommand({
       Bucket: this.conf.bucket,
-      Key: key,
+      Key: normalizedKey,
       ContentType: contentType,
     });
-    
-    const uploadUrl = await getSignedUrl(client, command, { 
-      expiresIn: Math.max(30, Math.min(3600, Math.floor(expiresInSeconds))) 
+
+    const uploadUrl = await getSignedUrl(client, command, {
+      expiresIn: Math.max(30, Math.min(3600, Math.floor(expiresInSeconds))),
     });
 
     return {
+      mode: 'tos' as const,
       uploadUrl,
-      publicUrl: this.publicUrl(key),
+      publicUrl: this.publicUrl(normalizedKey),
+      key: normalizedKey,
+      contentType,
     };
   }
 
   async putStream(
     key: string,
     stream: NodeJS.ReadableStream | Readable,
-    options?: any
+    options?: any,
   ): Promise<{ key: string; url: string }> {
     if (!this.isOssEnabled()) {
       this.logDisabledOnce();
       return { key, url: '' };
+    }
+
+    if (this.isLocalMode()) {
+      return this.putLocalFromStream(key, stream);
     }
 
     const client = this.client();
@@ -183,14 +369,17 @@ export class OssService {
   async putBuffer(
     key: string,
     buffer: Buffer,
-    contentType?: string
+    contentType?: string,
   ): Promise<{ key: string; url: string }> {
     if (!this.isOssEnabled()) {
       this.logDisabledOnce();
       return { key, url: '' };
     }
+    if (this.isLocalMode()) {
+      return this.putLocalFromBuffer(key, buffer);
+    }
     const client = this.client();
-    
+
     const command = new PutObjectCommand({
       Bucket: this.conf.bucket,
       Key: key,
@@ -205,16 +394,20 @@ export class OssService {
   async putJSON(
     key: string,
     data: unknown,
-    options?: { acl?: 'private' | 'public-read' | 'public-read-write' }
+    options?: { acl?: 'private' | 'public-read' | 'public-read-write' },
   ) {
     if (!this.isOssEnabled()) {
       this.logDisabledOnce();
       return key;
     }
     try {
+      if (this.isLocalMode()) {
+        await this.putLocalFromBuffer(key, Buffer.from(JSON.stringify(data)));
+        return key;
+      }
       const client = this.client();
       const body = Buffer.from(JSON.stringify(data));
-      
+
       const commandOptions: any = {
         Bucket: this.conf.bucket,
         Key: key,
@@ -244,9 +437,14 @@ export class OssService {
       return null;
     }
     try {
+      if (this.isLocalMode()) {
+        const filePath = this.resolveLocalPath(key);
+        const content = await readFile(filePath, 'utf8');
+        return JSON.parse(content) as T;
+      }
       const client = this.client();
       console.log('[OssService] Fetching from OSS...');
-      
+
       const command = new GetObjectCommand({
         Bucket: this.conf.bucket,
         Key: key,
@@ -254,14 +452,17 @@ export class OssService {
 
       const res = await client.send(command);
       const content = await res.Body?.transformToString();
-      
+
       console.log('[OssService] Got content, length:', content?.length || 0);
       if (!content) return null;
       return JSON.parse(content) as T;
     } catch (err: any) {
-      // S3 标准错误码为 NoSuchKey
       if (err?.name === 'NoSuchKey' || err?.Code === 'NoSuchKey' || err?.$metadata?.httpStatusCode === 404) {
         console.log('[OssService] Key not found:', key);
+        return null;
+      }
+      if (err?.code === 'ENOENT') {
+        console.log('[OssService] Local key not found:', key);
         return null;
       }
       console.warn(`OSS getJSON failed: ${err.message || err}`);
@@ -272,7 +473,7 @@ export class OssService {
   async signUrl(key: string, expiresInSeconds = 300): Promise<string> {
     const normalizedKey = typeof key === 'string' ? key.trim().replace(/^\/+/, '') : '';
     if (!normalizedKey) return '';
-    if (!this.isOssEnabled()) {
+    if (this.isLocalMode() || !this.isOssEnabled()) {
       return this.publicUrl(normalizedKey);
     }
     try {
@@ -293,6 +494,14 @@ export class OssService {
   async objectExists(key: string): Promise<boolean> {
     const normalizedKey = typeof key === 'string' ? key.trim().replace(/^\/+/, '') : '';
     if (!normalizedKey) return false;
+    if (this.isLocalMode()) {
+      try {
+        const filePath = this.resolveLocalPath(normalizedKey);
+        return existsSync(filePath);
+      } catch {
+        return false;
+      }
+    }
     if (!this.isOssEnabled()) return true;
     try {
       const client = this.client();
@@ -313,28 +522,42 @@ export class OssService {
   }
 
   publicUrl(key: string): string {
+    const normalizedKey = this.normalizeObjectKey(key);
+    if (this.isLocalMode()) {
+      const base = this.getLocalPublicBaseUrl();
+      if (base) return `${base}/${normalizedKey}`;
+      // 无公网 base 时返回同源相对路径，nginx 可直接托管
+      return `/${normalizedKey}`;
+    }
+
     const { cdnHost, bucket, endpoint } = this.conf;
-    
-    // 动态提取端点的主机名 (移除 http:// 或 https://)
+
     const rawEndpoint = (endpoint || '').replace(/^https?:\/\//i, '').replace(/\/+$/, '');
-    
-    // 默认 OSS/TOS 访问域名格式: bucket.endpoint
+
     const defaultHost = rawEndpoint ? `${bucket}.${rawEndpoint}` : `${bucket}.oss-cn-hangzhou.aliyuncs.com`;
     const host = cdnHost || defaultHost;
-    
-    return `https://${host}/${key}`;
+
+    return `https://${host}/${normalizedKey}`;
   }
 
   publicHosts(): string[] {
     const { cdnHost, bucket, endpoint } = this.conf;
     const stripProtocol = (value: string) => value.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
-    
+
     const rawEndpoint = (endpoint || '').replace(/^https?:\/\//i, '').replace(/\/+$/, '');
     const defaultHost = rawEndpoint ? `${bucket}.${rawEndpoint}` : `${bucket}.oss-cn-hangzhou.aliyuncs.com`;
-    
+
     const hosts = [defaultHost];
     if (cdnHost) {
       hosts.push(stripProtocol(cdnHost));
+    }
+    const localBase = this.getLocalPublicBaseUrl();
+    if (localBase) {
+      try {
+        hosts.push(new URL(localBase).hostname);
+      } catch {
+        hosts.push(stripProtocol(localBase));
+      }
     }
     return Array.from(new Set(hosts)).filter(Boolean);
   }
@@ -342,43 +565,52 @@ export class OssService {
   allowedPublicHosts(): string[] {
     const { cdnHost, bucket, endpoint } = this.conf;
     const stripProtocol = (value: string) => value.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
-    
+
     const rawEndpoint = (endpoint || '').replace(/^https?:\/\//i, '').replace(/\/+$/, '');
     const defaultHost = rawEndpoint ? `${bucket}.${rawEndpoint}` : `${bucket}.oss-cn-hangzhou.aliyuncs.com`;
-    
+
     const hosts = [defaultHost];
-    
+
     if (cdnHost) {
       hosts.push(stripProtocol(cdnHost));
     }
 
+    const localBase = this.getLocalPublicBaseUrl();
+    if (localBase) {
+      try {
+        hosts.push(new URL(localBase).hostname);
+      } catch {
+        hosts.push(stripProtocol(localBase));
+      }
+    }
+
     const extraHosts = this.config.get<string>('ALLOWED_PROXY_HOSTS');
     if (extraHosts) {
-      extraHosts.split(',').forEach(h => {
+      extraHosts.split(',').forEach((h) => {
         const trimmed = h.trim();
         if (trimmed) hosts.push(stripProtocol(trimmed));
       });
     }
 
     const defaultAllowed = [
-      'aliyuncs.com',           // 阿里云 OSS
-      'amazonaws.com.cn',       // AWS 中国区 (Vidu)
-      'amazonaws.com',          // AWS 国际
-      's3.cn-northwest-1.amazonaws.com.cn', // Vidu S3
-      'toapis.com',             // ToAPIs / Nano2 图像资源
-      'apimart.ai',             // 历史 Apimart 图像资源
-      'kechuangai.com',         // Kling / 可灵
-      'models.kapon.cloud',     // Kapon / Vidu
-      'volces.com',             // 字节/Seedance 1.5 Pro / 火山引擎
-      'tencentcos.cn',          // 腾讯 COS（混元 3D 输出）
-      'myqcloud.com',           // 腾讯云通用域名
-      'qcloud.com',             // 腾讯云下载域名（含 vod-qcloud.com）
-      'vod-qcloud.com',         // 腾讯 VOD 临时资源常见域名
-      'tgtai.com',              // Tanva CDN 域名（供 AI 上游服务访问）
-      'getapib.org',            // APIB 外部视频资源代理
+      'aliyuncs.com',
+      'amazonaws.com.cn',
+      'amazonaws.com',
+      's3.cn-northwest-1.amazonaws.com.cn',
+      'toapis.com',
+      'apimart.ai',
+      'kechuangai.com',
+      'models.kapon.cloud',
+      'volces.com',
+      'tencentcos.cn',
+      'myqcloud.com',
+      'qcloud.com',
+      'vod-qcloud.com',
+      'tgtai.com',
+      'getapib.org',
     ];
 
-    defaultAllowed.forEach(h => hosts.push(h));
+    defaultAllowed.forEach((h) => hosts.push(h));
 
     return Array.from(new Set(hosts)).filter(Boolean);
   }

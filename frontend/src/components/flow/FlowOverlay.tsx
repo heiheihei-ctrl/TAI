@@ -60,6 +60,7 @@ import {
   SHOW_TEAM_COLLABORATION,
 } from "@/config/featureFlags";
 import { shouldHideForeignFlowNode } from "@/config/foreignFlowNodes";
+import { getSeedream5ProCredits } from "@/config/brandCreditPricing";
 import {
   isAllowedForInternationalEdition,
   isInternationalLanguage,
@@ -1360,6 +1361,8 @@ const QUICK_CONNECT_PRESETS: Record<
     { nodeType: "imagePro", targetHandle: "img" },
     { nodeType: "nano2", targetHandle: "img" },
     { nodeType: "gptImage2", targetHandle: "img" },
+    { nodeType: "seedream5", targetHandle: "img" },
+    { nodeType: "seedream5Pro", targetHandle: "img" },
     { nodeType: "imageGrid", targetHandle: "images" },
     { nodeType: "imageSplit", targetHandle: "img" },
     { nodeType: "imageCompress", targetHandle: "img" },
@@ -1499,7 +1502,7 @@ const NODE_CREDITS_MAP: Record<string, number | string> = {
   nano2: 30, // Nano Banana 2 生图
   gptImage2: 29, // Gpt-Image-2 生图（默认按普通 1K + medium 兜底）
   seedream5: 30, // Seedream 5.0 生图
-  seedream5Pro: 90, // Seedream 5.0 Pro 生图（按 2K 90 积分兜底）
+  seedream5Pro: getSeedream5ProCredits("2K"), // Seedream 5.0 Pro 生图（按 2K 积分兜底，随部署品牌变化）
   three: 200, // 三维节点 - convert-2d-to-3d
   sora2Video: "40-400", // 视频生成节点 - sora-sd (40) 或 sora-hd (400)
   sora2Character: 0, // 角色生成节点 - 当前不单独计费
@@ -9888,6 +9891,7 @@ function FlowInner() {
           "nano2",
           "gptImage2",
           "seedream5",
+          "seedream5Pro",
         ];
         if (imageNodeTypes.includes(normalizedSourceType)) return true;
         // videoFrameExtract 的 image 句柄输出单张图片

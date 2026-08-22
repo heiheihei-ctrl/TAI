@@ -1,3 +1,7 @@
+import { getSeedream5ProResolutionPricing } from './brand-credit-pricing';
+
+const seedream5ProResolutionPricing = getSeedream5ProResolutionPricing();
+
 // 积分定价配置
 export const CREDIT_PRICING_CONFIG = {
   // Gemini 图像服务
@@ -351,13 +355,9 @@ export const CREDIT_PRICING_CONFIG = {
   'doubao-seedream-5-0-pro-260628': {
     serviceName: 'Seedream 5.0 Pro 图像生成',
     provider: 'seedream5Pro',
-    creditsPerCall: 90,
+    creditsPerCall: seedream5ProResolutionPricing['2K'],
     description: '使用 Seedream 5.0 Pro 生成图像（更强编辑与文字能力）',
-    resolutionPricing: {
-      '1K': 65,
-      '1.5K': 65,
-      '2K': 90,
-    },
+    resolutionPricing: seedream5ProResolutionPricing,
   },
 } as const;
 

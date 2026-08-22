@@ -7724,18 +7724,28 @@ function TeamsTab() {
         </div>
       )}
 
-      <div className='bg-white rounded-lg border overflow-hidden'>
-          <table className='w-full'>
+      <div className='bg-white rounded-lg border overflow-x-auto'>
+          <table className='w-full min-w-[1100px] table-fixed'>
+            <colgroup>
+              <col className='w-[16%]' />
+              <col className='w-[12%]' />
+              <col className='w-[6%]' />
+              <col className='w-[8%]' />
+              <col className='w-[7%]' />
+              <col className='w-[10%]' />
+              <col className='w-[14%]' />
+              <col className='w-[27%]' />
+            </colgroup>
             <thead>
               <tr className='border-b bg-gray-50'>
-                <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>企业名称</th>
-                <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>管理员</th>
-                <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>项目数</th>
-                <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>席位占用</th>
-                <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>状态</th>
-                <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>积分余额</th>
-                <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>创建时间</th>
-                <th className='text-left px-4 py-3 text-sm font-medium text-gray-600'>操作</th>
+                <th className='text-left px-3 py-3 text-sm font-medium text-gray-600'>企业名称</th>
+                <th className='text-left px-3 py-3 text-sm font-medium text-gray-600'>管理员</th>
+                <th className='text-left px-3 py-3 text-sm font-medium text-gray-600'>项目数</th>
+                <th className='text-left px-3 py-3 text-sm font-medium text-gray-600'>席位占用</th>
+                <th className='text-left px-3 py-3 text-sm font-medium text-gray-600'>状态</th>
+                <th className='text-left px-3 py-3 text-sm font-medium text-gray-600'>积分余额</th>
+                <th className='text-left px-3 py-3 text-sm font-medium text-gray-600'>创建时间</th>
+                <th className='text-left px-3 py-3 text-sm font-medium text-gray-600'>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -7754,32 +7764,52 @@ function TeamsTab() {
               ) : (
                 teams.map((team) => (
                   <tr key={team.id} className='border-b hover:bg-gray-50'>
-                    <td className='px-4 py-3'>
-                      <div>{team.name}</div>
+                    <td className='px-3 py-3 align-top'>
+                      <div className='truncate font-medium' title={team.name}>
+                        {team.name}
+                      </div>
                       {team.displayName && team.displayName !== team.name ? (
-                        <div className='text-xs text-gray-400'>显示名：{team.displayName}</div>
+                        <div
+                          className='truncate text-xs text-gray-400'
+                          title={team.displayName}
+                        >
+                          显示名：{team.displayName}
+                        </div>
                       ) : null}
                     </td>
-                    <td className='px-4 py-3'>
-                      <div>{team.owner.name || team.owner.phone}</div>
-                      <div className='text-xs text-gray-400'>{team.owner.phone}</div>
+                    <td className='px-3 py-3 align-top'>
+                      <div
+                        className='truncate'
+                        title={team.owner.name || team.owner.phone || undefined}
+                      >
+                        {team.owner.name || team.owner.phone}
+                      </div>
+                      <div className='truncate text-xs text-gray-400' title={team.owner.phone || undefined}>
+                        {team.owner.phone}
+                      </div>
                     </td>
-                    <td className='px-4 py-3'>{team.projectCount ?? 0}</td>
-                    <td className='px-4 py-3'>
+                    <td className='px-3 py-3 align-top whitespace-nowrap'>
+                      {team.projectCount ?? 0}
+                    </td>
+                    <td className='px-3 py-3 align-top whitespace-nowrap'>
                       {(team.usedSeats ?? team.memberCount)} / {team.maxSeats}
                     </td>
-                    <td className='px-4 py-3'>
+                    <td className='px-3 py-3 align-top'>
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusClass(team.status)}`}>
                         {getStatusLabel(team.status)}
                       </span>
                     </td>
-                    <td className='px-4 py-3'>
-                      <div className='font-medium'>{team.balance}</div>
-                      <div className='text-xs text-gray-400'>可用: {team.availableCredits}</div>
+                    <td className='px-3 py-3 align-top'>
+                      <div className='font-medium tabular-nums'>{team.balance}</div>
+                      <div className='text-xs text-gray-400 tabular-nums'>
+                        可用: {team.availableCredits}
+                      </div>
                     </td>
-                    <td className='px-4 py-3 text-sm'>{new Date(team.createdAt).toLocaleString()}</td>
-                    <td className='px-4 py-3'>
-                      <div className='flex items-center gap-2'>
+                    <td className='px-3 py-3 align-top text-sm whitespace-nowrap'>
+                      {new Date(team.createdAt).toLocaleString()}
+                    </td>
+                    <td className='px-3 py-3 align-top'>
+                      <div className='flex flex-wrap items-center gap-1'>
                         <Button variant='ghost' size='sm' onClick={() => handleViewMembers(team)}>
                           席位成员
                         </Button>

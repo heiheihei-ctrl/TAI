@@ -5,7 +5,12 @@ All notable changes to this knowledge base will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning (knowledge-base versioning).
 
 ## [Unreleased]
+### Added
+- Deployment brand: `DEPLOYMENT_BRAND=tai|linglong` (backend) / `VITE_DEPLOYMENT_BRAND` (frontend) — distinguishes credit pricing per product line; Seedream 5.0 Pro resolution pricing: tai `1K/1.5K/2K = 65/90/140`, linglong `100/130/180`.
+- Upload storage mode: `UPLOAD_MODE=tos|local` — local writes to `LOCAL_UPLOAD_ROOT` (nginx html) and serves via `LOCAL_UPLOAD_PUBLIC_BASE_URL`; TOS mode unchanged. Frontend follows `presign.mode` / `VITE_UPLOAD_MODE` and uses `/api/uploads/file` for local multipart. Old TOS URLs remap by key when `VITE_ASSET_PUBLIC_BASE_URL` points at nginx.
+
 ### Changed
+- Membership credits: VIP 69 月卡额度 `8700` → `7350`（`signupBonusCredits=0`，展示合计约 `9250`=7350+签到1900）；migration `202608220001_set_vip69_monthly_quota_7350`。
 - Prompt optimize (normal route): ToAPIs upstream model fixed to `gemini-2.5-flash-official`; stable route keeps existing text-model mapping.
 
 ### Added
@@ -14,7 +19,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ### Changed
 - Enterprise: 平台生成的企业管理员 `seatExempt` 不计席；`member` 不可进企业后台；新建管理员可标记 `isEnterpriseAccount`（不必先有个人工作区）。
 - Enterprise console: `/enterprise` 仅账号密码登录；默认落地项目管理；企业成员隐藏「新建团队」；Admin 用户管理去掉「项目管理」子 Tab（见 `enterprise-console.md`）。
-- Membership credits: VIP 弹窗「立即到账」与后端月卡额度对齐——`69/199/599` 分别为 `8700/22000/69000`（`signupBonusCredits=0`），`599` 每日签到 `150`（migration `202608050001_align_membership_plan_credits`）。
+- Membership credits: VIP 弹窗「立即到账」与后端月卡额度对齐——`69/199/599` 分别为 `8700/22000/69000`（`signupBonusCredits=0`），`599` 每日签到 `150`（migration `202608050001_align_membership_plan_credits`）；后续 69 档调整为 `7350`（见 `202608220001_set_vip69_monthly_quota_7350`）。
 - Profile completion: **真实姓名 → 昵称**，**年龄 → 生日（年月日）**，新增 **邮箱**，**所在地区** 改为省/市点选，完善资料奖励 **50 → 100 积分**（`User.profileNickname` / `profileBirthday` / `profileEmail` migration `202606230001_update_user_extended_profile_fields`）。
 - New API / Video Enhance: `volc-enhance-video` now supports direct Volcengine AI MediaKit routing through the `volcengine` adapter, while the older Tencent VOD procedure path remains only as a compatibility option for existing mappings.
 

@@ -31,6 +31,8 @@ export type OssUploadResult = {
 type PresignPutResponse = {
   uploadUrl: string;
   publicUrl: string;
+  mode?: "tos" | "local";
+  key?: string;
 };
 
 function getApiBaseUrl(): string {
@@ -39,15 +41,25 @@ function getApiBaseUrl(): string {
     ? import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, "")
     : "http://localhost:4000";
 }
-/*
-function isBackendImageRelayEnabled(): boolean {
-  const raw = String((import.meta.env.VITE_IMAGE_UPLOAD_BACKEND_RELAY as string | undefined) || "").trim().toLowerCase();
-  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+
+/** 前端也可强制指定；优先以后端 presign 返回的 mode 为准 */
+function isFrontendLocalUploadMode(): boolean {
+  const raw = String(
+    (import.meta.env.VITE_UPLOAD_MODE as string | undefined) || "",
+  )
+    .trim()
+    .toLowerCase();
+  return raw === "local" || raw === "disk" || raw === "nginx";
 }
-*/
+
 function isBackendImageRelayEnabled(): boolean {
-  // 强制关闭后端中转，彻底避开后端 req.on 报错，直接走 TOS 直传
-  return false; 
+  if (isFrontendLocalUploadMode()) return true;
+  const raw = String(
+    (import.meta.env.VITE_IMAGE_UPLOAD_BACKEND_RELAY as string | undefined) || "",
+  )
+    .trim()
+    .toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
 }
 function normalizeDir(baseDir: string | undefined, projectId?: string | null) {
   const trimmed = baseDir?.trim();
@@ -196,18 +208,20 @@ async function verifyUploadedAssetReadable(
   return false;
 }
 
-async function uploadImageViaBackend(
+async function uploadFileViaBackend(
   data: Blob | File,
   options: OssUploadOptions,
-  fallbackKey?: string
+  fallbackKey?: string,
+  endpoint: "image" | "file" = "file",
 ): Promise<OssUploadResult> {
   const API_BASE = getApiBaseUrl();
-  const fileName = options.fileName || "upload-image";
-  const file = data instanceof File
-    ? data
-    : new File([data], fileName, {
-        type: options.contentType || (data as File).type || "image/png",
-      });
+  const fileName = options.fileName || "upload";
+  const file =
+    data instanceof File
+      ? data
+      : new File([data], fileName, {
+          type: options.contentType || (data as File).type || "application/octet-stream",
+        });
   const formData = new FormData();
   formData.append("file", file);
   if (options.dir) formData.append("dir", options.dir);
@@ -218,7 +232,7 @@ async function uploadImageViaBackend(
   if (options.authToken) headers.Authorization = `Bearer ${options.authToken}`;
 
   try {
-    const res = await fetchWithAuth(`${API_BASE}/api/uploads/image`, {
+    const res = await fetchWithAuth(`${API_BASE}/api/uploads/${endpoint}`, {
       method: "POST",
       body: formData,
       headers,
@@ -232,22 +246,35 @@ async function uploadImageViaBackend(
         error:
           dataJson?.message ||
           dataJson?.error ||
-          `Backend image upload failed: ${res.status}`,
+          `Backend upload failed: ${res.status}`,
       };
     }
 
     const url = typeof dataJson?.url === "string" ? dataJson.url : "";
     const key = typeof dataJson?.key === "string" ? dataJson.key : "";
-    if (!url) {
-      return { success: false, error: "Backend image upload returned empty url" };
+    if (!url && !key) {
+      return { success: false, error: "Backend upload returned empty url/key" };
     }
-    return { success: true, url, key: key || undefined, size: data.size };
+    return {
+      success: true,
+      url: url || undefined,
+      key: key || undefined,
+      size: data.size,
+    };
   } catch (error: any) {
     return {
       success: false,
-      error: error?.message || "Backend image upload failed",
+      error: error?.message || "Backend upload failed",
     };
   }
+}
+
+async function uploadImageViaBackend(
+  data: Blob | File,
+  options: OssUploadOptions,
+  fallbackKey?: string,
+): Promise<OssUploadResult> {
+  return uploadFileViaBackend(data, options, fallbackKey, "image");
 }
 
 function buildKey(dir: string, fileName?: string, extensionHint?: string) {
@@ -286,19 +313,38 @@ export async function uploadToOSS(
       return buildKey(dir, options.fileName, extension);
     })();
 
-    // 优先走后端中转分支（兼容旧逻辑）
-    if (isImage && isBackendImageRelayEnabled()) {
-      const backendUpload = await uploadImageViaBackend(data, { ...options, dir }, key);
-      if (backendUpload.success && backendUpload.url) {
+    // 优先走后端中转：本地上传模式 / 显式 relay / 图片且配置开启
+    if (isFrontendLocalUploadMode() || (isImage && isBackendImageRelayEnabled())) {
+      const backendUpload = await uploadFileViaBackend(
+        data,
+        { ...options, dir },
+        key,
+        isImage ? "image" : "file",
+      );
+      if (backendUpload.success && (backendUpload.url || backendUpload.key)) {
         const backendReadable = await verifyUploadedAssetReadable(
           backendUpload.key,
           backendUpload.url,
-          options.authToken
+          options.authToken,
         );
-        if (backendReadable) return backendUpload;
+        if (backendReadable || isFrontendLocalUploadMode()) {
+          // 本地模式：proxy 已能读盘即可；若 nginx 尚未同步，仍以写入成功为准
+          if (backendReadable || backendUpload.url || backendUpload.key) {
+            return backendUpload;
+          }
+        }
+        if (!backendReadable && !isFrontendLocalUploadMode()) {
+          return {
+            success: false,
+            error: "Backend image upload succeeded but asset is still not readable",
+          };
+        }
+        return backendUpload;
+      }
+      if (isFrontendLocalUploadMode()) {
         return {
           success: false,
-          error: "Backend image upload succeeded but asset is still not readable",
+          error: backendUpload.error || "Local upload failed",
         };
       }
       logger.warn("Backend image upload failed, fallback to direct OSS upload", {
@@ -306,10 +352,25 @@ export async function uploadToOSS(
       });
     }
 
-    // --- 全新 TOS/S3 标准 PUT 直传逻辑 ---
+    // --- TOS/S3 标准 PUT 直传逻辑 ---
 
     // 2. 向后端请求针对该 Key 的专属 PUT 预签名链接
     const presignData = await requestPresignPutUrl(key, mimeType, options.authToken);
+
+    // 后端声明 local：改走 multipart，不再 PUT 空 uploadUrl
+    if (presignData.mode === "local" || !presignData.uploadUrl) {
+      const backendUpload = await uploadFileViaBackend(
+        data,
+        { ...options, dir },
+        key,
+        isImage ? "image" : "file",
+      );
+      if (backendUpload.success) return backendUpload;
+      return {
+        success: false,
+        error: backendUpload.error || "Local upload failed",
+      };
+    }
 
     // 3. 将二进制文件直接 PUT 到预签名链接 (彻底抛弃 FormData)
     const fileToUpload = data instanceof File 
