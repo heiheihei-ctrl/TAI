@@ -13,13 +13,11 @@ type TierKey = 69 | 199 | 599;
 /** 月付：立即到账 = 月卡额度；签到 = daily×30 + 连签额外×4 */
 const MONTHLY_COPY: Record<TierKey, PlanMarketingCopy> = {
   69: {
-    totalCredits: 10600,
+    totalCredits: 9250,
     lines: [
-      "套餐立即到账8700积分",
-      "原积分6900，现加送1800积分",
-      "每日签到共奖励1900积分",
-      "至多生成353张图片",
-      "或26个视频",
+      "套餐到账 7350积分 (每日签到共奖励1900积分)",
+      "至多生成308张图片",
+      "或23个视频",
     ],
   },
   199: {
@@ -45,7 +43,7 @@ const MONTHLY_COPY: Record<TierKey, PlanMarketingCopy> = {
 /**
  * 年付展示与月付立即到账对齐：
  * 套餐 = 月立即到账 × 12；签到 = daily×365 + 连签额外×52
- * 左→右：日常 8700 / 专业 22000 / 旗舰 69000
+ * 左→右：日常 7350 / 专业 22000 / 旗舰 69000
  */
 const YEARLY_COPY: Record<TierKey, PlanMarketingCopy> = {
   69: {
