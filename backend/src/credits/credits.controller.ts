@@ -108,6 +108,7 @@ export class CreditsController {
       requestParams: dto.requestParams,
       outputImageCount: dto.outputImageCount,
       edition: dto.edition,
+      deploymentBrand: dto.deploymentBrand,
     });
   }
 

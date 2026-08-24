@@ -116,6 +116,23 @@ export class UsersService {
     });
   }
 
+  async createAdminUser(phone: string, plainPassword = 'tai2026') {
+    const existingUser = await this.findByPhone(phone);
+    if (existingUser) {
+      throw new BadRequestException('手机号已被使用');
+    }
+    const bcrypt = require('bcryptjs');
+    const passwordHash = await bcrypt.hash(plainPassword, 10);
+    return this.prisma.user.create({
+      data: {
+        phone,
+        passwordHash,
+        name: `用户_${phone.substring(phone.length - 4)}`
+      },
+      select: AUTH_USER_SELECT,
+    });
+  }
+
   async updateGoogleApiKey(userId: string, dto: UpdateGoogleApiKeyDto) {
     return this.prisma.user.update({
       where: { id: userId },

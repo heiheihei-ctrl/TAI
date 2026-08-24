@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsOptional, IsString, Length, Matches } from 'class-validator';
+import { IsEmail, IsOptional, IsString, Length, Matches, MaxLength } from 'class-validator';
 
 export class RegisterDto {
   @ApiProperty({ required: false })
@@ -36,4 +36,10 @@ export class RegisterDto {
   @IsOptional()
   @IsString({ message: '邀请码必须是字符串' })
   inviteCode?: string;
+
+  @ApiProperty({ required: false, description: '所属公司（玲珑注册等场景）' })
+  @IsOptional()
+  @IsString({ message: '公司必须是字符串' })
+  @MaxLength(120, { message: '公司名称过长' })
+  company?: string;
 }

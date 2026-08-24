@@ -60,9 +60,12 @@ import {
   SHOW_TEAM_COLLABORATION,
 } from "@/config/featureFlags";
 import { shouldHideForeignFlowNode } from "@/config/foreignFlowNodes";
-import { getSeedream5ProCredits } from "@/config/brandCreditPricing";
+import { getSeedream5ProCredits, getSeedream5Credits, getSeedanceFallbackCredits } from "@/config/brandCreditPricing";
+import { shouldHideNodeForDeploymentPalette } from "@/config/linglongPalette";
+import { getDeploymentBrand } from "@/config/deploymentBrand";
 import {
   isAllowedForInternationalEdition,
+  isAllowedForSeedreamSeedancePalette,
   isInternationalLanguage,
 } from "@/config/internationalEditionNodes";
 import { useAuthStore } from "@/stores/authStore";
@@ -1501,8 +1504,8 @@ const NODE_CREDITS_MAP: Record<string, number | string> = {
   niji7: 50, // Niji 7 生成
   nano2: 30, // Nano Banana 2 生图
   gptImage2: 29, // Gpt-Image-2 生图（默认按普通 1K + medium 兜底）
-  seedream5: 30, // Seedream 5.0 生图
-  seedream5Pro: getSeedream5ProCredits("2K"), // Seedream 5.0 Pro 生图（按 2K 积分兜底，随部署品牌变化）
+  seedream5: getSeedream5Credits("2K"),
+  seedream5Pro: getSeedream5ProCredits("2K"),
   three: 200, // 三维节点 - convert-2d-to-3d
   sora2Video: "40-400", // 视频生成节点 - sora-sd (40) 或 sora-hd (400)
   sora2Character: 0, // 角色生成节点 - 当前不单独计费
@@ -1517,8 +1520,8 @@ const NODE_CREDITS_MAP: Record<string, number | string> = {
   klingO3Video: 600, // 可灵O3视频生成 - Omni Video
   viduVideo: 600, // Vidu视频生成
   viduQ3: 400, // Vidu Q3：默认 5 秒 × 80 积分/秒
-  doubaoVideo: 600, // Seedance 1.5 Pro包视频生成
-  seedance20Video: 600, // Seedance 2.0 视频生成
+  doubaoVideo: getSeedanceFallbackCredits(), // Seedance 1.5 Pro
+  seedance20Video: getSeedanceFallbackCredits(), // Seedance 2.0
   omniFlashExtVideo: 600, // Omni Flash Ext 视频生成
   videoToGif: 30, // 视频转GIF
   videoCompose: 0, // 前端本地视频合成
@@ -1841,7 +1844,7 @@ const isHiddenFlowNodeType = (rawType?: string): boolean => {
   const normalized = normalizeFlowNodeType(rawType);
   if (!normalized) return false;
   if (HIDDEN_FLOW_NODE_TYPES.has(normalized)) return true;
-  return shouldHideForeignFlowNode(normalized);
+  return shouldHideForeignFlowNode(normalized) || shouldHideNodeForDeploymentPalette(normalized);
 };
 
 const SEED_3D_PALETTE_NAME_CANONICALS = new Set(["seed3d"]);
@@ -4069,9 +4072,12 @@ function FlowInner() {
         const resolvedType = resolveFlowNodeTypeFromConfig(config);
         if (isHiddenFlowNodeType(resolvedType)) return false;
         if (shouldHideForeignFlowNode(config.nodeKey)) return false;
-        // 国际版（英文）下面板仅保留 Seedream / seedance / 免费节点
-        if (isInternationalLanguage(language)) {
-          if (!isAllowedForInternationalEdition(config)) return false;
+        // 国际版 / 玲珑生态：面板仅保留 Seedream / Seedance / 免费节点
+        if (
+          isInternationalLanguage(language) ||
+          getDeploymentBrand() === "linglong"
+        ) {
+          if (!isAllowedForSeedreamSeedancePalette(config)) return false;
         }
         return true;
       })

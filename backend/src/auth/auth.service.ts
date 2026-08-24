@@ -1993,6 +1993,12 @@ export class AuthService {
           passwordHash: hash,
           name: trimmedName,
           phone: normalizedPhone,
+          ...(dto.company?.trim()
+            ? {
+                profileCompany: dto.company.trim(),
+                profileRealName: trimmedName,
+              }
+            : {}),
         },
         select: {
           id: true,

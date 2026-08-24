@@ -1,26 +1,52 @@
 import { type DeploymentBrand, getDeploymentBrand } from './deploymentBrand';
 
 export type Seedream5ProResolution = '1K' | '1.5K' | '2K';
+export type Seedream5Resolution = '1K' | '2K' | '4K';
 
-const SEEDREAM5_PRO_RESOLUTION_CREDITS: Record<
-  DeploymentBrand,
-  Record<Seedream5ProResolution, number>
-> = {
-  tai: {
-    '1K': 65,
-    '1.5K': 90,
-    '2K': 140,
-  },
-  linglong: {
-    '1K': 100,
-    '1.5K': 130,
-    '2K': 180,
-  },
+export const LINGLONG_CREDIT_MULTIPLIER = 1.5;
+
+const TAI_SEEDREAM5_PRO_CREDITS: Record<Seedream5ProResolution, number> = {
+  '1K': 65,
+  '1.5K': 90,
+  '2K': 140,
 };
+
+const TAI_SEEDREAM5_CREDITS: Record<Seedream5Resolution, number> = {
+  '1K': 30,
+  '2K': 30,
+  '4K': 60,
+};
+
+const TAI_SEEDANCE_FALLBACK_CREDITS = 600;
+
+function scaleCredits(base: number, brand: DeploymentBrand): number {
+  if (brand !== 'linglong') return base;
+  return Math.ceil(base * LINGLONG_CREDIT_MULTIPLIER);
+}
 
 export function getSeedream5ProCredits(
   resolution: Seedream5ProResolution = '2K',
   brand: DeploymentBrand = getDeploymentBrand(),
 ): number {
-  return SEEDREAM5_PRO_RESOLUTION_CREDITS[brand][resolution];
+  return scaleCredits(TAI_SEEDREAM5_PRO_CREDITS[resolution], brand);
+}
+
+export function getSeedream5Credits(
+  resolution: Seedream5Resolution = '2K',
+  brand: DeploymentBrand = getDeploymentBrand(),
+): number {
+  return scaleCredits(TAI_SEEDREAM5_CREDITS[resolution], brand);
+}
+
+export function getSeedanceFallbackCredits(
+  brand: DeploymentBrand = getDeploymentBrand(),
+): number {
+  return scaleCredits(TAI_SEEDANCE_FALLBACK_CREDITS, brand);
+}
+
+export function applyLinglongCreditMultiplier(
+  credits: number,
+  brand: DeploymentBrand = getDeploymentBrand(),
+): number {
+  return scaleCredits(credits, brand);
 }

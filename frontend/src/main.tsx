@@ -10,6 +10,7 @@ import App from './App.tsx';
 import Home from '@/pages/Home';
 import LoginPage from '@/pages/auth/Login';
 import RegisterPage from '@/pages/auth/Register';
+import LinglongRegisterPage from '@/pages/auth/LinglongRegisterPage';
 import OSSDemo from '@/pages/OSSDemo';
 import Admin from '@/pages/Admin';
 import MyCredits from '@/pages/MyCredits';
@@ -50,6 +51,7 @@ function RootRoutes() {
       <Route path="/" element={<Home />} />
       <Route path="/auth/login" element={<LoginPage />} />
       <Route path="/auth/register" element={<RegisterPage />} />
+      <Route path="/auth/register/linglong" element={<LinglongRegisterPage />} />
       <Route path="/legal/terms" element={<TermsOfService />} />
       <Route path="/legal/privacy" element={<PrivacyPolicy />} />
       <Route path="/legal/community" element={<CommunityGuidelines />} />

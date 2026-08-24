@@ -4579,6 +4579,10 @@ function UsersTab({
   canManageSensitiveUserFields: boolean;
 }) {
   const [usersSubTab, setUsersSubTab] = useState<"users" | "teams">("users");
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [addPhone, setAddPhone] = useState("");
+  const [addName, setAddName] = useState("");
+  const [addingUser, setAddingUser] = useState(false);
 
   const currentUserId = useAuthStore((state) => state.user?.id);
   const [users, setUsers] = useState<UserWithCredits[]>([]);
@@ -4980,7 +4984,76 @@ function UsersTab({
             >
               {exporting ? "导出中..." : "导出"}
             </Button>
+            <Button
+              variant='default'
+              onClick={() => {
+                setAddPhone("");
+                setAddName("");
+                setShowAddUserModal(true);
+              }}
+            >
+              添加账户
+            </Button>
           </div>
+
+          {showAddUserModal && (
+            <Card className="mb-4 bg-white border border-gray-200">
+              <CardContent className='space-y-3 p-4'>
+                <h3 className='text-sm font-semibold'>添加用户</h3>
+                <div className='grid gap-3 md:grid-cols-2'>
+                  <div className='space-y-1'>
+                    <Label className='text-xs'>手机号 (必填)</Label>
+                    <Input
+                      placeholder='输入手机号'
+                      value={addPhone}
+                      onChange={(e) => setAddPhone(e.target.value)}
+                    />
+                  </div>
+                  <div className='space-y-1'>
+                    <Label className='text-xs'>姓名 (选填)</Label>
+                    <Input
+                      placeholder='用户昵称'
+                      value={addName}
+                      onChange={(e) => setAddName(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className='flex gap-2 mt-4'>
+                  <Button
+                    disabled={addingUser || !addPhone.trim()}
+                    onClick={() => {
+                      setAddingUser(true);
+                      fetchWithAuth("/api/admin/users", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ phone: addPhone, password: "tai2026", name: addName })
+                      }).then(res => {
+                        setAddingUser(false);
+                        if (res.ok) {
+                          alert(`添加成功！
+Added successfully!`);
+                          setShowAddUserModal(false);
+                          loadUsers();
+                        } else {
+                          res.text().then(text => alert(`添加失败: ${text}
+Add failed: ${text}`));
+                        }
+                      }).catch(err => {
+                        setAddingUser(false);
+                        alert(`请求出错: ${err.message}
+Request error: ${err.message}`);
+                      });
+                    }}
+                  >
+                    {addingUser ? "添加中..." : "确认添加"}
+                  </Button>
+                  <Button variant='outline' onClick={() => setShowAddUserModal(false)}>
+                    取消
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <div className='bg-white rounded-lg border overflow-hidden'>
         <div className='max-h-[1100px] overflow-auto'>
@@ -8409,6 +8482,11 @@ function WatermarkWhitelistTab() {
   const [search, setSearch] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [userSearch, setUserSearch] = useState("");
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [addPhone, setAddPhone] = useState("");
+  const [addPassword, setAddPassword] = useState("tai2026");
+  const [addName, setAddName] = useState("");
+  const [addingUser, setAddingUser] = useState(false);
 
   const loadWhitelist = async () => {
     setLoading(true);

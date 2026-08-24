@@ -1,5 +1,6 @@
 import { fetchWithAuth } from "./authFetch";
 import { getApiBaseUrl } from "@/utils/assetProxy";
+import { getDeploymentBrand, type DeploymentBrand } from "@/config/deploymentBrand";
 import i18n from "@/i18n";
 
 export type PricingEdition = "domestic" | "international";
@@ -17,6 +18,7 @@ export type CreditsPreviewRequest = {
   requestParams?: Record<string, any>;
   outputImageCount?: number;
   edition?: PricingEdition;
+  deploymentBrand?: DeploymentBrand;
 };
 
 export type CreditsPreviewResponse = {
@@ -67,12 +69,14 @@ export const stableSerializePreviewPayload = (value: unknown): string => {
 export const buildPreviewRequestSignature = (payload: CreditsPreviewRequest): string => {
   const edition =
     payload.edition ?? resolvePricingEdition(i18n.resolvedLanguage ?? i18n.language);
+  const deploymentBrand = payload.deploymentBrand ?? getDeploymentBrand();
   return stableSerializePreviewPayload({
     serviceType: payload.serviceType,
     model: payload.model || null,
     requestParams: payload.requestParams || null,
     outputImageCount: payload.outputImageCount ?? null,
     edition,
+    deploymentBrand,
   });
 };
 
@@ -88,7 +92,16 @@ export async function previewCredits(
 ): Promise<CreditsPreviewResponse> {
   const edition =
     payload.edition ?? resolvePricingEdition(i18n.resolvedLanguage ?? i18n.language);
-  const enrichedPayload: CreditsPreviewRequest = { ...payload, edition };
+  const deploymentBrand = payload.deploymentBrand ?? getDeploymentBrand();
+  const enrichedPayload: CreditsPreviewRequest = {
+    ...payload,
+    edition,
+    deploymentBrand,
+    requestParams: {
+      ...(payload.requestParams ?? {}),
+      deploymentBrand,
+    },
+  };
   const signature = buildPreviewRequestSignature(enrichedPayload);
   const now = Date.now();
   const cached = previewResponseCache.get(signature);

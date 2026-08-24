@@ -168,6 +168,14 @@ export class CreditsPreviewDto {
   @IsOptional()
   @IsEnum(['domestic', 'international'] as const)
   edition?: 'domestic' | 'international';
+
+  @ApiPropertyOptional({
+    description: '部署品牌（tai / linglong），玲珑下 Seedream/Seedance 积分 +50%',
+    enum: ['tai', 'linglong'],
+  })
+  @IsOptional()
+  @IsEnum(['tai', 'linglong'] as const)
+  deploymentBrand?: 'tai' | 'linglong';
 }
 
 export class AdjustCreditsDto {

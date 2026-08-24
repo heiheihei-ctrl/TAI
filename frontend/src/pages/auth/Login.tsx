@@ -21,8 +21,13 @@ import {
   buildTeamInviteHomePath,
   peekPendingTeamInvite,
 } from "@/utils/teamInvite";
+import { setRuntimeDeploymentBrand, getDeploymentBrand } from "@/config/deploymentBrand";
+import { refreshTeams, useTeamStore } from "@/stores/teamStore";
+import { pickPreferredEnterprise } from "@/utils/enterpriseAccess";
 
 const WECHAT_LOGIN_HIDDEN_ORIGINS = new Set(["http://101.96.217.132:8080"]);
+
+type LoginIdentity = "personal" | "enterprise" | "linglong";
 
 export default function LoginPage() {
   const { t } = useTranslation();
@@ -30,9 +35,11 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const currentOrigin = typeof window !== "undefined" ? window.location.origin : "";
   const wechatLoginEnabled = !WECHAT_LOGIN_HIDDEN_ORIGINS.has(currentOrigin);
-  const [tab, setTab] = useState<"wechat" | "password" | "sms">(
-    wechatLoginEnabled ? "wechat" : "password"
+  const [tab, setTab] = useState<"wechat" | "password" | "sms">("password");
+  const [loginIdentity, setLoginIdentity] = useState<LoginIdentity>(() =>
+    getDeploymentBrand() === "linglong" ? "linglong" : "personal",
   );
+  const [enterpriseError, setEnterpriseError] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [phone, setPhone] = useState("");
@@ -59,11 +66,16 @@ export default function LoginPage() {
   const [wechatBindSubmitting, setWechatBindSubmitting] = useState(false);
   const consumingRef = useRef(false);
   const consumedSessionIdRef = useRef<string | null>(null);
+  const appliedNavIdentityRef = useRef(false);
   const [profileGateActive, setProfileGateActive] = useState(false);
   const [isProfilePromptOpen, setIsProfilePromptOpen] = useState(false);
   const [profileRewardCredits, setProfileRewardCredits] = useState(100);
   const [pendingReturnTo, setPendingReturnTo] = useState("/app");
   const { login, loginWithSms, error, user, setAuthenticatedUser, clearError } = useAuthStore();
+  const setActiveTeamId = useTeamStore((s) => s.setActiveTeamId);
+
+  const showWechatTab = wechatLoginEnabled && loginIdentity === "personal";
+  const registerPath = loginIdentity === "linglong" ? "/auth/register/linglong" : "/auth/register";
 
   const returnTo = useMemo(() => {
     const fromState = typeof location.state?.from === "string" ? location.state.from : "";
@@ -87,10 +99,80 @@ export default function LoginPage() {
   }, [user, navigate, returnTo, isProfilePromptOpen, profileGateActive]);
 
   useEffect(() => {
-    if (!wechatLoginEnabled && tab === "wechat") {
+    if (!showWechatTab && tab === "wechat") {
       setTab("password");
     }
-  }, [wechatLoginEnabled, tab]);
+  }, [showWechatTab, tab]);
+
+  const tryEnterEnterpriseConsole = async () => {
+    const list = await refreshTeams().catch(() => useTeamStore.getState().teams);
+    const preferred = pickPreferredEnterprise(list);
+    if (!preferred) return false;
+    setActiveTeamId(preferred.id);
+    navigate(`/enterprise/${preferred.id}/projects`, { replace: true });
+    return true;
+  };
+
+  const handleIdentityChange = (identity: LoginIdentity) => {
+    setEnterpriseError(null);
+    setWechatError(null);
+    clearError();
+    if (identity === "enterprise") {
+      setRuntimeDeploymentBrand("tai");
+    } else if (identity === "linglong") {
+      setRuntimeDeploymentBrand("linglong");
+    } else {
+      setRuntimeDeploymentBrand("tai");
+    }
+    setLoginIdentity(identity);
+  };
+
+  useEffect(() => {
+    if (appliedNavIdentityRef.current) return;
+    const identity = (location.state as { identity?: LoginIdentity } | null)?.identity;
+    if (identity !== "linglong" && identity !== "enterprise" && identity !== "personal") {
+      return;
+    }
+    appliedNavIdentityRef.current = true;
+    setEnterpriseError(null);
+    setWechatError(null);
+    clearError();
+    if (identity === "enterprise") {
+      setRuntimeDeploymentBrand("tai");
+    } else if (identity === "linglong") {
+      setRuntimeDeploymentBrand("linglong");
+    } else {
+      setRuntimeDeploymentBrand("tai");
+    }
+    setLoginIdentity(identity);
+  }, [location.state, clearError]);
+
+  const welcomeTitle = useMemo(() => {
+    if (loginIdentity === "enterprise") return t("auth.login.enterpriseWelcome");
+    if (loginIdentity === "linglong") return t("auth.login.linglongWelcome");
+    return t("auth.login.welcome");
+  }, [loginIdentity, t]);
+
+  const identitySwitcherOptions = useMemo(() => {
+    if (loginIdentity === "personal") {
+      return [
+        { key: "enterprise" as const, label: t("auth.login.identityEnterprise") },
+        { key: "linglong" as const, label: t("auth.login.identityLinglong") },
+      ];
+    }
+    if (loginIdentity === "enterprise") {
+      return [
+        { key: "personal" as const, label: t("auth.login.identityPersonal") },
+        { key: "linglong" as const, label: t("auth.login.identityLinglong") },
+      ];
+    }
+    return [
+      { key: "enterprise" as const, label: t("auth.login.identityEnterprise") },
+      { key: "personal" as const, label: t("auth.login.identityPersonal") },
+    ];
+  }, [loginIdentity, t]);
+
+  const agreementInsideCard = false; // Always render agreement outside the card
 
   const activateProfileGate = () => {
     setProfileGateActive(true);
@@ -194,13 +276,13 @@ export default function LoginPage() {
   };
 
   useEffect(() => {
-    if (!wechatLoginEnabled || tab !== "wechat") return;
+    if (!showWechatTab || tab !== "wechat") return;
     if (wechatSession || wechatLoading || wechatRefreshing || wechatError) return;
     void createWechatSession("initial");
-  }, [wechatLoginEnabled, tab, wechatSession, wechatLoading, wechatRefreshing, wechatError]);
+  }, [showWechatTab, tab, wechatSession, wechatLoading, wechatRefreshing, wechatError]);
 
   useEffect(() => {
-    if (!wechatLoginEnabled || tab !== "wechat" || !wechatSession?.id) return;
+    if (!showWechatTab || tab !== "wechat" || !wechatSession?.id) return;
     if (consumedSessionIdRef.current === wechatSession.id) return;
 
     if (wechatSession.status === "authorized") {
@@ -235,10 +317,11 @@ export default function LoginPage() {
     }, 1800);
 
     return () => window.clearTimeout(timer);
-  }, [wechatLoginEnabled, tab, wechatSession, t]);
+  }, [showWechatTab, tab, wechatSession, t]);
 
   const performLogin = async () => {
     setIsSubmitting(true);
+    setEnterpriseError(null);
     activateProfileGate();
     try {
       if (tab === "password") {
@@ -246,6 +329,18 @@ export default function LoginPage() {
       } else {
         await loginWithSms(phone, code || "");
       }
+
+      if (loginIdentity === "enterprise") {
+        const entered = await tryEnterEnterpriseConsole();
+        if (!entered) {
+          releaseProfileGate();
+          setEnterpriseError(t("auth.login.enterpriseNoAccess"));
+          return;
+        }
+        releaseProfileGate();
+        return;
+      }
+
       await finishLoginFlow(returnTo);
     } catch (err) {
       releaseProfileGate();
@@ -419,11 +514,11 @@ export default function LoginPage() {
   };
 
   const agreementSection = (
-    <div className='flex items-center gap-2'>
+    <div className='flex items-start justify-center gap-2'>
       <button
         type='button'
         onClick={() => setAgreeTerms(!agreeTerms)}
-        className={`mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border-2 transition-all sm:mt-0 ${
+        className={`mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
           agreeTerms ? "border-white bg-white" : "border-white/50 bg-transparent"
         }`}
       >
@@ -431,82 +526,102 @@ export default function LoginPage() {
       </button>
       <label
         onClick={() => setAgreeTerms(!agreeTerms)}
-        className='cursor-pointer text-left text-xs leading-5 text-white'
+        className='cursor-pointer text-left text-xs leading-5 text-white/90'
       >
         {t("auth.agreements.prefix")}{" "}
-        <Link to='/legal/terms' className='mx-1 text-blue-400 underline hover:text-blue-300' target='_blank' onClick={(e) => e.stopPropagation()}>
+        <Link to='/legal/terms' className='text-blue-400 hover:text-blue-300' target='_blank' onClick={(e) => e.stopPropagation()}>
           {t("auth.agreements.terms")}
         </Link>
         {t("auth.agreements.comma")}
-        <Link to='/legal/privacy' className='mx-1 text-blue-400 underline hover:text-blue-300' target='_blank' onClick={(e) => e.stopPropagation()}>
+        <Link to='/legal/privacy' className='text-blue-400 hover:text-blue-300' target='_blank' onClick={(e) => e.stopPropagation()}>
           {t("auth.agreements.privacy")}
         </Link>{" "}
         {t("auth.agreements.and")}{" "}
-        <Link to='/legal/community' className='mx-1 text-blue-400 underline hover:text-blue-300' target='_blank' onClick={(e) => e.stopPropagation()}>
+        <Link to='/legal/community' className='text-blue-400 hover:text-blue-300' target='_blank' onClick={(e) => e.stopPropagation()}>
           {t("auth.agreements.community")}
         </Link>
       </label>
     </div>
   );
 
+  const identitySwitcher = (
+    <div className='mt-6 flex items-center justify-center gap-10 border-t border-white/10 pt-5 text-sm'>
+      {identitySwitcherOptions.map((option) => (
+        <button
+          key={option.key}
+          type='button'
+          onClick={() => handleIdentityChange(option.key)}
+          className='text-white/70 transition-colors hover:text-white'
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className='relative flex min-h-dvh items-start justify-center overflow-y-auto overflow-x-hidden px-4 py-6 sm:items-center sm:overflow-y-hidden sm:px-6 sm:py-10'>
       <WelcomeShaderBackground className='z-[1]' />
-      <div className='absolute inset-0 bg-black/50 z-[2]'></div>
+      <div className='absolute inset-0 z-[2] bg-black/55' />
 
-      <div className='relative z-10 my-auto w-full max-w-xl flex flex-col items-center'>
-        <Card className={`flex w-full flex-col rounded-3xl border border-blue-400/20 bg-blue-500/10 p-6 shadow-2xl backdrop-blur-md transition-[min-height,height] duration-300 sm:p-8 ${
-          needsWechatPhoneBind ? "min-h-[720px]" : "min-h-[560px]"
-        }`}>
-          {/* Logo 区域 */}
-          <div className='flex shrink-0 items-center justify-center sm:mb-5'>
-            <img src='/TAI-logo.png' alt='TAI' className='h-12 w-auto sm:h-14 pr-3.5 pb-1' />
+      <div className='relative z-10 my-auto flex w-full max-w-[420px] flex-col items-center gap-5'>
+        <Card
+          className={`flex w-full flex-col rounded-2xl border border-blue-400/35 bg-[#071428]/75 p-6 shadow-[0_0_32px_rgba(59,130,246,0.12)] backdrop-blur-xl transition-[min-height] duration-300 sm:p-8 ${
+            needsWechatPhoneBind ? "min-h-[720px]" : ""
+          }`}
+        >
+          {/* Logo */}
+          <div className='mx-auto flex shrink-0 items-center justify-center sm:mb-2'>
+            <img src='/TAI-logo.png' alt='TAI' className='h-12 w-auto pb-1 pr-3.5 sm:h-14' />
           </div>
 
-          {/* 欢迎登录 + 光标 */}
-          <div className='mb-6 flex shrink-0 items-center justify-center gap-3'>
+          {/* 标题 */}
+          <div className='mb-6 flex shrink-0 items-center justify-center gap-3 sm:mb-7'>
             <span className='typing-cursor-line-shorter' />
-            <p className='text-sm text-white'>{t("auth.login.welcome")}</p>
+            <p className='text-sm text-white/95'>{welcomeTitle}</p>
             <span className='typing-cursor-line-shorter' />
           </div>
 
           <div className='flex flex-1 justify-center'>
-            <div className='flex w-full max-w-xl flex-col'>
+            <div className='flex w-full flex-col'>
               {/* Tab 切换 */}
-              <div className='mb-6 flex shrink-0 items-center justify-center gap-12 sm:mb-8 sm:gap-16'>
-                {wechatLoginEnabled && (
+              <div className='mb-6 flex shrink-0 items-center justify-center gap-12 sm:mb-7 sm:gap-16'>
+                {showWechatTab && (
                   <button
+                    type='button'
                     className='flex flex-col items-center'
                     onClick={() => handleTabChange("wechat")}
                   >
-                    <span className={tab === "wechat" ? "text-sm font-semibold text-blue-400" : "text-sm text-white transition-all hover:text-white"}>
+                    <span className={tab === "wechat" ? "text-sm font-semibold text-blue-400" : "text-sm text-white/85 transition-all hover:text-white"}>
                       {t("auth.login.wechatTitle")}
                     </span>
-                    <span className={tab === "wechat" ? "mt-2 block h-0.5 w-full bg-blue-400 rounded-full" : "mt-2 block h-0.5 w-0"} />
+                    <span className={tab === "wechat" ? "mt-2 block h-0.5 w-full rounded-full bg-blue-400" : "mt-2 block h-0.5 w-0"} />
                   </button>
                 )}
                 <button
+                  type='button'
                   className='flex flex-col items-center'
                   onClick={() => handleTabChange("password")}
                 >
-                  <span className={tab === "password" ? "text-sm font-semibold text-blue-400" : "text-sm text-white transition-all hover:text-white"}>
+                  <span className={tab === "password" ? "text-sm font-semibold text-blue-400" : "text-sm text-white/85 transition-all hover:text-white"}>
                     {t("auth.login.passwordTab")}
                   </span>
-                  <span className={tab === "password" ? "mt-2 block h-0.5 w-full bg-blue-400 rounded-full" : "mt-2 block h-0.5 w-0"} />
+                  <span className={tab === "password" ? "mt-2 block h-0.5 w-full rounded-full bg-blue-400" : "mt-2 block h-0.5 w-0"} />
                 </button>
                 <button
+                  type='button'
                   className='flex flex-col items-center'
                   onClick={() => handleTabChange("sms")}
                 >
-                  <span className={tab === "sms" ? "text-sm font-semibold text-blue-400" : "text-sm text-white transition-all hover:text-white"}>
+                  <span className={tab === "sms" ? "text-sm font-semibold text-blue-400" : "text-sm text-white/85 transition-all hover:text-white"}>
                     {t("auth.login.smsTab")}
                   </span>
-                  <span className={tab === "sms" ? "mt-2 block h-0.5 w-full bg-blue-400 rounded-full" : "mt-2 block h-0.5 w-0"} />
+                  <span className={tab === "sms" ? "mt-2 block h-0.5 w-full rounded-full bg-blue-400" : "mt-2 block h-0.5 w-0"} />
                 </button>
               </div>
 
               <div className='flex-1 px-1 pb-1'>
-                {wechatLoginEnabled && tab === "wechat" ? (
+                {showWechatTab && tab === "wechat" ? (
                 <div className='w-full space-y-5 sm:space-y-6'>
                   <div className='flex flex-col items-center gap-4 text-white'>
                     {needsWechatPhoneBind ? (
@@ -639,12 +754,10 @@ export default function LoginPage() {
                             )}
                           </div>
 
-                          {agreementSection}
-
                           <Button
                             type='submit'
                             className='w-full bg-blue-500 hover:bg-blue-600 text-white border-transparent rounded-xl h-12 font-medium backdrop-blur-sm transition-all duration-200 disabled:opacity-70 hover:shadow-lg'
-                            disabled={wechatBindSubmitting || !agreeTerms}
+                            disabled={wechatBindSubmitting}
                           >
                             {wechatBindSubmitting ? (
                               <>
@@ -744,8 +857,9 @@ export default function LoginPage() {
                       {showPassword ? <Eye className='h-5 w-5' /> : <EyeOff className='h-5 w-5' />}
                     </button>
                   </div>
-                  {error && <div className='text-red-400 text-sm drop-shadow-md'>{error}</div>}
-                  {agreementSection}
+                  {error && <div className='text-sm text-red-400 drop-shadow-md'>{error}</div>}
+                  {enterpriseError && <div className='text-sm text-red-400 drop-shadow-md'>{enterpriseError}</div>}
+                  {agreementInsideCard && agreementSection}
                   <Button
                     type='submit'
                     className='w-full bg-blue-500 hover:bg-blue-600 text-white border-transparent rounded-xl h-12 font-medium backdrop-blur-sm transition-all duration-200 disabled:opacity-70 hover:shadow-lg'
@@ -762,13 +876,14 @@ export default function LoginPage() {
                   </Button>
                   <div className='flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4'>
                     <button
+                      type='button'
                       onClick={() => setIsForgotPasswordOpen(true)}
                       className='text-left text-white/80 transition-all duration-200 hover:text-white'
                     >
                       {t("auth.login.forgotPassword")}
                     </button>
                     <Link
-                      to='/auth/register'
+                      to={registerPath}
                       className='text-left text-white/80 transition-all duration-200 hover:text-white sm:text-right'
                     >
                       {t("auth.login.registerNow")}
@@ -813,8 +928,9 @@ export default function LoginPage() {
                     </button>
                   </div>
 
-                  {error && <div className='text-red-400 text-sm drop-shadow-md'>{error}</div>}
-                  {agreementSection}
+                  {error && <div className='text-sm text-red-400 drop-shadow-md'>{error}</div>}
+                  {enterpriseError && <div className='text-sm text-red-400 drop-shadow-md'>{enterpriseError}</div>}
+                  {agreementInsideCard && agreementSection}
                   <Button
                     type='submit'
                     className='w-full bg-blue-500 hover:bg-blue-600 text-white border-transparent rounded-xl h-12 font-medium backdrop-blur-sm transition-all duration-200 disabled:opacity-70 hover:shadow-lg'
@@ -832,13 +948,14 @@ export default function LoginPage() {
 
                   <div className='flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4'>
                     <button
+                      type='button'
                       onClick={() => setIsForgotPasswordOpen(true)}
                       className='text-left text-white/80 transition-all duration-200 hover:text-white'
                     >
                       {t("auth.login.forgotPassword")}
                     </button>
                     <Link
-                      to='/auth/register'
+                      to={registerPath}
                       className='text-left text-white/80 transition-all duration-200 hover:text-white sm:text-right'
                     >
                       {t("auth.login.registerNow")}
@@ -849,7 +966,11 @@ export default function LoginPage() {
               </div>
             </div>
           </div>
+
+          {identitySwitcher}
         </Card>
+
+        {!agreementInsideCard && <div className='w-full px-1'>{agreementSection}</div>}
       </div>
 
       <AgreementConsentModal

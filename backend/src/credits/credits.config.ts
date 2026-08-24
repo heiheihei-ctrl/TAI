@@ -1,6 +1,10 @@
-import { getSeedream5ProResolutionPricing } from './brand-credit-pricing';
+import {
+  getSeedream5ProResolutionPricing,
+  getSeedream5ResolutionPricing,
+} from './brand-credit-pricing';
 
-const seedream5ProResolutionPricing = getSeedream5ProResolutionPricing();
+const TAI_SEEDREAM5_PRO_RESOLUTION_PRICING = getSeedream5ProResolutionPricing('tai');
+const TAI_SEEDREAM5_RESOLUTION_PRICING = getSeedream5ResolutionPricing('tai');
 
 // 积分定价配置
 export const CREDIT_PRICING_CONFIG = {
@@ -344,20 +348,16 @@ export const CREDIT_PRICING_CONFIG = {
   'doubao-seedream-5-0-260128': {
     serviceName: 'Seedream 5.0 图像生成',
     provider: 'seedream5',
-    creditsPerCall: 30,
+    creditsPerCall: TAI_SEEDREAM5_RESOLUTION_PRICING['2K'],
     description: '使用 Seedream 5.0 生成图像',
-    resolutionPricing: {
-      '1K': 30,
-      '2K': 30,
-      '4K': 60,
-    },
+    resolutionPricing: TAI_SEEDREAM5_RESOLUTION_PRICING,
   },
   'doubao-seedream-5-0-pro-260628': {
     serviceName: 'Seedream 5.0 Pro 图像生成',
     provider: 'seedream5Pro',
-    creditsPerCall: seedream5ProResolutionPricing['2K'],
+    creditsPerCall: TAI_SEEDREAM5_PRO_RESOLUTION_PRICING['2K'],
     description: '使用 Seedream 5.0 Pro 生成图像（更强编辑与文字能力）',
-    resolutionPricing: seedream5ProResolutionPricing,
+    resolutionPricing: TAI_SEEDREAM5_PRO_RESOLUTION_PRICING,
   },
 } as const;
 

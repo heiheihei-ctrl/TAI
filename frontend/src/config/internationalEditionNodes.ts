@@ -122,8 +122,8 @@ export function isFreePaletteConfig(
   return true;
 }
 
-/** 国际版下面板节点是否允许显示 */
-export function isAllowedForInternationalEdition(
+/** 国际版 / 玲珑生态下面板节点是否允许显示（Seedream + Seedance + 免费） */
+export function isAllowedForSeedreamSeedancePalette(
   config?: Partial<NodeConfig> | null
 ): boolean {
   if (!config) return false;
@@ -131,4 +131,16 @@ export function isAllowedForInternationalEdition(
   if (isSeedancePaletteConfig(config)) return true;
   if (isFreePaletteConfig(config)) return true;
   return false;
+}
+
+/** @deprecated 使用 isAllowedForSeedreamSeedancePalette */
+export const isAllowedForInternationalEdition = isAllowedForSeedreamSeedancePalette;
+
+export function isAllowedNodeKeyForSeedreamSeedancePalette(
+  nodeKey?: string | null,
+  creditsPerCall = 0,
+): boolean {
+  if (!nodeKey) return false;
+  if (SEEDREAM_NODE_KEYS.has(nodeKey) || SEEDANCE_NODE_KEYS.has(nodeKey)) return true;
+  return isFreePaletteConfig({ nodeKey, creditsPerCall, serviceType: '' });
 }

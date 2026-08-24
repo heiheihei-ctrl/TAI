@@ -9,6 +9,11 @@ import {
   getInternationalMultiplier,
   isServiceTypeAvailableForEdition,
 } from './credits.config';
+import {
+  applyLinglongCreditMultiplier,
+  isLinglongPricedServiceType,
+  resolveDeploymentBrand,
+} from './brand-credit-pricing';
 import { TransactionType, ApiResponseStatus } from './dto/credits.dto';
 import { PricingResponseDto } from './dto/credits.dto';
 import { ReferralService } from '../referral/referral.service';
@@ -258,6 +263,7 @@ interface PreviewCreditsParams {
   requestParams?: any;
   outputImageCount?: number;
   edition?: 'domestic' | 'international';
+  deploymentBrand?: 'tai' | 'linglong';
 }
 
 interface CachedPreviewQuotePayload {
@@ -463,6 +469,8 @@ export class CreditsService {
       requestParams: params.requestParams ?? null,
       outputImageCount: params.outputImageCount ?? null,
       edition: params.edition ?? 'domestic',
+      deploymentBrand:
+        resolveDeploymentBrand(params.deploymentBrand ?? params.requestParams?.deploymentBrand),
     });
     const digest = createHash('sha256').update(signature).digest('hex');
     return `credits:preview:v2:${digest}`;
@@ -780,6 +788,13 @@ export class CreditsService {
       serviceName,
       effectiveRequestParams,
       params.outputImageCount,
+    );
+
+    const deploymentBrand = resolveDeploymentBrand(effectiveRequestParams?.deploymentBrand);
+    creditsToDeduct = applyLinglongCreditMultiplier(
+      creditsToDeduct,
+      params.serviceType,
+      deploymentBrand,
     );
 
     return {
@@ -3935,6 +3950,9 @@ export class CreditsService {
 
   async previewCredits(params: PreviewCreditsParams) {
     const edition = params.edition ?? 'domestic';
+    const deploymentBrand = resolveDeploymentBrand(
+      params.deploymentBrand ?? params.requestParams?.deploymentBrand,
+    );
 
     // 国内专属模型在国际版下不可用（仍然需要查账户余额信息）
     if (
@@ -3955,14 +3973,41 @@ export class CreditsService {
       };
     }
 
+    if (deploymentBrand === 'linglong' && !isLinglongPricedServiceType(params.serviceType)) {
+      const account = await this.getOrCreateAccount(params.userId);
+      return {
+        serviceName:
+          CREDIT_PRICING_CONFIG[params.serviceType as keyof typeof CREDIT_PRICING_CONFIG]
+            ?.serviceName ?? params.serviceType,
+        requestedProvider:
+          CREDIT_PRICING_CONFIG[params.serviceType as keyof typeof CREDIT_PRICING_CONFIG]
+            ?.provider ?? null,
+        creditsToDeduct: 0,
+        balance: account.balance,
+        sufficient: true,
+        edition,
+        available: false,
+        unavailableReason: 'linglong-restricted',
+      };
+    }
+
+    const mergedRequestParams = {
+      ...(params.requestParams ?? {}),
+      deploymentBrand,
+    };
+
     const account = await this.getOrCreateAccount(params.userId);
-    let cachedQuote = await this.getCachedPreviewQuote(params);
+    let cachedQuote = await this.getCachedPreviewQuote({
+      ...params,
+      requestParams: mergedRequestParams,
+      deploymentBrand,
+    });
 
     if (!cachedQuote) {
       const quote = await this.resolveEffectiveCreditsQuote({
         serviceType: params.serviceType,
         model: params.model,
-        requestParams: params.requestParams,
+        requestParams: mergedRequestParams,
         outputImageCount: params.outputImageCount,
       });
       cachedQuote = {
@@ -3984,7 +4029,10 @@ export class CreditsService {
             : null,
         effectiveRequestParams: quote.effectiveRequestParams ?? null,
       };
-      await this.setCachedPreviewQuote(params, cachedQuote);
+      await this.setCachedPreviewQuote(
+        { ...params, requestParams: mergedRequestParams, deploymentBrand },
+        cachedQuote,
+      );
     }
 
     let balance = account.balance;

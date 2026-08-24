@@ -31,7 +31,7 @@ export class TeamSeatPackageService {
     }
     const plan = TEAM_SEAT_PLANS[dto.cycle];
     const amount = plan.pricePerSeat * dto.seats;
-    const credits = plan.creditsPerSeat * dto.seats;
+    const credits = (amount / 100) * 8000;
 
     return this.paymentService.createOrder(requestingUserId, {
       amount,

@@ -23,7 +23,7 @@ type AuthState = {
   init: () => Promise<void>;
   login: (phone: string, password: string) => Promise<void>;
   loginWithSms: (phone: string, code: string) => Promise<void>;
-  register: (phone: string, password: string, confirmPassword: string, code: string, name: string, email?: string, inviteCode?: string) => Promise<void>;
+  register: (phone: string, password: string, confirmPassword: string, code: string, name: string, email?: string, inviteCode?: string, company?: string) => Promise<void>;
   logout: () => Promise<void>;
   forceLogout: (reason?: string) => void;
 };
@@ -90,10 +90,10 @@ export const useAuthStore = create<AuthState>((set) => ({
       throw e;
     }
   },
-  register: async (phone, password, confirmPassword, code, name, email, inviteCode) => {
+  register: async (phone, password, confirmPassword, code, name, email, inviteCode, company) => {
     set({ loading: true, error: null });
     try {
-      await authApi.register({ phone, password, confirmPassword, code, name, email, inviteCode });
+      await authApi.register({ phone, password, confirmPassword, code, name, email, inviteCode, company });
       set({ loading: false });
     } catch (e: any) {
       set({ loading: false, error: e?.message || '注册失败' });

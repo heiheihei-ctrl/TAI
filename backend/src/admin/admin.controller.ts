@@ -12,6 +12,7 @@ import {
   Request,
   ForbiddenException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { FastifyReply, FastifyRequest } from 'fastify';
@@ -179,6 +180,29 @@ export class AdminController {
       search: query.search,
       sortBy: query.sortBy,
       sortOrder: query.sortOrder,
+    });
+  }
+
+  @Post('users')
+  @ApiOperation({ summary: '手动添加用户' })
+  async createUser(
+    @Request() req: AuthenticatedRequest,
+    @Body() dto: { phone: string; password?: string; name?: string },
+  ) {
+    this.checkAdmin(req, 'users:list');
+    if (!dto.phone) {
+      throw new BadRequestException('手机号不能为空');
+    }
+    const bcrypt = require('bcryptjs');
+    const passwordHash = await bcrypt.hash(dto.password || 'tai2026', 10);
+    const existing = await this.usersService.findByPhone(dto.phone);
+    if (existing) {
+      throw new BadRequestException('手机号已被使用');
+    }
+    return this.usersService.create({ 
+      phone: dto.phone, 
+      passwordHash, 
+      name: dto.name || `用户_${dto.phone.substring(dto.phone.length - 4)}` 
     });
   }
 

@@ -846,7 +846,7 @@ function SubscriptionTab({ teamId, myRole }: { teamId: string; myRole?: string }
 
   const plan = PLANS[cycle];
   const totalAmount = plan.pricePerSeat * seats;
-  const totalCredits = plan.creditsPerSeat * seats;
+  const totalCredits = (totalAmount / 100) * 8000;
 
   const loadSummary = async () => {
     setSummaryLoading(true);
@@ -1019,7 +1019,7 @@ function SubscriptionTab({ teamId, myRole }: { teamId: string; myRole?: string }
                 <span className="font-semibold text-blue-700">+{totalCredits.toLocaleString()} 积分</span>
               </div>
               <div className="flex justify-between text-slate-400 text-xs mt-1">
-                <span>{plan.creditsPerSeat.toLocaleString()} 积分/席位 × {seats} 席位</span>
+                <span>100元送8000积分</span>
                 <span>有效期 {plan.days} 天</span>
               </div>
             </div>
