@@ -1,7 +1,8 @@
 import axios, { AxiosRequestConfig, AxiosResponse, Method } from 'axios';
 import { SocksProxyAgent } from 'socks-proxy-agent';
 
-const DEFAULT_TOAPIS_BASE = 'https://toapis.com/v1';
+// const DEFAULT_TOAPIS_BASE = 'https://toapis.com/v1';
+const DEFAULT_TOAPIS_BASE = 'https://toapis.xyz/v1';
 
 let cachedProxyUrl: string | null | undefined;
 let cachedAgent: SocksProxyAgent | null = null;
