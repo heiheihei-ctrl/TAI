@@ -47,6 +47,8 @@ type Props = {
     thumbnail?: string; // 缩略图，用于节点显示
     responseText?: string;
     title?: string;
+    nodeConfigNameZh?: string;
+    nodeConfigNameEn?: string;
     enableWebSearch?: boolean;
     error?: string;
     aspectRatio?: '1:1' | '2:3' | '3:2' | '3:4' | '4:3' | '4:5' | '5:4' | '9:16' | '16:9' | '21:9';
@@ -574,13 +576,13 @@ function GenerateProNodeInner({ id, data, selected }: Props) {
     if (previewOverrideAssetId) return previewOverrideAssetUrl || '';
     return buildImageSrc(previewOverrideValue) || '';
   }, [previewOverrideAssetId, previewOverrideAssetUrl, previewOverrideValue]);
-  const normalizedTitle = React.useMemo(
-    () =>
-      typeof data.title === 'string' && data.title.trim().length > 0
-        ? data.title.trim()
-        : DEFAULT_NODE_TITLE,
-    [data.title]
-  );
+  const normalizedTitle = React.useMemo(() => {
+    const custom = typeof data.title === 'string' ? data.title.trim() : '';
+    const configZh = typeof data.nodeConfigNameZh === 'string' ? data.nodeConfigNameZh.trim() : '';
+    const configEn = typeof data.nodeConfigNameEn === 'string' ? data.nodeConfigNameEn.trim() : '';
+    if (custom && custom !== 'Agent' && custom !== '自定义节点' && custom !== configZh) return custom;
+    return configEn || configZh || custom || 'Agent';
+  }, [data.title, data.nodeConfigNameZh, data.nodeConfigNameEn]);
   const [title, setTitle] = React.useState<string>(normalizedTitle);
   const [titleDraft, setTitleDraft] = React.useState<string>(normalizedTitle);
   const [isEditingTitle, setIsEditingTitle] = React.useState(false);

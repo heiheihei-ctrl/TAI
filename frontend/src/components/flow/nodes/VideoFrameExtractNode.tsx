@@ -13,6 +13,7 @@ import {
   useFlowNodeDarkTheme,
 } from './flowNodeDarkTheme';
 import FlowResizableNodeShell from './FlowResizableNodeShell';
+import { useFlowNodeConfigTitle } from '../utils/nodeConfigTitle';
 
 type FrameData = {
   index: number;
@@ -120,6 +121,7 @@ const resolveVideoUrlFromNode = (node?: Node<any> | null): string | undefined =>
 
 function VideoFrameExtractNodeInner({ id, data, selected = false }: Props) {
   const { lt } = useLocaleText();
+  const headerTitle = useFlowNodeConfigTitle(data, '视频抽帧节点', 'Video Frame Extract');
   const isFlowDark = useFlowNodeDarkTheme();
   const { status = 'idle', error, frames = [], totalFrames = 0 } = data;
   const [hover, setHover] = React.useState<string | null>(null);
@@ -418,7 +420,7 @@ function VideoFrameExtractNodeInner({ id, data, selected = false }: Props) {
     >
       {/* 标题栏 */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ fontWeight: 600, color: shell.color }}>Video Frame Extract</div>
+        <div style={{ fontWeight: 600, color: shell.color }}>{headerTitle}</div>
         <button
           onClick={extractFrames}
           disabled={!canExtract}

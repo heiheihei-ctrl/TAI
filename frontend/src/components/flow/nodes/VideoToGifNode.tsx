@@ -5,6 +5,7 @@ import { fetchWithAuth } from '@/services/authFetch';
 import { useProjectContentStore } from '@/stores/projectContentStore';
 import { useLocaleText } from '@/utils/localeText';
 import FlowResizableNodeShell from './FlowResizableNodeShell';
+import { useFlowNodeConfigTitle } from '../utils/nodeConfigTitle';
 
 type Props = {
   id: string;
@@ -72,6 +73,7 @@ const resolveVideoUrlFromNode = (node?: Node<any> | null): string | undefined =>
 
 function VideoToGifNodeInner({ id, data, selected = false }: Props) {
   const { lt } = useLocaleText();
+  const headerTitle = useFlowNodeConfigTitle(data, '视频转GIF节点', 'Video to GIF');
   const projectId = useProjectContentStore((s) => s.projectId);
   const [hover, setHover] = React.useState(false);
 
@@ -292,7 +294,7 @@ function VideoToGifNodeInner({ id, data, selected = false }: Props) {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ fontWeight: 600 }}>Video to GIF</div>
+        <div style={{ fontWeight: 600 }}>{headerTitle}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {gifUrl && (
             <a

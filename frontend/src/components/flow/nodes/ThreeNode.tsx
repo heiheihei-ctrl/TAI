@@ -15,6 +15,7 @@ import { canvasToDataUrl } from '@/utils/imageConcurrency';
 import { useLocaleText } from '@/utils/localeText';
 import FlowResizableNodeShell from './FlowResizableNodeShell';
 import { resolveFlowNodeSendAnchorClient } from '../utils/flowNodeSendAnchor';
+import { useFlowNodeConfigTitle } from '../utils/nodeConfigTitle';
 
 type Props = {
   id: string;
@@ -68,6 +69,7 @@ const PRESET_MODELS: PresetModel[] = [
 
 function ThreeNodeInner({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
+  const headerTitle = useFlowNodeConfigTitle(data, '三维节点', '3D');
   const isPathTracingForced = Boolean(data.forcePathTracing);
   const minNodeWidth = 520;
   const minNodeHeight = 280;
@@ -1068,7 +1070,6 @@ function ThreeNodeInner({ id, data, selected }: Props) {
     }
   }, []);
 
-  const headerTitle = data.nodeTitle || '3D';
   const pathTracerBadgeText = pathTracerStatus === 'ready'
     ? 'PT Ready'
     : pathTracerStatus === 'loading'

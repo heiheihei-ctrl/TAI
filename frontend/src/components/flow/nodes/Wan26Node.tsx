@@ -12,6 +12,7 @@ import NodeSelect from "./NodeSelect";
 import { useNodeRunCredits } from "../hooks/useNodeRunCredits";
 import { useBackendCreditsPreview } from "../hooks/useBackendCreditsPreview";
 import FlowResizableNodeShell from "./FlowResizableNodeShell";
+import { useFlowNodeConfigTitle } from "../utils/nodeConfigTitle";
 
 type VideoHistoryItem = {
   id: string;
@@ -87,6 +88,7 @@ const isSupportedAudioFile = (file: File): boolean => {
 
 function Wan26Node({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
+  const headerTitle = useFlowNodeConfigTitle(data, 'Wan2.6', 'Wan2.6');
   const projectId = useProjectContentStore((s) => s.projectId);
   const rf = useReactFlow();
   const borderColor = selected ? "#2563eb" : "#e5e7eb";
@@ -142,8 +144,6 @@ function Wan26Node({ id, data, selected }: Props) {
       clearInterval(interval);
     };
   }, [rf, id]);
-
-  const nodeTitle = "Wan2.6";
 
   // 工具函数
   const sanitizeMediaUrl = React.useCallback((url?: string | null) => {
@@ -615,7 +615,7 @@ function Wan26Node({ id, data, selected }: Props) {
         <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
           <Video size={18} />
           <span>
-            {nodeTitle}
+            {headerTitle}
           </span>
         </div>
         <div style={{ display: "flex", gap: 6 }}>

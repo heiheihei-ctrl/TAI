@@ -25,6 +25,8 @@ type Props = {
   id: string;
   data: {
     title?: string;
+    nodeConfigNameZh?: string;
+    nodeConfigNameEn?: string;
     status?: TextChatStatus;
     error?: string;
     responseText?: string;
@@ -184,9 +186,15 @@ const TextChatNode: React.FC<Props> = ({ id, data, selected }) => {
   });
   const resolvedRunCredits = backendCredits ?? data.creditsPerCall;
 
-  const normalizedTitle = typeof data.title === 'string' && data.title.trim().length
-    ? data.title.trim()
-    : DEFAULT_TITLE;
+  const normalizedTitle = React.useMemo(() => {
+    const custom = typeof data.title === 'string' ? data.title.trim() : '';
+    const configZh = typeof data.nodeConfigNameZh === 'string' ? data.nodeConfigNameZh.trim() : '';
+    const configEn = typeof data.nodeConfigNameEn === 'string' ? data.nodeConfigNameEn.trim() : '';
+    if (custom && custom !== DEFAULT_TITLE && custom !== '纯文本交互节点' && custom !== '文字对话' && custom !== configZh) {
+      return custom;
+    }
+    return configEn || configZh || custom || DEFAULT_TITLE;
+  }, [data.title, data.nodeConfigNameZh, data.nodeConfigNameEn]);
   const [title, setTitle] = React.useState<string>(normalizedTitle);
   const [titleDraft, setTitleDraft] = React.useState<string>(normalizedTitle);
   const [isEditingTitle, setIsEditingTitle] = React.useState(false);

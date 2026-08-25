@@ -22,6 +22,7 @@ import { flowImagePreviewWell, flowLetterboxBackground } from './flowNodeDarkThe
 import RunCreditBadge from './RunCreditBadge';
 import FlowResizableNodeShell from './FlowResizableNodeShell';
 import { useImageNodeCreditsPreview } from '../hooks/useImageNodeCreditsPreview';
+import { useFlowNodeConfigTitle } from '../utils/nodeConfigTitle';
 
 type MidjourneyMode = 'FAST' | 'RELAX';
 type AdvancedMidjourneyType = 'midjourneyV7' | 'niji7';
@@ -181,7 +182,8 @@ function MidjourneyNodeInner({ id, type, data, selected }: Props) {
   const accentSoft = isNiji ? '#fdf2f8' : '#faf5ff';
   const accentBorder = isNiji ? '#f9a8d4' : '#e9d5ff';
   const isDarkTheme = useAIChatStore((state) => state.chatTheme === 'black');
-  const title = isAdvanced ? (isNiji ? 'Niji 7' : 'Midjourney V7') : 'Midjourney';
+  const fallbackTitle = isAdvanced ? (isNiji ? 'Niji 7' : 'Midjourney V7') : 'Midjourney';
+  const title = useFlowNodeConfigTitle(data, fallbackTitle, fallbackTitle);
   const { status, error } = data;
   const rawFullValue = data.imageUrl || data.imageData;
   const fullAssetId = React.useMemo(() => parseFlowImageAssetRef(rawFullValue), [rawFullValue]);

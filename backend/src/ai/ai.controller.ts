@@ -64,6 +64,7 @@ import { ModelRoutingService } from './services/model-routing.service';
 import { MinimaxSpeechService } from './services/minimax-speech.service';
 import { MinimaxMusicService } from './services/minimax-music.service';
 import { TencentSpeechService } from './services/tencent-speech.service';
+import { TencentAsrAuthService } from './services/tencent-asr-auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { applyWatermarkToBase64 } from './services/watermark.util';
 import { VideoWatermarkService } from './services/video-watermark.service';
@@ -409,6 +410,7 @@ export class AiController {
     private readonly modelRoutingService: ModelRoutingService,
     private readonly minimaxSpeechService: MinimaxSpeechService,
     private readonly tencentSpeechService: TencentSpeechService,
+    private readonly tencentAsrAuthService: TencentAsrAuthService,
     private readonly minimaxMusicService: MinimaxMusicService,
     private readonly prisma: PrismaService,
     private readonly oss: OssService,
@@ -7297,6 +7299,16 @@ export class AiController {
       throw new BadRequestException('taskId 参数不能为空');
     }
     return this.tencentSpeechService.queryAsyncSpeechTask(normalizedTaskId);
+  }
+
+  @Get('tencent-asr/config')
+  getTencentAsrConfig() {
+    return this.tencentAsrAuthService.getPublicConfig();
+  }
+
+  @Post('tencent-asr/sign')
+  signTencentAsr(@Body() body: { signStr?: string }) {
+    return this.tencentAsrAuthService.sign(body?.signStr || '');
   }
 
   @Post('minimax-speech')

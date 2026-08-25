@@ -18,6 +18,7 @@ import {
   useFlowNodeDarkTheme,
 } from './flowNodeDarkTheme';
 import { useFlowRenderMode } from '../FlowRenderModeContext';
+import { useFlowNodeConfigTitle } from '../utils/nodeConfigTitle';
 import FlowResizableNodeShell from './FlowResizableNodeShell';
 
 type ImageItem = {
@@ -200,6 +201,7 @@ function FlowImagePreview({ item, alt }: { item: ImageItem; alt: string }) {
 
 function ImageGridNodeInner({ id, data, selected = false }: Props) {
   const { lt } = useLocaleText();
+  const headerTitle = useFlowNodeConfigTitle(data, '图片拼合节点', 'Image Grid');
   const { status = 'idle', error, images = [], outputImage } = data;
   const [hover, setHover] = React.useState<string | null>(null);
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
@@ -735,7 +737,7 @@ function ImageGridNodeInner({ id, data, selected = false }: Props) {
     >
       {/* 标题栏 */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ fontWeight: 600, color: shell.color }}>Image Grid</div>
+        <div style={{ fontWeight: 600, color: shell.color }}>{headerTitle}</div>
         <button
           onClick={combineImages}
           disabled={!canCombine}

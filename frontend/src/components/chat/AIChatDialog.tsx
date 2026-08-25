@@ -27,6 +27,7 @@ import {
 // 比例选择改为自定义浮层（定位到对话框上方）
 import ImagePreviewModal from "@/components/ui/ImagePreviewModal";
 import InlineImageMentionEditor from "@/components/common/InlineImageMentionEditor";
+import SpeechToTextButton from "@/components/common/SpeechToTextButton";
 import SmartImage from "@/components/ui/SmartImage";
 import SmoothSmartImage from "@/components/ui/SmoothSmartImage";
 import { useAIChatStore, getTextModelForProvider } from "@/stores/aiChatStore";
@@ -3670,6 +3671,13 @@ const AIChatDialog: React.FC = () => {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
+
+                <SpeechToTextButton
+                  value={currentInput}
+                  onChange={setCurrentInput}
+                  disabled={generationStatus.isGenerating}
+                  onError={(message) => showToast(message, "error")}
+                />
               </div>
 
               {/* 长宽比选择按钮 */}
@@ -3681,7 +3689,7 @@ const AIChatDialog: React.FC = () => {
                   size='sm'
                   variant='outline'
                   className={cn(
-                    "absolute right-52 bottom-2 h-7 p-0 rounded-full transition-all duration-200",
+                    "absolute right-56 bottom-2 h-7 p-0 rounded-full transition-all duration-200",
                     "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
                     aspectRatio
                       ? isBlackTheme
@@ -3713,7 +3721,7 @@ const AIChatDialog: React.FC = () => {
                   size='sm'
                   variant='outline'
                   className={cn(
-                    "absolute right-28 bottom-2 h-7 p-0 rounded-full transition-all duration-200",
+                    "absolute right-32 bottom-2 h-7 p-0 rounded-full transition-all duration-200",
                     "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
                     videoAspectRatio
                       ? isBlackTheme
@@ -3749,7 +3757,7 @@ const AIChatDialog: React.FC = () => {
                   size='sm'
                   variant='outline'
                   className={cn(
-                    "absolute right-20 bottom-2 h-7 w-7 p-0 rounded-full transition-all duration-200 text-xs",
+                    "absolute right-24 bottom-2 h-7 w-7 p-0 rounded-full transition-all duration-200 text-xs",
                     "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
                     videoDurationSeconds
                       ? isBlackTheme
@@ -3784,7 +3792,7 @@ const AIChatDialog: React.FC = () => {
                   size='sm'
                   variant='outline'
                   className={cn(
-                    "absolute right-44 bottom-2 h-7 w-7 p-0 rounded-full transition-all duration-200 text-xs",
+                    "absolute right-48 bottom-2 h-7 w-7 p-0 rounded-full transition-all duration-200 text-xs",
                     "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
                     imageSize
                       ? isBlackTheme
@@ -3813,7 +3821,7 @@ const AIChatDialog: React.FC = () => {
                   size='sm'
                   variant='outline'
                   className={cn(
-                    "absolute right-36 bottom-2 h-7 w-7 p-0 rounded-full transition-all duration-200",
+                    "absolute right-40 bottom-2 h-7 w-7 p-0 rounded-full transition-all duration-200",
                     "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
                     thinkingLevel
                       ? isBlackTheme
@@ -4086,7 +4094,7 @@ const AIChatDialog: React.FC = () => {
                   size='sm'
                   variant='outline'
                   className={cn(
-                    "absolute right-28 bottom-2 h-7 w-7 p-0 rounded-full transition-all duration-200",
+                    "absolute right-32 bottom-2 h-7 w-7 p-0 rounded-full transition-all duration-200",
                     "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
                     !generationStatus.isGenerating
                       ? enableWebSearch
@@ -4114,7 +4122,7 @@ const AIChatDialog: React.FC = () => {
                   data-chat-secondary-action='true'
                   disabled={autoOptimizing}
                   className={cn(
-                    "absolute right-20 bottom-2 h-7 w-7 p-0 rounded-full transition-all duration-200",
+                    "absolute right-24 bottom-2 h-7 w-7 p-0 rounded-full transition-all duration-200",
                     "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
                     autoOptimizeEnabled
                       ? isBlackTheme

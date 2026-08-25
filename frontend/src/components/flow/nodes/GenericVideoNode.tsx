@@ -570,16 +570,11 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
     ? PROVIDER_CONFIG.kling
     : PROVIDER_CONFIG[provider] || PROVIDER_CONFIG["kling"];
   const displayTitle = React.useMemo(() => {
-    const zhTitle = typeof data.nodeConfigNameZh === "string" && data.nodeConfigNameZh.trim()
-      ? data.nodeConfigNameZh.trim()
-      : providerInfo.zh;
     const enTitle = typeof data.nodeConfigNameEn === "string" && data.nodeConfigNameEn.trim()
       ? data.nodeConfigNameEn.trim()
       : providerInfo.name;
-    const normalizedZhTitle = stripVideoGenerationSuffix(zhTitle) || providerInfo.zh;
-    const normalizedEnTitle = stripVideoGenerationSuffix(enTitle) || providerInfo.name;
-    return isZh ? normalizedZhTitle : normalizedEnTitle;
-  }, [data.nodeConfigNameEn, data.nodeConfigNameZh, isZh, providerInfo.name, providerInfo.zh]);
+    return stripVideoGenerationSuffix(enTitle) || providerInfo.name;
+  }, [data.nodeConfigNameEn, providerInfo.name]);
   const supportedModels = React.useMemo(
     () =>
       Array.isArray(nodeConfigMetadata.supportedModels)

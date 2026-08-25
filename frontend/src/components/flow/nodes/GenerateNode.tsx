@@ -18,6 +18,7 @@ import RunCreditBadge from "./RunCreditBadge";
 import NodeSelect from "./NodeSelect";
 import { useImageNodeCreditsPreview } from "../hooks/useImageNodeCreditsPreview";
 import { useFlowRenderMode } from "../FlowRenderModeContext";
+import { useFlowNodeConfigTitle } from "../utils/nodeConfigTitle";
 import FlowResizableNodeShell from "./FlowResizableNodeShell";
 import {
   getFlowModelProviderMode,
@@ -516,6 +517,7 @@ function InputImageThumb({
 
 function GenerateNodeInner({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
+  const headerTitle = useFlowNodeConfigTitle(data, '生成节点', 'Generate');
   const onboardingActive = useFlowOnboardingStore((s) => s.active);
   const onboardingTargetId = useFlowOnboardingStore((s) => s.targetNodeId);
   const onboardingTrack = useFlowOnboardingStore((s) => s.track);
@@ -867,7 +869,7 @@ function GenerateNodeInner({ id, data, selected }: Props) {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ fontWeight: 600 }}>Generate</div>
+          <div style={{ fontWeight: 600 }}>{headerTitle}</div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button

@@ -9,6 +9,7 @@ import RunCreditBadge from "./RunCreditBadge";
 import { useNodeRunCredits } from "../hooks/useNodeRunCredits";
 import { useBackendCreditsPreview } from "../hooks/useBackendCreditsPreview";
 import FlowResizableNodeShell from "./FlowResizableNodeShell";
+import { useFlowNodeConfigTitle } from "../utils/nodeConfigTitle";
 
 type VideoHistoryItem = {
   id: string;
@@ -100,6 +101,7 @@ const computeCaps = (model: HappyhorseModel, referenceCount: number): ModelCaps 
 
 function HappyhorseR2VNodeInner({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
+  const headerTitle = useFlowNodeConfigTitle(data, '快乐马', 'HappyHorse');
   const [hover, setHover] = React.useState<string | null>(null);
   const [previewAspect, setPreviewAspect] = React.useState<string>("16/9");
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
@@ -578,7 +580,7 @@ function HappyhorseR2VNodeInner({ id, data, selected }: Props) {
           }}
         >
           <Video size={18} />
-          <span>{lt("快乐马", "HappyHorse")}</span>
+          <span>{headerTitle}</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <button

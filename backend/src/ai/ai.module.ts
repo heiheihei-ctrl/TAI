@@ -30,6 +30,7 @@ import { Seedream5Service } from './services/seedream5.service';
 import { MinimaxSpeechService } from './services/minimax-speech.service';
 import { MinimaxMusicService } from './services/minimax-music.service';
 import { TencentSpeechService } from './services/tencent-speech.service';
+import { TencentAsrAuthService } from './services/tencent-asr-auth.service';
 import { TencentVodAigcService } from './services/tencent-vod-aigc.service';
 import { ModelRoutingService } from './services/model-routing.service';
 import { UpstreamImageUrlService } from './services/upstream-image-url.service';
@@ -72,6 +73,7 @@ import { ContentModerationModule } from '../content-moderation/content-moderatio
     MinimaxSpeechService,
     MinimaxMusicService,
     TencentSpeechService,
+    TencentAsrAuthService,
     TencentVodAigcService,
     ModelRoutingService,
     UpstreamImageUrlService,

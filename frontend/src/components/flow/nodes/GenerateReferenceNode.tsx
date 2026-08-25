@@ -14,6 +14,7 @@ import { useLocaleText } from "@/utils/localeText";
 import { useFlowOnboardingStore } from "@/stores/flowOnboardingStore";
 import { flowImagePreviewWell, flowLetterboxBackground, useFlowNodeDarkTheme } from "./flowNodeDarkTheme";
 import { explainGenerateReferenceImageError } from "@/utils/flowGenerateRefErrors";
+import { useFlowNodeConfigTitle } from "../utils/nodeConfigTitle";
 import RunCreditBadge from "./RunCreditBadge";
 import { useAIChatStore } from "@/stores/aiChatStore";
 import { useImageNodeCreditsPreview } from "../hooks/useImageNodeCreditsPreview";
@@ -50,6 +51,7 @@ const buildImageSrc = (value?: string): string | undefined => {
 
 function GenerateReferenceNodeInner({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
+  const headerTitle = useFlowNodeConfigTitle(data, '参考图生成节点', 'Generate Refer');
   const onboardingActive = useFlowOnboardingStore((s) => s.active);
   const onboardingTargetId = useFlowOnboardingStore((s) => s.targetNodeId);
   const onboardingTrack = useFlowOnboardingStore((s) => s.track);
@@ -210,7 +212,7 @@ function GenerateReferenceNodeInner({ id, data, selected }: Props) {
           justifyContent: "space-between",
         }}
       >
-        <div style={{ fontWeight: 600 }}>Generate Refer</div>
+        <div style={{ fontWeight: 600 }}>{headerTitle}</div>
         <div style={{ display: "flex", gap: 6 }}>
           <button
             onClick={onRun}

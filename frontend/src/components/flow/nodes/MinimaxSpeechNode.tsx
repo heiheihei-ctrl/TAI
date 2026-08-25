@@ -16,6 +16,7 @@ import {
 } from './flowNodeDarkTheme';
 import RunCreditBadge from './RunCreditBadge';
 import FlowResizableNodeShell from './FlowResizableNodeShell';
+import { useFlowNodeConfigTitle } from '../utils/nodeConfigTitle';
 
 const VOICE_OPTIONS = [
   { value: 'echo', zh: 'echo（男声青年-清色）', en: 'echo (male youth clear)' },
@@ -88,6 +89,7 @@ type Props = {
 
 function MinimaxSpeechNode({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
+  const headerTitle = useFlowNodeConfigTitle(data, 'MiniMax语音合成', 'MiniMax Speech');
   const isFlowDark = useFlowNodeDarkTheme();
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [downloadingId, setDownloadingId] = React.useState<string | null>(null);
@@ -278,7 +280,7 @@ function MinimaxSpeechNode({ id, data, selected }: Props) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
           <Mic size={20} color="#8b5cf6" strokeWidth={2.2} />
           <span>
-            {lt('MiniMax 语音合成', 'MiniMax Speech')}
+            {headerTitle}
             <RunCreditBadge credits={data.creditsPerCall} inline />
           </span>
         </div>

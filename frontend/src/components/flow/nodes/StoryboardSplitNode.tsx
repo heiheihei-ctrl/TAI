@@ -2,6 +2,7 @@ import React from 'react';
 import { Handle, Position, useReactFlow, useStore, useUpdateNodeInternals, type ReactFlowState, type Edge } from 'reactflow';
 import { useLocaleText } from '@/utils/localeText';
 import FlowResizableNodeShell from './FlowResizableNodeShell';
+import { useFlowNodeConfigTitle } from '../utils/nodeConfigTitle';
 import {
   flowNodeControlField,
   flowNodeMutedWellBackground,
@@ -127,6 +128,7 @@ function extractSegmentsByMatches(text: string, matches: RegExpMatchArray[]): st
 
 function StoryboardSplitNodeInner({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
+  const headerTitle = useFlowNodeConfigTitle(data, '分镜拆分节点', 'Split');
   const isFlowDark = useFlowNodeDarkTheme();
   const rf = useReactFlow();
   const updateNodeInternals = useUpdateNodeInternals();
@@ -401,7 +403,7 @@ function StoryboardSplitNodeInner({ id, data, selected }: Props) {
     >
       {/* 标题栏 */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <div style={{ fontWeight: 600, color: shell.color }}>Split</div>
+        <div style={{ fontWeight: 600, color: shell.color }}>{headerTitle}</div>
         <div style={{ display: 'flex', gap: 6 }}>
           <button
             onClick={handleGeneratePromptNodes}

@@ -14,6 +14,7 @@ import {
 import { useImeSafeTextValue } from '../hooks/useImeSafeTextInput';
 import { useBackendCreditsPreview } from '../hooks/useBackendCreditsPreview';
 import FlowResizableNodeShell from './FlowResizableNodeShell';
+import { useFlowNodeConfigTitle } from '../utils/nodeConfigTitle';
 
 type Props = {
   id: string;
@@ -51,6 +52,7 @@ const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve
 
 function VideoAnalyzeNodeInner({ id, data, selected = false }: Props) {
   const { lt } = useLocaleText();
+  const headerTitle = useFlowNodeConfigTitle(data, '视频分析节点', 'Video Analysis');
   const isFlowDark = useFlowNodeDarkTheme();
   const aiProvider = useAIChatStore((state) => state.aiProvider);
   const bananaImageRoute = useAIChatStore((state) => state.bananaImageRoute);
@@ -334,7 +336,7 @@ function VideoAnalyzeNodeInner({ id, data, selected = false }: Props) {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ fontWeight: 600, color: shell.color }}>{lt('视频分析', 'Video Analysis')}</div>
+        <div style={{ fontWeight: 600, color: shell.color }}>{headerTitle}</div>
         <button
           className="tanva-video-analyze-run-btn run-btn-with-credit"
           onClick={onAnalyze}

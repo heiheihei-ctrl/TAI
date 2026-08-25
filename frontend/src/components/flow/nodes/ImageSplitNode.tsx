@@ -28,6 +28,7 @@ import {
 } from './flowNodeDarkTheme';
 import FlowResizableNodeShell from './FlowResizableNodeShell';
 import { useFlowRenderMode } from '../FlowRenderModeContext';
+import { useFlowNodeConfigTitle } from '../utils/nodeConfigTitle';
 
 // 类型定义
 type SplitRectItem = {
@@ -1187,6 +1188,7 @@ function SplitRectPreview({
 
 function ImageSplitNodeInner({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
+  const headerTitle = useFlowNodeConfigTitle(data, '图片分割节点', 'Image Split');
   const isFlowDark = useFlowNodeDarkTheme();
   const rf = useReactFlow();
   const updateNodeInternals = useUpdateNodeInternals();
@@ -2420,7 +2422,7 @@ function ImageSplitNodeInner({ id, data, selected }: Props) {
     >
       {/* 标题栏 */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <div style={{ fontWeight: 600, color: shell.color }}>Image Split</div>
+        <div style={{ fontWeight: 600, color: shell.color }}>{headerTitle}</div>
         <div style={{ display: 'flex', gap: 6 }}>
           <button
             onClick={handleGenerateImageNodes}

@@ -7,10 +7,18 @@ import { useFlowOnboardingStore, getFlowOnboardingSteps } from '@/stores/flowOnb
 import { useCanvasStore } from '@/stores';
 import FlowResizableNodeShell from './FlowResizableNodeShell';
 import InlineImageMentionEditor from '@/components/common/InlineImageMentionEditor';
+import SpeechToTextButton from '@/components/common/SpeechToTextButton';
 
 type Props = {
   id: string;
-  data: { text?: string; boxW?: number; boxH?: number; title?: string };
+  data: {
+    text?: string;
+    boxW?: number;
+    boxH?: number;
+    title?: string;
+    nodeConfigNameZh?: string;
+    nodeConfigNameEn?: string;
+  };
   selected?: boolean;
 };
 
@@ -50,9 +58,17 @@ function TextPromptNodeInner({ id, data, selected }: Props) {
 
   const borderColor = selected ? '#2563eb' : '#e5e7eb';
   const boxShadow = selected ? '0 0 0 2px rgba(37,99,235,0.12)' : '0 1px 2px rgba(0,0,0,0.04)';
-  const normalizedTitle = typeof data.title === 'string' && data.title.trim().length
-    ? data.title.trim()
-    : DEFAULT_TITLE;
+  const configZh =
+    (typeof data.nodeConfigNameZh === 'string' && data.nodeConfigNameZh.trim()) || '';
+  const configTitle =
+    (typeof data.nodeConfigNameEn === 'string' && data.nodeConfigNameEn.trim()) ||
+    configZh ||
+    '';
+  const customTitle =
+    typeof data.title === 'string' && data.title.trim().length ? data.title.trim() : '';
+  const normalizedTitle = customTitle && customTitle !== configZh
+    ? customTitle
+    : (configTitle || DEFAULT_TITLE);
   const [title, setTitle] = React.useState<string>(normalizedTitle);
   const [titleDraft, setTitleDraft] = React.useState<string>(normalizedTitle);
   const [isEditingTitle, setIsEditingTitle] = React.useState(false);
@@ -232,7 +248,7 @@ function TextPromptNodeInner({ id, data, selected }: Props) {
       data={data}
       selected={selected}
       nodeType="textPrompt"
-      defaultHeight={104}
+      defaultHeight={132}
       minWidth={180}
       minHeight={88}
       heightMode="fixed"
@@ -308,7 +324,14 @@ function TextPromptNodeInner({ id, data, selected }: Props) {
             ? 'text-prompt-input'
             : undefined
         }
-        style={{ display: 'flex', flex: 1, minHeight: 0, position: 'relative' }}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          flex: 1,
+          minHeight: 0,
+          position: 'relative',
+          gap: 6,
+        }}
       >
       {onboardingInputHint ? (
         <div className="flow-onboarding-input-hint" aria-hidden="true">
@@ -365,6 +388,26 @@ function TextPromptNodeInner({ id, data, selected }: Props) {
           cursor: 'text'
         }}
       />
+      <div
+        className="nodrag nopan"
+        style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          minHeight: 28,
+          flexShrink: 0,
+          pointerEvents: 'auto',
+          zIndex: 5,
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <SpeechToTextButton
+          variant="plain"
+          value={value}
+          onChange={commitValue}
+        />
+      </div>
       </div>
       <Handle
         type="target"

@@ -12,6 +12,7 @@ import { flowImagePreviewWell, flowLetterboxBackground, useFlowNodeDarkTheme } f
 import RunCreditBadge from "./RunCreditBadge";
 import { useImageNodeCreditsPreview } from "../hooks/useImageNodeCreditsPreview";
 import FlowResizableNodeShell from "./FlowResizableNodeShell";
+import { useFlowNodeConfigTitle } from "../utils/nodeConfigTitle";
 
 type Props = {
   id: string;
@@ -71,6 +72,7 @@ const normalizeSeedreamDimensionSize = (value?: string): string | undefined => {
 
 function Seedream5Node({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
+  const headerTitle = useFlowNodeConfigTitle(data, 'Seedream', 'Seedream');
   const { status, error } = data;
 
   const images = React.useMemo(() => {
@@ -213,7 +215,7 @@ function Seedream5Node({ id, data, selected }: Props) {
           marginBottom: 6,
         }}
       >
-        <div style={{ fontWeight: 600 }}>Seedream</div>
+        <div style={{ fontWeight: 600 }}>{headerTitle}</div>
         <div style={{ display: "flex", gap: 6 }}>
           <button
             onClick={() => setShowHelp(!showHelp)}

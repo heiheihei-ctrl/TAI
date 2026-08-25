@@ -242,9 +242,6 @@ function Nano2NodeInner({ id, data, selected }: Props) {
   }, [metadata]);
 
   const resolvedNodeType = inferNanoImageNodeType(metadata, data, defaultData);
-  const titleZh =
-    data.nodeConfigNameZh ||
-    (resolvedNodeType === "gptImage2" ? "GPT-Image-2" : "Nano2");
   const titleEn =
     data.nodeConfigNameEn ||
     (resolvedNodeType === "gptImage2" ? "GPT-Image-2" : "Nano2");
@@ -675,7 +672,7 @@ function Nano2NodeInner({ id, data, selected }: Props) {
           marginBottom: 6,
         }}
       >
-        <div style={{ fontWeight: 600 }}>{lt(titleZh, titleEn)}</div>
+        <div style={{ fontWeight: 600 }}>{titleEn}</div>
         <div style={{ display: "flex", gap: 6 }}>
           <button
             onClick={onRun}

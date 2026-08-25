@@ -458,10 +458,24 @@ function ImageNodeInner({ id, data, selected }: Props) {
       : undefined;
   const isFlowDark = useFlowNodeDarkTheme();
   const rf = useReactFlow();
-  const normalizedNodeLabel =
-    typeof data.label === "string" && data.label.trim().length
-      ? data.label.trim()
-      : DEFAULT_NODE_LABEL;
+  const normalizedNodeLabel = React.useMemo(() => {
+    const custom =
+      typeof data.label === "string" && data.label.trim().length
+        ? data.label.trim()
+        : "";
+    const configZh =
+      typeof (data as any).nodeConfigNameZh === "string"
+        ? String((data as any).nodeConfigNameZh).trim()
+        : "";
+    const configEn =
+      typeof (data as any).nodeConfigNameEn === "string"
+        ? String((data as any).nodeConfigNameEn).trim()
+        : "";
+    if (custom && custom !== DEFAULT_NODE_LABEL && custom !== "图片节点" && custom !== configZh) {
+      return custom;
+    }
+    return configEn || configZh || custom || DEFAULT_NODE_LABEL;
+  }, [data.label, (data as any).nodeConfigNameZh, (data as any).nodeConfigNameEn]);
   const [nodeLabel, setNodeLabel] = React.useState<string>(normalizedNodeLabel);
   const [nodeLabelDraft, setNodeLabelDraft] = React.useState<string>(normalizedNodeLabel);
   const [isEditingNodeLabel, setIsEditingNodeLabel] = React.useState(false);

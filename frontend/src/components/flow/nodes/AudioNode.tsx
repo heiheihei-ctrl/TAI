@@ -10,6 +10,7 @@ import {
   flowNodeShellChrome,
 } from "./flowNodeDarkTheme";
 import FlowResizableNodeShell from "./FlowResizableNodeShell";
+import { useFlowNodeConfigTitle } from "../utils/nodeConfigTitle";
 
 const MAX_AUDIO_NAME_LENGTH = 28;
 const MAX_AUDIO_SIZE = 100 * 1024 * 1024; // 100MB
@@ -189,6 +190,7 @@ const AudioContent = React.memo(
 
 function AudioNodeInner({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
+  const headerTitle = useFlowNodeConfigTitle(data, '语音节点', 'Audio Node');
   const isFlowDark = useFlowNodeDarkTheme();
   const rf = useReactFlow();
   const inputRef = React.useRef<HTMLInputElement | null>(null);
@@ -392,7 +394,7 @@ function AudioNodeInner({ id, data, selected }: Props) {
           marginBottom: 6,
         }}
       >
-        <div style={{ fontWeight: 600, color: shell.color }}>{data.label || lt("语音节点", "Audio Node")}</div>
+        <div style={{ fontWeight: 600, color: shell.color }}>{headerTitle}</div>
         <div style={{ display: "flex", gap: 6 }}>
           {hasInputConnection && (
             <button

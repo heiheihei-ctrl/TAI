@@ -16,6 +16,7 @@ import { parseFlowImageAssetRef } from "@/services/flowImageAssetStore";
 import { useFlowImageAssetUrl } from "@/hooks/useFlowImageAssetUrl";
 import RunCreditBadge from "./RunCreditBadge";
 import { useFlowRenderMode } from "../FlowRenderModeContext";
+import { useFlowNodeConfigTitle } from "../utils/nodeConfigTitle";
 import FlowResizableNodeShell from "./FlowResizableNodeShell";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "../../ui/dropdown-menu";
 import {
@@ -473,6 +474,7 @@ function InputImageThumb({
 
 function Generate4NodeInner({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
+  const headerTitle = useFlowNodeConfigTitle(data, '生成多张图片节点', 'Multi Generate');
   const { status, error } = data;
   const images = data.images || [];
   const imageUrls = data.imageUrls || [];
@@ -885,7 +887,7 @@ function Generate4NodeInner({ id, data, selected }: Props) {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ fontWeight: 600 }}>Multi Generate</div>
+          <div style={{ fontWeight: 600 }}>{headerTitle}</div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button

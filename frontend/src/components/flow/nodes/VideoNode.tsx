@@ -4,6 +4,7 @@ import { Handle, Position, useReactFlow } from "reactflow";
 import { useProjectContentStore } from "@/stores/projectContentStore";
 import { useLocaleText } from "@/utils/localeText";
 import FlowResizableNodeShell from "./FlowResizableNodeShell";
+import { useFlowNodeConfigTitle } from "../utils/nodeConfigTitle";
 
 const MIN_WIDTH = 320;
 const MIN_HEIGHT = 240;
@@ -108,6 +109,7 @@ const VideoContent = React.memo(({
 
 function VideoNodeInner({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
+  const headerTitle = useFlowNodeConfigTitle(data, '视频节点', 'Video');
   const rf = useReactFlow();
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const projectId = useProjectContentStore((state) => state.projectId);
@@ -250,7 +252,7 @@ function VideoNodeInner({ id, data, selected }: Props) {
           marginBottom: 6,
         }}
       >
-        <div style={{ fontWeight: 600 }}>{data.label || "Video"}</div>
+        <div style={{ fontWeight: 600 }}>{headerTitle}</div>
         <div style={{ display: "flex", gap: 6 }}>
           {data.videoUrl && (
             <button

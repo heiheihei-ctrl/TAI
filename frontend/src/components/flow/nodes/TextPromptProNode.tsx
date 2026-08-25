@@ -7,6 +7,7 @@ import useNodeInternalsSync from '../hooks/useNodeInternalsSync';
 import { useLocaleText } from '@/utils/localeText';
 import { useCanvasStore } from '@/stores';
 import InlineImageMentionEditor from '@/components/common/InlineImageMentionEditor';
+import SpeechToTextButton from '@/components/common/SpeechToTextButton';
 
 type Props = {
   id: string;
@@ -382,8 +383,27 @@ function TextPromptProNodeInner({ id, data, selected }: Props) {
               background: 'transparent',
               color: '#374151',
               caretColor: '#374151',
+              paddingBottom: 32,
             }}
           />
+          <div
+            className="nodrag nopan"
+            style={{
+              position: 'absolute',
+              right: 10,
+              bottom: 8,
+              zIndex: 6,
+              pointerEvents: 'auto',
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <SpeechToTextButton
+              variant="plain"
+              value={prompts[0] || ''}
+              onChange={(nextValue) => updatePrompt(0, nextValue)}
+            />
+          </div>
         </div>
 
         {/* Handle - 与 GenerateProNode 样式一致 */}

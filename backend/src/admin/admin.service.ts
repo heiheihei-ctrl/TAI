@@ -1578,6 +1578,58 @@ export class AdminService {
   }
 
   /**
+   * 删除用户前处理其作为 owner / uploader 的 Restrict 外键：
+   * - Team.ownerId / Enterprise.ownerId / TeamAsset.uploaderId
+   * 有其他成员的非个人团队：转让 owner；否则删除团队（企业随 workspaceTeam Cascade）。
+   */
+  private async purgeUserTeamOwnership(
+    tx: Prisma.TransactionClient,
+    userId: string,
+  ) {
+    await tx.teamAsset.deleteMany({ where: { uploaderId: userId } });
+
+    const ownedTeams = await tx.team.findMany({
+      where: { ownerId: userId },
+      select: { id: true, isPersonal: true },
+    });
+
+    for (const team of ownedTeams) {
+      if (!team.isPersonal) {
+        const otherMembers = await tx.teamMembership.findMany({
+          where: { teamId: team.id, userId: { not: userId } },
+          orderBy: { createdAt: 'asc' },
+          select: { userId: true, role: true },
+        });
+        const next =
+          otherMembers.find((m) => m.role === 'admin') || otherMembers[0];
+        if (next) {
+          await tx.team.update({
+            where: { id: team.id },
+            data: { ownerId: next.userId },
+          });
+          await tx.teamMembership.update({
+            where: {
+              teamId_userId: { teamId: team.id, userId: next.userId },
+            },
+            data: { role: 'owner' },
+          });
+          await tx.enterprise.updateMany({
+            where: { workspaceTeamId: team.id },
+            data: { ownerId: next.userId },
+          });
+          continue;
+        }
+      }
+
+      // 个人团队 / 无其他成员：直接删除（关联 Team* / Enterprise 走 Cascade / SetNull）
+      await tx.team.delete({ where: { id: team.id } });
+    }
+
+    // 兜底：仍挂在该用户名下的企业记录
+    await tx.enterprise.deleteMany({ where: { ownerId: userId } });
+  }
+
+  /**
    * 删除用户账号及关联数据
    */
   async deleteUserAccount(userId: string, operatorId: string) {
@@ -1606,6 +1658,8 @@ export class AdminService {
         where: { invitedById: userId },
         data: { invitedById: null },
       });
+
+      await this.purgeUserTeamOwnership(tx, userId);
 
       await tx.refreshToken.deleteMany({ where: { userId } });
       await tx.workflowHistory.deleteMany({ where: { userId } });
@@ -1646,6 +1700,9 @@ export class AdminService {
 
       await tx.paymentOrder.deleteMany({ where: { userId } });
       await tx.imageTask.deleteMany({ where: { userId } });
+      await this.runWithMissingTableTolerance(() =>
+        tx.bioAuthGroup.deleteMany({ where: { userId } }),
+      );
       await tx.user.delete({ where: { id: userId } });
 
       return {

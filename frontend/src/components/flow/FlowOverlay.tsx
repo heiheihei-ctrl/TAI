@@ -9212,6 +9212,24 @@ function FlowInner() {
         boxW: size.w,
         boxH: size.h,
       };
+      // 节点管理改名后：创建时把配置名同步到 title/label，避免画布仍显示硬编码旧名
+      if (paletteConfig) {
+        const configTitle =
+          (typeof paletteConfig.nameEn === "string" && paletteConfig.nameEn.trim()) ||
+          (typeof paletteConfig.nameZh === "string" && paletteConfig.nameZh.trim()) ||
+          "";
+        if (configTitle) {
+          if ("title" in data) {
+            (data as any).title = configTitle;
+          }
+          if ("label" in data) {
+            (data as any).label = configTitle;
+          }
+          if ("nodeTitle" in data) {
+            (data as any).nodeTitle = configTitle;
+          }
+        }
+      }
       const newNode = { id, type, position: pos, data } as RFNode;
       const nextNodes = (nodesRef.current as RFNode[]).concat([newNode]);
       setNodes(nextNodes);

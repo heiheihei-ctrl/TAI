@@ -13,6 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import RunCreditBadge from './RunCreditBadge';
 import { useBackendCreditsPreview } from '../hooks/useBackendCreditsPreview';
 import FlowResizableNodeShell from './FlowResizableNodeShell';
+import { useFlowNodeConfigTitle } from '../utils/nodeConfigTitle';
 
 // 已去除可视化设置面板，采用内部默认参数
 type Props = {
@@ -32,6 +33,7 @@ type FlowUpdatePatch = Record<string, unknown>;
 
 function PromptOptimizeNodeInner({ id, data, selected }: Props) {
   const { lt, isZh } = useLocaleText();
+  const headerTitle = useFlowNodeConfigTitle(data, '提示词优化节点', 'Prompt Optimizer');
   const rf = useReactFlow();
   const [upstreamText, setUpstreamText] = React.useState<string>('');
   const [hover, setHover] = React.useState<string | null>(null);
@@ -258,7 +260,7 @@ function PromptOptimizeNodeInner({ id, data, selected }: Props) {
         flexShrink: 0,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span>Prompt Optimizer</span>
+          <span>{headerTitle}</span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button

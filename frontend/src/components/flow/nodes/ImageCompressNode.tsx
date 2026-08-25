@@ -14,6 +14,7 @@ import {
   useFlowNodeDarkTheme,
 } from './flowNodeDarkTheme';
 import FlowResizableNodeShell from './FlowResizableNodeShell';
+import { useFlowNodeConfigTitle } from '../utils/nodeConfigTitle';
 
 type CompressionLevel = 'light' | 'balanced' | 'strong';
 
@@ -306,6 +307,7 @@ const compressBlob = async (
 
 function ImageCompressNodeInner({ id, data, selected = false }: Props) {
   const { lt } = useLocaleText();
+  const headerTitle = useFlowNodeConfigTitle(data, '图片压缩节点', 'Image Compress');
   const isFlowDark = useFlowNodeDarkTheme();
   const projectId = useProjectContentStore((s) => s.projectId);
   const [isProcessing, setIsProcessing] = React.useState(false);
@@ -573,7 +575,7 @@ function ImageCompressNodeInner({ id, data, selected = false }: Props) {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ fontWeight: 600, color: shell.color }}>Image Compress</div>
+        <div style={{ fontWeight: 600, color: shell.color }}>{headerTitle}</div>
         <button
           onClick={handleCompress}
           disabled={!connectedInput || isProcessing || data.status === 'processing'}

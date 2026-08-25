@@ -12,6 +12,7 @@ import { toRenderableImageSrc } from "@/utils/imageSource";
 import { useLocaleText } from "@/utils/localeText";
 import { flowImagePreviewWell, flowLetterboxBackground, useFlowNodeDarkTheme } from "./flowNodeDarkTheme";
 import { resolveFlowNodeSendAnchorClient } from "../utils/flowNodeSendAnchor";
+import { useFlowNodeConfigTitle } from "../utils/nodeConfigTitle";
 import FlowResizableNodeShell from "./FlowResizableNodeShell";
 
 type Props = {
@@ -22,6 +23,7 @@ type Props = {
 
 function CameraNodeInner({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
+  const headerTitle = useFlowNodeConfigTitle(data, '截图节点', 'Camera');
   const rf = useReactFlow();
   const [hover, setHover] = React.useState<string | null>(null);
   const [preview, setPreview] = React.useState(false);
@@ -228,7 +230,7 @@ function CameraNodeInner({ id, data, selected }: Props) {
           marginBottom: 6,
         }}
       >
-        <div style={{ fontWeight: 600 }}>Camera</div>
+        <div style={{ fontWeight: 600 }}>{headerTitle}</div>
         <div style={{ display: "flex", gap: 6 }}>
           <button
             onClick={capture}

@@ -16,6 +16,7 @@ import {
 } from "./flowNodeDarkTheme";
 import RunCreditBadge from "./RunCreditBadge";
 import FlowResizableNodeShell from "./FlowResizableNodeShell";
+import { useFlowNodeConfigTitle } from "../utils/nodeConfigTitle";
 
 const PROMPT_MAX_LENGTH = 2000;
 const LYRICS_MAX_LENGTH = 3500;
@@ -53,6 +54,7 @@ type Props = {
 
 function MinimaxMusicNode({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
+  const headerTitle = useFlowNodeConfigTitle(data, "MiniMax音乐生成", "MiniMax Music");
   const isFlowDark = useFlowNodeDarkTheme();
   const [downloadingId, setDownloadingId] = React.useState<string | null>(null);
   const [handleHover, setHandleHover] = React.useState<string | null>(null);
@@ -297,7 +299,7 @@ function MinimaxMusicNode({ id, data, selected }: Props) {
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}>
           <Music2 size={20} color="#14b8a6" strokeWidth={2.2} />
           <span>
-            {lt("MiniMax 音乐生成", "MiniMax Music")}
+            {headerTitle}
             <RunCreditBadge credits={data.creditsPerCall} inline />
           </span>
         </div>

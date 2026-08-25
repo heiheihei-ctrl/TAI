@@ -11,6 +11,7 @@ import { useFlowImageAssetUrl } from '@/hooks/useFlowImageAssetUrl';
 import { resolveImageToBlob, resolveImageToDataUrl, toRenderableImageSrc } from '@/utils/imageSource';
 import { useLocaleText } from '@/utils/localeText';
 import { resolveTextFromSourceNode } from '../utils/textSource';
+import { useFlowNodeConfigTitle } from '../utils/nodeConfigTitle';
 import RunCreditBadge from './RunCreditBadge';
 import { useCanvasStore } from '@/stores';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '../../ui/dropdown-menu';
@@ -282,6 +283,7 @@ function InputImageThumb({
 
 function AnalysisNodeInner({ id, data, selected = false }: Props) {
   const { lt } = useLocaleText();
+  const headerTitle = useFlowNodeConfigTitle(data, '图像分析节点', 'Analysis');
   const isFlowDark = useFlowNodeDarkTheme();
   const rf = useReactFlow();
   const { status, error } = data;
@@ -1048,7 +1050,7 @@ function AnalysisNodeInner({ id, data, selected = false }: Props) {
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ fontWeight: 600, color: shell.color }}>Analysis</div>
+          <div style={{ fontWeight: 600, color: shell.color }}>{headerTitle}</div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
