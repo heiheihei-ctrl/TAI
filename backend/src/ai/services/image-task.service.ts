@@ -10,6 +10,7 @@ import { ApiResponseStatus } from '../../credits/dto/credits.dto';
 import { ContentModerationService } from '../../content-moderation/content-moderation.service';
 import crypto from 'crypto';
 import { Readable } from 'stream';
+import { rewriteToapisLegacyUrl } from '../../utils/toapisHttpClient';
 
 const REFUND_RETRY_DELAYS_MS = [0, 150, 420];
 
@@ -436,13 +437,29 @@ export class ImageTaskService {
       throw new ServiceUnavailableException('OSS 未配置或已禁用，无法持久化图像任务结果');
     }
 
+    const resolvedUrl = rewriteToapisLegacyUrl(imageUrl);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000);
 
     try {
-      const response = await fetch(imageUrl, { signal: controller.signal });
+      let response: Response;
+      try {
+        response = await fetch(resolvedUrl, { signal: controller.signal });
+      } catch (fetchError) {
+        const err = fetchError instanceof Error ? fetchError : new Error(String(fetchError));
+        const cause = (err as Error & { cause?: { code?: string; message?: string } }).cause;
+        const causeDetail =
+          (typeof cause?.code === 'string' && cause.code) ||
+          (typeof cause?.message === 'string' && cause.message) ||
+          err.message;
+        throw new BadGatewayException(
+          `抓取图像任务外链失败: ${causeDetail}（url=${resolvedUrl.slice(0, 120)}）`,
+        );
+      }
       if (!response.ok) {
-        throw new BadGatewayException(`抓取图像任务外链失败: HTTP ${response.status}`);
+        throw new BadGatewayException(
+          `抓取图像任务外链失败: HTTP ${response.status}（url=${resolvedUrl.slice(0, 120)}）`,
+        );
       }
 
       const contentType = (response.headers.get('content-type') || '').toLowerCase();

@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { teamApi } from '@/services/teamApi';
-import { useProjectStore } from '@/stores/projectStore';
 
 export interface TeamInfo {
   id: string;
@@ -76,13 +75,13 @@ export function getActiveWorkspaceTeamId(): string | undefined {
   return team.id;
 }
 
-/** 计费用 teamId：优先当前选中的共享团队，其次当前打开项目的 teamId */
+/**
+ * 计费用 teamId：只跟当前工作区身份走。
+ * 个人身份必须返回 undefined（走个人积分），禁止再回落到「当前项目的 teamId」，
+ * 否则切到个人后仍可能按团队预扣，出现「团队积分不足」。
+ */
 export function getBillingTeamId(): string | undefined {
-  const { activeTeamId, teams } = useTeamStore.getState();
-  const projectTeamId = useProjectStore.getState().currentProject?.teamId;
-  return (
-    resolveCollaborationTeam(teams, activeTeamId, projectTeamId)?.id
-  );
+  return getActiveWorkspaceTeamId();
 }
 
 export function resolveCollaborationTeam(

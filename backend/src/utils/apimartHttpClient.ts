@@ -20,5 +20,6 @@ export {
   formatToapisHttpError,
   getToapisApiKey,
   getToapisOrigin,
+  rewriteToapisLegacyUrl,
   toapisRequest,
 } from './toapisHttpClient';

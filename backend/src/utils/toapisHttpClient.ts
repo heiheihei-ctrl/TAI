@@ -1,7 +1,8 @@
 import axios, { AxiosRequestConfig, AxiosResponse, Method } from 'axios';
 import { SocksProxyAgent } from 'socks-proxy-agent';
 
-// const DEFAULT_TOAPIS_BASE = 'https://toapis.com/v1';
+// 备用域名（国内更稳）：https://toapis.xyz/v1
+// 原域名 toapis.com 在部分网络不可用，仅作兼容回退参考
 const DEFAULT_TOAPIS_BASE = 'https://toapis.xyz/v1';
 
 let cachedProxyUrl: string | null | undefined;
@@ -115,6 +116,45 @@ function getProxyAgent(): SocksProxyAgent | null {
 
 export function getToapisOrigin(): string {
   return getToapisApiBaseUrl().replace(/\/v1\/?$/, '');
+}
+
+/**
+ * 规范化 ToAPIs 返回的结果图外链。
+ * - 文件 CDN 固定为 files.toapis.com，禁止改写成 API 域名 toapis.xyz
+ * - 若上游给出 API 域上的 /__files/ 别名，还原为 files.toapis.com
+ * - API 域名切换只影响 /v1 接口，不影响结果图 CDN
+ */
+export function rewriteToapisLegacyUrl(rawUrl: string): string {
+  const input = typeof rawUrl === 'string' ? rawUrl.trim() : '';
+  if (!input) return input;
+  try {
+    const parsed = new URL(input);
+    const host = parsed.hostname.toLowerCase();
+    const pathname = parsed.pathname || '/';
+
+    // 已经是文件 CDN：原样返回
+    if (host === 'files.toapis.com') {
+      return input;
+    }
+
+    // API 域上的 /__files/... 是文件 CDN 别名，还原到 files.toapis.com
+    if (
+      (host === 'toapis.com' ||
+        host === 'toapis.xyz' ||
+        host === 'www.toapis.com' ||
+        host === 'www.toapis.xyz') &&
+      pathname.startsWith('/__files/')
+    ) {
+      parsed.hostname = 'files.toapis.com';
+      parsed.pathname = pathname.slice('/__files'.length) || '/';
+      return parsed.toString();
+    }
+
+    // 其它 *.toapis.com / *.toapis.xyz 结果图链接保持原样，避免误伤 CDN
+    return input;
+  } catch {
+    return input;
+  }
 }
 
 export async function toapisRequest<T = unknown>(

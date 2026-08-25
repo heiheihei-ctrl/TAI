@@ -1304,11 +1304,15 @@ const QUICK_CONNECT_HOVER_DELAY_MS = 520;
 const QUICK_CONNECT_MAX_ITEMS = 6;
 const QUICK_CONNECT_USAGE_STORAGE_KEY = "tanva-quick-connect-usage-v1";
 
+/** 可连接节点弹窗仅展示这几个目标节点 */
 const QUICK_CONNECT_NODE_LABELS: Partial<
   Record<FlowNodeType, { zh: string; en: string }>
 > = {
+  promptOptimize: { zh: "提示词优化", en: "提示词优化" },
+  seedream5Pro: { zh: "seedream5.0 pro", en: "seedream5.0 pro" },
+  doubaoVideo: { zh: "seedance", en: "seedance" },
   gptImage2: { zh: "GPT-Image-2", en: "GPT-Image-2" },
-  nano2: { zh: "Nano Banana 2", en: "Nano Banana 2" },
+  generate: { zh: "生成节点(Nano banana)", en: "生成节点(Nano banana)" },
 };
 
 const resolveQuickConnectLabel = (
@@ -1342,56 +1346,29 @@ const QUICK_CONNECT_PRESETS: Record<
   QuickConnectPreset[]
 > = {
   text: [
-    { nodeType: "textPrompt", targetHandle: "text" },
-    { nodeType: "generate", targetHandle: "text" },
-    { nodeType: "generateRef", targetHandle: "text" },
-    { nodeType: "midjourney", targetHandle: "text" },
-    { nodeType: "nano2", targetHandle: "text" },
-    { nodeType: "gptImage2", targetHandle: "text" },
     { nodeType: "promptOptimize", targetHandle: "text" },
-    { nodeType: "textChat", targetHandle: "text" },
-    { nodeType: "analysis", targetHandle: "text" },
-    { nodeType: "omniFlashExtVideo", targetHandle: "text" },
+    { nodeType: "seedream5Pro", targetHandle: "prompt" },
+    { nodeType: "doubaoVideo", targetHandle: "text" },
+    { nodeType: "gptImage2", targetHandle: "text" },
+    { nodeType: "generate", targetHandle: "text" },
   ],
   image: [
-    { nodeType: "image", targetHandle: "img" },
-    { nodeType: "generate", targetHandle: "img" },
-    { nodeType: "generate4", targetHandle: "img" },
-    { nodeType: "generatePro", targetHandle: "img" },
-    { nodeType: "generateRef", targetHandle: "image2" },
-    { nodeType: "viewAngle", targetHandle: "img" },
-    { nodeType: "analysis", targetHandle: "img" },
-    { nodeType: "imagePro", targetHandle: "img" },
-    { nodeType: "nano2", targetHandle: "img" },
-    { nodeType: "gptImage2", targetHandle: "img" },
-    { nodeType: "seedream5", targetHandle: "img" },
     { nodeType: "seedream5Pro", targetHandle: "img" },
-    { nodeType: "imageGrid", targetHandle: "images" },
-    { nodeType: "imageSplit", targetHandle: "img" },
-    { nodeType: "imageCompress", targetHandle: "img" },
-    { nodeType: "happyhorseR2V", targetHandle: "image-1" },
-    { nodeType: "omniFlashExtVideo", targetHandle: "image" },
+    { nodeType: "doubaoVideo", targetHandle: "image" },
+    { nodeType: "gptImage2", targetHandle: "img" },
+    { nodeType: "generate", targetHandle: "img" },
   ],
   video: [
-    { nodeType: "videoAnalyze", targetHandle: "video" },
-    { nodeType: "videoFrameExtract", targetHandle: "video" },
-    { nodeType: "videoToGif", targetHandle: "video" },
-    { nodeType: "wan2R2V", targetHandle: "video-1" },
-    { nodeType: "wan27Video", targetHandle: "video" },
-    { nodeType: "omniFlashExtVideo", targetHandle: "video" },
-    { nodeType: "klingO1Video", targetHandle: "video" },
-    { nodeType: "sora2Video", targetHandle: "character" },
-    { nodeType: "sora2Character", targetHandle: "video" },
+    { nodeType: "doubaoVideo", targetHandle: "video" },
   ],
-  audio: [
-    { nodeType: "wan26", targetHandle: "audio" },
-    { nodeType: "wan27Video", targetHandle: "audio" },
-  ],
-  character: [{ nodeType: "sora2Video", targetHandle: "character" }],
+  audio: [],
+  character: [],
   unknown: [
+    { nodeType: "promptOptimize", targetHandle: "text" },
+    { nodeType: "seedream5Pro", targetHandle: "img" },
+    { nodeType: "doubaoVideo", targetHandle: "text" },
+    { nodeType: "gptImage2", targetHandle: "text" },
     { nodeType: "generate", targetHandle: "text" },
-    { nodeType: "analysis", targetHandle: "img" },
-    { nodeType: "videoAnalyze", targetHandle: "video" },
   ],
 };
 
@@ -1400,66 +1377,25 @@ const QUICK_CONNECT_PRESETS: Record<
   QuickConnectPreset[]
 > = {
   text: [
-    { nodeType: "textPrompt", sourceHandle: "text" },
-    { nodeType: "textPromptPro", sourceHandle: "text" },
     { nodeType: "promptOptimize", sourceHandle: "text" },
-    { nodeType: "textChat", sourceHandle: "text" },
-    { nodeType: "textNote", sourceHandle: "text-right-out" },
     { nodeType: "generate", sourceHandle: "text" },
-    { nodeType: "analysis", sourceHandle: "prompt" },
   ],
   image: [
-    { nodeType: "image", sourceHandle: "img" },
-    { nodeType: "generate", sourceHandle: "img" },
-    { nodeType: "generateRef", sourceHandle: "img" },
-    { nodeType: "viewAngle", sourceHandle: "img" },
-    { nodeType: "midjourney", sourceHandle: "img" },
-    { nodeType: "midjourneyV7", sourceHandle: "img" },
-    { nodeType: "niji7", sourceHandle: "img" },
-    { nodeType: "seedream5", sourceHandle: "img" },
     { nodeType: "seedream5Pro", sourceHandle: "img" },
-    { nodeType: "nano2", sourceHandle: "img" },
     { nodeType: "gptImage2", sourceHandle: "img" },
-    { nodeType: "camera", sourceHandle: "img" },
+    { nodeType: "generate", sourceHandle: "img" },
   ],
   video: [
-    { nodeType: "video", sourceHandle: "video" },
-    { nodeType: "sora2Video", sourceHandle: "video" },
-    { nodeType: "wan26", sourceHandle: "video" },
-    { nodeType: "wan2R2V", sourceHandle: "video" },
-    { nodeType: "happyhorseR2V", sourceHandle: "video" },
-    { nodeType: "wan27Video", sourceHandle: "video" },
-    { nodeType: "omniFlashExtVideo", sourceHandle: "video" },
-    { nodeType: "klingO1Video", sourceHandle: "video-out" },
-    { nodeType: "videoFrameExtract", sourceHandle: "video" },
-  ],
-  audio: [
-    { nodeType: "audioUpload", sourceHandle: "audio" },
-    { nodeType: "minimaxSpeech", sourceHandle: "audio" },
-    { nodeType: "minimaxMusic", sourceHandle: "audio" },
-    { nodeType: "tencentSpeech", sourceHandle: "audio" },
-  ],
-  character: [
-    { nodeType: "video", sourceHandle: "video" },
-    { nodeType: "sora2Video", sourceHandle: "character" },
-    { nodeType: "sora2Video", sourceHandle: "video" },
-    { nodeType: "wan26", sourceHandle: "video" },
-    { nodeType: "wan2R2V", sourceHandle: "video" },
-    { nodeType: "happyhorseR2V", sourceHandle: "video" },
-    { nodeType: "wan27Video", sourceHandle: "video" },
-    { nodeType: "klingVideo", sourceHandle: "video" },
-    { nodeType: "kling26Video", sourceHandle: "video" },
-    { nodeType: "klingO1Video", sourceHandle: "video-out" },
-    { nodeType: "viduVideo", sourceHandle: "video" },
-    { nodeType: "viduQ3", sourceHandle: "video" },
     { nodeType: "doubaoVideo", sourceHandle: "video" },
-    { nodeType: "omniFlashExtVideo", sourceHandle: "video" },
-    { nodeType: "sora2Character", sourceHandle: "character" },
   ],
+  audio: [],
+  character: [],
   unknown: [
-    { nodeType: "textPrompt", sourceHandle: "text" },
-    { nodeType: "image", sourceHandle: "img" },
-    { nodeType: "video", sourceHandle: "video" },
+    { nodeType: "promptOptimize", sourceHandle: "text" },
+    { nodeType: "seedream5Pro", sourceHandle: "img" },
+    { nodeType: "doubaoVideo", sourceHandle: "video" },
+    { nodeType: "gptImage2", sourceHandle: "img" },
+    { nodeType: "generate", sourceHandle: "img" },
   ],
 };
 
@@ -1470,14 +1406,8 @@ const QUICK_CONNECT_BASE_PRESET: Record<
     reverse?: QuickConnectPreset;
   }
 > = {
-  text: {
-    forward: { nodeType: "textPrompt", targetHandle: "text" },
-    reverse: { nodeType: "textPrompt", sourceHandle: "text" },
-  },
-  image: {
-    forward: { nodeType: "image", targetHandle: "img" },
-    reverse: { nodeType: "image", sourceHandle: "img" },
-  },
+  text: {},
+  image: {},
   video: {},
   audio: {},
   character: {},
@@ -9230,6 +9160,19 @@ function FlowInner() {
           }
         }
       }
+      // generate 节点展示名统一为 Nano banana（避免旧配置/缺省回退成 Generate）
+      if (type === "generate") {
+        const enName =
+          typeof (data as any).nodeConfigNameEn === "string"
+            ? String((data as any).nodeConfigNameEn).trim()
+            : "";
+        if (!enName || /^generate$/i.test(enName)) {
+          (data as any).nodeConfigNameEn = "Nano banana";
+        }
+        if (!(data as any).nodeConfigNameZh) {
+          (data as any).nodeConfigNameZh = "生成节点";
+        }
+      }
       const newNode = { id, type, position: pos, data } as RFNode;
       const nextNodes = (nodesRef.current as RFNode[]).concat([newNode]);
       setNodes(nextNodes);
@@ -11420,7 +11363,23 @@ function FlowInner() {
 
       recordQuickConnectUsage(item);
       closeConnectQuickMenu({ resetSource: true });
-      const newNodeId = createNodeAtWorldCenter(item.nodeType, world);
+      const paletteConfig = findPaletteConfigByFlowNodeType(
+        nodePaletteConfigs,
+        item.nodeType
+      );
+      const paletteDefaultData =
+        paletteConfig?.metadata &&
+        typeof paletteConfig.metadata === "object" &&
+        (paletteConfig.metadata as any).defaultData &&
+        typeof (paletteConfig.metadata as any).defaultData === "object"
+          ? ((paletteConfig.metadata as any).defaultData as Record<string, any>)
+          : undefined;
+      const newNodeId = createNodeAtWorldCenter(
+        item.nodeType,
+        world,
+        paletteDefaultData,
+        paletteConfig
+      );
       if (!newNodeId) return;
 
       window.requestAnimationFrame(() => {
@@ -11452,6 +11411,7 @@ function FlowInner() {
       closeConnectQuickMenu,
       connectQuickMenu.world,
       createNodeAtWorldCenter,
+      nodePaletteConfigs,
       onConnect,
       recordQuickConnectUsage,
     ]

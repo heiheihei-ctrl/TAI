@@ -517,7 +517,7 @@ function InputImageThumb({
 
 function GenerateNodeInner({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
-  const headerTitle = useFlowNodeConfigTitle(data, '生成节点', 'Generate');
+  const headerTitle = useFlowNodeConfigTitle(data, '生成节点', 'Nano banana');
   const onboardingActive = useFlowOnboardingStore((s) => s.active);
   const onboardingTargetId = useFlowOnboardingStore((s) => s.targetNodeId);
   const onboardingTrack = useFlowOnboardingStore((s) => s.track);

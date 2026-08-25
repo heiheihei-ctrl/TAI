@@ -33,7 +33,7 @@ import {
   getApimartProxySummary,
   getToapisApiKey,
 } from "../../utils/apimartHttpClient";
-import { getToapisApiBaseUrl } from "../../utils/toapisHttpClient";
+import { getToapisApiBaseUrl, rewriteToapisLegacyUrl } from "../../utils/toapisHttpClient";
 import {
   buildUpstreamImageTaskQueryUrls,
   extractUpstreamImageTaskError,
@@ -99,17 +99,25 @@ export const BANANA_TEXT_PROVIDER_SETTING_KEY = "banana_text_provider";
 
 /**
  * Banana API Provider - 经 ToAPIs OpenAI 兼容网关调用 Gemini 等模型
- * Base URL: https://toapis.com/v1
+ * Base URL: https://toapis.xyz/v1（备用域名；原 toapis.com 部分网络不可用）
  */
 @Injectable()
 export class BananaProvider implements IAIProvider {
   private readonly logger = new Logger(BananaProvider.name);
   private apiKey: string | null = null;
   private apimartApiKey: string | null = null;
-  private readonly apiBaseUrl = buildToapisUrl("/chat/completions");
-  private readonly apimartGenerateUrl = buildToapisUrl("/images/generations");
-  private readonly apimartTaskBaseUrl = buildToapisUrl("/tasks");
-  private readonly apimartTextUrl = buildToapisUrl("/chat/completions");
+  private get apiBaseUrl() {
+    return buildToapisUrl("/chat/completions");
+  }
+  private get apimartGenerateUrl() {
+    return buildToapisUrl("/images/generations");
+  }
+  private get apimartTaskBaseUrl() {
+    return buildToapisUrl("/tasks");
+  }
+  private get apimartTextUrl() {
+    return buildToapisUrl("/chat/completions");
+  }
   private readonly tencentTextUrl =
     "https://text-aigc.vod-qcloud.com/v1/chat/completions";
   private readonly DEFAULT_MODEL = "gemini-3-flash-preview";
@@ -137,8 +145,8 @@ export class BananaProvider implements IAIProvider {
   };
   private readonly DEFAULT_TIMEOUT = 900000; // 15鍒嗛挓
   private readonly TEXT_TIMEOUT = 45000; // 鏂囨湰鎺ュ彛鏇村揩澶辫触锛屼究浜庨€氶亾蹇€熷垏鎹?
-  private readonly APIMART_SUBMIT_TIMEOUT = 60000;
-  private readonly APIMART_QUERY_TIMEOUT = 30000;
+  private readonly APIMART_SUBMIT_TIMEOUT = 120000;
+  private readonly APIMART_QUERY_TIMEOUT = 45000;
   private readonly APIMART_QUERY_MAX_RETRIES = 3;
   private readonly APIMART_QUERY_RETRY_DELAYS_MS = [300, 800];
   private readonly MAX_RETRIES = 3;
@@ -147,6 +155,8 @@ export class BananaProvider implements IAIProvider {
   private readonly APIMART_INITIAL_DELAY_MS = 8000;
   private readonly APIMART_POLL_INTERVAL_MS = 3000;
   private readonly APIMART_POLL_MAX_ATTEMPTS = 300; // 3绉掍竴娆★紝绾?5鍒嗛挓绐楀彛
+  /** 轮询期间连续网络失败上限；短暂超时不应直接判整单失败 */
+  private readonly APIMART_POLL_MAX_CONSECUTIVE_NETWORK_ERRORS = 8;
 
   // 闄嶇骇妯″瀷鏄犲皠锛氫紭鍏堝悓浠?鍚岃兘鍔涢檷绾э紝鍐嶉檷鍒版洿淇濆畧妯″瀷
   private readonly FALLBACK_MODELS: Record<string, string> = {
@@ -186,7 +196,7 @@ export class BananaProvider implements IAIProvider {
     }
 
     this.logger.log(
-      `Banana provider initialized (toapis=${!!this.apiKey}, tencent=${tencentReady}, proxy=${getApimartProxySummary()})`
+      `Banana provider initialized (toapis=${!!this.apiKey}, base=${getToapisApiBaseUrl()}, tencent=${tencentReady}, proxy=${getApimartProxySummary()})`
     );
   }
 
@@ -208,7 +218,11 @@ export class BananaProvider implements IAIProvider {
     return this.apimartApiKey;
   }
 
-  private wrapApimartNetworkError(error: unknown, context: string): Error {
+  private wrapApimartNetworkError(
+    error: unknown,
+    context: string,
+    failedUrl?: string,
+  ): Error {
     const err =
       error instanceof Error ? error : new Error(typeof error === "string" ? error : "Unknown error");
     const causeCode =
@@ -219,10 +233,11 @@ export class BananaProvider implements IAIProvider {
           : "";
     const message = String(err.message || "");
     const normalized = message.toLowerCase();
+    const endpointHint = failedUrl || getToapisApiBaseUrl();
 
     if (causeCode === "ENOTFOUND") {
       return new ServiceUnavailableException(
-        `ToAPIs 域名解析失败（${getToapisApiBaseUrl()}），请检查服务器 DNS 或代理网络。${context}`
+        `ToAPIs 域名解析失败（${endpointHint}），请检查服务器 DNS 或代理网络。${context}`
       ) as unknown as Error;
     }
     if (
@@ -232,7 +247,7 @@ export class BananaProvider implements IAIProvider {
       normalized.includes("timeout")
     ) {
       return new ServiceUnavailableException(
-        `ToAPIs 网络连接超时，请检查服务器到 ${getToapisApiBaseUrl()} 的网络链路或代理配置。${context}`
+        `ToAPIs 网络连接超时，请检查服务器到 ${endpointHint} 的网络链路或代理配置。${context}`
       ) as unknown as Error;
     }
     if (
@@ -1398,15 +1413,41 @@ export class BananaProvider implements IAIProvider {
     return this.makeApimartTextRequest(model, contents, config);
   }
 
+  private isRetryableApimartSubmitError(error: unknown): boolean {
+    const err = error instanceof Error ? error : new Error(String(error));
+    const code =
+      typeof (err as any)?.cause?.code === "string"
+        ? String((err as any).cause.code)
+        : typeof (err as any)?.code === "string"
+          ? String((err as any).code)
+          : "";
+    const message = String(err.message || "").toLowerCase();
+    return (
+      code === "ECONNRESET" ||
+      code === "ETIMEDOUT" ||
+      code === "ECONNABORTED" ||
+      code === "EAI_AGAIN" ||
+      err.name === "AbortError" ||
+      message.includes("timeout") ||
+      message.includes("etimedout") ||
+      message.includes("econnaborted") ||
+      message.includes("econnreset") ||
+      message.includes("socket hang up") ||
+      message.includes("fetch failed")
+    );
+  }
+
   private async submitApimartTask(payload: Record<string, any>): Promise<string> {
     const apiKey = this.ensureApimartApiKey();
     const maxAttempts = 3;
     let lastError: Error | null = null;
+    // 只走当前配置的 ToAPIs 域名，不再回退 apimart / toapis.com
+    const submitUrl = buildToapisUrl("/images/generations");
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const response = await apimartRequest<any>({
-          url: this.apimartGenerateUrl,
+          url: submitUrl,
           method: "POST",
           headers: {
             Authorization: `Bearer ${apiKey}`,
@@ -1435,9 +1476,9 @@ export class BananaProvider implements IAIProvider {
             throw error;
           }
 
-          const delayMs = attempt === 1 ? 500 : 1200;
+          const delayMs = attempt === 1 ? 800 : 1600;
           this.logger.warn(
-            `[Banana/Apimart] submit retry ${attempt}/${maxAttempts} in ${delayMs}ms: ${error.message}`
+            `[Banana/ToAPIs] submit retry ${attempt}/${maxAttempts} in ${delayMs}ms via ${submitUrl}: ${error.message}`
           );
           await new Promise((resolve) => setTimeout(resolve, delayMs));
           continue;
@@ -1453,23 +1494,22 @@ export class BananaProvider implements IAIProvider {
         return taskId;
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
-        const normalizedMessage = err.message.toLowerCase();
-        const retryableNetworkError =
-          normalizedMessage.includes("fetch failed") ||
-          normalizedMessage.includes("econnreset") ||
-          normalizedMessage.includes("etimedout");
 
-        if (retryableNetworkError && attempt < maxAttempts) {
-          const delayMs = attempt === 1 ? 500 : 1200;
+        if (this.isRetryableApimartSubmitError(err) && attempt < maxAttempts) {
+          const delayMs = attempt === 1 ? 800 : 1600;
           this.logger.warn(
-            `[Banana/Apimart] submit network retry ${attempt}/${maxAttempts} in ${delayMs}ms: ${err.message}`
+            `[Banana/ToAPIs] submit network retry ${attempt}/${maxAttempts} in ${delayMs}ms via ${submitUrl}: ${err.message}`
           );
           await new Promise((resolve) => setTimeout(resolve, delayMs));
           lastError = err;
           continue;
         }
 
-        throw this.wrapApimartNetworkError(err, "Banana 生图普通路线提交失败");
+        throw this.wrapApimartNetworkError(
+          err,
+          "Banana 生图提交失败（上游可能已受理，但本机等待响应超时/失败）",
+          submitUrl,
+        );
       }
     }
 
@@ -1477,7 +1517,8 @@ export class BananaProvider implements IAIProvider {
   }
 
   private extractApimartImageUrl(taskPayload: any): string | undefined {
-    return extractUpstreamImageUrl(taskPayload);
+    const url = extractUpstreamImageUrl(taskPayload);
+    return url ? rewriteToapisLegacyUrl(url) : undefined;
   }
 
   private isRetryableApimartQueryError(error: unknown): boolean {
@@ -1556,7 +1597,8 @@ export class BananaProvider implements IAIProvider {
 
           throw this.wrapApimartNetworkError(
             error,
-            `Banana 普通路线查询任务失败(task=${taskId})`
+            `Banana 查询 ToAPIs 任务失败(task=${taskId})`,
+            queryUrl,
           );
         }
       }
@@ -1564,7 +1606,8 @@ export class BananaProvider implements IAIProvider {
 
     throw this.wrapApimartNetworkError(
       lastError,
-      `Banana 普通路线查询任务失败(task=${taskId})`
+      `Banana 查询 ToAPIs 任务失败(task=${taskId})`,
+      buildToapisUrl(`/images/generations/${encodeURIComponent(taskId)}`),
     );
   }
 
@@ -1572,9 +1615,35 @@ export class BananaProvider implements IAIProvider {
     taskId: string
   ): Promise<{ imageUrl: string }> {
     await new Promise((resolve) => setTimeout(resolve, this.APIMART_INITIAL_DELAY_MS));
+    let consecutiveNetworkErrors = 0;
 
     for (let attempt = 1; attempt <= this.APIMART_POLL_MAX_ATTEMPTS; attempt++) {
-      const result = await this.queryApimartTask(taskId);
+      let result: { status: string; imageUrl?: string; errorMessage?: string };
+      try {
+        result = await this.queryApimartTask(taskId);
+        consecutiveNetworkErrors = 0;
+      } catch (error) {
+        // 提交已成功拿到 taskId 后，查询短暂超时不应直接整单失败（上游可能仍在跑）
+        if (this.isRetryableApimartQueryError(error)) {
+          consecutiveNetworkErrors += 1;
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.warn(
+            `[Banana/ToAPIs] poll network glitch ${consecutiveNetworkErrors}/${this.APIMART_POLL_MAX_CONSECUTIVE_NETWORK_ERRORS}: task=${taskId}, attempt=${attempt}, error=${message}`,
+          );
+          if (consecutiveNetworkErrors >= this.APIMART_POLL_MAX_CONSECUTIVE_NETWORK_ERRORS) {
+            throw this.wrapApimartNetworkError(
+              error,
+              `Banana 连续查询 ToAPIs 任务失败(task=${taskId})`,
+              buildToapisUrl(`/images/generations/${encodeURIComponent(taskId)}`),
+            );
+          }
+          await new Promise((resolve) =>
+            setTimeout(resolve, this.APIMART_POLL_INTERVAL_MS),
+          );
+          continue;
+        }
+        throw error;
+      }
       const status = result.status;
 
       if (isUpstreamImageTaskCompleted(status)) {
@@ -1606,7 +1675,7 @@ export class BananaProvider implements IAIProvider {
       );
     }
 
-    throw new Error(`Apimart task ${taskId} polling timeout`);
+    throw new Error(`ToAPIs task ${taskId} polling timeout`);
   }
 
   private async toApimartImageUrls(sourceImages: string[]): Promise<string[]> {
@@ -2119,7 +2188,7 @@ export class BananaProvider implements IAIProvider {
         return await this.withTimeout(
           this.generateImageViaApimart(request),
           this.DEFAULT_TIMEOUT,
-          "Apimart image generation"
+          "ToAPIs image generation"
         );
       } catch (error) {
         return this.buildApimartError("GENERATION_FAILED", error);
@@ -2131,10 +2200,10 @@ export class BananaProvider implements IAIProvider {
         const result = await this.withTimeout(
           this.generateImageViaApimart(request),
           this.DEFAULT_TIMEOUT,
-          "Apimart image generation"
+          "ToAPIs image generation"
         );
         if (result.success) {
-          this.logger.log("[Banana/Image] route -> Apimart (success)");
+          this.logger.log("[Banana/Image] route -> ToAPIs (success)");
           return result;
         }
         if (providerMode === "apimart") return result;
@@ -2143,7 +2212,7 @@ export class BananaProvider implements IAIProvider {
           return this.buildApimartError("GENERATION_FAILED", error);
         }
         this.logger.warn(
-          `Apimart image generation failed in auto mode, fallback to legacy: ${
+          `ToAPIs image generation failed in auto mode, fallback to legacy: ${
             error instanceof Error ? error.message : error
           }`
         );

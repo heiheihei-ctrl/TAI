@@ -598,6 +598,8 @@ export class OssService {
       'amazonaws.com',
       's3.cn-northwest-1.amazonaws.com.cn',
       'toapis.com',
+      'toapis.xyz',
+      'files.toapis.com',
       'apimart.ai',
       'kechuangai.com',
       'models.kapon.cloud',

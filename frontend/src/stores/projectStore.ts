@@ -82,9 +82,19 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         ? await projectApi.listByTeam(activeTeam.id)
         : await projectApi.list();
       set((s) => {
-        const current =
-          projects.find((p) => p.id === s.currentProjectId) ?? s.currentProject;
-        return { projects, currentProject: current };
+        const currentInList = projects.find((p) => p.id === s.currentProjectId);
+        if (currentInList) {
+          return { projects, currentProject: currentInList };
+        }
+        // 个人工作区下不要继续挂着旧的团队项目（否则计费/展示会串身份）
+        if (!isOrgTeam && s.currentProject?.teamId) {
+          return {
+            projects,
+            currentProjectId: null,
+            currentProject: null,
+          };
+        }
+        return { projects, currentProject: s.currentProject };
       });
     } catch {
       // best-effort

@@ -152,7 +152,10 @@ export function TeamSwitcher({ variant = 'header', className }: Props) {
     (t) => !t.isPersonal && (SHOW_ENTERPRISE_CONSOLE ? t.enterpriseEnabled !== false : true),
   );
   const activeTeam = teams.find((t) => t.id === activeTeamId);
-  const isPersonalActive = !activeTeam || activeTeam.isPersonal;
+  // teams 未加载时不要把「有 activeTeamId 但找不到团队」误判成个人
+  const isPersonalActive = activeTeam
+    ? activeTeam.isPersonal
+    : !activeTeamId;
 
   const displayName = (() => {
     if (!activeTeam || activeTeam.isPersonal) {
@@ -163,7 +166,16 @@ export function TeamSwitcher({ variant = 'header', className }: Props) {
   })();
 
   const completeSwitchTeam = (teamId: string, projectId?: string) => {
-    setActiveTeamId(teamId);
+    const target = teams.find((t) => t.id === teamId);
+    const switchingToPersonal = !target || !!target.isPersonal;
+    setActiveTeamId(teamId || personalTeam?.id || null);
+    // 切到个人时立刻清掉团队项目上下文，避免 load 完成前仍按团队预扣积分
+    if (switchingToPersonal && projectStore.currentProject?.teamId) {
+      useProjectStore.setState({
+        currentProjectId: null,
+        currentProject: null,
+      });
+    }
     window.dispatchEvent(new Event('refresh-credits'));
     setTimeout(() => {
       void projectStore.load().then(() => {
