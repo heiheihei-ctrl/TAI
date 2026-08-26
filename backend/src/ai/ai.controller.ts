@@ -2220,6 +2220,12 @@ export class AiController {
       return new BadGatewayException('上游任务失败，请稍后重试');
     }
 
+    if (status === 503) {
+      return new ServiceUnavailableException(
+        '上游模型暂不可用，请稍后重试或切换尊享路线',
+      );
+    }
+
     if (status === 524 || this.isTimeoutLikeError(error)) {
       return new HttpException('服务器处理超时，请稍后重试', 524);
     }
@@ -4385,7 +4391,9 @@ export class AiController {
             text: result.data.text,
           };
         }
-        throw new Error(result.error?.message || 'Failed to generate text');
+        throw new BadGatewayException(
+          result.error?.message || 'Failed to generate text',
+        );
       }
 
       // gemini 和 gemini-pro 都使用默认的 Gemini 服务

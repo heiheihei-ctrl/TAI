@@ -96,7 +96,7 @@ const resolveRequestBananaImageRoute = (request: {
     normalizeBananaImageRoute(request.providerOptions?.banana?.imageRoute) ||
     normalizeBananaImageRoute(request.providerOptions?.bananaImageRoute);
   if (routeFromRequest) return routeFromRequest;
-  return resolvePersistedBananaImageRoute() || "normal";
+  return resolvePersistedBananaImageRoute() || "stable";
 };
 
 const attachBananaRouteToProviderOptions = <T extends {

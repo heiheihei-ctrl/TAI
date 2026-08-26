@@ -83,7 +83,7 @@ const VECTOR_KEYWORDS = [
 
 export type BananaImageProvider =
   | "auto"
-  | "legacy_auto"
+  | "legacy_auto" 
   | "tencent_auto"
   | "apimart"
   | "tencent"
@@ -263,6 +263,12 @@ export class BananaProvider implements IAIProvider {
     return err;
   }
 
+  private formatTextChannelLabel(channel: "legacy" | "apimart" | "tencent"): string {
+    if (channel === "apimart") return "ToAPIs";
+    if (channel === "tencent") return "Tencent";
+    return "147";
+  }
+
   private getUserBananaImageRoute(
     providerOptions?: ProviderOptionsPayload
   ): BananaImageRoute | null {
@@ -299,13 +305,13 @@ export class BananaProvider implements IAIProvider {
     }
     if (mode === "auto") {
       this.logger.warn(
-        "[Banana/Image] deprecated backend mode=auto ignored for normal route, fallback to apimart"
+        "[Banana/Image] deprecated backend mode=auto ignored for normal route, fallback to ToAPIs"
       );
       return "apimart";
     }
     if (mode === "tencent" || mode === "tencent_auto") {
       this.logger.warn(
-        `[Banana/Image] deprecated backend mode=${mode} ignored for normal route, fallback to apimart`
+        `[Banana/Image] deprecated backend mode=${mode} ignored for normal route, fallback to ToAPIs`
       );
       return "apimart";
     }
@@ -320,7 +326,7 @@ export class BananaProvider implements IAIProvider {
     }
     if (mode === "auto" || mode === "tencent") {
       this.logger.warn(
-        `[Banana/Text] deprecated backend mode=${mode} ignored for normal route, fallback to apimart`
+        `[Banana/Text] deprecated backend mode=${mode} ignored for normal route, fallback to ToAPIs`
       );
       return "apimart";
     }
@@ -467,6 +473,9 @@ export class BananaProvider implements IAIProvider {
     const normalized = this.normalizeModelName(model);
     // 提示词优化普通路线：保留 ToAPIs official 模型名
     if (normalized === "gemini-2.5-flash-official") {
+      return "gemini-2.5-flash-official";
+    }
+    if (normalized === "gemini-2.5-flash") {
       return "gemini-2.5-flash-official";
     }
     if (normalized === "gemini-3-pro-preview") {
@@ -1311,7 +1320,7 @@ export class BananaProvider implements IAIProvider {
         rawText ||
         `HTTP ${response.status}`;
       throw new Error(
-        `Apimart text request failed: ${response.status} ${response.statusText} - ${message}`
+        `ToAPIs 文本请求失败: ${response.status} ${response.statusText} - ${message}`
       );
     }
 
@@ -1320,7 +1329,7 @@ export class BananaProvider implements IAIProvider {
       data?.choices?.[0]?.message?.content
     );
     if (!textResponse) {
-      throw new Error("Apimart text response was empty");
+      throw new Error("ToAPIs 文本响应为空");
     }
     return {
       imageBytes: null,
@@ -1341,6 +1350,78 @@ export class BananaProvider implements IAIProvider {
     }
     throw new ServiceUnavailableException(
       "Tencent text token not configured (set TENCENT_VOD_AIGC_API_TOKEN or TENCENT_VOD_TEXT_API_TOKEN)."
+    );
+  }
+
+  private isTencentTextAvailable(): boolean {
+    try {
+      this.getTencentTextApiKey();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private appendTextChannelFallbackMetadata(
+    result: AIProviderResponse<TextResult>,
+    fallbackFrom: "toapis" | "legacy",
+  ): AIProviderResponse<TextResult> {
+    if (!result.success || !result.data) return result;
+    return {
+      success: true,
+      data: {
+        ...result.data,
+        metadata: {
+          ...(result.data.metadata || {}),
+          channelFallback: "tencent",
+          channelFallbackFrom: fallbackFrom,
+        },
+      },
+    };
+  }
+
+  private async fallbackTextToTencent(
+    request: TextChatRequest,
+    previous: AIProviderResponse<TextResult> | null,
+    fallbackFrom: "toapis" | "legacy",
+    reason: string,
+  ): Promise<AIProviderResponse<TextResult>> {
+    if (!this.isTencentTextAvailable()) {
+      return (
+        previous || {
+          success: false,
+          error: {
+            code: "TEXT_GENERATION_FAILED",
+            message: reason || "Text generation failed",
+          },
+        }
+      );
+    }
+
+    this.logger.warn(
+      `[Banana/Text] ${
+        fallbackFrom === "toapis" ? "ToAPIs" : "147"
+      } text unavailable, fallback to Tencent: ${reason}`,
+    );
+
+    const tencentResult = await this.generateTextViaChannel(request, "tencent");
+    if (tencentResult.success) {
+      return this.appendTextChannelFallbackMetadata(tencentResult, fallbackFrom);
+    }
+
+    return previous?.error ? previous : tencentResult;
+  }
+
+  private async generateTextViaToapisWithTencentFallback(
+    request: TextChatRequest,
+  ): Promise<AIProviderResponse<TextResult>> {
+    const toapisResult = await this.generateTextViaChannel(request, "apimart");
+    if (toapisResult.success) return toapisResult;
+    return this.fallbackTextToTencent(
+      request,
+      toapisResult,
+      "toapis",
+      toapisResult.error?.message || "ToAPIs text failed",
     );
   }
 
@@ -1739,7 +1820,7 @@ export class BananaProvider implements IAIProvider {
         hasImage: true,
         metadata: {
           taskId,
-          provider: "apimart",
+          provider: "toapis",
           model,
           resolution: payload.resolution,
           webSearchEnabled: Boolean(
@@ -1787,7 +1868,7 @@ export class BananaProvider implements IAIProvider {
         hasImage: true,
         metadata: {
           taskId,
-          provider: "apimart",
+          provider: "toapis",
           model,
           resolution: payload.resolution,
         },
@@ -1826,7 +1907,7 @@ export class BananaProvider implements IAIProvider {
         hasImage: true,
         metadata: {
           taskId,
-          provider: "apimart",
+          provider: "toapis",
           model,
           resolution: payload.resolution,
         },
@@ -2156,7 +2237,7 @@ export class BananaProvider implements IAIProvider {
       }
 
       this.logger.warn(
-        `Tencent image generation failed in Tencent-first mode, fallback to Apimart/147: ${this.getProviderFailureMessage(
+        `Tencent image generation failed in Tencent-first mode, fallback to ToAPIs/147: ${this.getProviderFailureMessage(
           tencentResult,
           tencentError
         )}`
@@ -2179,7 +2260,7 @@ export class BananaProvider implements IAIProvider {
       }
 
       this.logger.warn(
-        `147 image generation failed in 147-first mode, fallback to Apimart: ${this.getProviderFailureMessage(
+        `147 image generation failed in 147-first mode, fallback to ToAPIs: ${this.getProviderFailureMessage(
           legacyResult,
           legacyError
         )}`
@@ -2267,7 +2348,7 @@ export class BananaProvider implements IAIProvider {
       }
 
       this.logger.warn(
-        `Tencent image edit failed in Tencent-first mode, fallback to Apimart/147: ${this.getProviderFailureMessage(
+        `Tencent image edit failed in Tencent-first mode, fallback to ToAPIs/147: ${this.getProviderFailureMessage(
           tencentResult,
           tencentError
         )}`
@@ -2290,7 +2371,7 @@ export class BananaProvider implements IAIProvider {
       }
 
       this.logger.warn(
-        `147 image edit failed in 147-first mode, fallback to Apimart: ${this.getProviderFailureMessage(
+        `147 image edit failed in 147-first mode, fallback to ToAPIs: ${this.getProviderFailureMessage(
           legacyResult,
           legacyError
         )}`
@@ -2299,7 +2380,7 @@ export class BananaProvider implements IAIProvider {
         return await this.withTimeout(
           this.editImageViaApimart(request),
           this.DEFAULT_TIMEOUT,
-          "Apimart image edit"
+          "ToAPIs image edit"
         );
       } catch (error) {
         return this.buildApimartError("EDIT_FAILED", error);
@@ -2311,10 +2392,10 @@ export class BananaProvider implements IAIProvider {
         const result = await this.withTimeout(
           this.editImageViaApimart(request),
           this.DEFAULT_TIMEOUT,
-          "Apimart image edit"
+          "ToAPIs image edit"
         );
         if (result.success) {
-          this.logger.log("[Banana/Edit] route -> Apimart (success)");
+          this.logger.log("[Banana/Edit] route -> ToAPIs (success)");
           return result;
         }
         if (providerMode === "apimart") return result;
@@ -2323,7 +2404,7 @@ export class BananaProvider implements IAIProvider {
           return this.buildApimartError("EDIT_FAILED", error);
         }
         this.logger.warn(
-          `Apimart image edit failed in auto mode, fallback to legacy: ${
+          `ToAPIs image edit failed in auto mode, fallback to legacy: ${
             error instanceof Error ? error.message : error
           }`
         );
@@ -2380,7 +2461,7 @@ export class BananaProvider implements IAIProvider {
       }
 
       this.logger.warn(
-        `Tencent image blend failed in Tencent-first mode, fallback to Apimart/147: ${this.getProviderFailureMessage(
+        `Tencent image blend failed in Tencent-first mode, fallback to ToAPIs/147: ${this.getProviderFailureMessage(
           tencentResult,
           tencentError
         )}`
@@ -2403,7 +2484,7 @@ export class BananaProvider implements IAIProvider {
       }
 
       this.logger.warn(
-        `147 image blend failed in 147-first mode, fallback to Apimart: ${this.getProviderFailureMessage(
+        `147 image blend failed in 147-first mode, fallback to ToAPIs: ${this.getProviderFailureMessage(
           legacyResult,
           legacyError
         )}`
@@ -2412,7 +2493,7 @@ export class BananaProvider implements IAIProvider {
         return await this.withTimeout(
           this.blendImagesViaApimart(request),
           this.DEFAULT_TIMEOUT,
-          "Apimart image blend"
+          "ToAPIs image blend"
         );
       } catch (error) {
         return this.buildApimartError("BLEND_FAILED", error);
@@ -2424,10 +2505,10 @@ export class BananaProvider implements IAIProvider {
         const result = await this.withTimeout(
           this.blendImagesViaApimart(request),
           this.DEFAULT_TIMEOUT,
-          "Apimart image blend"
+          "ToAPIs image blend"
         );
         if (result.success) {
-          this.logger.log("[Banana/Blend] route -> Apimart (success)");
+          this.logger.log("[Banana/Blend] route -> ToAPIs (success)");
           return result;
         }
         if (providerMode === "apimart") return result;
@@ -2436,7 +2517,7 @@ export class BananaProvider implements IAIProvider {
           return this.buildApimartError("BLEND_FAILED", error);
         }
         this.logger.warn(
-          `Apimart image blend failed in auto mode, fallback to legacy: ${
+          `ToAPIs image blend failed in auto mode, fallback to legacy: ${
             error instanceof Error ? error.message : error
           }`
         );
@@ -2656,7 +2737,7 @@ export class BananaProvider implements IAIProvider {
     for (let round = 0; round < this.MAX_MODEL_ATTEMPTS; round++) {
       try {
         this.logger.log(
-          `馃摑 [${channel}] Using model: ${currentModel}${
+          `馃摑 [${this.formatTextChannelLabel(channel)}] Using model: ${currentModel}${
             usedFallback ? " (fallback)" : ""
           }`
         );
@@ -2680,7 +2761,7 @@ export class BananaProvider implements IAIProvider {
             );
           })(),
           this.TEXT_TIMEOUT,
-          `Text generation (${channel})`
+          `Text generation (${this.formatTextChannelLabel(channel)})`
         );
 
         if (usedFallback) {
@@ -2700,7 +2781,7 @@ export class BananaProvider implements IAIProvider {
             metadata: {
               provider:
                 channel === "apimart"
-                  ? "apimart"
+                  ? "toapis"
                   : channel === "tencent"
                   ? "tencent"
                   : "147",
@@ -2719,7 +2800,7 @@ export class BananaProvider implements IAIProvider {
 
         if (this.isRateLimitedOrQuotaError(err)) {
           this.logger.warn(
-            `鈿狅笍 [FAST-SWITCH] Text generation hit rate/quota limit on ${channel}: ${err.message}`
+            `鈿狅笍 [FAST-SWITCH] Text generation hit rate/quota limit on ${this.formatTextChannelLabel(channel)}: ${err.message}`
           );
           return {
             success: false,
@@ -2736,7 +2817,7 @@ export class BananaProvider implements IAIProvider {
           this.shouldFallback(err)
         ) {
           this.logger.warn(
-            `鈿狅笍 [FAST-SWITCH] ${channel} text channel unavailable, skip same-channel retries: ${err.message}`
+            `鈿狅笍 [FAST-SWITCH] ${this.formatTextChannelLabel(channel)} text channel unavailable, skip same-channel retries: ${err.message}`
           );
           return {
             success: false,
@@ -2795,18 +2876,19 @@ export class BananaProvider implements IAIProvider {
     request: TextChatRequest
   ): Promise<AIProviderResponse<TextResult>> {
     this.logger.log(`Generating text response using Banana provider...`);
-    const userRoute = this.getUserBananaImageRoute(request.providerOptions);
+    const explicitRoute = this.getUserBananaImageRoute(request.providerOptions);
+    const userRoute = explicitRoute ?? "stable";
+
     if (userRoute === "stable") {
       this.logger.log(
         "[Banana/Text] userRoute=stable -> channel=tencent (respect AI settings)"
       );
       return this.generateTextViaChannel(request, "tencent");
     }
-    if (userRoute === "normal") {
-      this.logger.log(
-        "[Banana/Text] userRoute=normal -> follow backend normal-channel policy"
-      );
-    }
+
+    this.logger.log(
+      "[Banana/Text] userRoute=normal -> ToAPIs first, Tencent fallback on failure"
+    );
     const providerMode = await this.getConfiguredTextProvider(
       request.providerOptions
     );
@@ -2824,12 +2906,12 @@ export class BananaProvider implements IAIProvider {
       if (legacyResult?.success) return legacyResult;
 
       this.logger.warn(
-        `147 text generation failed in 147-first mode, fallback to Apimart: ${this.getProviderFailureMessage(
+        `147 text generation failed in 147-first mode, fallback to ToAPIs: ${this.getProviderFailureMessage(
           legacyResult,
           legacyError
         )}`
       );
-      return this.generateTextViaChannel(request, "apimart");
+      return this.generateTextViaToapisWithTencentFallback(request);
     }
 
     if (providerMode === "tencent") {
@@ -2838,32 +2920,25 @@ export class BananaProvider implements IAIProvider {
     }
 
     if (providerMode !== "legacy") {
-      try {
-        const result = await this.generateTextViaChannel(request, "apimart");
-        if (result.success || providerMode === "apimart") {
-          return result;
-        }
-      } catch (error) {
-        if (providerMode === "apimart") {
-          const message = error instanceof Error ? error.message : String(error);
-          return {
-            success: false,
-            error: {
-              code: "TEXT_GENERATION_FAILED",
-              message,
-              details: error,
-            },
-          };
-        }
-        this.logger.warn(
-          `Apimart text generation failed in auto mode, fallback to legacy: ${
-            error instanceof Error ? error.message : error
-          }`
-        );
+      const result = await this.generateTextViaToapisWithTencentFallback(request);
+      if (result.success || providerMode === "apimart") {
+        return result;
       }
+      this.logger.warn(
+        `ToAPIs+Tencent text failed in auto mode, fallback to legacy: ${
+          result.error?.message || "unknown"
+        }`
+      );
     }
 
-    return this.generateTextViaChannel(request, "legacy");
+    const legacyResult = await this.generateTextViaChannel(request, "legacy");
+    if (legacyResult.success) return legacyResult;
+    return this.fallbackTextToTencent(
+      request,
+      legacyResult,
+      "legacy",
+      legacyResult.error?.message || "147 text failed",
+    );
   }
 
   private sanitizeAvailableTools(
