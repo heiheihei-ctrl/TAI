@@ -18,6 +18,7 @@ import {
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { EventDateTimeFields } from "@/components/admin/EventDateTimeFields";
 import WeChatCustomMenuTab from "@/components/admin/WeChatCustomMenuTab";
+import ClassroomSettingsTab from "@/components/admin/ClassroomSettingsTab";
 import { fetchWithAuth } from "@/services/authFetch";
 import {
   getDashboardStats,
@@ -129,14 +130,16 @@ type AdminTabKey =
   | "users"
   | "paid-users"
   | "credit-records"
-  | "credit-anomalies"
   | "api-stats"
   | "api-records"
   | "watermark"
   | "node-configs"
   | "settings"
   | "templates"
+  | "classroom"
   | "volc-review";
+
+type CreditSubTabKey = "records" | "anomalies";
 
 const NORMAL_ADMIN_ALLOWED_TABS = new Set<AdminTabKey>([
   "dashboard",
@@ -145,6 +148,7 @@ const NORMAL_ADMIN_ALLOWED_TABS = new Set<AdminTabKey>([
   "api-records",
   "watermark",
   "templates",
+  "classroom",
 ]);
 
 const normalizeRole = (role?: string | null) => (role || "").trim().toLowerCase();
@@ -1953,6 +1957,7 @@ const inferManagedNodeTemplate = (model: Partial<ManagedModelConfig>): string =>
   if (modelKey === "kling-o3") return "klingO1Video";
   if (modelKey === "vidu-q3") return "viduVideo";
   if (modelKey === "seedance-1.5") return "doubaoVideo";
+  if (modelKey === "seedance-2.5") return "doubaoVideo";
   if (modelKey === "seedance-2.0") return "seedance20Video";
   if (modelKey === "sora-2") return "sora2Video";
   if (modelKey === "seedream5") return "seedream5";
@@ -2247,6 +2252,14 @@ const DEFAULT_MODEL_VENDOR_PLATFORMS: ManagedVendorPlatformConfig[] = [
     route: "legacy",
     provider: "doubao",
     description: "Seedance 视频生成渠道占位",
+  },
+  {
+    platformKey: "toapis",
+    platformName: "ToAPIs",
+    enabled: true,
+    route: "legacy",
+    provider: "doubao",
+    description: "ToAPIs 视频生成路由",
   },
 ];
 
@@ -3273,6 +3286,36 @@ const DEFAULT_MODEL_CATALOG: ManagedModelConfig[] = [
         modelName: "Seedance",
         modelVersion: "2.0",
         metadata: DEFAULT_SEEDANCE20_V2_VENDOR_METADATA,
+      },
+    ],
+  },
+  {
+    modelKey: "seedance-2.5",
+    modelName: "Seedance 2.5",
+    taskType: "video",
+    enabled: true,
+    defaultVendor: "seedance_api",
+    vendors: [
+      {
+        vendorKey: "seedance_api",
+        platformKey: "seedance_api",
+        label: "Seedance API（尊享）",
+        enabled: true,
+        route: "legacy",
+        provider: "doubao",
+        modelName: "Seedance",
+        modelVersion: "2.5",
+        metadata: DEFAULT_SEEDANCE20_V2_VENDOR_METADATA,
+      },
+      {
+        vendorKey: "toapis",
+        platformKey: "toapis",
+        label: "ToAPIs（普通）",
+        enabled: true,
+        route: "legacy",
+        provider: "doubao",
+        modelName: "Seedance",
+        modelVersion: "2.5",
       },
     ],
   },
@@ -14496,6 +14539,7 @@ export default function Admin() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<AdminTabKey>("dashboard");
+  const [creditSubTab, setCreditSubTab] = useState<CreditSubTabKey>("records");
   const [settingsSubTab, setSettingsSubTab] = useState<
     | "system"
     | "vip-management"
@@ -14638,7 +14682,7 @@ export default function Admin() {
     { key: "users", label: "用户管理" },
     { key: "paid-users", label: "付费用户" },
     { key: "credit-records", label: "积分记录" },
-    { key: "credit-anomalies", label: "异常积分" },
+    { key: "classroom", label: "课堂设置" },
     { key: "api-stats", label: "API统计" },
     { key: "api-records", label: "API记录" },
     { key: "watermark", label: "水印白名单" },
@@ -14870,8 +14914,39 @@ export default function Admin() {
           <UsersTab canManageSensitiveUserFields={canManageSensitiveUserFields} />
         )}
         {currentTab === "paid-users" && <PaidUsersTab />}
-        {currentTab === "credit-records" && <CreditChangeRecordsTab />}
-        {currentTab === "credit-anomalies" && <CreditAnomaliesTab />}
+        {currentTab === "credit-records" && (
+          <div className="space-y-4">
+            <div className="rounded-lg border bg-white p-2 shadow-sm">
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    { key: "records", label: "记录列表" },
+                    { key: "anomalies", label: "异常积分" },
+                  ] as const
+                ).map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => setCreditSubTab(tab.key)}
+                    className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                      creditSubTab === tab.key
+                        ? "bg-blue-100 text-blue-700"
+                        : "text-gray-600 hover:bg-gray-100"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {creditSubTab === "records" ? (
+              <CreditChangeRecordsTab />
+            ) : (
+              <CreditAnomaliesTab />
+            )}
+          </div>
+        )}
+        {currentTab === "classroom" && <ClassroomSettingsTab />}
         {currentTab === "api-stats" && <ApiStatsTab />}
         {currentTab === "api-records" && <ApiRecordsTab />}
         {currentTab === "watermark" && <WatermarkWhitelistTab />}

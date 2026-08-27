@@ -162,6 +162,7 @@ import {
   proxifyRemoteAssetUrl,
   resolvePublicAssetUrlFromKey,
 } from "@/utils/assetProxy";
+import { persistGeneratedVideoUrlForSave } from "@/utils/persistVideoForSave";
 import {
   isAssetProxyRef,
   isBlobUrl,
@@ -316,7 +317,7 @@ const VIDEO_LIBRARY_NODE_TYPES = new Set([
   "viduQ3",
   "doubaoVideo",
   "seedance20Video",
-  "omniFlashExtVideo",
+    "omniFlashExtVideo",
   "sora2Video",
   "wan26",
   "wan27Video",
@@ -1123,7 +1124,7 @@ const FLOW_GROUP_RUNNABLE_TYPES = new Set([
   "viduQ3",
   "doubaoVideo",
   "seedance20Video",
-  "omniFlashExtVideo",
+    "omniFlashExtVideo",
   "minimaxSpeech",
   "tencentSpeech",
   "minimaxMusic",
@@ -1150,7 +1151,19 @@ const SEEDANCE20_REFERENCE_VIDEO_MIN_DURATION_SEC = 2;
 const SEEDANCE20_REFERENCE_VIDEO_MAX_DURATION_SEC = 15.2;
 const SEEDANCE20_REFERENCE_VIDEO_TOTAL_MAX_DURATION_SEC = 15.2;
 const SEEDANCE15_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12];
-const SEEDANCE20_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+const SEEDANCE20_DURATIONS = [5, 10, 15, 20, 25, 30];
+const SEEDANCE25_DURATIONS = [5, 10, 15, 20, 25, 30];
+const SEEDANCE25_REFERENCE_VIDEO_MAX_DURATION_SEC = 30.2;
+const SEEDANCE25_REFERENCE_VIDEO_TOTAL_MAX_DURATION_SEC = 30.2;
+
+const snapSeedanceStepDuration = (value: number): number => {
+  const rounded = Math.round(value);
+  const clamped = Math.max(5, Math.min(30, rounded));
+  return Math.round(clamped / 5) * 5;
+};
+
+const isSeedance2VideoNodeType = (nodeType?: string | null): boolean =>
+  nodeType === "seedance20Video";
 const SEEDANCE_REFERENCE_IMAGE_MAX_BYTES = 30 * 1024 * 1024; // 30MB
 
 type Seedance20Mode = "reference_images" | "start_end";
@@ -1177,15 +1190,18 @@ const VIDEO_SOURCE_NODE_TYPES = [
   "viduQ3",
   "doubaoVideo",
   "seedance20Video",
-  "omniFlashExtVideo",
+    "omniFlashExtVideo",
 ];
 
 const normalizeSeedanceModelValue = (
   value?: unknown
-): "seedance-1.5-pro" | "seedance-2.0" | "seedance-2.0-fast" => {
+): "seedance-1.5-pro" | "seedance-2.0" | "seedance-2.0-fast" | "seedance-2.5" => {
   const normalized = String(value || "")
     .trim()
     .toLowerCase();
+  if (normalized === "seedance-2.5" || normalized === "2.5") {
+    return "seedance-2.5";
+  }
   if (normalized === "seedance-2.0-fast" || normalized === "2.0-fast") {
     return "seedance-2.0-fast";
   }
@@ -1195,10 +1211,23 @@ const normalizeSeedanceModelValue = (
   return "seedance-1.5-pro";
 };
 
+const isSeedance25ModelValue = (value?: unknown): boolean => {
+  const normalized = normalizeSeedanceModelValue(value);
+  return normalized === "seedance-2.5";
+};
+
 const isSeedance20ModelValue = (value?: unknown): boolean => {
   const normalized = normalizeSeedanceModelValue(value);
   return normalized === "seedance-2.0" || normalized === "seedance-2.0-fast";
 };
+
+const isSeedance2FamilyModelValue = (value?: unknown): boolean =>
+  isSeedance20ModelValue(value) || isSeedance25ModelValue(value);
+
+const resolveSeedance25VendorKey = (
+  bananaImageRoute?: "normal" | "stable"
+): "seedance_api" | "toapis" =>
+  bananaImageRoute === "stable" ? "seedance_api" : "toapis";
 
 const getEffectiveViduMaxReferenceImages = (nodeData?: Record<string, any>): number =>
   isViduQ3FamilyModel(nodeData?.viduModel)
@@ -2115,7 +2144,7 @@ const VIDEO_DYNAMIC_CREDIT_NODE_TYPES = new Set([
   "viduQ3",
   "doubaoVideo",
   "seedance20Video",
-  "omniFlashExtVideo",
+    "omniFlashExtVideo",
 ]);
 
 const KLING_DYNAMIC_CREDIT_MATRIX = {
@@ -9008,7 +9037,7 @@ function FlowInner() {
               videoVersion: 0,
               history: [],
               clipDuration:
-                type === "doubaoVideo" || type === "seedance20Video"
+                type === "doubaoVideo" || type === "seedance20Video" 
                   ? 5
                   : type === "omniFlashExtVideo"
                   ? 6
@@ -9056,17 +9085,24 @@ function FlowInner() {
                   ? ("seedance-2.0" as const)
                   : undefined,
               seedanceMode:
-                type === "seedance20Video"
+                type === "seedance20Video" 
                   ? ("reference_images" as const)
                   : type === "doubaoVideo"
                   ? ("text" as const)
                   : undefined,
-              generateAudio: type === "seedance20Video" ? true : undefined,
+              generateAudio:
+                type === "seedance20Video"  ? true : undefined,
               style: type === "viduVideo" || type === "viduQ3" ? ("general" as const) : undefined,
               offPeak: type === "viduVideo" || type === "viduQ3" ? false : undefined,
               // Seedance 1.5 Pro专用参数
-              camerafixed: type === "doubaoVideo" || type === "seedance20Video" ? false : undefined,
-              watermark: type === "doubaoVideo" || type === "seedance20Video" ? false : undefined,
+              camerafixed:
+                type === "doubaoVideo" || type === "seedance20Video" 
+                  ? false
+                  : undefined,
+              watermark:
+                type === "doubaoVideo" || type === "seedance20Video" 
+                  ? false
+                  : undefined,
               videoMode: type === "omniFlashExtVideo" ? ("frame" as const) : undefined,
               managedModelKey: type === "omniFlashExtVideo" ? "omni-flash-ext" : undefined,
               vendorKey: type === "omniFlashExtVideo" ? "apimart" : undefined,
@@ -9081,7 +9117,8 @@ function FlowInner() {
                   ? ("720P" as const)
                   : type === "viduVideo" || type === "viduQ3"
                   ? ("720p" as const)
-                  : type === "seedance20Video" || type === "doubaoVideo"
+                  : type === "seedance20Video" ||
+                    type === "doubaoVideo"
                   ? ("720P" as const)
                   : undefined,
               resolutionLimit: type === "videoEnhance" ? 1080 : undefined,
@@ -9264,7 +9301,7 @@ function FlowInner() {
       "klingO1Video",
       "viduVideo",
       "seedance20Video",
-      "omniFlashExtVideo",
+        "omniFlashExtVideo",
       "doubaoVideo",
       "videoFrameExtract",
     ],
@@ -9653,7 +9690,7 @@ function FlowInner() {
       node?: Node | null
     ): {
       isSeedance20: boolean;
-      model: "seedance-1.5-pro" | "seedance-2.0" | "seedance-2.0-fast";
+      model: "seedance-1.5-pro" | "seedance-2.0" | "seedance-2.0-fast" | "seedance-2.5";
     } | null => {
       if (!isSeedanceVideoNode(node)) return null;
       const nodeData = (node?.data || {}) as Record<string, any>;
@@ -9915,7 +9952,7 @@ function FlowInner() {
             "viduQ3",
             "doubaoVideo",
             "seedance20Video",
-          ].includes(sourceNode.type || "");
+                        ].includes(sourceNode.type || "");
         }
 
         if (targetHandle === "character") {
@@ -9940,7 +9977,7 @@ function FlowInner() {
             "viduQ3",
             "doubaoVideo",
             "seedance20Video",
-          ].includes(sourceNode.type || "");
+                        ].includes(sourceNode.type || "");
         }
 
         if (isImageHandle(targetHandle)) {
@@ -10013,7 +10050,7 @@ function FlowInner() {
             "viduQ3",
             "doubaoVideo",
             "seedance20Video",
-          ].includes(sourceNode.type || "");
+                        ].includes(sourceNode.type || "");
         }
         if (targetHandle === "audio") {
           if (sourceHandle !== "audio") return false;
@@ -10059,7 +10096,7 @@ function FlowInner() {
             "viduQ3",
             "doubaoVideo",
             "seedance20Video",
-          ].includes(sourceNode.type || "");
+                        ].includes(sourceNode.type || "");
         }
         return false;
       }
@@ -10805,7 +10842,7 @@ function FlowInner() {
           "viduVideo",
           "doubaoVideo",
           "seedance20Video",
-          "omniFlashExtVideo",
+            "omniFlashExtVideo",
           "minimaxSpeech",
           "tencentSpeech",
           "minimaxMusic",
@@ -12728,10 +12765,14 @@ function FlowInner() {
               const processingTime = Math.max(0, Date.now() - startMs);
               void markVideoTaskSuccess(apiUsageId, processingTime).catch(() => {});
             }
+            const projectId = useProjectContentStore.getState().projectId;
+            const persistedVideoUrl =
+              (await persistGeneratedVideoUrlForSave(queryResult.videoUrl, projectId)) ||
+              queryResult.videoUrl;
             const elapsedSeconds = Math.max(1, Math.round((Date.now() - startMs) / 1000));
             const historyEntry = {
               id: `video-history-${Date.now()}`,
-              videoUrl: queryResult.videoUrl,
+              videoUrl: persistedVideoUrl,
               thumbnail: queryResult.thumbnailUrl,
               createdAt: new Date().toISOString(),
               elapsedSeconds,
@@ -12745,7 +12786,7 @@ function FlowInner() {
                   data: {
                     ...prev,
                     status: "succeeded",
-                    videoUrl: queryResult.videoUrl,
+                    videoUrl: persistedVideoUrl,
                     thumbnail: queryResult.thumbnailUrl,
                     error: undefined,
                     videoVersion: Number(prev.videoVersion || 0) + 1,
@@ -15689,7 +15730,7 @@ function FlowInner() {
         "viduQ3",
         "doubaoVideo",
         "seedance20Video",
-        "omniFlashExtVideo",
+                "omniFlashExtVideo",
       ];
       if (newVideoNodeTypes.includes(normalizedVideoNodeType)) {
         const projectId = useProjectContentStore.getState().projectId;
@@ -15737,7 +15778,10 @@ function FlowInner() {
               ? "seedance-2.0"
               : "seedance-1.5-pro")
         );
+        const isSeedance25Request = isSeedance25ModelValue(seedanceModelForRequest);
         const isSeedance20Request = isSeedance20ModelValue(seedanceModelForRequest);
+        const isSeedance2FamilyRequest = isSeedance20Request || isSeedance25Request;
+        const seedanceFamilyLabel = isSeedance25Request ? "Seedance 2.5" : "Seedance 2.0";
         const seedanceMode = isSeedanceNode ? inferSeedanceMode(node) : undefined;
         const seedanceModeSpec = isSeedanceNode ? getSeedanceModeSpec(node) : undefined;
 
@@ -15850,10 +15894,10 @@ function FlowInner() {
           ).length;
           const seedanceTotalImageCount = seedanceImageCount + seedanceImage2Count;
 
-          if (isSeedance20Request) {
+          if (isSeedance2FamilyRequest) {
             if (seedanceMode === "start_end") {
               if (seedanceTotalImageCount < 1 || seedanceTotalImageCount > 2) {
-                failCurrentVideoNode("Seedance 2.0 帧模式需要 1-2 张图片");
+                failCurrentVideoNode(`${seedanceFamilyLabel} 帧模式需要 1-2 张图片`);
                 return;
               }
             } else if (
@@ -16053,9 +16097,10 @@ function FlowInner() {
               .filter((item) => item.length > 0)
           );
         })();
-        const metadataSupportsSeedance20 =
+        const metadataSupportsSeedance2 =
           nodeSupportedSeedanceModels.has("seedance-2.0") ||
-          nodeSupportedSeedanceModels.has("seedance-2.0-fast");
+          nodeSupportedSeedanceModels.has("seedance-2.0-fast") ||
+          nodeSupportedSeedanceModels.has("seedance-2.5");
         const effectiveConfiguredDurationOptions = (() => {
           if (provider === "kling-o3" && isTencentKlingO3RouteForDuration) {
             return Array.from(
@@ -16067,27 +16112,36 @@ function FlowInner() {
             return configuredDurationOptions;
           }
 
-          if (isSeedance20Request) {
-            // 兼容历史工作流：旧的 doubaoVideo 元数据通常不是 4-15，切到 2.0 时不应继续拦截 15s。
-            if (nodeConfigKey === "doubaoVideo" || !metadataSupportsSeedance20) {
+          if (isSeedance2FamilyRequest) {
+            // 兼容历史工作流：旧的 doubaoVideo 元数据通常不是 5-30，切到 2.x 时不应继续拦截。
+            if (nodeConfigKey === "doubaoVideo" || !metadataSupportsSeedance2) {
               return [] as number[];
             }
 
+            const allowedDurations = isSeedance25Request
+              ? SEEDANCE25_DURATIONS
+              : SEEDANCE20_DURATIONS;
             return configuredDurationOptions.filter(
               (value) =>
-                value >= SEEDANCE20_DURATIONS[0] &&
-                value <= SEEDANCE20_DURATIONS[SEEDANCE20_DURATIONS.length - 1]
+                value >= allowedDurations[0] &&
+                value <= allowedDurations[allowedDurations.length - 1] &&
+                value % 5 === 0
             );
           }
 
           return [...SEEDANCE15_DURATIONS];
         })();
         if (isSeedanceNode && typeof clipDuration === "number" && Number.isFinite(clipDuration)) {
-          if (isSeedance20Request && (clipDuration < 4 || clipDuration > 15)) {
-            failCurrentVideoNode("Seedance 2.0 生成时长仅支持 4-15 秒");
+          if (
+            isSeedance2FamilyRequest &&
+            (clipDuration < 5 || clipDuration > 30 || clipDuration % 5 !== 0)
+          ) {
+            failCurrentVideoNode(
+              `${seedanceFamilyLabel} 生成时长仅支持 5-30 秒，且需为 5 的倍数`
+            );
             return;
           }
-          if (!isSeedance20Request && (clipDuration < 4 || clipDuration > 12)) {
+          if (!isSeedance2FamilyRequest && (clipDuration < 4 || clipDuration > 12)) {
             failCurrentVideoNode("Seedance 1.5 生成时长仅支持 4-12 秒");
             return;
           }
@@ -16343,7 +16397,7 @@ function FlowInner() {
         }
         */
         let seedanceAudioUrlsForAPI: string[] | undefined = undefined;
-        if (isSeedanceNode && isSeedance20Request) {
+        if (isSeedanceNode && isSeedance2FamilyRequest) {
           const connectedAudioEdges = currentEdges.filter(
             (e) => e.target === nodeId && e.targetHandle === "audio"
           );
@@ -16407,7 +16461,7 @@ function FlowInner() {
 
         let referenceVideoUrl: string | undefined = undefined;
         let referenceVideoUrls: string[] = [];
-        if (provider === "kling-o3" || (isSeedanceNode && isSeedance20Request) || isOmniFlashExtNode) {
+        if (provider === "kling-o3" || (isSeedanceNode && isSeedance2FamilyRequest) || isOmniFlashExtNode) {
           const videoEdges = currentEdges.filter(
             (e) => e.target === nodeId && e.targetHandle === "video"
           );
@@ -16472,14 +16526,21 @@ function FlowInner() {
           }
 
           referenceVideoUrls = Array.from(new Set(resolvedVideoUrls));
-          if (isSeedanceNode && isSeedance20Request) {
+          if (isSeedanceNode && isSeedance2FamilyRequest) {
             referenceVideoUrls = referenceVideoUrls.slice(0, SEEDANCE20_REFERENCE_VIDEO_MAX);
           } else {
             referenceVideoUrls = referenceVideoUrls.slice(0, 1);
           }
           referenceVideoUrl = referenceVideoUrls[0];
 
-          if (isSeedanceNode && isSeedance20Request && referenceVideoUrls.length > 0) {
+          if (isSeedanceNode && isSeedance2FamilyRequest && referenceVideoUrls.length > 0) {
+            const referenceVideoMaxDurationSec = isSeedance25Request
+              ? SEEDANCE25_REFERENCE_VIDEO_MAX_DURATION_SEC
+              : SEEDANCE20_REFERENCE_VIDEO_MAX_DURATION_SEC;
+            const referenceVideoTotalMaxDurationSec = isSeedance25Request
+              ? SEEDANCE25_REFERENCE_VIDEO_TOTAL_MAX_DURATION_SEC
+              : SEEDANCE20_REFERENCE_VIDEO_TOTAL_MAX_DURATION_SEC;
+            const referenceVideoMaxLabelSec = isSeedance25Request ? 30 : 15;
             const durationHintByUrl = new Map<string, number>();
             for (const videoEdge of videoEdges) {
               const sourceNode = rf.getNode(videoEdge.source);
@@ -16511,17 +16572,17 @@ function FlowInner() {
                 if (duration < SEEDANCE20_REFERENCE_VIDEO_MIN_DURATION_SEC) {
                   failCurrentVideoNode(
                     lt(
-                      `Seedance 2.0 参考视频每条至少 ${SEEDANCE20_REFERENCE_VIDEO_MIN_DURATION_SEC} 秒，第 ${index + 1} 条约 ${duration.toFixed(1)} 秒`,
-                      `Seedance 2.0 reference videos must be at least ${SEEDANCE20_REFERENCE_VIDEO_MIN_DURATION_SEC}s; clip ${index + 1} is ~${duration.toFixed(1)}s`
+                      `${seedanceFamilyLabel} 参考视频每条至少 ${SEEDANCE20_REFERENCE_VIDEO_MIN_DURATION_SEC} 秒，第 ${index + 1} 条约 ${duration.toFixed(1)} 秒`,
+                      `${seedanceFamilyLabel} reference videos must be at least ${SEEDANCE20_REFERENCE_VIDEO_MIN_DURATION_SEC}s; clip ${index + 1} is ~${duration.toFixed(1)}s`
                     )
                   );
                   return;
                 }
-                if (duration > SEEDANCE20_REFERENCE_VIDEO_MAX_DURATION_SEC) {
+                if (duration > referenceVideoMaxDurationSec) {
                   failCurrentVideoNode(
                     lt(
-                      `Seedance 2.0 参考视频每条不能超过 15 秒，第 ${index + 1} 条约 ${duration.toFixed(1)} 秒，请先裁剪后再生成`,
-                      `Seedance 2.0 reference videos must be <= 15s; clip ${index + 1} is ~${duration.toFixed(1)}s. Trim before generating.`
+                      `${seedanceFamilyLabel} 参考视频每条不能超过 ${referenceVideoMaxLabelSec} 秒，第 ${index + 1} 条约 ${duration.toFixed(1)} 秒，请先裁剪后再生成`,
+                      `${seedanceFamilyLabel} reference videos must be <= ${referenceVideoMaxLabelSec}s; clip ${index + 1} is ~${duration.toFixed(1)}s. Trim before generating.`
                     )
                   );
                   return;
@@ -16529,11 +16590,11 @@ function FlowInner() {
               }
 
               const totalDuration = clipDurations.reduce((sum, value) => sum + value, 0);
-              if (totalDuration > SEEDANCE20_REFERENCE_VIDEO_TOTAL_MAX_DURATION_SEC) {
+              if (totalDuration > referenceVideoTotalMaxDurationSec) {
                 failCurrentVideoNode(
                   lt(
-                    `Seedance 2.0 参考视频总时长不能超过 15 秒，当前合计约 ${totalDuration.toFixed(1)} 秒，请先裁剪后再生成`,
-                    `Seedance 2.0 total reference video duration must be <= 15s; current total is ~${totalDuration.toFixed(1)}s. Trim before generating.`
+                    `${seedanceFamilyLabel} 参考视频总时长不能超过 ${referenceVideoMaxLabelSec} 秒，当前合计约 ${totalDuration.toFixed(1)} 秒，请先裁剪后再生成`,
+                    `${seedanceFamilyLabel} total reference video duration must be <= ${referenceVideoMaxLabelSec}s; current total is ~${totalDuration.toFixed(1)}s. Trim before generating.`
                   )
                 );
                 return;
@@ -16553,7 +16614,7 @@ function FlowInner() {
 
           if (referenceVideoUrl) {
             console.log(
-              `🎬 [${isSeedanceNode && isSeedance20Request ? "Seedance 2.0" : "Kling O1"}] 检测到视频输入: ${referenceVideoUrl.slice(0, 80)}...`
+              `🎬 [${isSeedanceNode && isSeedance2FamilyRequest ? seedanceFamilyLabel : "Kling O1"}] 检测到视频输入: ${referenceVideoUrl.slice(0, 80)}...`
             );
           }
         }
@@ -16784,14 +16845,15 @@ function FlowInner() {
             durationForAPI = clipDuration;
           } else if (
             isSeedanceNode &&
-            isSeedance20Request &&
-            clipDuration >= 4 &&
-            clipDuration <= 15
+            isSeedance2FamilyRequest &&
+            clipDuration >= 5 &&
+            clipDuration <= 30 &&
+            clipDuration % 5 === 0
           ) {
             durationForAPI = clipDuration;
           } else if (
             provider === "doubao" &&
-            !isSeedance20Request &&
+            !isSeedance2FamilyRequest &&
             clipDuration >= 4 &&
             clipDuration <= 12
           ) {
@@ -16802,8 +16864,10 @@ function FlowInner() {
               isOmniFlashExtNode
                 ? [4, 6, 8, 10]
                 : isSeedanceNode
-                ? isSeedance20Request
-                  ? SEEDANCE20_DURATIONS
+                ? isSeedance2FamilyRequest
+                  ? isSeedance25Request
+                    ? SEEDANCE25_DURATIONS
+                    : SEEDANCE20_DURATIONS
                   : SEEDANCE15_DURATIONS
                 : configuredDurationOptions;
             const durationHintOptions =
@@ -16826,7 +16890,7 @@ function FlowInner() {
         const seedanceVideoModeForAPI =
           !isSeedanceNode || !seedanceMode
             ? undefined
-            : isSeedance20Request
+            : isSeedance2FamilyRequest
             ? seedanceMode === "start_end"
               ? imageCount >= 2
                 ? "start_end"
@@ -16874,6 +16938,14 @@ function FlowInner() {
                 ? rawNodeData.platformKey.trim()
                 : undefined,
           };
+          if (isSeedanceNode && isSeedance25Request) {
+            const activeRoute =
+              useAIChatStore.getState().bananaImageRoute || bananaImageRoute;
+            const seedance25Vendor = resolveSeedance25VendorKey(activeRoute);
+            managedRoutePayload.managedModelKey = "seedance-2.5";
+            managedRoutePayload.vendorKey = seedance25Vendor;
+            managedRoutePayload.platformKey = seedance25Vendor;
+          }
           const normalizedVendorKey = (managedRoutePayload.vendorKey || "").toLowerCase();
           const normalizedPlatformKey = (managedRoutePayload.platformKey || "").toLowerCase();
           const isTencentKlingO3Route =
@@ -17026,7 +17098,7 @@ function FlowInner() {
                 volcAssetStatus?: "processing" | "active" | "failed";
               }>
             | undefined =
-            isSeedanceNode && isSeedance20Request && referenceImageUrls.length > 0
+            isSeedanceNode && isSeedance2FamilyRequest && referenceImageUrls.length > 0
               ? referenceImageUrls.map((url, idx) => {
                   const sourceEdge = referenceImageSourceEdges[idx];
                   const sourceNode = sourceEdge
@@ -17084,7 +17156,7 @@ function FlowInner() {
                   referenceVideos:
                     referenceVideoUrls.length > 0 ? referenceVideoUrls : undefined,
                   audioUrls:
-                    isSeedanceNode && isSeedance20Request
+                    isSeedanceNode && isSeedance2FamilyRequest
                       ? seedanceAudioUrlsForAPI
                       : Array.isArray(rawNodeData.audioUrls) && rawNodeData.audioUrls.length > 0
                       ? rawNodeData.audioUrls
@@ -17095,7 +17167,7 @@ function FlowInner() {
                   resolution: rawNodeData.resolution,
                   videoMode: seedanceVideoModeForAPI,
                   generateAudio:
-                    isSeedance20Request
+                    isSeedance2FamilyRequest
                       ? typeof rawNodeData.generateAudio === "boolean"
                         ? rawNodeData.generateAudio
                         : true
@@ -17281,13 +17353,17 @@ function FlowInner() {
                     }
                   );
                 }
+                const projectId = useProjectContentStore.getState().projectId;
+                const persistedVideoUrl =
+                  (await persistGeneratedVideoUrlForSave(queryResult.videoUrl, projectId)) ||
+                  queryResult.videoUrl;
                 const elapsedSeconds = Math.max(
                   1,
                   Math.round((Date.now() - generationStartMs) / 1000)
                 );
                 const historyEntry = {
                   id: `video-history-${Date.now()}`,
-                  videoUrl: queryResult.videoUrl,
+                  videoUrl: persistedVideoUrl,
                   thumbnail: queryResult.thumbnailUrl,
                   prompt: promptText,
                   createdAt: new Date().toISOString(),
@@ -17302,7 +17378,7 @@ function FlowInner() {
                       data: {
                         ...previousData,
                         status: "succeeded",
-                        videoUrl: queryResult.videoUrl,
+                        videoUrl: persistedVideoUrl,
                         thumbnail: queryResult.thumbnailUrl,
                         error: undefined,
                         videoVersion:
@@ -21853,6 +21929,15 @@ function FlowInner() {
             ? { nodeConfigMetadata: managedRuntime.nodeConfigMetadata }
             : {}),
         } as Record<string, any>;
+        if (
+          (n.type === "doubaoVideo" || n.type === "seedance20Video") &&
+          isSeedance25ModelValue(normalizeSeedanceModelValue(runtimeNodeData.seedanceModel))
+        ) {
+          const seedance25Vendor = resolveSeedance25VendorKey(bananaImageRoute);
+          runtimeNodeData.vendorKey = seedance25Vendor;
+          runtimeNodeData.platformKey = seedance25Vendor;
+          runtimeNodeData.managedModelKey = "seedance-2.5";
+        }
         const defaultCreditsPerCall =
           (typeof runtimeNodeData.creditsPerCall === "number"
             ? runtimeNodeData.creditsPerCall
@@ -21942,7 +22027,7 @@ function FlowInner() {
               ...runtimeNodeData,
               onRun: runNode,
               creditsPerCall,
-              ...(n.type === "seedance20Video"
+              ...(n.type === "doubaoVideo" || n.type === "seedance20Video"
                 ? { seedance2AccessEnabled, seedance2AccessResolved }
                 : {}),
             },
@@ -24189,7 +24274,9 @@ function FlowInner() {
                           const isDisabled =
                             config.status === "maintenance" ||
                             config.status === "coming_soon";
-                          const isVipNode = config.nodeKey === "seedance20Video" || (config.metadata as Record<string, any>)?.vipOnly === true;
+                          const isVipNode =
+                            config.nodeKey === "seedance20Video" ||
+                            (config.metadata as Record<string, any>)?.vipOnly === true;
                           const isVipLocked = !membershipActive && isVipNode;
                           const badge = getStatusBadge(config.status);
                           const rawCaption = buildNodePaletteCaption(config);

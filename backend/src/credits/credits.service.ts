@@ -748,6 +748,12 @@ export class CreditsService {
       effectiveRequestParams,
     );
 
+    creditsToDeduct = this.resolveSeedance25Credits(
+      params.serviceType,
+      creditsToDeduct,
+      effectiveRequestParams,
+    );
+
     creditsToDeduct = this.resolveSeedanceCredits(
       params.serviceType,
       creditsToDeduct,
@@ -1084,6 +1090,9 @@ export class CreditsService {
       typeof requestParams?.seedanceModel === 'string'
         ? requestParams.seedanceModel.trim().toLowerCase()
         : '';
+    if (seedanceModel === 'seedance-2.5' || seedanceModel === '2.5') {
+      return 'seedance-2.5';
+    }
     if (seedanceModel === 'seedance-2.0' || seedanceModel === 'seedance-2.0-fast') {
       return 'seedance-2.0';
     }
@@ -1217,6 +1226,13 @@ export class CreditsService {
       typeof requestParams?.seedanceModel === 'string'
         ? requestParams.seedanceModel.trim().toLowerCase()
         : '';
+
+    if (
+      seedanceModel === 'seedance-2.5' ||
+      seedanceModel === '2.5'
+    ) {
+      return 'Seedance 2.5视频生成';
+    }
 
     if (
       seedanceModel === 'seedance-2.0-fast' ||
@@ -1407,6 +1423,48 @@ export class CreditsService {
         : 5;
 
     return duration * CreditsService.VIDU_Q3_CREDITS_PER_SECOND;
+  }
+
+  /** Seedance 2.5：按分辨率 × 时长动态计费（覆盖 managed pricing） */
+  private static readonly SEEDANCE25_CREDITS_PER_SECOND: Record<string, number> = {
+    '480P': 110,
+    '720P': 240,
+    '1080P': 600,
+  };
+
+  private resolveSeedance25Credits(
+    serviceType: ServiceType,
+    currentCredits: number,
+    requestParams: any,
+  ): number {
+    if (serviceType !== 'doubao-video') return currentCredits;
+
+    const seedanceModel =
+      typeof requestParams?.seedanceModel === 'string'
+        ? requestParams.seedanceModel.trim().toLowerCase()
+        : '';
+    if (seedanceModel !== 'seedance-2.5' && seedanceModel !== '2.5') {
+      return currentCredits;
+    }
+
+    const resolution = String(requestParams?.resolution || '720P')
+      .trim()
+      .toUpperCase();
+    const rate =
+      CreditsService.SEEDANCE25_CREDITS_PER_SECOND[resolution] ??
+      CreditsService.SEEDANCE25_CREDITS_PER_SECOND['720P'];
+
+    const durationRaw = Number(
+      requestParams?.durationSec ??
+        requestParams?.duration ??
+        requestParams?.clipDuration,
+    );
+    const duration =
+      Number.isFinite(durationRaw) && durationRaw > 0
+        ? Math.max(5, Math.min(30, Math.round(durationRaw / 5) * 5))
+        : 5;
+
+    return Math.round(rate * duration);
   }
 
   /**

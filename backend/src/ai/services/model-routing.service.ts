@@ -506,6 +506,14 @@ const DEFAULT_MODEL_PROVIDER_MAPPING_V2: ModelProviderMappingV2 = {
       description: 'APIMart 直连视频路由',
     },
     {
+      platformKey: 'toapis',
+      platformName: 'ToAPIs',
+      enabled: true,
+      route: 'legacy',
+      provider: 'doubao',
+      description: 'ToAPIs 视频生成路由',
+    },
+    {
       platformKey: 'vidu_api',
       platformName: 'Vidu API',
       enabled: true,
@@ -846,6 +854,36 @@ const DEFAULT_MODEL_PROVIDER_MAPPING_V2: ModelProviderMappingV2 = {
         },
       ],
     },
+    {
+      modelKey: 'seedance-2.5',
+      modelName: 'Seedance 2.5',
+      taskType: 'video',
+      enabled: true,
+      defaultVendor: 'seedance_api',
+      vendors: [
+        {
+          vendorKey: 'seedance_api',
+          platformKey: 'seedance_api',
+          label: 'Seedance API（尊享）',
+          enabled: true,
+          route: 'legacy',
+          provider: 'doubao',
+          modelName: 'Seedance',
+          modelVersion: '2.5',
+          metadata: DEFAULT_SEEDANCE20_V2_VENDOR_METADATA,
+        },
+        {
+          vendorKey: 'toapis',
+          platformKey: 'toapis',
+          label: 'ToAPIs（普通）',
+          enabled: true,
+          route: 'legacy',
+          provider: 'doubao',
+          modelName: 'Seedance',
+          modelVersion: '2.5',
+        },
+      ],
+    },
   ],
 };
 
@@ -981,12 +1019,43 @@ export class ModelRoutingService {
       ),
     ];
 
-    const mergedModels = Array.isArray(input.models) ? input.models.filter(Boolean) : fallback.models || [];
+    const existingModels = Array.isArray(input.models) ? input.models.filter(Boolean) : [];
+    const existingModelKeys = new Set(
+      existingModels
+        .map((item) => (typeof item?.modelKey === 'string' ? item.modelKey.trim() : ''))
+        .filter(Boolean),
+    );
+    const mergedModels = [
+      ...existingModels.map((model) => {
+        const fallbackModel =
+          (fallback.models || []).find((item) => item.modelKey === model.modelKey) || null;
+        if (!fallbackModel) {
+          return model;
+        }
+        return {
+          ...fallbackModel,
+          ...model,
+          metadata: {
+            ...(fallbackModel.metadata && typeof fallbackModel.metadata === 'object'
+              ? fallbackModel.metadata
+              : {}),
+            ...(model.metadata && typeof model.metadata === 'object' ? model.metadata : {}),
+          },
+        };
+      }),
+      ...(fallback.models || []).filter(
+        (item) =>
+          item &&
+          typeof item.modelKey === 'string' &&
+          item.modelKey.trim().length > 0 &&
+          !existingModelKeys.has(item.modelKey.trim()),
+      ),
+    ];
 
     return this.normalizeSpecialCases({
       version: input.version || fallback.version || 'v2',
       platforms: mergedPlatforms,
-      models: mergedModels,
+      models: mergedModels.length ? mergedModels : fallback.models || [],
     });
   }
 
@@ -1180,10 +1249,11 @@ export class ModelRoutingService {
         });
       }
 
-      if (model.modelKey !== 'seedance-2.0') {
+      if (model.modelKey !== 'seedance-2.0' && model.modelKey !== 'seedance-2.5') {
         return model;
       }
 
+      const seedanceApiModelVersion = model.modelKey === 'seedance-2.5' ? '2.5' : '2.0';
       const existingVendors = Array.isArray(model.vendors) ? model.vendors.filter(Boolean) : [];
       const seedanceVendor =
         existingVendors.find((vendor) => vendor.vendorKey === 'seedance_api') || {
@@ -1194,7 +1264,7 @@ export class ModelRoutingService {
           route: 'legacy' as const,
           provider: 'doubao',
           modelName: 'Seedance',
-          modelVersion: '2.0',
+          modelVersion: seedanceApiModelVersion,
         };
 
       const normalizedVendor: ManagedModelVendorConfig = {
@@ -1205,7 +1275,7 @@ export class ModelRoutingService {
         route: 'legacy',
         provider: 'doubao',
         modelName: seedanceVendor.modelName || 'Seedance',
-        modelVersion: '2.0',
+        modelVersion: seedanceApiModelVersion,
         metadata: this.mergeMetadataWithFallback(
           DEFAULT_SEEDANCE20_V2_VENDOR_METADATA,
           seedanceVendor.metadata && typeof seedanceVendor.metadata === 'object'
@@ -1214,10 +1284,38 @@ export class ModelRoutingService {
         ),
       };
 
+      const vendors: ManagedModelVendorConfig[] = [normalizedVendor];
+
+      if (model.modelKey === 'seedance-2.5') {
+        const toapisVendor =
+          existingVendors.find((vendor) => vendor.vendorKey === 'toapis') ||
+          existingVendors.find((vendor) => vendor.vendorKey === 'apimart') || {
+            vendorKey: 'toapis',
+            platformKey: 'toapis',
+            label: 'ToAPIs',
+            enabled: true,
+            route: 'legacy' as const,
+            provider: 'doubao',
+            modelName: 'Seedance',
+            modelVersion: '2.5',
+          };
+        vendors.push({
+          ...toapisVendor,
+          vendorKey: 'toapis',
+          platformKey: 'toapis',
+          label: toapisVendor.label || 'ToAPIs',
+          enabled: toapisVendor.enabled !== false,
+          route: 'legacy',
+          provider: 'doubao',
+          modelName: toapisVendor.modelName || 'Seedance',
+          modelVersion: '2.5',
+        });
+      }
+
       return this.ensureModelDefaultVendor({
         ...model,
         defaultVendor: 'seedance_api',
-        vendors: [normalizedVendor],
+        vendors,
       });
     });
 
@@ -1319,6 +1417,36 @@ export class ModelRoutingService {
     };
   }
 
+  private resolvePreferredVideoVendorKey(
+    modelKey: string,
+    preferredVendorKey: string,
+    enabledVendors: ManagedModelVendorConfig[],
+  ): string {
+    const normalizedPreferred = preferredVendorKey.trim();
+    if (!normalizedPreferred) return normalizedPreferred;
+
+    const hasVendor = (vendorKey: string) =>
+      enabledVendors.some(
+        (item) =>
+          typeof item.vendorKey === 'string' && item.vendorKey.trim() === vendorKey.trim(),
+      );
+
+    if (hasVendor(normalizedPreferred)) {
+      return normalizedPreferred;
+    }
+
+    if (modelKey === 'seedance-2.5') {
+      if (normalizedPreferred === 'toapis' && hasVendor('apimart')) {
+        return 'apimart';
+      }
+      if (normalizedPreferred === 'apimart' && hasVendor('toapis')) {
+        return 'toapis';
+      }
+    }
+
+    return normalizedPreferred;
+  }
+
   async resolveVideoModelCandidates(
     modelKey: string,
     preferredVendorKey?: string,
@@ -1348,7 +1476,13 @@ export class ModelRoutingService {
     if (!enabledVendors.length) return [];
 
     const normalizedPreferredVendorKey =
-      typeof preferredVendorKey === 'string' ? preferredVendorKey.trim() : '';
+      typeof preferredVendorKey === 'string'
+        ? this.resolvePreferredVideoVendorKey(
+            normalizedKey,
+            preferredVendorKey.trim(),
+            enabledVendors,
+          )
+        : '';
 
     const selected =
       (normalizedPreferredVendorKey

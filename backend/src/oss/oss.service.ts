@@ -521,6 +521,21 @@ export class OssService {
     }
   }
 
+  async objectExistsWithRetry(
+    key: string,
+    options?: { attempts?: number; delayMs?: number },
+  ): Promise<boolean> {
+    const attempts = Math.max(1, options?.attempts ?? 4);
+    const delayMs = Math.max(0, options?.delayMs ?? 400);
+    for (let index = 0; index < attempts; index += 1) {
+      if (await this.objectExists(key)) return true;
+      if (index < attempts - 1 && delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs * (index + 1)));
+      }
+    }
+    return false;
+  }
+
   publicUrl(key: string): string {
     const normalizedKey = this.normalizeObjectKey(key);
     if (this.isLocalMode()) {

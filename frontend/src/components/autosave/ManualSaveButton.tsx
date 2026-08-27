@@ -28,6 +28,7 @@ export default function ManualSaveButton() {
     try {
       await paperSaveService.saveImmediately();
       await flowSaveService.flushFlowNodeImageRefs();
+      await flowSaveService.flushFlowNodeVideoRefs();
 
       const store = useProjectContentStore.getState();
       const { projectId: currentProjectId, content, version } = store;

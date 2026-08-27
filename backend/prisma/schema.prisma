@@ -885,6 +885,71 @@ model PaymentOrder {
   @@index([orderType, status])
 }
 
+/// TAI 课堂课程
+model Course {
+  id                 String   @id @default(uuid())
+  title              String
+  subtitle           String?
+  coverUrl           String?
+  tag                String?  // 如「专栏」「大专栏」
+  originalPriceYuan  Decimal  @db.Decimal(10, 2)
+  discountPriceYuan  Decimal  @db.Decimal(10, 2)
+  detailHtml         String?  @db.Text
+  subscriberCount    Int      @default(0)
+  episodeCount       Int      @default(0)
+  authorName         String?
+  authorAvatarUrl    String?
+  isPublished        Boolean  @default(false)
+  sortOrder          Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  lessons    CourseLesson[]
+  purchases  CoursePurchase[]
+
+  @@index([isPublished, sortOrder])
+  @@index([createdAt])
+}
+
+/// 课程目录课时
+model CourseLesson {
+  id            String   @id @default(uuid())
+  courseId      String
+  title         String
+  type          String   // article | video
+  contentHtml   String?  @db.Text
+  videoUrl      String?
+  sortOrder     Int      @default(0)
+  isTrial       Boolean  @default(false)
+  trialSeconds  Int?     // 视频试看秒数；图文试学则整集可看
+  isPublished   Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([courseId, sortOrder])
+  @@index([courseId, isPublished])
+}
+
+/// 用户已购课程
+model CoursePurchase {
+  id        String   @id @default(uuid())
+  userId    String
+  courseId  String
+  orderId   String?
+  orderNo   String?
+  paidAt    DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([userId, paidAt])
+  @@index([courseId])
+}
+
 model ImageTask {
   id           String    @id @default(uuid())
   userId       String

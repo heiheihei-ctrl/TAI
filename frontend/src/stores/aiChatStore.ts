@@ -8586,7 +8586,15 @@ export async function uploadVideoToOSS(
     if (!trimmed) return null;
 
     // 如果已经是我们自己的 OSS URL，直接返回
-    if (trimmed.includes("aliyuncs.com") && !trimmed.includes("X-Amz")) {
+    if (
+      (trimmed.includes("aliyuncs.com") ||
+        trimmed.includes("volces.com") ||
+        trimmed.includes("tos-s3")) &&
+      !trimmed.includes("X-Amz")
+    ) {
+      return trimmed;
+    }
+    if (/^(projects|uploads|templates|videos|ai)\//i.test(trimmed)) {
       return trimmed;
     }
 

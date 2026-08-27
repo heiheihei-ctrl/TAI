@@ -151,6 +151,7 @@ export default function KeyboardShortcuts() {
         try {
           await paperSaveService.saveImmediately();
           await flowSaveService.flushFlowNodeImageRefs();
+          await flowSaveService.flushFlowNodeVideoRefs();
           const store = useProjectContentStore.getState();
           const { projectId, content, version } = store;
           if (!projectId || !content) return;

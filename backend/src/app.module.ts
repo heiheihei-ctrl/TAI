@@ -26,6 +26,7 @@ import { TeamCreditsModule } from './team-credits/team-credits.module';
 import { TeamCollabModule } from './team-collab/team-collab.module';
 import { CanvasCommentsModule } from './canvas-comments/canvas-comments.module';
 import { TeamLibraryModule } from './team-library/team-library.module';
+import { ClassroomModule } from './classroom/classroom.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { TeamLibraryModule } from './team-library/team-library.module';
     TeamCollabModule,
     CanvasCommentsModule,
     TeamLibraryModule,
+    ClassroomModule,
   ],
 })
 export class AppModule {}

@@ -758,7 +758,7 @@ export class ProjectsService {
           cursor += 1;
           const key = keysToVerify[current];
           if (!key) break;
-          const exists = await this.oss.objectExists(key);
+          const exists = await this.oss.objectExistsWithRetry(key);
           if (!exists) missing.push(key);
         }
       })

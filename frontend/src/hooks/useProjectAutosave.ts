@@ -123,6 +123,18 @@ export function useProjectAutosave(projectId: string | null) {
         }
       }
 
+      try {
+        await flowSaveService.flushFlowNodeVideoRefs();
+        const storeAfterVideoFlush = useProjectContentStore.getState();
+        if (storeAfterVideoFlush.projectId === currentProjectId && storeAfterVideoFlush.content) {
+          contentToSave = storeAfterVideoFlush.content;
+          versionToSave = storeAfterVideoFlush.version;
+          counterToSave = storeAfterVideoFlush.dirtyCounter;
+        }
+      } catch {
+        // noop
+      }
+
       const sanitizeResult = sanitizeProjectContentForCloudSave(contentToSave);
       const invalidCanvasImageIds = sanitizeResult?.dropped.canvasImageIds ?? [];
       const invalidFlowNodeIds = sanitizeResult?.dropped.flowNodeIds ?? [];

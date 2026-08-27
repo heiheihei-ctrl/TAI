@@ -468,6 +468,46 @@ export class PaymentService implements OnModuleInit {
         throw new BadRequestException('团队订单积分无效');
       }
       businessCode = orderType;
+    } else if (orderType === 'course') {
+      const meta =
+        dto.metadata &&
+        typeof dto.metadata === 'object' &&
+        !Array.isArray(dto.metadata)
+          ? (dto.metadata as Record<string, unknown>)
+          : null;
+      const courseId =
+        typeof meta?.courseId === 'string' ? meta.courseId.trim() : '';
+      if (!courseId) {
+        throw new BadRequestException('课程订单缺少 courseId');
+      }
+      const course = await this.prisma.course.findFirst({
+        where: { id: courseId, isPublished: true },
+      });
+      if (!course) {
+        throw new NotFoundException('课程不存在');
+      }
+      const existingPurchase = await this.prisma.coursePurchase.findUnique({
+        where: { userId_courseId: { userId, courseId } },
+      });
+      if (existingPurchase) {
+        throw new BadRequestException('您已购买该课程');
+      }
+      const price = this.normalizeMoneyAmount(Number(course.discountPriceYuan));
+      if (!Number.isFinite(orderAmount) || Math.abs(price - orderAmount) >= 0.01) {
+        throw new BadRequestException('课程订单金额与折扣价不匹配');
+      }
+      if (dto.credits !== 0) {
+        throw new BadRequestException('课程订单 credits 必须为 0');
+      }
+      orderAmount = price;
+      orderCredits = 0;
+      businessCode = `course:${course.id}`;
+      planSnapshot = {
+        courseId: course.id,
+        title: course.title,
+        discountPriceYuan: price.toFixed(2),
+        originalPriceYuan: Number(course.originalPriceYuan).toFixed(2),
+      } as Prisma.InputJsonValue;
     } else {
       if (!Number.isFinite(orderAmount) || orderAmount <= 0) {
         throw new BadRequestException('Invalid recharge amount');
@@ -1104,6 +1144,45 @@ export class PaymentService implements OnModuleInit {
         currentOrder.orderType === 'team_credits'
       ) {
         await this.fulfillTeamCreditsTopupOrder(tx, currentOrder, userId);
+        return;
+      }
+      if (currentOrder.orderType === 'course') {
+        const meta =
+          currentOrder.metadata &&
+          typeof currentOrder.metadata === 'object' &&
+          !Array.isArray(currentOrder.metadata)
+            ? (currentOrder.metadata as Record<string, unknown>)
+            : null;
+        const snapshot =
+          currentOrder.planSnapshot &&
+          typeof currentOrder.planSnapshot === 'object' &&
+          !Array.isArray(currentOrder.planSnapshot)
+            ? (currentOrder.planSnapshot as Record<string, unknown>)
+            : null;
+        const courseId =
+          (typeof meta?.courseId === 'string' && meta.courseId.trim()) ||
+          (typeof snapshot?.courseId === 'string' && snapshot.courseId.trim()) ||
+          '';
+        if (courseId) {
+          const existing = await tx.coursePurchase.findUnique({
+            where: { userId_courseId: { userId, courseId } },
+          });
+          if (!existing) {
+            await tx.coursePurchase.create({
+              data: {
+                userId,
+                courseId,
+                orderId: currentOrder.id,
+                orderNo: currentOrder.orderNo,
+                paidAt: options?.paidAt ?? new Date(),
+              },
+            });
+            await tx.course.update({
+              where: { id: courseId },
+              data: { subscriberCount: { increment: 1 } },
+            });
+          }
+        }
         return;
       }
       let account = await tx.creditAccount.findUnique({ where: { userId } });

@@ -122,9 +122,18 @@ const buildManagedImageNodeMetadata = (params: {
   },
 });
 
-const SEEDANCE20_SUPPORTED_MODELS = ['seedance-1.5-pro', 'seedance-2.0', 'seedance-2.0-fast'];
+const SEEDANCE20_SUPPORTED_MODELS = [
+  'seedance-1.5-pro',
+  'seedance-2.0',
+  'seedance-2.0-fast',
+  'seedance-2.5',
+];
 const SEEDANCE20_ASPECT_RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'];
-const SEEDANCE20_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+const SEEDANCE20_DURATIONS = [5, 10, 15, 20, 25, 30];
+const SEEDANCE20_NOTES = [
+  '当前接入模型 ID: doubao-seedance-2-0-260128 / doubao-seedance-2-0-fast-260128 / doubao-seedance-2-5-260628',
+  '节点采用自动模式推导：最多支持 9 张参考图，尾帧/视频/音频各 1 路，运行时按已连接输入自动确定上游 video_mode',
+];
 const SEEDANCE20_RESOLUTIONS = ['480P', '720P', '1080P'];
 const SEEDANCE20_INPUT_MODES = [
   'text',
@@ -136,10 +145,6 @@ const SEEDANCE20_INPUT_MODES = [
   'image_video',
   'video_audio',
   'image_video_audio',
-];
-const SEEDANCE20_NOTES = [
-  '当前接入模型 ID: doubao-seedance-2-0-260128 / doubao-seedance-2-0-fast-260128',
-  '节点采用自动模式推导：最多支持 9 张参考图，尾帧/视频/音频各 1 路，运行时按已连接输入自动确定上游 video_mode',
 ];
 
 @Injectable()
@@ -569,12 +574,15 @@ export class NodeConfigService {
     }
 
     const isSeedance20 = normalizedConfig.nodeKey === 'seedance20Video';
+    const isSeedance2Node = isSeedance20;
     const modelVersion = isSeedance20 ? '2.0' : '1.5-pro';
-    const supportedModels = isSeedance20 ? SEEDANCE20_SUPPORTED_MODELS : ['seedance-1.5-pro'];
+    const supportedModels = isSeedance20
+      ? SEEDANCE20_SUPPORTED_MODELS
+      : ['seedance-1.5-pro', 'seedance-2.0', 'seedance-2.0-fast', 'seedance-2.5'];
     const resolutions = isSeedance20 ? SEEDANCE20_RESOLUTIONS : ['720P'];
     const notes = isSeedance20
       ? SEEDANCE20_NOTES
-      : ['1.5-Pro 当前接入默认分辨率限制为 720P'];
+      : ['1.5-Pro 当前接入默认分辨率限制为 720P；可在节点内切换 Seedance 2.0 / 2.0 Fast / 2.5'];
 
     const metadata = {
       ...(normalizedConfig.metadata && typeof normalizedConfig.metadata === 'object'
@@ -591,8 +599,8 @@ export class NodeConfigService {
             seedanceModel: isSeedance20 ? 'seedance-2.0' : 'seedance-1.5-pro',
             clipDuration: 5,
             resolution: '720P',
-            seedanceMode: isSeedance20 ? 'text' : undefined,
-            generateAudio: isSeedance20 ? true : undefined,
+            seedanceMode: isSeedance2Node ? 'reference_images' : undefined,
+            generateAudio: isSeedance2Node ? true : undefined,
             camerafixed: false,
             watermark: false,
           },
@@ -602,12 +610,12 @@ export class NodeConfigService {
           modelName: 'Seedance',
           modelVersion,
           outputConfig: {
-            aspectRatios: isSeedance20 ? SEEDANCE20_ASPECT_RATIOS : ['16:9', '9:16', '1:1'],
-            durations: isSeedance20 ? SEEDANCE20_DURATIONS : [3, 4, 5, 6, 7, 8, 9, 10],
+            aspectRatios: isSeedance2Node ? SEEDANCE20_ASPECT_RATIOS : ['16:9', '9:16', '1:1'],
+            durations: isSeedance2Node ? SEEDANCE20_DURATIONS : [3, 4, 5, 6, 7, 8, 9, 10],
             resolutions,
-            audioGeneration: isSeedance20,
+            audioGeneration: isSeedance2Node,
           },
-          inputModes: isSeedance20 ? SEEDANCE20_INPUT_MODES : ['text', 'image'],
+          inputModes: isSeedance2Node ? SEEDANCE20_INPUT_MODES : ['text', 'image'],
           notes,
         },
         {
@@ -619,10 +627,9 @@ export class NodeConfigService {
 
     return {
       ...normalizedConfig,
-      description:
-        isSeedance20
-          ? 'Seedance 2.0视频生成，走火山方舟模型管理'
-          : 'Seedance 1.5 Pro视频，走火山方舟模型管理',
+      description: isSeedance20
+        ? 'Seedance 2.0视频生成，走火山方舟模型管理'
+        : 'Seedance 1.5 Pro视频，走火山方舟模型管理',
       metadata,
     };
   }
@@ -1179,7 +1186,7 @@ export class NodeConfigService {
               type: 'doubaoVideo',
               provider: 'doubao',
               modelKeys: ['seedance-1.5'],
-              supportedModels: ['seedance-1.5-pro'],
+              supportedModels: SEEDANCE20_SUPPORTED_MODELS,
               defaultData: {
                 provider: 'doubao',
                 seedanceModel: 'seedance-1.5-pro',
@@ -1773,7 +1780,7 @@ export class NodeConfigService {
               type: 'doubaoVideo',
               provider: 'doubao',
               modelKeys: ['seedance-1.5'],
-              supportedModels: ['seedance-1.5-pro'],
+              supportedModels: SEEDANCE20_SUPPORTED_MODELS,
               defaultData: {
                 provider: 'doubao',
                 seedanceModel: 'seedance-1.5-pro',

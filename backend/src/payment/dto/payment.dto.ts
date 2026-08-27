@@ -19,7 +19,8 @@ export type PaymentOrderType =
   | 'team_seat'
   | 'team_credits'
   | 'team_seat_package'
-  | 'team_credits_topup';
+  | 'team_credits_topup'
+  | 'course';
 
 export const TEAM_CREDITS_PACKAGES = [
   { price: 25, credits: 2500 },

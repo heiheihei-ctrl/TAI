@@ -32,6 +32,9 @@ import EnterpriseAssetsPage from '@/pages/enterprise/EnterpriseAssetsPage';
 import EnterpriseSettingsPage from '@/pages/enterprise/EnterpriseSettingsPage';
 import EnterpriseJoinRequestsPage from '@/pages/enterprise/EnterpriseJoinRequestsPage';
 import EnterpriseProjectsPage from '@/pages/enterprise/EnterpriseProjectsPage';
+import ClassroomListPage from '@/pages/classroom/ClassroomListPage';
+import ClassroomDetailPage from '@/pages/classroom/ClassroomDetailPage';
+import ClassroomPurchasesPage from '@/pages/classroom/ClassroomPurchasesPage';
 
 function RootRoutes() {
   const user = useAuthStore((s) => s.user);
@@ -56,10 +59,12 @@ function RootRoutes() {
       <Route path="/legal/privacy" element={<PrivacyPolicy />} />
       <Route path="/legal/community" element={<CommunityGuidelines />} />
       <Route path="/oss" element={<OSSDemo />} />
+      <Route path="/classroom" element={<ClassroomListPage />} />
       {SHOW_ENTERPRISE_CONSOLE ? (
         <Route path="/enterprise" element={<EnterpriseLoginPage />} />
       ) : null}
       <Route element={<ProtectedRoute />}>
+        <Route path="/classroom/purchases" element={<ClassroomPurchasesPage />} />
         <Route path="/workspace" element={<Workspace />} />
         <Route path="/app" element={<App />} />
         <Route path="/admin" element={<Admin />} />
@@ -78,6 +83,7 @@ function RootRoutes() {
           </Route>
         ) : null}
       </Route>
+      <Route path="/classroom/:courseId" element={<ClassroomDetailPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

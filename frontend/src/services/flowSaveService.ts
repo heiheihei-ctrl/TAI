@@ -3,6 +3,10 @@ import { useProjectContentStore } from '@/stores/projectContentStore';
 import type { TemplateNode } from '@/types/template';
 import { mapWithLimit } from '@/utils/asyncLimit';
 import { isPersistableImageRef, normalizePersistableImageRef } from '@/utils/imageSource';
+import {
+  persistGeneratedVideoUrlForSave,
+  persistVideoThumbnailForSave,
+} from '@/utils/persistVideoForSave';
 
 export type FlowSaveFlushResult = {
   changed: boolean;
@@ -271,7 +275,163 @@ async function flushFlowNodeImageRefs(): Promise<FlowSaveFlushResult> {
   return { changed, uploadedCount, failedCount };
 }
 
+type VideoHistoryEntry = {
+  id?: string;
+  videoUrl?: string;
+  thumbnail?: string;
+  prompt?: string;
+  createdAt?: string;
+  elapsedSeconds?: number;
+};
+
+function hasVideoPayload(data: Record<string, unknown>): boolean {
+  return (
+    typeof data.videoUrl === 'string' ||
+    Array.isArray(data.history)
+  );
+}
+
+async function flushFlowNodeVideoRefs(): Promise<FlowSaveFlushResult> {
+  const store = useProjectContentStore.getState();
+  const projectId = store.projectId;
+  const content = store.content;
+  if (!content?.flow?.nodes || !Array.isArray(content.flow.nodes)) {
+    return { changed: false, uploadedCount: 0, failedCount: 0 };
+  }
+
+  const nodes = content.flow.nodes as TemplateNode[];
+  let changed = false;
+  let uploadedCount = 0;
+  let failedCount = 0;
+  const videoCache = new Map<string, string>();
+
+  const persistVideoCached = async (raw?: string): Promise<string | undefined> => {
+    const trimmed = typeof raw === 'string' ? raw.trim() : '';
+    if (!trimmed) return undefined;
+    const cached = videoCache.get(trimmed);
+    if (cached) return cached;
+    const persisted = await persistGeneratedVideoUrlForSave(trimmed, projectId);
+    if (persisted) {
+      videoCache.set(trimmed, persisted);
+      if (persisted !== trimmed) uploadedCount += 1;
+      return persisted;
+    }
+    failedCount += 1;
+    return undefined;
+  };
+
+  const persistThumbnailCached = async (raw?: string): Promise<string | undefined> => {
+    const trimmed = typeof raw === 'string' ? raw.trim() : '';
+    if (!trimmed) return undefined;
+    const cached = videoCache.get(`thumb:${trimmed}`);
+    if (cached) return cached;
+    const persisted = await persistVideoThumbnailForSave(trimmed, projectId);
+    if (persisted) {
+      videoCache.set(`thumb:${trimmed}`, persisted);
+      if (persisted !== trimmed) uploadedCount += 1;
+      return persisted;
+    }
+    return undefined;
+  };
+
+  const nextNodes = await mapWithLimit(nodes, 2, async (node, index) => {
+    if (!node || !node.data || typeof node.data !== 'object') return node;
+    const data = { ...(node.data as Record<string, unknown>) };
+    if (!hasVideoPayload(data)) return node;
+
+    let nodeChanged = false;
+
+    if (typeof data.videoUrl === 'string' && data.videoUrl.trim()) {
+      const rawVideoUrl = data.videoUrl.trim();
+      const persisted = await persistVideoCached(rawVideoUrl);
+      if (persisted) {
+        if (persisted !== rawVideoUrl) {
+          data.videoUrl = persisted;
+          nodeChanged = true;
+        }
+      } else if (!/^https?:\/\//i.test(rawVideoUrl)) {
+        delete data.videoUrl;
+        nodeChanged = true;
+        failedCount += 1;
+      } else {
+        failedCount += 1;
+      }
+    }
+
+    if (typeof data.thumbnail === 'string' && data.thumbnail.trim()) {
+      const persisted = await persistThumbnailCached(data.thumbnail);
+      if (persisted && persisted !== data.thumbnail) {
+        data.thumbnail = persisted;
+        nodeChanged = true;
+      } else if (!persisted) {
+        delete data.thumbnail;
+        nodeChanged = true;
+      }
+    }
+
+    if (Array.isArray(data.history) && data.history.length > 0) {
+      const nextHistory: VideoHistoryEntry[] = [];
+      for (const entry of data.history as VideoHistoryEntry[]) {
+        if (!entry || typeof entry !== 'object') continue;
+        const nextEntry = { ...entry };
+        let entryChanged = false;
+
+        if (typeof entry.videoUrl === 'string' && entry.videoUrl.trim()) {
+          const persisted = await persistVideoCached(entry.videoUrl);
+          if (persisted) {
+            if (persisted !== entry.videoUrl) entryChanged = true;
+            nextEntry.videoUrl = persisted;
+          } else {
+            failedCount += 1;
+            continue;
+          }
+        } else {
+          continue;
+        }
+
+        if (typeof entry.thumbnail === 'string' && entry.thumbnail.trim()) {
+          const persisted = await persistThumbnailCached(entry.thumbnail);
+          if (persisted) {
+            if (persisted !== entry.thumbnail) entryChanged = true;
+            nextEntry.thumbnail = persisted;
+          } else {
+            delete nextEntry.thumbnail;
+            entryChanged = true;
+          }
+        }
+
+        nextHistory.push(nextEntry);
+        if (entryChanged) nodeChanged = true;
+      }
+
+      if (nextHistory.length !== data.history.length) {
+        nodeChanged = true;
+      }
+      data.history = nextHistory;
+    }
+
+    if (!nodeChanged) return node;
+    changed = true;
+    return { ...node, data: data as TemplateNode['data'] };
+  });
+
+  if (changed) {
+    store.updatePartial(
+      {
+        flow: {
+          ...content.flow,
+          nodes: nextNodes,
+        },
+      },
+      { markDirty: true }
+    );
+  }
+
+  return { changed, uploadedCount, failedCount };
+}
+
 export const flowSaveService = {
   flushFlowNodeImageRefs,
+  flushFlowNodeVideoRefs,
   flushImageSplitInputImages,
 };

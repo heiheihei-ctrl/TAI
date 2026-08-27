@@ -94,7 +94,7 @@ const HISTORY_CATEGORY_SOURCE_TYPES: Record<string, string[]> = {
     "viduQ3",
     "doubaoVideo",
     "seedance20Video",
-    "wan26",
+        "wan26",
     "wan27Video",
     "wan2R2V",
     "happyhorseR2V",

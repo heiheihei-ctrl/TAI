@@ -648,6 +648,13 @@ export default function Home() {
                 </button>
               </div>
             ) : null}
+            <button
+              type="button"
+              className="hidden rounded-full border border-sky-400/40 bg-sky-500/15 px-3 py-1 text-xs text-sky-100 transition-colors hover:bg-sky-500/25 sm:inline-flex"
+              onClick={() => navigate("/classroom")}
+            >
+              TAI课堂
+            </button>
             {user ? (
               <div className="flex items-center gap-2 text-sm sm:gap-3">
                 <span className="hidden text-white/80 sm:inline">
@@ -696,6 +703,13 @@ export default function Home() {
                     </button>
                   </div>
                 ) : null}
+                <button
+                  type="button"
+                  className="hidden rounded-full border border-sky-400/40 bg-sky-500/15 px-3 py-1 text-xs text-sky-100 transition-colors hover:bg-sky-500/25 sm:inline-flex"
+                  onClick={() => navigate("/classroom")}
+                >
+                  TAI课堂
+                </button>
                 <button
                   type="button"
                   className="px-2 text-sm text-white/70 transition-colors hover:text-white"

@@ -44,6 +44,7 @@ const MANAGED_IMAGE_KEY_REGEX = /^(projects|uploads|templates|videos|ai)\//i;
 const MANAGED_KLING26_TENCENT_TASK_PREFIX = "tencentvod-kling26-";
 const MANAGED_KLING30_TENCENT_TASK_PREFIX = "tencentvod-kling30-";
 const MANAGED_VIDU_TENCENT_PREFIX = "tencentvod-vidu-";
+const SEEDANCE25_TOAPIS_TASK_PREFIX = "seedance25-toapis:";
 
 type ManagedTencentVideoModelKey =
   | "kling-2.6"
@@ -51,7 +52,8 @@ type ManagedTencentVideoModelKey =
   | "vidu-q2"
   | "vidu-q3"
   | "seedance-1.5"
-  | "seedance-2.0";
+  | "seedance-2.0"
+  | "seedance-2.5";
 
 const MANAGED_TENCENT_VIDEO_MODEL_META: Record<
   ManagedTencentVideoModelKey,
@@ -87,11 +89,16 @@ const MANAGED_TENCENT_VIDEO_MODEL_META: Record<
     label: "Seedance 2.0",
     uploadKeyPrefix: "seedance-2.0",
   },
+  "seedance-2.5": {
+    prefix: "tencentvod-seedance25-",
+    label: "Seedance 2.5",
+    uploadKeyPrefix: "seedance-2.5",
+  },
 };
 
 type ViduManagedModelVersion = "q2" | "q3";
 
-type SeedanceManagedModelVersion = "1.5-pro" | "2.0" | "2.0-fast";
+type SeedanceManagedModelVersion = "1.5-pro" | "2.0" | "2.0-fast" | "2.5";
 
 type ManagedV2ExecutionBranch = "legacy" | "v2_request_profile";
 
@@ -118,8 +125,17 @@ type ManagedV2ParsedTask = {
   rawTaskId: string;
 };
 
+const snapSeedanceStepDuration = (value: number, min = 5, max = 30): number => {
+  const rounded = Math.round(value);
+  const clamped = Math.max(min, Math.min(max, rounded));
+  const snapped = Math.round(clamped / 5) * 5;
+  return Math.max(min, Math.min(max, snapped));
+};
+
 const resolveSeedanceUpstreamModelId = (modelVersion: SeedanceManagedModelVersion): string => {
   switch (modelVersion) {
+    case "2.5":
+      return "doubao-seedance-2-5-260628";
     case "2.0":
       return "doubao-seedance-2-0-260128";
     case "2.0-fast":
@@ -275,6 +291,15 @@ export class VideoProviderService {
       normalized === "seedance-2.0-fast" ||
       normalized === "2.0-fast"
     );
+  }
+
+  private isSeedance25Request(options: VideoProviderRequestDto): boolean {
+    const normalized = String(options.seedanceModel || "").trim().toLowerCase();
+    return normalized === "seedance-2.5" || normalized === "2.5";
+  }
+
+  private isSeedance2FamilyRequest(options: VideoProviderRequestDto): boolean {
+    return this.isSeedance20Request(options) || this.isSeedance25Request(options);
   }
 
   private normalizeSeedanceErrorMessage(rawError: unknown, options: VideoProviderRequestDto): string {
@@ -985,6 +1010,13 @@ export class VideoProviderService {
       return this.queryOmniFlashExtTask(taskId);
     }
 
+    if (
+      provider === "doubao" &&
+      taskId.startsWith(SEEDANCE25_TOAPIS_TASK_PREFIX)
+    ) {
+      return this.querySeedance25ToapisTask(taskId);
+    }
+
     if (taskId.startsWith(this.managedV2TaskPrefix)) {
       return this.queryManagedV2Task(taskId);
     }
@@ -1022,7 +1054,8 @@ export class VideoProviderService {
     if (
       provider === "doubao" &&
       (taskId.startsWith("tencentvod-seedance15-") ||
-        taskId.startsWith("tencentvod-seedance20-"))
+        taskId.startsWith("tencentvod-seedance20-") ||
+        taskId.startsWith("tencentvod-seedance25-"))
     ) {
       return this.queryManagedTencentVideoTask(taskId);
     }
@@ -1261,6 +1294,229 @@ export class VideoProviderService {
     return { status: "processing" };
   }
 
+  private normalizeSeedance25ToapisResolution(resolution: unknown): string {
+    const normalized = String(resolution || "720P").trim().toUpperCase();
+    if (normalized === "480P") return "480p";
+    if (normalized === "1080P") return "1080p";
+    return "720p";
+  }
+
+  private normalizeSeedance25ToapisAspectRatio(aspectRatio: unknown): string {
+    const normalized = String(aspectRatio || "16:9").trim();
+    return normalized || "16:9";
+  }
+
+  private buildSeedance25ToapisPayload(options: VideoProviderRequestDto): Record<string, any> {
+    const prompt = typeof options.prompt === "string" ? options.prompt.trim() : "";
+    if (!prompt) {
+      throw new BadRequestException("prompt 不能为空");
+    }
+
+    const durationRaw = Number(options.duration);
+    const duration =
+      Number.isFinite(durationRaw) && durationRaw > 0
+        ? Math.max(5, Math.min(30, Math.round(Math.round(durationRaw) / 5) * 5))
+        : 5;
+    const aspectRatio = this.normalizeSeedance25ToapisAspectRatio(options.aspectRatio);
+
+    const payload: Record<string, any> = {
+      model: "seedance-2-5",
+      prompt,
+      duration,
+      size: aspectRatio,
+      aspect_ratio: aspectRatio,
+      resolution: this.normalizeSeedance25ToapisResolution(options.resolution),
+      metadata: {},
+      generate_audio:
+        typeof options.generateAudio === "boolean" ? options.generateAudio : true,
+      video_operation: "generate",
+      output_format: "mp4",
+    };
+
+    const referenceImages = Array.isArray(options.referenceImages)
+      ? options.referenceImages
+          .map((item) => {
+            if (typeof item === "string") return item.trim();
+            if (item && typeof item === "object" && typeof item.url === "string") {
+              return item.url.trim();
+            }
+            return "";
+          })
+          .filter((url) => url.length > 0)
+      : [];
+    if (referenceImages.length > 0) {
+      payload.image_urls = referenceImages;
+    }
+
+    return payload;
+  }
+
+  private async generateSeedance25ViaToapis(
+    options: VideoProviderRequestDto,
+    route: ResolvedManagedModelRoute,
+  ): Promise<VideoGenerationResult> {
+    const apiKey = getToapisApiKey();
+    if (!apiKey) {
+      throw new ServiceUnavailableException("ToAPIs token 未配置 (TOAPIS_TOKEN)");
+    }
+
+    const payload = this.buildSeedance25ToapisPayload(options);
+    this.logProviderPayload("seedance-2.5/toapis", payload);
+
+    let response: { status: number; data: any };
+    try {
+      response = await apimartRequest({
+        url: buildToapisUrl("/videos/generations"),
+        method: "POST",
+        timeout: DEFAULT_FETCH_TIMEOUT,
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        data: payload,
+      });
+    } catch (error) {
+      const wrapped = this.wrapApimartNetworkError(error, "Seedance 2.5 提交任务失败");
+      this.logger.error(
+        `ToAPIs Seedance 2.5 请求失败: vendor=${route.vendor.vendorKey}, proxy=${getApimartProxySummary()}, message=${this.summarizeError(wrapped)}`,
+      );
+      throw wrapped;
+    }
+
+    const data =
+      typeof response.data === "string"
+        ? (() => {
+            try {
+              return JSON.parse(response.data);
+            } catch {
+              return { raw: response.data };
+            }
+          })()
+        : (response.data ?? {});
+    const textBody =
+      typeof response.data === "string" ? response.data : JSON.stringify(response.data ?? "");
+
+    if (response.status < 200 || response.status >= 300) {
+      const message =
+        data?.error?.message ||
+        data?.message ||
+        textBody ||
+        `HTTP ${response.status}`;
+      throw new BadRequestException(`ToAPIs Seedance 2.5 创建任务失败: ${message}`);
+    }
+
+    const rawTaskId = extractUpstreamImageTaskId(data);
+    const videoUrl =
+      data?.videoUrl ||
+      data?.video_url ||
+      data?.url ||
+      data?.data?.videoUrl ||
+      data?.data?.video_url ||
+      data?.data?.url;
+
+    if (!rawTaskId && !videoUrl) {
+      throw new ServiceUnavailableException("ToAPIs Seedance 2.5 未返回 taskId 或视频地址");
+    }
+
+    return {
+      taskId: rawTaskId
+        ? `${SEEDANCE25_TOAPIS_TASK_PREFIX}${String(rawTaskId)}`
+        : `${SEEDANCE25_TOAPIS_TASK_PREFIX}${Date.now()}`,
+      status: videoUrl ? "succeeded" : "queued",
+      ...(videoUrl ? { videoUrl } : {}),
+      execution: {
+        modelKey: "seedance-2.5",
+        vendorKey: route.vendor.vendorKey,
+        platformKey: route.vendor.platformKey || route.vendor.vendorKey,
+        route: "legacy",
+        providerChannel: "toapis",
+        routedProvider: "doubao",
+        fallbackUsed: false,
+      },
+    };
+  }
+
+  private async querySeedance25ToapisTask(
+    taskId: string,
+  ): Promise<{ status: string; videoUrl?: string; thumbnailUrl?: string }> {
+    const rawTaskId = taskId.startsWith(SEEDANCE25_TOAPIS_TASK_PREFIX)
+      ? taskId.slice(SEEDANCE25_TOAPIS_TASK_PREFIX.length)
+      : taskId;
+    if (!rawTaskId) return { status: "processing" };
+
+    const apiKey = getToapisApiKey();
+    if (!apiKey) {
+      throw new ServiceUnavailableException("ToAPIs token 未配置 (TOAPIS_TOKEN)");
+    }
+
+    const cacheBuster = Date.now();
+    const endpoints = [
+      buildToapisUrl(`/videos/generations/${encodeURIComponent(rawTaskId)}?t=${cacheBuster}`),
+      buildToapisUrl(`/tasks/${encodeURIComponent(rawTaskId)}?language=zh&t=${cacheBuster}`),
+    ];
+    let lastStatus = 0;
+    let lastBody = "";
+
+    for (const endpoint of endpoints) {
+      let response: { status: number; data: any };
+      try {
+        response = await apimartRequest({
+          url: endpoint,
+          method: "GET",
+          timeout: QUERY_FETCH_TIMEOUT,
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+          },
+        });
+      } catch (error) {
+        throw this.wrapApimartNetworkError(error, `Seedance 2.5 查询任务失败: ${rawTaskId}`);
+      }
+
+      const textBody =
+        typeof response.data === "string" ? response.data : JSON.stringify(response.data ?? "");
+      lastStatus = response.status;
+      lastBody = textBody;
+      if (response.status < 200 || response.status >= 300) {
+        if (response.status === 404) continue;
+        break;
+      }
+
+      const raw =
+        typeof response.data === "string"
+          ? (() => {
+              try {
+                return JSON.parse(response.data);
+              } catch {
+                return { raw: response.data };
+              }
+            })()
+          : (response.data ?? {});
+
+      const parsed = parseOmniFlashExtTaskResponse(raw, rawTaskId);
+      if (parsed.videoUrl) {
+        const finalVideoUrl = this.isOssPublicUrl(parsed.videoUrl)
+          ? parsed.videoUrl
+          : await this.uploadRemoteVideoToOss(parsed.videoUrl, `seedance25-${rawTaskId}`);
+        return {
+          status: "succeeded",
+          videoUrl: finalVideoUrl,
+          thumbnailUrl: parsed.thumbnailUrl,
+        };
+      }
+      return {
+        status: parsed.status,
+        ...(parsed.thumbnailUrl ? { thumbnailUrl: parsed.thumbnailUrl } : {}),
+      };
+    }
+
+    this.logger.warn(
+      `Seedance 2.5 ToAPIs 查询失败: taskId=${rawTaskId}, http=${lastStatus}, body=${lastBody.slice(0, 500)}`,
+    );
+    return { status: "processing" };
+  }
+
   private async generateManagedKlingO3(
     options: VideoProviderRequestDto
   ): Promise<VideoGenerationResult> {
@@ -1478,6 +1734,14 @@ export class VideoProviderService {
       options.vendorKey,
       async (route) => {
         try {
+          if (
+            resolved.modelKey === "seedance-2.5" &&
+            (route.vendor.vendorKey === "toapis" ||
+              route.vendor.vendorKey === "apimart")
+          ) {
+            return this.generateSeedance25ViaToapis(options, route);
+          }
+
           if (this.shouldUseManagedV2RequestProfile(route)) {
             return this.createManagedV2Task(resolved.modelKey, options, route);
           }
@@ -1623,9 +1887,15 @@ export class VideoProviderService {
 
   private async assertSeedance20ReferenceVideoLimits(
     options: VideoProviderRequestDto,
+    modelKey = "seedance-2.0",
   ): Promise<void> {
     const referenceVideos = this.normalizeManagedV2ReferenceVideos(options);
     if (!referenceVideos.length) return;
+
+    const isSeedance25 = modelKey === "seedance-2.5";
+    const maxClipDuration = isSeedance25 ? 30.2 : SEEDANCE20_REFERENCE_VIDEO_MAX_DURATION_SEC;
+    const totalMaxDuration = isSeedance25 ? 30.2 : SEEDANCE20_REFERENCE_VIDEO_TOTAL_MAX_DURATION_SEC;
+    const label = isSeedance25 ? "Seedance 2.5" : "Seedance 2.0";
 
     const clipDurations: number[] = [];
     for (let index = 0; index < referenceVideos.length; index += 1) {
@@ -1645,20 +1915,20 @@ export class VideoProviderService {
 
       if (duration < SEEDANCE20_REFERENCE_VIDEO_MIN_DURATION_SEC) {
         throw new BadRequestException(
-          `Seedance 2.0 参考视频每条至少 ${SEEDANCE20_REFERENCE_VIDEO_MIN_DURATION_SEC} 秒，第 ${index + 1} 条约 ${duration.toFixed(1)} 秒`,
+          `${label} 参考视频每条至少 ${SEEDANCE20_REFERENCE_VIDEO_MIN_DURATION_SEC} 秒，第 ${index + 1} 条约 ${duration.toFixed(1)} 秒`,
         );
       }
-      if (duration > SEEDANCE20_REFERENCE_VIDEO_MAX_DURATION_SEC) {
+      if (duration > maxClipDuration) {
         throw new BadRequestException(
-          `Seedance 2.0 参考视频每条不能超过 15 秒，第 ${index + 1} 条约 ${duration.toFixed(1)} 秒，请先裁剪后再生成`,
+          `${label} 参考视频每条不能超过 ${isSeedance25 ? 30 : 15} 秒，第 ${index + 1} 条约 ${duration.toFixed(1)} 秒，请先裁剪后再生成`,
         );
       }
     }
 
     const totalDuration = clipDurations.reduce((sum, value) => sum + value, 0);
-    if (totalDuration > SEEDANCE20_REFERENCE_VIDEO_TOTAL_MAX_DURATION_SEC) {
+    if (totalDuration > totalMaxDuration) {
       throw new BadRequestException(
-        `Seedance 2.0 参考视频总时长不能超过 15 秒，当前合计约 ${totalDuration.toFixed(1)} 秒，请先裁剪后再生成`,
+        `${label} 参考视频总时长不能超过 ${isSeedance25 ? 30 : 15} 秒，当前合计约 ${totalDuration.toFixed(1)} 秒，请先裁剪后再生成`,
       );
     }
   }
@@ -2124,8 +2394,8 @@ export class VideoProviderService {
       throw new ServiceUnavailableException(`V2 配置缺少 create 阶段: ${modelKey}`);
     }
 
-    if (modelKey === "seedance-2.0" || modelKey === "seedance-2.0-fast") {
-      await this.assertSeedance20ReferenceVideoLimits(options);
+    if (modelKey === "seedance-2.0" || modelKey === "seedance-2.0-fast" || modelKey === "seedance-2.5") {
+      await this.assertSeedance20ReferenceVideoLimits(options, modelKey);
     }
 
     const context = await this.buildManagedV2RequestContext(modelKey, options, route);
@@ -2402,11 +2672,18 @@ export class VideoProviderService {
   }
 
   private resolveManagedSeedanceModel(options: VideoProviderRequestDto): {
-    modelKey: "seedance-1.5" | "seedance-2.0";
+    modelKey: "seedance-1.5" | "seedance-2.0" | "seedance-2.5";
     modelVersion: SeedanceManagedModelVersion;
     label: string;
   } {
     const normalized = String(options.seedanceModel || "").trim().toLowerCase();
+    if (normalized === "seedance-2.5" || normalized === "2.5") {
+      return {
+        modelKey: "seedance-2.5",
+        modelVersion: "2.5",
+        label: "Seedance 2.5",
+      };
+    }
     if (normalized === "seedance-2.0-fast" || normalized === "2.0-fast") {
       return {
         modelKey: "seedance-2.0",
@@ -2899,10 +3176,14 @@ export class VideoProviderService {
     const normalizedPrompt =
       typeof options.prompt === "string" ? options.prompt.trim() : "";
     const isSeedance2Model = modelVersion === "2.0" || modelVersion === "2.0-fast";
+    const isSeedance25Model = modelVersion === "2.5";
     const promptText = normalizedPrompt;
 
-    if (isSeedance2Model) {
-      await this.assertSeedance20ReferenceVideoLimits(options);
+    if (isSeedance2Model || isSeedance25Model) {
+      await this.assertSeedance20ReferenceVideoLimits(
+        options,
+        isSeedance25Model ? "seedance-2.5" : "seedance-2.0",
+      );
     }
 
     const content: any[] = [];
@@ -2945,7 +3226,7 @@ export class VideoProviderService {
         image_url: { url },
       };
 
-      if (isSeedance2Model) {
+      if (isSeedance2Model || isSeedance25Model) {
         imageItem.role = "reference_image";
       } else if (options.videoMode === "start-end2video") {
         imageItem.role = index === 0 ? "first_frame" : index === 1 ? "last_frame" : undefined;
@@ -2989,9 +3270,13 @@ export class VideoProviderService {
     }
     if (typeof options.duration === "number" && Number.isFinite(options.duration)) {
       const normalizedDuration = Math.round(options.duration);
-      payload.duration = isSeedance2Model
-        ? Math.max(4, Math.min(15, normalizedDuration))
-        : Math.max(4, Math.min(12, normalizedDuration));
+      if (isSeedance25Model) {
+        payload.duration = snapSeedanceStepDuration(normalizedDuration, 5, 30);
+      } else if (isSeedance2Model) {
+        payload.duration = snapSeedanceStepDuration(normalizedDuration, 5, 30);
+      } else {
+        payload.duration = Math.max(4, Math.min(12, normalizedDuration));
+      }
     }
     if (typeof options.resolution === "string" && options.resolution.trim()) {
       payload.resolution = options.resolution.trim().toLowerCase();
@@ -3003,6 +3288,9 @@ export class VideoProviderService {
       payload.watermark = options.watermark;
     }
     if (isSeedance2Model && typeof options.generateAudio === "boolean") {
+      payload.generate_audio = options.generateAudio;
+    }
+    if (isSeedance25Model && typeof options.generateAudio === "boolean") {
       payload.generate_audio = options.generateAudio;
     }
 

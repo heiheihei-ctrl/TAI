@@ -7,6 +7,10 @@ import { useAuthStore } from "@/stores/authStore";
 import { uploadAudioToOSS } from "@/stores/aiChatStore";
 import { useProjectContentStore } from "@/stores/projectContentStore";
 import { proxifyRemoteAssetUrl } from "@/utils/assetProxy";
+import {
+  persistGeneratedVideoUrlForSave,
+  persistVideoThumbnailForSave,
+} from "@/utils/persistVideoForSave";
 import { useLocaleText } from "@/utils/localeText";
 import { useFlowOnboardingStore } from "@/stores/flowOnboardingStore";
 import RunCreditBadge from "./RunCreditBadge";
@@ -28,7 +32,7 @@ import {
 
 export type VideoProvider = "kling" | "kling-2.6" | "kling-o3" | "vidu" | "viduq3-pro" | "doubao";
 type ViduModel = ViduModelValue;
-type SeedanceModel = "seedance-1.5-pro" | "seedance-2.0" | "seedance-2.0-fast";
+type SeedanceModel = "seedance-1.5-pro" | "seedance-2.0" | "seedance-2.0-fast" | "seedance-2.5";
 type Seedance20Mode = "reference_images" | "start_end";
 type Seedance15Mode = "text" | "image" | "start_end";
 type SeedanceMode = Seedance20Mode | Seedance15Mode;
@@ -223,13 +227,18 @@ const SUPPORTED_AUDIO_ACCEPT = SUPPORTED_AUDIO_EXTENSIONS.map((ext) => `.${ext}`
 
 const SEEDANCE20_DOC_ASPECT_RATIOS = ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"] as const;
 const SEEDANCE15_DOC_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
-const SEEDANCE20_DOC_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const;
+const SEEDANCE20_DOC_DURATIONS = [5, 10, 15, 20, 25, 30] as const;
+const SEEDANCE25_DOC_DURATIONS = [5, 10, 15, 20, 25, 30] as const;
 const SEEDANCE20_DOC_RESOLUTIONS = ["480P", "720P", "1080P"] as const;
 const SEEDANCE20_FAST_DOC_RESOLUTIONS = ["480P", "720P"] as const;
 
 const SEEDANCE20_MODE_VALUES: Seedance20Mode[] = ["reference_images", "start_end"];
 const SEEDANCE15_MODE_VALUES: Seedance15Mode[] = ["text", "image", "start_end"];
 
+const isSeedance25ModelValue = (value: unknown): boolean => {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "seedance-2.5" || normalized === "2.5";
+};
 const isSeedance20ModelValue = (value: unknown): boolean => {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
   return normalized === "seedance-2.0" || normalized === "seedance-2.0-fast";
@@ -443,7 +452,9 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
     data.viduModel || (provider === "viduq3-pro" ? "q3" : "q2")
   );
   const seedanceModel: SeedanceModel =
-    data.seedanceModel === "seedance-2.0-fast"
+    data.seedanceModel === "seedance-2.5"
+      ? "seedance-2.5"
+      : data.seedanceModel === "seedance-2.0-fast"
       ? "seedance-2.0-fast"
       : data.seedanceModel === "seedance-2.0"
       ? "seedance-2.0"
@@ -457,19 +468,22 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
     isSeedanceModel && seedance2AccessResolved && !seedance2AccessEnabled;
   const isSeedance20LockedOption = React.useCallback(
     (value: SeedanceModel): boolean =>
-      seedance20RestrictedForCurrentUser && isSeedance20ModelValue(value),
+      seedance20RestrictedForCurrentUser &&
+      (isSeedance20ModelValue(value) || isSeedance25ModelValue(value)),
     [seedance20RestrictedForCurrentUser]
   );
   const isSeedance20Model =
     isSeedanceModel &&
     (seedanceModel === "seedance-2.0" || seedanceModel === "seedance-2.0-fast");
+  const isSeedance25Model = isSeedanceModel && seedanceModel === "seedance-2.5";
+  const isSeedance2FamilyModel = isSeedance20Model || isSeedance25Model;
   const seedanceGenerateAudio =
-    isSeedance20Model && typeof data.generateAudio === "boolean"
+    isSeedance2FamilyModel && typeof data.generateAudio === "boolean"
       ? data.generateAudio
-      : isSeedance20Model;
+      : isSeedance2FamilyModel;
   const inferredSeedanceMode = React.useMemo<SeedanceMode>(() => {
     if (!isSeedanceModel) return "text";
-    if (isSeedance20Model) {
+    if (isSeedance2FamilyModel) {
       if (isSeedance20ModeValue(data.seedanceMode)) return data.seedanceMode;
       const legacyMode = String(data.seedanceMode || "").trim().toLowerCase();
       if (legacyMode === "start_end" || legacyMode === "first_frame") return "start_end";
@@ -492,17 +506,17 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
     hasImage2Input,
     imageInputCount,
     isSeedanceModel,
-    isSeedance20Model,
+    isSeedance2FamilyModel,
   ]);
   const seedanceMode: SeedanceMode = inferredSeedanceMode;
   const seedanceModeSpec = React.useMemo(
     () =>
       !isSeedanceModel
         ? null
-        : isSeedance20Model
+        : isSeedance2FamilyModel
         ? getSeedance20ModeSpec(seedanceMode as Seedance20Mode)
         : getSeedance15ModeSpec(seedanceMode as Seedance15Mode),
-    [isSeedance20Model, isSeedanceModel, seedanceMode]
+    [isSeedance2FamilyModel, isSeedanceModel, seedanceMode]
   );
   const seedanceHandleTopMap = React.useMemo(
     () => (seedanceModeSpec ? getSeedanceHandleTopMap(seedanceModeSpec.visibleHandles) : {}),
@@ -1030,7 +1044,9 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       ];
     }
     if (provider === "doubao") {
-      const values = isSeedance20Model
+      const values = isSeedance25Model
+        ? [...SEEDANCE25_DOC_DURATIONS]
+        : isSeedance20Model
         ? [...SEEDANCE20_DOC_DURATIONS]
         : [...SEEDANCE15_DOC_DURATIONS];
       return values.map((value) => ({ label: lt(`${value}秒`, `${value}s`), value }));
@@ -1039,7 +1055,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
   };
 
   const aspectOptions = React.useMemo(() => {
-    if (provider === "doubao" && isSeedance20Model) {
+    if (provider === "doubao" && isSeedance2FamilyModel) {
       return [...SEEDANCE20_DOC_ASPECT_RATIOS].map((value) => ({ label: value, value }));
     }
     if (vodAspectOptions.length > 0) {
@@ -1056,13 +1072,13 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       ];
     }
     if (provider === "doubao") {
-      const ratios = isSeedance20Model
+      const ratios = isSeedance2FamilyModel
         ? [...SEEDANCE20_DOC_ASPECT_RATIOS]
         : ["16:9", "9:16", "1:1"];
       return ratios.map((value) => ({ label: value, value }));
     }
     return getAspectOptions();
-  }, [getAspectOptions, isSeedance20Model, lt, provider, vodAspectOptions]);
+  }, [getAspectOptions, isSeedance2FamilyModel, lt, provider, vodAspectOptions]);
   const klingModelOptions = React.useMemo(
     () => [
       { label: "Kling 2.6", value: "kling-v2-6" as const },
@@ -1082,6 +1098,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       { label: "Seedance 1.5-Pro", value: "seedance-1.5-pro" as const },
       { label: "Seedance 2.0", value: "seedance-2.0" as const },
       { label: "Seedance 2.0 Fast", value: "seedance-2.0-fast" as const },
+      { label: "Seedance 2.5", value: "seedance-2.5" as const },
     ],
     []
   );
@@ -1110,10 +1127,15 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       const normalized = new Set(
         supportedModels.map((item) => String(item).trim().toLowerCase())
       );
-      // 2.0 与 2.0 Fast 属于同一模型族，任一可用时都展示，方便切换。
-      if (normalized.has("seedance-2.0") || normalized.has("seedance-2.0-fast")) {
+      // 2.0 / 2.0 Fast / 2.5 属于同一模型族，任一可用时都展示，方便切换。
+      if (
+        normalized.has("seedance-2.0") ||
+        normalized.has("seedance-2.0-fast") ||
+        normalized.has("seedance-2.5")
+      ) {
         normalized.add("seedance-2.0");
         normalized.add("seedance-2.0-fast");
+        normalized.add("seedance-2.5");
       }
       const filtered = seedanceModelOptions.filter((opt) => normalized.has(opt.value));
       return filtered.length > 0 ? filtered : seedanceModelOptions;
@@ -1126,7 +1148,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
     ]
   );
   React.useEffect(() => {
-    if (!seedance20RestrictedForCurrentUser || !isSeedance20Model) return;
+    if (!seedance20RestrictedForCurrentUser || !isSeedance2FamilyModel) return;
     const nextDuration =
       clipDuration && clipDuration >= 4 && clipDuration <= 12 ? clipDuration : 5;
     window.dispatchEvent(
@@ -1141,10 +1163,13 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
         },
       })
     );
-  }, [clipDuration, id, isSeedance20Model, seedance20RestrictedForCurrentUser]);
+  }, [clipDuration, id, isSeedance2FamilyModel, seedance20RestrictedForCurrentUser]);
   const durationOptions = React.useMemo(() => {
-    if (provider === "doubao" && isSeedance20Model) {
-      return [...SEEDANCE20_DOC_DURATIONS].map((value) => ({
+    if (provider === "doubao" && isSeedance2FamilyModel) {
+      const values = isSeedance25Model
+        ? [...SEEDANCE25_DOC_DURATIONS]
+        : [...SEEDANCE20_DOC_DURATIONS];
+      return values.map((value) => ({
         label: lt(`${value}秒`, `${value}s`),
         value,
       }));
@@ -1156,7 +1181,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       }));
     }
     return vodDurationOptions.length > 0 ? vodDurationOptions : getDurationOptions();
-  }, [getDurationOptions, isSeedance20Model, lt, provider, vodDurationOptions]);
+  }, [getDurationOptions, isSeedance2FamilyModel, isSeedance25Model, lt, provider, vodDurationOptions]);
   const durationOptionValues = React.useMemo(
     () => durationOptions.map((option) => option.value),
     [durationOptions]
@@ -1178,11 +1203,11 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
   );
   const legacySeedanceResolutionOptions = React.useMemo(() => {
     if (provider !== "doubao" || isVodManagedNode) return [];
-    return isSeedance20Model ? seedance20ResolutionList : ["720P"];
-  }, [isSeedance20Model, isVodManagedNode, provider, seedance20ResolutionList]);
+    return isSeedance2FamilyModel ? seedance20ResolutionList : ["720P"];
+  }, [isSeedance2FamilyModel, isVodManagedNode, provider, seedance20ResolutionList]);
   const resolutionOptions = React.useMemo(
     () => {
-      if (provider === "doubao" && isSeedance20Model) {
+      if (provider === "doubao" && isSeedance2FamilyModel) {
         if (vodResolutionOptions.length === 0) return seedance20ResolutionList;
         const allowed = new Set(seedance20ResolutionList);
         const filtered = vodResolutionOptions.filter((value) => allowed.has(value));
@@ -1193,7 +1218,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
         : legacySeedanceResolutionOptions;
     },
     [
-      isSeedance20Model,
+      isSeedance2FamilyModel,
       legacySeedanceResolutionOptions,
       provider,
       seedance20ResolutionList,
@@ -1216,10 +1241,10 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
   const shouldShowLegacyViduOptions =
     (provider === "vidu" || provider === "viduq3-pro") && !isVodManagedNode;
   const shouldShowLegacySeedanceOptions =
-    provider === "doubao" && !isVodManagedNode && !isSeedance20Model;
+    provider === "doubao" && !isVodManagedNode;
   const seedanceConstraintTips = React.useMemo(() => {
     if (!isSeedanceModel) return [] as string[];
-    if (isSeedance20Model) {
+    if (isSeedance2FamilyModel) {
       const resolutionTip =
         seedanceModel === "seedance-2.0-fast"
           ? lt(
@@ -1503,28 +1528,30 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
             detail: {
               type: "info",
               message: lt(
-                "Seedance 2.0 / 2.0 Fast 需开通 VIP 权益或进入水印白名单后才可选择",
-                "Seedance 2.0 / 2.0 Fast requires VIP access or watermark whitelist access",
+                "Seedance 2.0 / 2.0 Fast / 2.5 需开通 VIP 权益或进入水印白名单后才可选择",
+                "Seedance 2.0 / 2.0 Fast / 2.5 requires VIP access or watermark whitelist access",
               ),
             },
           })
         );
         return;
       }
-      const nextMode: SeedanceMode =
-        value === "seedance-2.0" || value === "seedance-2.0-fast"
-          ? "reference_images"
-          : "text";
-      const nextDuration =
-        value === "seedance-2.0" || value === "seedance-2.0-fast"
-          ? clipDuration === 3
-            ? 4
-            : clipDuration && clipDuration >= 4 && clipDuration <= 15
-            ? clipDuration
-            : 5
-          : clipDuration && clipDuration >= 4 && clipDuration <= 12
-          ? clipDuration
-          : 5;
+      const isSeedance2FamilySelection =
+        value === "seedance-2.0" ||
+        value === "seedance-2.0-fast" ||
+        value === "seedance-2.5";
+      const nextMode: SeedanceMode = isSeedance2FamilySelection ? "reference_images" : "text";
+      const snapSeedanceStepDuration = (value?: number) => {
+        const base =
+          typeof value === "number" && Number.isFinite(value) ? Math.round(value) : 5;
+        const clamped = Math.max(5, Math.min(30, base));
+        return Math.round(clamped / 5) * 5;
+      };
+      const nextDuration = isSeedance2FamilySelection
+        ? snapSeedanceStepDuration(clipDuration)
+        : clipDuration && clipDuration >= 4 && clipDuration <= 12
+        ? clipDuration
+        : 5;
       const currentResolution =
         typeof data.resolution === "string" ? data.resolution.trim().toUpperCase() : "";
       const nextResolution =
@@ -1539,8 +1566,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
               seedanceModel: value,
               seedanceMode: nextMode,
               clipDuration: nextDuration,
-              generateAudio:
-                value === "seedance-2.0" || value === "seedance-2.0-fast"
+              generateAudio: isSeedance2FamilySelection
                   ? typeof data.generateAudio === "boolean"
                     ? data.generateAudio
                     : true
@@ -1555,18 +1581,18 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
   );
 
   const handleSeedanceAudioToggle = React.useCallback(() => {
-    if (!isSeedance20Model) return;
+    if (!isSeedance2FamilyModel) return;
     window.dispatchEvent(
       new CustomEvent("flow:updateNodeData", {
         detail: { id, patch: { generateAudio: !seedanceGenerateAudio } },
       })
     );
-  }, [id, isSeedance20Model, seedanceGenerateAudio]);
+  }, [id, isSeedance2FamilyModel, seedanceGenerateAudio]);
 
   const handleSeedanceModeChange = React.useCallback(
     (value: SeedanceMode) => {
       if (!isSeedanceModel || value === seedanceMode) return;
-      const spec = isSeedance20Model
+      const spec = isSeedance2FamilyModel
         ? getSeedance20ModeSpec(value as Seedance20Mode)
         : getSeedance15ModeSpec(value as Seedance15Mode);
 
@@ -1620,7 +1646,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
         })
       );
     },
-    [id, isSeedance20Model, isSeedanceModel, seedanceMode, setEdges]
+    [id, isSeedance2FamilyModel, isSeedanceModel, seedanceMode, setEdges]
   );
 
   const handleManagedRouteChange = React.useCallback(
@@ -1669,13 +1695,13 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
   }, [data.sound, id, isKling26Model]);
 
   React.useEffect(() => {
-    if (!isSeedance20Model || typeof data.generateAudio === "boolean") return;
+    if (!isSeedance2FamilyModel || typeof data.generateAudio === "boolean") return;
     window.dispatchEvent(
       new CustomEvent("flow:updateNodeData", {
         detail: { id, patch: { generateAudio: true } },
       })
     );
-  }, [data.generateAudio, id, isSeedance20Model]);
+  }, [data.generateAudio, id, isSeedance2FamilyModel]);
 
   const handleRemoveAudioAt = React.useCallback(
     (index: number) => {
@@ -1981,26 +2007,53 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
     [isDownloading, lt, scheduleFeedbackClear]
   );
 
+  const [isApplyingHistory, setIsApplyingHistory] = React.useState(false);
+
   const handleApplyHistory = React.useCallback(
-    (item: VideoHistoryItem) => {
-      const patch: Record<string, any> = {
-        videoUrl: item.videoUrl,
-        thumbnail: item.thumbnail,
-        videoVersion: Number(data.videoVersion || 0) + 1,
-      };
+    async (item: VideoHistoryItem) => {
+      if (isApplyingHistory) return;
+      setIsApplyingHistory(true);
+      try {
+        const projectId = useProjectContentStore.getState().projectId;
+        const persistedVideoUrl =
+          (await persistGeneratedVideoUrlForSave(item.videoUrl, projectId)) || item.videoUrl;
+        const persistedThumbnail = item.thumbnail
+          ? (await persistVideoThumbnailForSave(item.thumbnail, projectId)) || undefined
+          : undefined;
 
-      if (data.status !== "running") {
-        patch.status = "succeeded";
-        patch.error = undefined;
+        const patch: Record<string, any> = {
+          videoUrl: persistedVideoUrl,
+          thumbnail: persistedThumbnail,
+          videoVersion: Number(data.videoVersion || 0) + 1,
+        };
+
+        if (Array.isArray(data.history) && data.history.length > 0) {
+          patch.history = data.history.map((entry) =>
+            entry.id === item.id
+              ? {
+                  ...entry,
+                  videoUrl: persistedVideoUrl,
+                  ...(persistedThumbnail ? { thumbnail: persistedThumbnail } : {}),
+                }
+              : entry
+          );
+        }
+
+        if (data.status !== "running") {
+          patch.status = "succeeded";
+          patch.error = undefined;
+        }
+
+        window.dispatchEvent(
+          new CustomEvent("flow:updateNodeData", {
+            detail: { id, patch },
+          })
+        );
+      } finally {
+        setIsApplyingHistory(false);
       }
-
-      window.dispatchEvent(
-        new CustomEvent("flow:updateNodeData", {
-          detail: { id, patch },
-        })
-      );
     },
-    [id, data.videoVersion, data.status]
+    [id, data.videoVersion, data.status, data.history, isApplyingHistory]
   );
 
   const formatHistoryTime = React.useCallback((iso: string) => {
@@ -3252,7 +3305,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
         </div>
       )}
 
-      {isSeedance20Model && (
+      {isSeedance2FamilyModel && (
         <div style={{ marginBottom: 8 }}>
           <button
             type='button'
@@ -3420,17 +3473,21 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
                   {!isActive && (
                     <button
                       type='button'
-                      onClick={() => handleApplyHistory(item)}
+                      onClick={() => void handleApplyHistory(item)}
+                      disabled={isApplyingHistory}
                       style={{
                         padding: "4px 8px",
                         borderRadius: 6,
                         border: "1px solid #94a3b8",
                         background: "#fff",
                         fontSize: 11,
-                        cursor: "pointer",
+                        cursor: isApplyingHistory ? "wait" : "pointer",
+                        opacity: isApplyingHistory ? 0.6 : 1,
                       }}
                     >
-                      {lt("设为当前", "Set current")}
+                      {isApplyingHistory
+                        ? lt("处理中...", "Applying...")
+                        : lt("设为当前", "Set current")}
                     </button>
                   )}
                   <button

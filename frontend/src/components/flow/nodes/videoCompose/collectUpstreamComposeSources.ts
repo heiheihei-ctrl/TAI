@@ -29,7 +29,7 @@ const VIDEO_SOURCE_NODE_TYPES = new Set([
   "viduQ3",
   "doubaoVideo",
   "seedance20Video",
-  "omniFlashExtVideo",
+    "omniFlashExtVideo",
 ]);
 
 const AUDIO_SOURCE_NODE_TYPES = new Set(["audioUpload"]);

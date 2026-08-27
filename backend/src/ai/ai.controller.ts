@@ -380,7 +380,9 @@ export class AiController {
       (normalizedSeedanceModel === 'seedance-2.0' ||
         normalizedSeedanceModel === '2.0' ||
         normalizedSeedanceModel === 'seedance-2.0-fast' ||
-        normalizedSeedanceModel === '2.0-fast');
+        normalizedSeedanceModel === '2.0-fast' ||
+        normalizedSeedanceModel === 'seedance-2.5' ||
+        normalizedSeedanceModel === '2.5');
 
     if (!isSeedance2Request || !userId) {
       return;
@@ -389,7 +391,7 @@ export class AiController {
     const access = await this.resolveSeedance2CombinedAccess(userId, req);
     if (!access.allowed) {
       throw new BadRequestException(
-        'Seedance 2.0 / 2.0 Fast requires VIP access or watermark whitelist access',
+        'Seedance 2.0 / 2.0 Fast / 2.5 requires VIP access or watermark whitelist access',
       );
     }
   }
@@ -1182,7 +1184,12 @@ export class AiController {
 
     if (dto.provider === 'doubao') {
       const normalized = String(dto.seedanceModel || '').trim().toLowerCase();
-      const modelKey = this.isSeedance20Model(normalized) ? 'seedance-2.0' : 'seedance-1.5';
+      const modelKey =
+        normalized === 'seedance-2.5' || normalized === '2.5'
+          ? 'seedance-2.5'
+          : this.isSeedance20Model(normalized)
+          ? 'seedance-2.0'
+          : 'seedance-1.5';
       assignRouteParams(
         await this.modelRoutingService.resolveVideoModel(modelKey, preferredVendorKey),
       );
