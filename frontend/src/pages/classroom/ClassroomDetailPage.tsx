@@ -247,7 +247,9 @@ export default function ClassroomDetailPage() {
                       </span>
                       {lesson.isTrial ? (
                         <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[11px] text-blue-600">
-                          试学
+                          {lesson.trialSeconds != null && lesson.trialSeconds > 0
+                            ? `试看 ${lesson.trialSeconds} 秒`
+                            : "试学"}
                         </span>
                       ) : null}
                       {lesson.locked ? (
@@ -282,34 +284,6 @@ export default function ClassroomDetailPage() {
         </div>
 
         <aside className="space-y-4">
-          <div className="rounded-xl bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              {course.authorAvatarUrl ? (
-                <img
-                  src={course.authorAvatarUrl}
-                  alt=""
-                  className="h-12 w-12 rounded-full object-cover"
-                />
-              ) : (
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-200 text-sm text-slate-500">
-                  TAI
-                </div>
-              )}
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">
-                  {course.authorName || "TAI课堂"}
-                </p>
-                <p className="text-xs text-slate-400">设计软件课程平台</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              className="mt-3 w-full rounded border border-slate-200 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-              onClick={() => navigate("/classroom")}
-            >
-              进店逛逛
-            </button>
-          </div>
 
           <div className="rounded-xl bg-white p-4 shadow-sm">
             <h3 className="mb-3 text-sm font-semibold">相关推荐</h3>

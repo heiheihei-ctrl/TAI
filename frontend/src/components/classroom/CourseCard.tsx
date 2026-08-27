@@ -36,9 +36,6 @@ export function CourseCard({ course }: Props) {
         <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-slate-900">
           {course.title}
         </h3>
-        {course.subtitle ? (
-          <p className="line-clamp-1 text-xs text-slate-500">{course.subtitle}</p>
-        ) : null}
         <p className="mt-auto pt-2 text-xs text-slate-400">
           {course.subscriberCount || 0}人订阅
         </p>
