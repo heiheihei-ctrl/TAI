@@ -20,8 +20,10 @@ export interface NodeConfigDto {
   creditsPerCall?: number;
   priceYuan?: number;
   serviceType?: string;
+  configSummary?: string | null;
   sortOrder?: number;
   isVisible?: boolean;
+  isNew?: boolean;
   description?: string;
   metadata?: Record<string, any>;
 }
@@ -35,8 +37,10 @@ export interface UpdateNodeConfigDto {
   creditsPerCall?: number;
   priceYuan?: number;
   serviceType?: string;
+  configSummary?: string | null;
   sortOrder?: number;
   isVisible?: boolean;
+  isNew?: boolean;
   description?: string;
   metadata?: Record<string, any>;
 }
@@ -651,14 +655,48 @@ export class NodeConfigService {
   }
 
   /**
+   * 按 serviceType 聚合 API 调用次数（用于节点面板 HOT 排序）
+   */
+  private async getServiceTypeUsageCountMap(): Promise<Map<string, number>> {
+    const rows = await this.prisma.apiUsageRecord.groupBy({
+      by: ['serviceType'],
+      _count: { _all: true },
+    });
+    const map = new Map<string, number>();
+    for (const row of rows) {
+      const key = typeof row.serviceType === 'string' ? row.serviceType.trim() : '';
+      if (!key) continue;
+      map.set(key, row._count._all);
+    }
+    return map;
+  }
+
+  private resolveUsageCount(
+    config: { serviceType?: string | null; nodeKey: string },
+    usageMap: Map<string, number>,
+  ): number {
+    const serviceType = typeof config.serviceType === 'string' ? config.serviceType.trim() : '';
+    if (serviceType && usageMap.has(serviceType)) {
+      return usageMap.get(serviceType) || 0;
+    }
+    if (usageMap.has(config.nodeKey)) {
+      return usageMap.get(config.nodeKey) || 0;
+    }
+    return 0;
+  }
+
+  /**
    * 获取所有节点配置（公开接口，前端使用）
    */
   async getAllNodeConfigs() {
-    const configs = await this.prisma.nodeConfig.findMany({
-      where: { isVisible: true },
-      orderBy: [{ sortOrder: 'asc' }], // 先按 sortOrder 粗排，后面再自定义分类顺序
-    });
-    const managedModelMap = await this.getManagedModelConfigMap();
+    const [configs, usageMap, managedModelMap] = await Promise.all([
+      this.prisma.nodeConfig.findMany({
+        where: { isVisible: true },
+        orderBy: [{ sortOrder: 'asc' }],
+      }),
+      this.getServiceTypeUsageCountMap(),
+      this.getManagedModelConfigMap(),
+    ]);
     const enabledManagedModelKeys = new Set(Array.from(managedModelMap.keys()));
 
     // 自定义分类顺序：输入(input) → 图像(image) → 视频(video) → 其他(other)
@@ -689,9 +727,12 @@ export class NodeConfigService {
           creditsPerCall: config.creditsPerCall,
           priceYuan: config.priceYuan ? Number(config.priceYuan) : null,
           serviceType: config.serviceType,
+          configSummary: config.configSummary,
           sortOrder: config.sortOrder,
+          isNew: config.isNew === true,
           description: config.description,
           metadata: config.metadata,
+          usageCount: this.resolveUsageCount(config, usageMap),
         });
 
         const normalizedMetadata = this.normalizeManagedNodeMetadata(
@@ -769,8 +810,10 @@ export class NodeConfigService {
       creditsPerCall: config.creditsPerCall,
       priceYuan: config.priceYuan ? Number(config.priceYuan) : null,
       serviceType: config.serviceType,
+      configSummary: config.configSummary,
       sortOrder: config.sortOrder,
       isVisible: config.isVisible,
+      isNew: config.isNew === true,
       description: config.description,
       metadata: config.metadata,
       createdAt: config.createdAt,
@@ -801,8 +844,10 @@ export class NodeConfigService {
       creditsPerCall: config.creditsPerCall,
       priceYuan: config.priceYuan ? Number(config.priceYuan) : null,
       serviceType: config.serviceType,
+      configSummary: config.configSummary,
       sortOrder: config.sortOrder,
       isVisible: config.isVisible,
+      isNew: config.isNew === true,
       description: config.description,
       metadata: config.metadata,
     });
@@ -823,8 +868,10 @@ export class NodeConfigService {
         creditsPerCall: dto.creditsPerCall || 0,
         priceYuan: dto.priceYuan ? new Prisma.Decimal(dto.priceYuan) : null,
         serviceType: dto.serviceType,
+        configSummary: dto.configSummary?.trim() || null,
         sortOrder: dto.sortOrder || 0,
         isVisible: dto.isVisible ?? true,
+        isNew: dto.isNew === true,
         description: dto.description,
         metadata: dto.metadata || {},
       },
@@ -858,8 +905,15 @@ export class NodeConfigService {
       updateData.priceYuan = dto.priceYuan ? new Prisma.Decimal(dto.priceYuan) : null;
     }
     if (dto.serviceType !== undefined) updateData.serviceType = dto.serviceType;
+    if (dto.configSummary !== undefined) {
+      updateData.configSummary =
+        typeof dto.configSummary === 'string' && dto.configSummary.trim()
+          ? dto.configSummary.trim()
+          : null;
+    }
     if (dto.sortOrder !== undefined) updateData.sortOrder = dto.sortOrder;
     if (dto.isVisible !== undefined) updateData.isVisible = dto.isVisible;
+    if (dto.isNew !== undefined) updateData.isNew = dto.isNew === true;
     if (dto.description !== undefined) updateData.description = dto.description;
     if (dto.metadata !== undefined) updateData.metadata = dto.metadata;
 

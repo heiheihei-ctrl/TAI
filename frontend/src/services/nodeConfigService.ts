@@ -15,9 +15,12 @@ export interface NodeConfig {
   creditsPerCall: number;
   priceYuan?: number;
   serviceType?: string;
+  configSummary?: string | null;
   sortOrder: number;
+  isNew?: boolean;
   description?: string;
   metadata?: Record<string, any>;
+  usageCount?: number;
 }
 
 // 缓存配置

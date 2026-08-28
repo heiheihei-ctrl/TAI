@@ -2913,10 +2913,14 @@ const buildNodePaletteCaption = (config: Partial<NodeConfig>): string | undefine
     }
     return trimmed;
   };
+  // 后台「面板描述 / 配置摘要」：优先展示可编辑文案（节点名称下方）
+  if (typeof config.configSummary === "string" && config.configSummary.trim()) {
+    return normalizeCaption(config.configSummary);
+  }
+  if (typeof config.description === "string" && config.description.trim()) {
+    return normalizeCaption(config.description);
+  }
   if (isBaseVideoInputPaletteConfig(config)) {
-    if (typeof config.description === "string" && config.description.trim()) {
-      return normalizeCaption(config.description);
-    }
     return "上传视频文件";
   }
   const nodeConfig =
@@ -2940,10 +2944,6 @@ const buildNodePaletteCaption = (config: Partial<NodeConfig>): string | undefine
         : undefined,
     ].filter(Boolean);
     if (segments.length > 0) return segments.join(" · ");
-  }
-  if (typeof config.description === "string" && config.description.trim()) {
-    const caption = normalizeCaption(config.description);
-    return caption || undefined;
   }
   return undefined;
 };
@@ -3010,15 +3010,18 @@ const nodePaletteEnCodeStyle: React.CSSProperties = {
 };
 
 const nodePaletteBadgeStyle: React.CSSProperties = {
-  fontSize: 11,
+  fontSize: 10,
   fontWeight: 700,
   color: "#18181b",
   background: "#f4f4f5",
-  padding: "4px 8px",
-  borderRadius: 999,
+  padding: "1px 6px",
+  borderRadius: 4,
   border: "1px solid #d4d4d8",
-  letterSpacing: "0.04em",
+  letterSpacing: "0.02em",
   whiteSpace: "nowrap",
+  display: "inline-flex",
+  alignItems: "center",
+  boxSizing: "border-box",
 };
 
 const nodePaletteCreditsStyle: React.CSSProperties = {
@@ -3158,6 +3161,7 @@ const NodePaletteButton: React.FC<{
   en: string;
   caption?: string;
   badge?: string;
+  badges?: Array<{ text: string; tone?: "hot" | "new" | "status" }>;
   status?: string;
   credits?: number | string;
   disabled?: boolean;
@@ -3171,6 +3175,7 @@ const NodePaletteButton: React.FC<{
   en,
   caption,
   badge,
+  badges,
   status,
   credits,
   disabled,
@@ -3187,7 +3192,28 @@ const NodePaletteButton: React.FC<{
         : credits.toString()
       : null;
 
-  const getBadgeStyle = (statusCode?: string): React.CSSProperties => {
+  const getBadgeStyle = (
+    tone?: "hot" | "new" | "status",
+    statusCode?: string
+  ): React.CSSProperties => {
+    if (tone === "hot") {
+      return {
+        ...nodePaletteBadgeStyle,
+        color: "#fff",
+        background: "linear-gradient(135deg, #ef4444, #f97316)",
+        border: "1px solid #ef4444",
+        fontWeight: 700,
+      };
+    }
+    if (tone === "new") {
+      return {
+        ...nodePaletteBadgeStyle,
+        color: isDarkTheme ? "#6ee7b7" : "#047857",
+        background: isDarkTheme ? "#123528" : "#d1fae5",
+        border: isDarkTheme ? "1px solid #065f46" : "1px solid #6ee7b7",
+        fontWeight: 700,
+      };
+    }
     if (statusCode === "maintenance") {
       return {
         ...nodePaletteBadgeStyle,
@@ -3206,6 +3232,13 @@ const NodePaletteButton: React.FC<{
     }
     return nodePaletteBadgeStyle;
   };
+
+  const resolvedBadges =
+    Array.isArray(badges) && badges.length > 0
+      ? badges
+      : badge
+        ? [{ text: badge, tone: "status" as const }]
+        : [];
 
   // VIP-only 样式
   const isVipLocked = vipOnly && !disabled;
@@ -3252,24 +3285,30 @@ const NodePaletteButton: React.FC<{
           >
             {en}
           </span>
-          {badge ? <span style={getBadgeStyle(status)}>{badge}</span> : null}
+          {resolvedBadges.map((item) => (
+            <span
+              key={`${item.tone || "badge"}-${item.text}`}
+              style={getBadgeStyle(item.tone, status)}
+            >
+              {item.text}
+            </span>
+          ))}
           {/* VIP 锁定标识 */}
           {isVipLocked && (
             <span
               style={{
                 ...nodePaletteBadgeStyle,
-                display: "flex",
+                display: "inline-flex",
                 alignItems: "center",
-                gap: 3,
+                gap: 2,
                 color: isDarkTheme ? "#fcd34d" : "#92400e",
                 background: isDarkTheme ? "#3a2e16" : "#fef3c7",
                 border: isDarkTheme ? "1px solid #7c5a14" : "1px solid #fcd34d",
                 fontSize: 10,
-                padding: "2px 6px",
-                borderRadius: 6,
+                padding: "1px 5px",
               }}
             >
-              <Crown size={10} />
+              <Crown size={9} />
               <span>VIP</span>
             </span>
           )}
@@ -4125,7 +4164,14 @@ function FlowInner() {
   const groupedNodePaletteConfigs = React.useMemo(() => {
     const grouped: Record<
       NodePanelGroupKey,
-      Array<NodeConfig & { _index: number; _inactive: number }>
+      Array<
+        NodeConfig & {
+          _index: number;
+          _inactive: number;
+          _usageCount: number;
+          _isHot: boolean;
+        }
+      >
     > = {
       text: [],
       image: [],
@@ -4141,17 +4187,62 @@ function FlowInner() {
         config.status === "maintenance" || config.status === "coming_soon"
           ? 1
           : 0;
-      grouped[groupKey].push({ ...config, _index: index, _inactive: inactive });
+      const usageCount =
+        typeof config.usageCount === "number" && Number.isFinite(config.usageCount)
+          ? config.usageCount
+          : 0;
+      grouped[groupKey].push({
+        ...config,
+        _index: index,
+        _inactive: inactive,
+        _usageCount: usageCount,
+        _isHot: false,
+      });
+    });
+
+    (["image", "video"] as const).forEach((groupKey) => {
+      const ranked = [...grouped[groupKey]]
+        .filter((item) => item._usageCount > 0)
+        .sort((a, b) => b._usageCount - a._usageCount)
+        .slice(0, 3)
+        .map((item) => item.nodeKey);
+      const hotKeys = new Set(ranked);
+      grouped[groupKey] = grouped[groupKey].map((item) => ({
+        ...item,
+        _isHot: hotKeys.has(item.nodeKey),
+      }));
     });
 
     return NODE_PANEL_GROUP_ORDER
       .map((groupKey) => {
+        const shouldSortByUsage = groupKey === "image" || groupKey === "video";
         const items = grouped[groupKey]
           .sort((a, b) => {
             if (a._inactive !== b._inactive) return a._inactive - b._inactive;
+            // HOT 优先，其次 NEW
+            const aHot = a._isHot ? 1 : 0;
+            const bHot = b._isHot ? 1 : 0;
+            if (aHot !== bHot) return bHot - aHot;
+            const aNew = a.isNew ? 1 : 0;
+            const bNew = b.isNew ? 1 : 0;
+            if (aNew !== bNew) return bNew - aNew;
+            if (shouldSortByUsage && a._usageCount !== b._usageCount) {
+              return b._usageCount - a._usageCount;
+            }
             return a._index - b._index;
           })
-          .map(({ _index: _ignoredIndex, _inactive: _ignoredInactive, ...item }) => item);
+          .map(
+            ({
+              _index: _ignoredIndex,
+              _inactive: _ignoredInactive,
+              _usageCount: _ignoredUsage,
+              _isHot,
+              ...item
+            }) => ({
+              ...item,
+              _isHot,
+            })
+          );
 
         if (items.length === 0) return null;
 
@@ -24278,7 +24369,20 @@ function FlowInner() {
                             config.nodeKey === "seedance20Video" ||
                             (config.metadata as Record<string, any>)?.vipOnly === true;
                           const isVipLocked = !membershipActive && isVipNode;
-                          const badge = getStatusBadge(config.status);
+                          const statusBadge = getStatusBadge(config.status);
+                          const paletteBadges: Array<{
+                            text: string;
+                            tone?: "hot" | "new" | "status";
+                          }> = [];
+                          if ((config as { _isHot?: boolean })._isHot) {
+                            paletteBadges.push({ text: "HOT", tone: "hot" });
+                          }
+                          if (config.isNew) {
+                            paletteBadges.push({ text: "NEW", tone: "new" });
+                          }
+                          if (statusBadge) {
+                            paletteBadges.push({ text: statusBadge, tone: "status" });
+                          }
                           const rawCaption = buildNodePaletteCaption(config);
                           const caption =
                             !isZh &&
@@ -24292,7 +24396,7 @@ function FlowInner() {
                               zh={config.nameZh}
                               en={config.nameEn}
                               caption={caption}
-                              badge={badge}
+                              badges={paletteBadges}
                               status={config.status}
                               credits={resolveNodeConfigCreditsPerCall(config)}
                               disabled={isDisabled || isVipLocked}

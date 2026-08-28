@@ -846,8 +846,10 @@ model NodeConfig {
   creditsPerCall  Int      @default(0)      // 每次调用消耗积分
   priceYuan       Decimal? @db.Decimal(10, 2) // 原价(元)，用于显示参考
   serviceType     String?                   // 关联的服务类型，用于计费
+  configSummary   String?                   // 配置摘要（后台可编辑展示文案）
   sortOrder       Int      @default(0)      // 排序顺序
   isVisible       Boolean  @default(true)   // 是否在节点面板显示
+  isNew           Boolean  @default(false)  // 是否显示 NEW 标签
   description     String?                   // 节点描述
   metadata        Json?                     // 扩展配置，如不同参数的计费规则
   createdAt       DateTime @default(now())

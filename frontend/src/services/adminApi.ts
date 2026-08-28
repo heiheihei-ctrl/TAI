@@ -1823,10 +1823,13 @@ export interface NodeConfig {
   creditsPerCall: number;
   priceYuan?: number;
   serviceType?: string;
+  configSummary?: string | null;
   sortOrder: number;
   isVisible: boolean;
+  isNew?: boolean;
   description?: string;
   metadata?: Record<string, any>;
+  usageCount?: number;
   createdAt?: string;
   updatedAt?: string;
 }

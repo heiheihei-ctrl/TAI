@@ -11098,8 +11098,52 @@ function NodeConfigsTab() {
     loadManagedModels();
   }, []);
 
+  const summarizeMetadata = (metadata?: Record<string, any>) => {
+    if (!metadata || typeof metadata !== "object") return "-";
+    const vod = metadata.vod && typeof metadata.vod === "object" ? metadata.vod : undefined;
+    if (vod) {
+      const res = Array.isArray(vod.outputConfig?.resolutions)
+        ? vod.outputConfig.resolutions.join("/")
+        : "";
+      return [
+        "VOD",
+        vod.modelName,
+        vod.modelVersion,
+        res,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    }
+    if (Array.isArray(metadata.modelKeys) && metadata.modelKeys.length > 0) {
+      return metadata.modelKeys.join(", ");
+    }
+    if (typeof metadata.provider === "string" && metadata.provider.trim()) {
+      return metadata.provider.trim();
+    }
+    return "-";
+  };
+
+  const resolveConfigSummary = (config: NodeConfig) => {
+    const manual =
+      typeof config.configSummary === "string" ? config.configSummary.trim() : "";
+    if (manual) return manual;
+    const desc =
+      typeof config.description === "string" ? config.description.trim() : "";
+    if (desc) return desc;
+    return summarizeMetadata(config.metadata);
+  };
+
   const handleEdit = (config: NodeConfig) => {
-    setEditingConfig({ ...config });
+    const currentSummary = resolveConfigSummary(config);
+    setEditingConfig({
+      ...config,
+      configSummary:
+        typeof config.configSummary === "string" && config.configSummary.trim()
+          ? config.configSummary
+          : currentSummary === "-"
+            ? ""
+            : currentSummary,
+    });
     setMetadataText(JSON.stringify(config.metadata || {}, null, 2));
     setIsCreating(false);
     setModalOpen(true);
@@ -11113,8 +11157,10 @@ function NodeConfigsTab() {
       category: "other",
       status: "normal",
       creditsPerCall: 0,
+      configSummary: "",
       sortOrder: 0,
       isVisible: true,
+      isNew: false,
     });
     setMetadataText("{}");
     setIsCreating(true);
@@ -11193,8 +11239,10 @@ function NodeConfigsTab() {
           creditsPerCall: editingConfig.creditsPerCall,
           priceYuan: editingConfig.priceYuan,
           serviceType: editingConfig.serviceType,
+          configSummary: editingConfig.configSummary || null,
           sortOrder: editingConfig.sortOrder,
           isVisible: editingConfig.isVisible,
+          isNew: editingConfig.isNew === true,
           description: editingConfig.description,
           metadata: parsedMetadata,
         });
@@ -11218,8 +11266,10 @@ function NodeConfigsTab() {
           creditsPerCall: editingConfig.creditsPerCall,
           priceYuan: editingConfig.priceYuan,
           serviceType: editingConfig.serviceType,
+          configSummary: editingConfig.configSummary || null,
           sortOrder: editingConfig.sortOrder,
           isVisible: editingConfig.isVisible,
+          isNew: editingConfig.isNew === true,
           description: editingConfig.description,
           metadata: parsedMetadata,
         });
@@ -11254,31 +11304,6 @@ function NodeConfigsTab() {
     const timer = window.setTimeout(() => setToast(null), 2400);
     return () => window.clearTimeout(timer);
   }, [toast]);
-
-  const summarizeMetadata = (metadata?: Record<string, any>) => {
-    if (!metadata || typeof metadata !== "object") return "-";
-    const vod = metadata.vod && typeof metadata.vod === "object" ? metadata.vod : undefined;
-    if (vod) {
-      const res = Array.isArray(vod.outputConfig?.resolutions)
-        ? vod.outputConfig.resolutions.join("/")
-        : "";
-      return [
-        "VOD",
-        vod.modelName,
-        vod.modelVersion,
-        res,
-      ]
-        .filter(Boolean)
-        .join(" · ");
-    }
-    if (Array.isArray(metadata.modelKeys) && metadata.modelKeys.length > 0) {
-      return metadata.modelKeys.join(", ");
-    }
-    if (typeof metadata.provider === "string" && metadata.provider.trim()) {
-      return metadata.provider.trim();
-    }
-    return "-";
-  };
 
   const statusOptions = [
     { value: "normal", label: "正常" },
@@ -11348,65 +11373,102 @@ function NodeConfigsTab() {
 
       <div className="bg-white rounded-lg border overflow-hidden">
         <div className="max-h-[800px] overflow-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[960px] table-fixed text-sm">
+            <colgroup>
+              <col className="w-[20%]" />
+              <col className="w-[8%]" />
+              <col className="w-[10%]" />
+              <col className="w-[8%]" />
+              <col className="w-[8%]" />
+              <col className="w-[12%]" />
+              <col className="w-[10%]" />
+              <col className="w-[6%]" />
+              <col className="w-[6%]" />
+              <col className="w-[12%]" />
+            </colgroup>
             <thead className="bg-gray-50 sticky top-0">
               <tr>
-                <th className="px-4 py-3 text-left">节点</th>
-                <th className="px-4 py-3 text-left">分类</th>
-                <th className="px-4 py-3 text-left">状态</th>
-                <th className="px-4 py-3 text-right">积分/次</th>
-                <th className="px-4 py-3 text-right">原价(元)</th>
-                <th className="px-4 py-3 text-left">服务类型</th>
-                <th className="px-4 py-3 text-left">配置摘要</th>
-                <th className="px-4 py-3 text-center">显示</th>
-                <th className="px-4 py-3 text-left">操作</th>
+                <th className="px-3 py-3 text-left whitespace-nowrap">节点</th>
+                <th className="px-3 py-3 text-left whitespace-nowrap">分类</th>
+                <th className="px-3 py-3 text-left whitespace-nowrap">状态</th>
+                <th className="px-3 py-3 text-right whitespace-nowrap">积分/次</th>
+                <th className="px-3 py-3 text-right whitespace-nowrap">原价(元)</th>
+                <th className="px-3 py-3 text-left whitespace-nowrap">服务类型</th>
+                <th className="px-3 py-3 text-left whitespace-nowrap">面板描述</th>
+                <th className="px-3 py-3 text-center whitespace-nowrap">最新</th>
+                <th className="px-3 py-3 text-center whitespace-nowrap">显示</th>
+                <th className="px-3 py-3 text-left whitespace-nowrap">操作</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-gray-500">加载中...</td>
+                  <td colSpan={10} className="px-4 py-8 text-center text-gray-500">加载中...</td>
                 </tr>
               ) : configs.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={10} className="px-4 py-8 text-center text-gray-500">
                     暂无数据，请点击"初始化默认配置"
                   </td>
                 </tr>
               ) : (
                 configs.map((config) => (
                   <tr key={config.nodeKey} className="border-t hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <div className="font-medium">{config.nameZh}</div>
-                      <div className="text-xs text-gray-400">{config.nodeKey}</div>
+                    <td className="px-3 py-3">
+                      <div className="truncate font-medium" title={config.nameZh}>
+                        {config.nameZh}
+                      </div>
+                      <div className="truncate text-xs text-gray-400" title={config.nodeKey}>
+                        {config.nodeKey}
+                      </div>
                     </td>
-                    <td className="px-4 py-3">{getCategoryBadge(config.category)}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      {getCategoryBadge(config.category)}
+                    </td>
+                    <td className="px-3 py-3">
                       {getStatusBadge(config.status)}
                       {config.statusMessage && (
-                        <div className="text-xs text-gray-400 mt-1">{config.statusMessage}</div>
+                        <div
+                          className="mt-1 truncate text-xs text-gray-400"
+                          title={config.statusMessage}
+                        >
+                          {config.statusMessage}
+                        </div>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right font-medium">
+                    <td className="px-3 py-3 text-right font-medium whitespace-nowrap">
                       {config.creditsPerCall > 0 ? config.creditsPerCall : <span className="text-green-600">免费</span>}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-3 py-3 text-right whitespace-nowrap">
                       {config.priceYuan ? `¥${config.priceYuan}` : "-"}
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-500">
-                      {config.serviceType || "-"}
+                    <td className="px-3 py-3 text-xs text-gray-500">
+                      <div className="truncate" title={config.serviceType || "-"}>
+                        {config.serviceType || "-"}
+                      </div>
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 max-w-[260px] truncate" title={summarizeMetadata(config.metadata)}>
-                      {summarizeMetadata(config.metadata)}
+                    <td className="px-3 py-3 text-xs text-gray-500">
+                      <div className="truncate" title={resolveConfigSummary(config)}>
+                        {resolveConfigSummary(config)}
+                      </div>
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-3 py-3 text-center whitespace-nowrap">
+                      {config.isNew ? (
+                        <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                          NEW
+                        </span>
+                      ) : (
+                        <span className="text-gray-300">-</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-center whitespace-nowrap">
                       {config.isVisible ? (
                         <span className="text-green-600">✓</span>
                       ) : (
                         <span className="text-red-600">✗</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3 whitespace-nowrap">
                       <div className="flex gap-2">
                         <Button size="sm" variant="outline" onClick={() => handleEdit(config)}>
                           编辑
@@ -11541,11 +11603,27 @@ function NodeConfigsTab() {
               </div>
 
               <div>
-                <label className="block text-sm text-gray-600 mb-1">描述</label>
+                <label className="block text-sm text-gray-600 mb-1">
+                  面板描述（节点弹窗名称下方）
+                </label>
+                <Input
+                  value={editingConfig.configSummary || ""}
+                  onChange={(e) =>
+                    setEditingConfig({ ...editingConfig, configSummary: e.target.value })
+                  }
+                  placeholder="显示在节点弹窗里名称下方，如：上传视频文件"
+                />
+                <div className="mt-1 text-xs text-gray-400">
+                  保存后会出现在双击画布打开的节点列表中，名称正下方那一行。
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">内部描述（可选）</label>
                 <Input
                   value={editingConfig.description || ""}
                   onChange={(e) => setEditingConfig({ ...editingConfig, description: e.target.value })}
-                  placeholder="节点功能描述"
+                  placeholder="后台备注用，面板描述留空时也会作为兜底文案"
                 />
               </div>
 
@@ -11563,7 +11641,7 @@ function NodeConfigsTab() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-4">
                 <label className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -11571,6 +11649,14 @@ function NodeConfigsTab() {
                     onChange={(e) => setEditingConfig({ ...editingConfig, isVisible: e.target.checked })}
                   />
                   <span className="text-sm text-gray-600">在节点面板中显示</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={editingConfig.isNew === true}
+                    onChange={(e) => setEditingConfig({ ...editingConfig, isNew: e.target.checked })}
+                  />
+                  <span className="text-sm text-gray-600">标记为最新</span>
                 </label>
               </div>
 
