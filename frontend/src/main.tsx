@@ -34,6 +34,7 @@ import EnterpriseJoinRequestsPage from '@/pages/enterprise/EnterpriseJoinRequest
 import EnterpriseProjectsPage from '@/pages/enterprise/EnterpriseProjectsPage';
 import ClassroomListPage from '@/pages/classroom/ClassroomListPage';
 import ClassroomDetailPage from '@/pages/classroom/ClassroomDetailPage';
+import ClassroomLearnPage from '@/pages/classroom/ClassroomLearnPage';
 import ClassroomPurchasesPage from '@/pages/classroom/ClassroomPurchasesPage';
 
 function RootRoutes() {
@@ -60,6 +61,8 @@ function RootRoutes() {
       <Route path="/legal/community" element={<CommunityGuidelines />} />
       <Route path="/oss" element={<OSSDemo />} />
       <Route path="/classroom" element={<ClassroomListPage />} />
+      <Route path="/classroom/:courseId/learn/:lessonId" element={<ClassroomLearnPage />} />
+      <Route path="/classroom/:courseId" element={<ClassroomDetailPage />} />
       {SHOW_ENTERPRISE_CONSOLE ? (
         <Route path="/enterprise" element={<EnterpriseLoginPage />} />
       ) : null}
@@ -83,7 +86,6 @@ function RootRoutes() {
           </Route>
         ) : null}
       </Route>
-      <Route path="/classroom/:courseId" element={<ClassroomDetailPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

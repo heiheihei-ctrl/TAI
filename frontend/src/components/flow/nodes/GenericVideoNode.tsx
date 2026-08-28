@@ -227,7 +227,7 @@ const SUPPORTED_AUDIO_ACCEPT = SUPPORTED_AUDIO_EXTENSIONS.map((ext) => `.${ext}`
 
 const SEEDANCE20_DOC_ASPECT_RATIOS = ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"] as const;
 const SEEDANCE15_DOC_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
-const SEEDANCE20_DOC_DURATIONS = [5, 10, 15, 20, 25, 30] as const;
+const SEEDANCE20_DOC_DURATIONS = [5, 10, 15] as const;
 const SEEDANCE25_DOC_DURATIONS = [5, 10, 15, 20, 25, 30] as const;
 const SEEDANCE20_DOC_RESOLUTIONS = ["480P", "720P", "1080P"] as const;
 const SEEDANCE20_FAST_DOC_RESOLUTIONS = ["480P", "720P"] as const;
@@ -1541,14 +1541,14 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
         value === "seedance-2.0-fast" ||
         value === "seedance-2.5";
       const nextMode: SeedanceMode = isSeedance2FamilySelection ? "reference_images" : "text";
-      const snapSeedanceStepDuration = (value?: number) => {
+      const snapSeedanceStepDuration = (value?: number, max = 30) => {
         const base =
           typeof value === "number" && Number.isFinite(value) ? Math.round(value) : 5;
-        const clamped = Math.max(5, Math.min(30, base));
+        const clamped = Math.max(5, Math.min(max, base));
         return Math.round(clamped / 5) * 5;
       };
       const nextDuration = isSeedance2FamilySelection
-        ? snapSeedanceStepDuration(clipDuration)
+        ? snapSeedanceStepDuration(clipDuration, value === "seedance-2.5" ? 30 : 15)
         : clipDuration && clipDuration >= 4 && clipDuration <= 12
         ? clipDuration
         : 5;

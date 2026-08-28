@@ -645,28 +645,9 @@ export default function Home() {
 
           <div className="flex items-center gap-2 sm:gap-3">
             <LanguageSwitcher tone="dark" style="simple" compact />
-            {!user && SHOW_ENTERPRISE_CONSOLE ? (
-              <div className="relative hidden sm:block">
-                <button
-                  type="button"
-                  className="rounded-full border border-teal-400/40 bg-teal-500/15 px-3 py-1 text-xs text-teal-100 transition-colors hover:bg-teal-500/25"
-                  onClick={() => void handleEnterpriseVersionClick()}
-                  disabled={enterpriseEntryBusy}
-                >
-                  {t("enterprise.homeActions.enterprise")}
-                </button>
-              </div>
-            ) : null}
-            <button
-              type="button"
-              className="hidden rounded-full border border-sky-400/40 bg-sky-500/15 px-3 py-1 text-xs text-sky-100 transition-colors hover:bg-sky-500/25 sm:inline-flex"
-              onClick={() => openClassroomPage()}
-            >
-              TAI课堂
-            </button>
             {user ? (
-              <div className="flex items-center gap-2 text-sm sm:gap-3">
-                <span className="hidden text-white/80 sm:inline">
+              <>
+                <span className="hidden text-sm text-white/80 sm:inline">
                   {t("home.header.greeting", {
                     name:
                       user.name ||
@@ -700,57 +681,59 @@ export default function Home() {
                 >
                   {t("home.header.actions.membership")}
                 </button>
-                {SHOW_ENTERPRISE_CONSOLE ? (
-                  <div className="relative hidden sm:block">
-                    <button
-                      type="button"
-                      className="rounded-full border border-teal-400/40 bg-teal-500/15 px-3 py-1 text-xs text-teal-100 transition-colors hover:bg-teal-500/25"
-                      onClick={() => void handleEnterpriseVersionClick()}
-                      disabled={enterpriseEntryBusy}
-                    >
-                      {t("enterprise.homeActions.enterprise")}
-                    </button>
-                  </div>
-                ) : null}
+              </>
+            ) : null}
+            {SHOW_ENTERPRISE_CONSOLE ? (
+              <div className="relative hidden sm:block">
                 <button
                   type="button"
-                  className="hidden rounded-full border border-sky-400/40 bg-sky-500/15 px-3 py-1 text-xs text-sky-100 transition-colors hover:bg-sky-500/25 sm:inline-flex"
-                  onClick={() => openClassroomPage()}
+                  className="rounded-full border border-teal-400/40 bg-teal-500/15 px-3 py-1 text-xs text-teal-100 transition-colors hover:bg-teal-500/25"
+                  onClick={() => void handleEnterpriseVersionClick()}
+                  disabled={enterpriseEntryBusy}
                 >
-                  TAI课堂
-                </button>
-                <button
-                  type="button"
-                  className="px-2 text-sm text-white/70 transition-colors hover:text-white"
-                  onClick={async () => {
-                    try {
-                      await logout();
-                      navigate("/auth/login", { replace: true });
-                    } catch (error) {
-                      console.error("退出登录失败", error);
-                    }
-                  }}
-                >
-                  {t("home.header.actions.logout")}
+                  {t("enterprise.homeActions.enterprise")}
                 </button>
               </div>
+            ) : null}
+            {/* <button
+              type="button"
+              className="hidden rounded-full border border-sky-400/40 bg-sky-500/15 px-3 py-1 text-xs text-sky-100 transition-colors hover:bg-sky-500/25 sm:inline-flex"
+              onClick={() => openClassroomPage()}
+            >
+              TAI课堂
+            </button> */}
+            {user ? (
+              <button
+                type="button"
+                className="px-2 text-sm text-white/70 transition-colors hover:text-white"
+                onClick={async () => {
+                  try {
+                    await logout();
+                    navigate("/auth/login", { replace: true });
+                  } catch (error) {
+                    console.error("退出登录失败", error);
+                  }
+                }}
+              >
+                {t("home.header.actions.logout")}
+              </button>
             ) : (
               <div className="flex items-center bg-[#14181F] rounded-[20px]">
-                  <button
-                    type="button"
-                    className="px-2 text-[12px] text-white/80 transition-colors px-[16px]"
-                    onClick={() => navigate("/auth/register")}
-                  >
-                    {t("home.header.actions.register")}
-                  </button>
-                  <button
-                    type="button"
-                    className={BTN_LOGIN_CLASS}
-                    onClick={() => navigate("/auth/login")}
-                  >
-                    {t("home.header.actions.login")}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  className="px-2 text-[12px] text-white/80 transition-colors px-[16px]"
+                  onClick={() => navigate("/auth/register")}
+                >
+                  {t("home.header.actions.register")}
+                </button>
+                <button
+                  type="button"
+                  className={BTN_LOGIN_CLASS}
+                  onClick={() => navigate("/auth/login")}
+                >
+                  {t("home.header.actions.login")}
+                </button>
+              </div>
             )}
           </div>
         </div>

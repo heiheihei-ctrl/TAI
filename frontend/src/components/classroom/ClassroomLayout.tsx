@@ -4,6 +4,8 @@ import { useAuthStore } from "@/stores/authStore";
 
 type Props = {
   children: React.ReactNode;
+  /** 学习页等需要全宽内容时去掉 main 的限宽与内边距 */
+  bleed?: boolean;
 };
 
 const NAV = [
@@ -12,14 +14,25 @@ const NAV = [
   { to: "/classroom/purchases", label: "我的已购", match: (p: string) => p.startsWith("/classroom/purchases") },
 ];
 
-export default function ClassroomLayout({ children }: Props) {
+export default function ClassroomLayout({ children, bleed = false }: Props) {
   const location = useLocation();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const initializing = useAuthStore((s) => s.initializing);
+  const init = useAuthStore((s) => s.init);
+  const authBootstrappedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (authBootstrappedRef.current) return;
+    authBootstrappedRef.current = true;
+    void init().catch(() => {});
+  }, [init]);
+
+  const authReady = !initializing || Boolean(user);
 
   return (
-    <div className="min-h-screen bg-[#f5f6f8] text-slate-900">
-      <header className="sticky top-0 z-40 bg-[#2a2d34] text-white shadow-sm">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#f5f6f8] text-slate-900">
+      <header className="sticky top-0 z-40 shrink-0 bg-[#2a2d34] text-white shadow-sm">
         <div className="mx-auto flex h-14 max-w-[1200px] items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-6">
             <button
@@ -50,7 +63,9 @@ export default function ClassroomLayout({ children }: Props) {
             </nav>
           </div>
           <div className="flex items-center gap-3 text-sm">
-            {user ? (
+            {!authReady ? (
+              <span className="text-white/50">…</span>
+            ) : user ? (
               <span className="hidden text-white/80 md:inline">
                 {user.name || user.phone || "用户"}
               </span>
@@ -71,7 +86,13 @@ export default function ClassroomLayout({ children }: Props) {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6 sm:py-8">{children}</main>
+      {bleed ? (
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
+      ) : (
+        <main className="mx-auto min-h-0 w-full max-w-[1200px] flex-1 overflow-y-auto overscroll-contain px-4 py-6 sm:px-6 sm:py-8">
+          {children}
+        </main>
+      )}
     </div>
   );
 }

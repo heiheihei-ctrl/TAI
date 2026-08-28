@@ -8,6 +8,7 @@ export interface CreateCourseDto {
   originalPriceYuan: number;
   discountPriceYuan: number;
   detailHtml?: string | null;
+  materialsHtml?: string | null;
   subscriberCount?: number;
   authorName?: string | null;
   authorAvatarUrl?: string | null;

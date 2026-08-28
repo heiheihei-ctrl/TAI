@@ -46,6 +46,7 @@ export class ClassroomService {
     originalPriceYuan: Prisma.Decimal | number;
     discountPriceYuan: Prisma.Decimal | number;
     detailHtml?: string | null;
+    materialsHtml?: string | null;
     subscriberCount: number;
     episodeCount: number;
     authorName: string | null;
@@ -64,6 +65,7 @@ export class ClassroomService {
       originalPriceYuan: Number(course.originalPriceYuan),
       discountPriceYuan: Number(course.discountPriceYuan),
       detailHtml: course.detailHtml ?? undefined,
+      materialsHtml: course.materialsHtml ?? undefined,
       subscriberCount: course.subscriberCount,
       episodeCount: course.episodeCount,
       authorName: course.authorName,
@@ -125,7 +127,7 @@ export class ClassroomService {
       : false;
 
     const lessons = await this.prisma.courseLesson.findMany({
-      where: { courseId, isPublished: true },
+      where: { courseId, isPublished: true, type: 'video' },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
     });
 
@@ -297,7 +299,8 @@ export class ClassroomService {
         originalPriceYuan: original,
         discountPriceYuan: discount,
         detailHtml: dto.detailHtml || null,
-        subscriberCount: Math.max(0, Math.floor(dto.subscriberCount ?? 0)),
+        materialsHtml: dto.materialsHtml || null,
+        subscriberCount: 0,
         authorName: dto.authorName?.trim() || null,
         authorAvatarUrl: dto.authorAvatarUrl?.trim() || null,
         isPublished: dto.isPublished === true,
@@ -331,9 +334,7 @@ export class ClassroomService {
       data.discountPriceYuan = money(dto.discountPriceYuan);
     }
     if (dto.detailHtml !== undefined) data.detailHtml = dto.detailHtml || null;
-    if (dto.subscriberCount !== undefined) {
-      data.subscriberCount = Math.max(0, Math.floor(dto.subscriberCount));
-    }
+    if (dto.materialsHtml !== undefined) data.materialsHtml = dto.materialsHtml || null;
     if (dto.authorName !== undefined) {
       data.authorName = dto.authorName?.trim() || null;
     }
@@ -369,7 +370,7 @@ export class ClassroomService {
 
   private async refreshEpisodeCount(courseId: string) {
     const count = await this.prisma.courseLesson.count({
-      where: { courseId, isPublished: true },
+      where: { courseId, isPublished: true, type: 'video' },
     });
     await this.prisma.course.update({
       where: { id: courseId },

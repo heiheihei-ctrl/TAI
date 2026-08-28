@@ -129,7 +129,7 @@ const SEEDANCE20_SUPPORTED_MODELS = [
   'seedance-2.5',
 ];
 const SEEDANCE20_ASPECT_RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'];
-const SEEDANCE20_DURATIONS = [5, 10, 15, 20, 25, 30];
+const SEEDANCE20_DURATIONS = [5, 10, 15];
 const SEEDANCE20_NOTES = [
   '当前接入模型 ID: doubao-seedance-2-0-260128 / doubao-seedance-2-0-fast-260128 / doubao-seedance-2-5-260628',
   '节点采用自动模式推导：最多支持 9 张参考图，尾帧/视频/音频各 1 路，运行时按已连接输入自动确定上游 video_mode',

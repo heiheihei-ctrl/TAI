@@ -33,13 +33,22 @@ type CourseForm = {
   originalPriceYuan: string;
   discountPriceYuan: string;
   detailHtml: string;
-  subscriberCount: string;
+  materialsHtml: string;
   authorName: string;
   isPublished: boolean;
   sortOrder: string;
 };
 
 type TrialMode = "full" | "seconds";
+
+type LessonDraft = {
+  title: string;
+  videoUrl: string;
+  isTrial: boolean;
+  trialMode: TrialMode;
+  trialSeconds: string;
+  sortOrder: string;
+};
 
 const emptyForm = (): CourseForm => ({
   title: "",
@@ -48,10 +57,19 @@ const emptyForm = (): CourseForm => ({
   originalPriceYuan: "499",
   discountPriceYuan: "109",
   detailHtml: "",
-  subscriberCount: "0",
+  materialsHtml: "",
   authorName: "TAI课堂",
   isPublished: false,
   sortOrder: "0",
+});
+
+const emptyLessonDraft = (sortOrder = "0"): LessonDraft => ({
+  title: "",
+  videoUrl: "",
+  isTrial: false,
+  trialMode: "full",
+  trialSeconds: "60",
+  sortOrder,
 });
 
 const resolveTrialMode = (lesson: {
@@ -64,7 +82,6 @@ const resolveTrialMode = (lesson: {
 
 const formatTrialLabel = (lesson: LessonRow) => {
   if (!lesson.isTrial) return "";
-  if (lesson.type === "article") return "试学·整集";
   if (lesson.trialSeconds != null && lesson.trialSeconds > 0) {
     return `试学·${lesson.trialSeconds}秒`;
   }
@@ -73,14 +90,13 @@ const formatTrialLabel = (lesson: LessonRow) => {
 
 const buildTrialPayload = (
   isTrial: boolean,
-  type: "article" | "video",
   trialMode: TrialMode,
   trialSeconds: string
 ) => {
   if (!isTrial) {
     return { isTrial: false, trialSeconds: null as number | null };
   }
-  if (type === "article" || trialMode === "full") {
+  if (trialMode === "full") {
     return { isTrial: true, trialSeconds: null as number | null };
   }
   const seconds = Math.max(1, Math.floor(Number(trialSeconds) || 60));
@@ -88,7 +104,6 @@ const buildTrialPayload = (
 };
 
 function TrialSettings({
-  type,
   isTrial,
   trialMode,
   trialSeconds,
@@ -96,7 +111,6 @@ function TrialSettings({
   onModeChange,
   onSecondsChange,
 }: {
-  type: "article" | "video";
   isTrial: boolean;
   trialMode: TrialMode;
   trialSeconds: string;
@@ -115,43 +129,123 @@ function TrialSettings({
         设为试学
       </label>
       {isTrial ? (
-        <div className="space-y-2 pl-5 text-sm">
-          {type === "video" ? (
-            <div className="flex flex-wrap gap-4">
-              <label className="flex items-center gap-1.5">
-                <input
-                  type="radio"
-                  checked={trialMode === "full"}
-                  onChange={() => onModeChange("full")}
-                />
-                整集试学
-              </label>
-              <label className="flex items-center gap-1.5">
-                <input
-                  type="radio"
-                  checked={trialMode === "seconds"}
-                  onChange={() => onModeChange("seconds")}
-                />
-                限时试看
-              </label>
-              {trialMode === "seconds" ? (
-                <label className="flex items-center gap-1.5">
-                  <input
-                    type="number"
-                    min={1}
-                    className="w-24 rounded border px-2 py-1"
-                    value={trialSeconds}
-                    onChange={(e) => onSecondsChange(e.target.value)}
-                  />
-                  秒
-                </label>
-              ) : null}
-            </div>
-          ) : (
-            <p className="text-xs text-gray-500">图文课时试学为整集开放</p>
-          )}
+        <div className="flex flex-wrap gap-4 pl-5 text-sm">
+          <label className="flex items-center gap-1.5">
+            <input
+              type="radio"
+              checked={trialMode === "full"}
+              onChange={() => onModeChange("full")}
+            />
+            整集试学
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input
+              type="radio"
+              checked={trialMode === "seconds"}
+              onChange={() => onModeChange("seconds")}
+            />
+            限时试看
+          </label>
+          {trialMode === "seconds" ? (
+            <label className="flex items-center gap-1.5">
+              <input
+                type="number"
+                min={1}
+                className="w-24 rounded border px-2 py-1"
+                value={trialSeconds}
+                onChange={(e) => onSecondsChange(e.target.value)}
+              />
+              秒
+            </label>
+          ) : null}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function LessonEditorForm({
+  draft,
+  saving,
+  submitLabel,
+  onChange,
+  onSubmit,
+  onCancel,
+  onUploadVideo,
+}: {
+  draft: LessonDraft;
+  saving: boolean;
+  submitLabel: string;
+  onChange: (patch: Partial<LessonDraft>) => void;
+  onSubmit: () => void;
+  onCancel?: () => void;
+  onUploadVideo: (file: File) => Promise<void>;
+}) {
+  return (
+    <div className="space-y-3 rounded border bg-gray-50 p-3">
+      <input
+        className="w-full rounded border px-3 py-2 text-sm"
+        placeholder="课时标题"
+        value={draft.title}
+        onChange={(e) => onChange({ title: e.target.value })}
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          className="min-w-[240px] flex-1 rounded border px-3 py-2 text-sm"
+          placeholder="视频 URL"
+          value={draft.videoUrl}
+          onChange={(e) => onChange({ videoUrl: e.target.value })}
+        />
+        <label className="cursor-pointer rounded border bg-white px-2 py-1 text-xs">
+          上传视频
+          <input
+            type="file"
+            accept="video/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (!file) return;
+              void onUploadVideo(file);
+            }}
+          />
+        </label>
+      </div>
+      <label className="flex items-center gap-2 text-sm">
+        排序
+        <input
+          className="w-24 rounded border px-2 py-1"
+          value={draft.sortOrder}
+          onChange={(e) => onChange({ sortOrder: e.target.value })}
+        />
+      </label>
+      <TrialSettings
+        isTrial={draft.isTrial}
+        trialMode={draft.trialMode}
+        trialSeconds={draft.trialSeconds}
+        onTrialChange={(checked) => onChange({ isTrial: checked })}
+        onModeChange={(mode) => onChange({ trialMode: mode })}
+        onSecondsChange={(value) => onChange({ trialSeconds: value })}
+      />
+      <div className="flex gap-2">
+        <button
+          type="button"
+          className="rounded bg-emerald-600 px-3 py-1.5 text-sm text-white disabled:opacity-60"
+          disabled={saving}
+          onClick={onSubmit}
+        >
+          {submitLabel}
+        </button>
+        {onCancel ? (
+          <button
+            type="button"
+            className="rounded border px-3 py-1.5 text-sm"
+            onClick={onCancel}
+          >
+            取消
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -164,24 +258,9 @@ export default function ClassroomSettingsTab() {
   const [form, setForm] = React.useState<CourseForm>(emptyForm());
   const [lessons, setLessons] = React.useState<LessonRow[]>([]);
   const [saving, setSaving] = React.useState(false);
-  const [lessonDraft, setLessonDraft] = React.useState({
-    title: "",
-    type: "article" as "article" | "video",
-    contentHtml: "",
-    videoUrl: "",
-    isTrial: false,
-    trialMode: "full" as TrialMode,
-    trialSeconds: "60",
-    sortOrder: "0",
-  });
-  const [editingTrialLessonId, setEditingTrialLessonId] = React.useState<string | null>(
-    null
-  );
-  const [lessonTrialDraft, setLessonTrialDraft] = React.useState({
-    isTrial: false,
-    trialMode: "full" as TrialMode,
-    trialSeconds: "60",
-  });
+  const [lessonDraft, setLessonDraft] = React.useState<LessonDraft>(emptyLessonDraft());
+  const [editingLessonId, setEditingLessonId] = React.useState<string | null>(null);
+  const [lessonEditDraft, setLessonEditDraft] = React.useState<LessonDraft>(emptyLessonDraft());
 
   const reloadList = React.useCallback(async () => {
     setLoading(true);
@@ -204,7 +283,8 @@ export default function ClassroomSettingsTab() {
     setEditingId(null);
     setForm(emptyForm());
     setLessons([]);
-    setEditingTrialLessonId(null);
+    setEditingLessonId(null);
+    setLessonDraft(emptyLessonDraft());
   };
 
   const openEdit = async (id: string) => {
@@ -220,18 +300,31 @@ export default function ClassroomSettingsTab() {
         originalPriceYuan: String(detail.originalPriceYuan ?? ""),
         discountPriceYuan: String(detail.discountPriceYuan ?? ""),
         detailHtml: detail.detailHtml || "",
-        subscriberCount: String(detail.subscriberCount ?? 0),
+        materialsHtml: detail.materialsHtml || "",
         authorName: detail.authorName || "",
         isPublished: detail.isPublished === true,
         sortOrder: String(detail.sortOrder ?? 0),
       });
-      setLessons((detail.lessons as LessonRow[]) || []);
-      setEditingTrialLessonId(null);
+      setLessons(
+        ((detail.lessons as LessonRow[]) || []).filter((l) => l.type === "video")
+      );
+      setEditingLessonId(null);
+      setLessonDraft(emptyLessonDraft(String(detail.lessons?.length || 0)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "加载课程失败");
     } finally {
       setSaving(false);
     }
+  };
+
+  const reloadLessons = async (courseId: string) => {
+    const detail = await adminGetCourse(courseId);
+    const videoLessons = ((detail.lessons as LessonRow[]) || []).filter(
+      (l) => l.type === "video"
+    );
+    setLessons(videoLessons);
+    setLessonDraft(emptyLessonDraft(String(videoLessons.length)));
+    return detail;
   };
 
   const uploadImage = async (file: File, dir: string) => {
@@ -250,8 +343,8 @@ export default function ClassroomSettingsTab() {
     []
   );
 
-  const uploadLessonImage = React.useCallback(
-    (file: File) => uploadImage(file, "classroom/lessons/"),
+  const uploadMaterialsImage = React.useCallback(
+    (file: File) => uploadImage(file, "classroom/materials/"),
     []
   );
 
@@ -278,7 +371,7 @@ export default function ClassroomSettingsTab() {
         originalPriceYuan: Number(form.originalPriceYuan),
         discountPriceYuan: Number(form.discountPriceYuan),
         detailHtml: form.detailHtml || null,
-        subscriberCount: Number(form.subscriberCount) || 0,
+        materialsHtml: form.materialsHtml || null,
         authorName: form.authorName.trim() || null,
         isPublished: form.isPublished,
         sortOrder: Number(form.sortOrder) || 0,
@@ -307,32 +400,19 @@ export default function ClassroomSettingsTab() {
     try {
       const trial = buildTrialPayload(
         lessonDraft.isTrial,
-        lessonDraft.type,
         lessonDraft.trialMode,
         lessonDraft.trialSeconds
       );
       await adminCreateLesson(editingId, {
         title: lessonDraft.title.trim(),
-        type: lessonDraft.type,
-        contentHtml: lessonDraft.type === "article" ? lessonDraft.contentHtml : null,
-        videoUrl: lessonDraft.type === "video" ? lessonDraft.videoUrl : null,
+        type: "video",
+        videoUrl: lessonDraft.videoUrl.trim(),
         isTrial: trial.isTrial,
         trialSeconds: trial.trialSeconds,
         sortOrder: Number(lessonDraft.sortOrder) || 0,
         isPublished: true,
       });
-      const detail = await adminGetCourse(editingId);
-      setLessons((detail.lessons as LessonRow[]) || []);
-      setLessonDraft({
-        title: "",
-        type: "article",
-        contentHtml: "",
-        videoUrl: "",
-        isTrial: false,
-        trialMode: "full",
-        trialSeconds: "60",
-        sortOrder: String(detail.lessons?.length || 0),
-      });
+      await reloadLessons(editingId);
       await reloadList();
     } catch (err) {
       setError(err instanceof Error ? err.message : "添加课时失败");
@@ -341,36 +421,44 @@ export default function ClassroomSettingsTab() {
     }
   };
 
-  const openLessonTrialEditor = (lesson: LessonRow) => {
-    setEditingTrialLessonId(lesson.id);
-    setLessonTrialDraft({
+  const openLessonEditor = (lesson: LessonRow) => {
+    setEditingLessonId(lesson.id);
+    setLessonEditDraft({
+      title: lesson.title,
+      videoUrl: lesson.videoUrl || "",
       isTrial: lesson.isTrial,
       trialMode: resolveTrialMode(lesson),
       trialSeconds:
         lesson.trialSeconds != null && lesson.trialSeconds > 0
           ? String(lesson.trialSeconds)
           : "60",
+      sortOrder: String(lesson.sortOrder ?? 0),
     });
   };
 
-  const saveLessonTrial = async (lesson: LessonRow) => {
+  const saveLessonEdit = async () => {
+    if (!editingLessonId || !editingId) return;
     setSaving(true);
     setError(null);
     try {
       const trial = buildTrialPayload(
-        lessonTrialDraft.isTrial,
-        lesson.type,
-        lessonTrialDraft.trialMode,
-        lessonTrialDraft.trialSeconds
+        lessonEditDraft.isTrial,
+        lessonEditDraft.trialMode,
+        lessonEditDraft.trialSeconds
       );
-      await adminUpdateLesson(lesson.id, trial);
-      if (editingId) {
-        const detail = await adminGetCourse(editingId);
-        setLessons((detail.lessons as LessonRow[]) || []);
-      }
-      setEditingTrialLessonId(null);
+      await adminUpdateLesson(editingLessonId, {
+        title: lessonEditDraft.title.trim(),
+        type: "video",
+        videoUrl: lessonEditDraft.videoUrl.trim(),
+        sortOrder: Number(lessonEditDraft.sortOrder) || 0,
+        isTrial: trial.isTrial,
+        trialSeconds: trial.trialSeconds,
+      });
+      await reloadLessons(editingId);
+      setEditingLessonId(null);
+      await reloadList();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "更新试学失败");
+      setError(err instanceof Error ? err.message : "保存课时失败");
     } finally {
       setSaving(false);
     }
@@ -381,8 +469,8 @@ export default function ClassroomSettingsTab() {
     setSaving(true);
     try {
       await adminDeleteLesson(lessonId);
-      setLessons((prev) => prev.filter((l) => l.id !== lessonId));
-      if (editingTrialLessonId === lessonId) setEditingTrialLessonId(null);
+      if (editingId) await reloadLessons(editingId);
+      if (editingLessonId === lessonId) setEditingLessonId(null);
       await reloadList();
     } catch (err) {
       setError(err instanceof Error ? err.message : "删除失败");
@@ -446,7 +534,7 @@ export default function ClassroomSettingsTab() {
                   <div className="mt-1 flex items-center justify-between text-xs text-gray-500">
                     <span>
                       ¥{Number(c.discountPriceYuan).toFixed(0)} ·{" "}
-                      {c.isPublished ? "已上架" : "草稿"}
+                      {c.isPublished ? "已上架" : "草稿"} · {c.subscriberCount || 0} 人订阅
                     </span>
                     <button
                       type="button"
@@ -502,16 +590,6 @@ export default function ClassroomSettingsTab() {
                 className="w-full rounded border px-3 py-2"
                 value={form.tag}
                 onChange={(e) => setForm((f) => ({ ...f, tag: e.target.value }))}
-              />
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block text-gray-600">订阅人数展示</span>
-              <input
-                className="w-full rounded border px-3 py-2"
-                value={form.subscriberCount}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, subscriberCount: e.target.value }))
-                }
               />
             </label>
             <label className="text-sm">
@@ -585,6 +663,18 @@ export default function ClassroomSettingsTab() {
             />
           </div>
 
+          <div className="space-y-2">
+            <span className="block text-sm text-gray-600">课程资料</span>
+            <p className="text-xs text-gray-400">购买后可查看，支持图文排版</p>
+            <RichTextEditor
+              value={form.materialsHtml}
+              onChange={(html) => setForm((f) => ({ ...f, materialsHtml: html }))}
+              placeholder="编写课程资料、附件说明、补充内容…"
+              minHeight={220}
+              onUploadImage={uploadMaterialsImage}
+            />
+          </div>
+
           <button
             type="button"
             disabled={saving}
@@ -595,183 +685,67 @@ export default function ClassroomSettingsTab() {
           </button>
 
           <div className="border-t pt-4">
-            <h4 className="mb-3 font-semibold">目录管理</h4>
+            <h4 className="mb-3 font-semibold">目录管理（视频课时）</h4>
             {!editingId ? (
               <p className="text-sm text-amber-600">先保存课程后再添加目录</p>
             ) : (
               <>
-                <div className="mb-3 space-y-3 rounded border bg-gray-50 p-3">
-                  <input
-                    className="w-full rounded border px-3 py-2 text-sm"
-                    placeholder="课时标题"
-                    value={lessonDraft.title}
-                    onChange={(e) =>
-                      setLessonDraft((d) => ({ ...d, title: e.target.value }))
-                    }
+                <div className="mb-3">
+                  <LessonEditorForm
+                    draft={lessonDraft}
+                    saving={saving}
+                    submitLabel="添加课时"
+                    onChange={(patch) => setLessonDraft((d) => ({ ...d, ...patch }))}
+                    onSubmit={() => void handleAddLesson()}
+                    onUploadVideo={async (file) => {
+                      const url = await uploadVideo(file);
+                      setLessonDraft((d) => ({ ...d, videoUrl: url }));
+                    }}
                   />
-                  <div className="flex flex-wrap gap-3 text-sm">
-                    <label className="flex items-center gap-1">
-                      <input
-                        type="radio"
-                        checked={lessonDraft.type === "article"}
-                        onChange={() =>
-                          setLessonDraft((d) => ({ ...d, type: "article" }))
-                        }
-                      />
-                      图文
-                    </label>
-                    <label className="flex items-center gap-1">
-                      <input
-                        type="radio"
-                        checked={lessonDraft.type === "video"}
-                        onChange={() =>
-                          setLessonDraft((d) => ({ ...d, type: "video" }))
-                        }
-                      />
-                      视频
-                    </label>
-                  </div>
-
-                  <TrialSettings
-                    type={lessonDraft.type}
-                    isTrial={lessonDraft.isTrial}
-                    trialMode={lessonDraft.trialMode}
-                    trialSeconds={lessonDraft.trialSeconds}
-                    onTrialChange={(checked) =>
-                      setLessonDraft((d) => ({ ...d, isTrial: checked }))
-                    }
-                    onModeChange={(mode) =>
-                      setLessonDraft((d) => ({ ...d, trialMode: mode }))
-                    }
-                    onSecondsChange={(value) =>
-                      setLessonDraft((d) => ({ ...d, trialSeconds: value }))
-                    }
-                  />
-
-                  {lessonDraft.type === "article" ? (
-                    <div className="space-y-1">
-                      <span className="text-sm text-gray-600">课时正文</span>
-                      <RichTextEditor
-                        value={lessonDraft.contentHtml}
-                        onChange={(html) =>
-                          setLessonDraft((d) => ({ ...d, contentHtml: html }))
-                        }
-                        placeholder="编写图文课时内容…"
-                        minHeight={160}
-                        onUploadImage={uploadLessonImage}
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <input
-                        className="min-w-[240px] flex-1 rounded border px-3 py-2 text-sm"
-                        placeholder="视频 URL"
-                        value={lessonDraft.videoUrl}
-                        onChange={(e) =>
-                          setLessonDraft((d) => ({
-                            ...d,
-                            videoUrl: e.target.value,
-                          }))
-                        }
-                      />
-                      <label className="cursor-pointer rounded border bg-white px-2 py-1 text-xs">
-                        上传视频
-                        <input
-                          type="file"
-                          accept="video/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            void uploadVideo(file)
-                              .then((url) =>
-                                setLessonDraft((d) => ({ ...d, videoUrl: url }))
-                              )
-                              .catch((err) =>
-                                setError(
-                                  err instanceof Error ? err.message : "视频上传失败"
-                                )
-                              );
-                          }}
-                        />
-                      </label>
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    className="rounded bg-emerald-600 px-3 py-1.5 text-sm text-white"
-                    disabled={saving}
-                    onClick={() => void handleAddLesson()}
-                  >
-                    添加课时
-                  </button>
                 </div>
 
                 <div className="divide-y rounded border">
                   {lessons.map((lesson) => (
                     <div key={lesson.id} className="px-3 py-2 text-sm">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">
-                          {lesson.type === "video" ? "视频" : "图文"}
-                        </span>
-                        <span className="flex-1">{lesson.title}</span>
-                        {lesson.isTrial ? (
-                          <span className="text-xs text-blue-600">
-                            {formatTrialLabel(lesson)}
-                          </span>
-                        ) : null}
-                        <button
-                          type="button"
-                          className="text-xs text-blue-600"
-                          onClick={() => openLessonTrialEditor(lesson)}
-                        >
-                          {lesson.isTrial ? "编辑试学" : "设为试学"}
-                        </button>
-                        <button
-                          type="button"
-                          className="text-xs text-red-500"
-                          onClick={() => void removeLesson(lesson.id)}
-                        >
-                          删除
-                        </button>
-                      </div>
-
-                      {editingTrialLessonId === lesson.id ? (
-                        <div className="mt-2 space-y-2 rounded border bg-gray-50 p-2">
-                          <TrialSettings
-                            type={lesson.type}
-                            isTrial={lessonTrialDraft.isTrial}
-                            trialMode={lessonTrialDraft.trialMode}
-                            trialSeconds={lessonTrialDraft.trialSeconds}
-                            onTrialChange={(checked) =>
-                              setLessonTrialDraft((d) => ({ ...d, isTrial: checked }))
-                            }
-                            onModeChange={(mode) =>
-                              setLessonTrialDraft((d) => ({ ...d, trialMode: mode }))
-                            }
-                            onSecondsChange={(value) =>
-                              setLessonTrialDraft((d) => ({ ...d, trialSeconds: value }))
-                            }
-                          />
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              className="rounded bg-blue-600 px-2 py-1 text-xs text-white"
-                              disabled={saving}
-                              onClick={() => void saveLessonTrial(lesson)}
-                            >
-                              保存试学设置
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded border px-2 py-1 text-xs"
-                              onClick={() => setEditingTrialLessonId(null)}
-                            >
-                              取消
-                            </button>
-                          </div>
+                      {editingLessonId === lesson.id ? (
+                        <LessonEditorForm
+                          draft={lessonEditDraft}
+                          saving={saving}
+                          submitLabel="保存课时"
+                          onChange={(patch) =>
+                            setLessonEditDraft((d) => ({ ...d, ...patch }))
+                          }
+                          onSubmit={() => void saveLessonEdit()}
+                          onCancel={() => setEditingLessonId(null)}
+                          onUploadVideo={async (file) => {
+                            const url = await uploadVideo(file);
+                            setLessonEditDraft((d) => ({ ...d, videoUrl: url }));
+                          }}
+                        />
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="flex-1">{lesson.title}</span>
+                          {lesson.isTrial ? (
+                            <span className="text-xs text-blue-600">
+                              {formatTrialLabel(lesson)}
+                            </span>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="text-xs text-blue-600"
+                            onClick={() => openLessonEditor(lesson)}
+                          >
+                            编辑
+                          </button>
+                          <button
+                            type="button"
+                            className="text-xs text-red-500"
+                            onClick={() => void removeLesson(lesson.id)}
+                          >
+                            删除
+                          </button>
                         </div>
-                      ) : null}
+                      )}
                     </div>
                   ))}
                   {lessons.length === 0 ? (

@@ -3273,7 +3273,7 @@ export class VideoProviderService {
       if (isSeedance25Model) {
         payload.duration = snapSeedanceStepDuration(normalizedDuration, 5, 30);
       } else if (isSeedance2Model) {
-        payload.duration = snapSeedanceStepDuration(normalizedDuration, 5, 30);
+        payload.duration = snapSeedanceStepDuration(normalizedDuration, 5, 15);
       } else {
         payload.duration = Math.max(4, Math.min(12, normalizedDuration));
       }

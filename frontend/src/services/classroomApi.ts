@@ -41,6 +41,7 @@ export type ClassroomCourse = {
   originalPriceYuan: number;
   discountPriceYuan: number;
   detailHtml?: string | null;
+  materialsHtml?: string | null;
   subscriberCount: number;
   episodeCount: number;
   authorName?: string | null;

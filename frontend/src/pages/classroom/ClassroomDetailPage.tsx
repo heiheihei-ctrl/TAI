@@ -5,33 +5,34 @@ import ClassroomLayout from "@/components/classroom/ClassroomLayout";
 import ClassroomCheckoutModal from "@/components/classroom/ClassroomCheckoutModal";
 import {
   getClassroomCourse,
-  getClassroomLessonContent,
   listClassroomLessons,
   type ClassroomCourse,
-  type ClassroomLessonContent,
   type ClassroomLessonMeta,
 } from "@/services/classroomApi";
 import { useAuthStore } from "@/stores/authStore";
-import { proxifyRemoteAssetUrl } from "@/utils/assetProxy";
+
+type TabKey = "detail" | "catalog" | "materials";
+
+const RICH_HTML_CLASS =
+  "classroom-rich-html [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:mt-3 [&_h3]:text-base [&_h3]:font-semibold [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6 [&_img]:max-w-full";
 
 export default function ClassroomDetailPage() {
   const { courseId = "" } = useParams();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const initializing = useAuthStore((s) => s.initializing);
 
   const [course, setCourse] = React.useState<ClassroomCourse | null>(null);
   const [lessons, setLessons] = React.useState<ClassroomLessonMeta[]>([]);
   const [purchased, setPurchased] = React.useState(false);
-  const [tab, setTab] = React.useState<"detail" | "catalog">("detail");
+  const [tab, setTab] = React.useState<TabKey>("detail");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [checkoutOpen, setCheckoutOpen] = React.useState(false);
-  const [activeLesson, setActiveLesson] = React.useState<ClassroomLessonContent | null>(null);
   const [lessonError, setLessonError] = React.useState<string | null>(null);
-  const videoRef = React.useRef<HTMLVideoElement | null>(null);
 
   const reload = React.useCallback(async () => {
-    if (!courseId) return;
+    if (!courseId || initializing) return;
     setLoading(true);
     setError(null);
     try {
@@ -47,26 +48,11 @@ export default function ClassroomDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [courseId]);
+  }, [courseId, initializing]);
 
   React.useEffect(() => {
     void reload();
-  }, [reload]);
-
-  React.useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !activeLesson?.trialSeconds || activeLesson.purchased) return;
-    const limit = activeLesson.trialSeconds;
-    const onTimeUpdate = () => {
-      if (video.currentTime >= limit) {
-        video.pause();
-        video.currentTime = limit;
-        setLessonError(`试看已结束（${limit} 秒），购买后可观看完整内容`);
-      }
-    };
-    video.addEventListener("timeupdate", onTimeUpdate);
-    return () => video.removeEventListener("timeupdate", onTimeUpdate);
-  }, [activeLesson]);
+  }, [reload, user?.id]);
 
   const handleBuy = () => {
     if (!user) {
@@ -78,19 +64,30 @@ export default function ClassroomDetailPage() {
     setCheckoutOpen(true);
   };
 
-  const openLesson = async (lesson: ClassroomLessonMeta) => {
+  const goLearn = (lesson: ClassroomLessonMeta) => {
     setLessonError(null);
     if (lesson.locked) {
       setLessonError("请先购买课程后再学习");
       return;
     }
-    try {
-      const content = await getClassroomLessonContent(lesson.id);
-      setActiveLesson(content);
+    const base = import.meta.env.BASE_URL || "/";
+    const originWithBase = `${window.location.origin}${
+      base.endsWith("/") ? base : `${base}/`
+    }`;
+    const href = new URL(
+      `classroom/${encodeURIComponent(courseId)}/learn/${encodeURIComponent(lesson.id)}`,
+      originWithBase
+    ).href;
+    window.open(href, "_blank", "noopener,noreferrer");
+  };
+
+  const startLearning = () => {
+    const first = lessons.find((l) => !l.locked) || lessons[0];
+    if (!first) {
       setTab("catalog");
-    } catch (err) {
-      setLessonError(err instanceof Error ? err.message : "无法打开课时");
+      return;
     }
+    goLearn(first);
   };
 
   if (loading) {
@@ -149,7 +146,7 @@ export default function ClassroomDetailPage() {
                 <button
                   type="button"
                   className="rounded-lg bg-emerald-500 px-8 py-2.5 text-sm font-medium text-white"
-                  onClick={() => setTab("catalog")}
+                  onClick={startLearning}
                 >
                   开始学习
                 </button>
@@ -174,6 +171,7 @@ export default function ClassroomDetailPage() {
               [
                 { key: "detail", label: "详情" },
                 { key: "catalog", label: "目录" },
+                { key: "materials", label: "资料" },
               ] as const
             ).map((item) => (
               <button
@@ -195,53 +193,46 @@ export default function ClassroomDetailPage() {
             {tab === "detail" ? (
               course.detailHtml ? (
                 <div
-                  className="prose prose-slate max-w-none"
+                  className={RICH_HTML_CLASS}
                   dangerouslySetInnerHTML={{ __html: course.detailHtml }}
                 />
               ) : (
                 <p className="text-sm text-slate-400">暂无详情</p>
               )
+            ) : tab === "materials" ? (
+              purchased ? (
+                course.materialsHtml ? (
+                  <div
+                    className={RICH_HTML_CLASS}
+                    dangerouslySetInnerHTML={{ __html: course.materialsHtml }}
+                  />
+                ) : (
+                  <p className="text-sm text-slate-400">暂无资料</p>
+                )
+              ) : (
+                <div className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-6 text-center">
+                  <p className="text-sm text-amber-700">购买课程后可查看资料</p>
+                  <button
+                    type="button"
+                    className="mt-3 rounded-lg bg-[#3b82f6] px-5 py-2 text-sm text-white hover:bg-[#2563eb]"
+                    onClick={handleBuy}
+                  >
+                    立即购买
+                  </button>
+                </div>
+              )
             ) : (
               <div className="space-y-4">
-                {activeLesson ? (
-                  <div className="rounded-lg border border-slate-200 p-3">
-                    <h3 className="mb-2 font-semibold">{activeLesson.title}</h3>
-                    {lessonError ? (
-                      <p className="mb-2 text-sm text-amber-600">{lessonError}</p>
-                    ) : null}
-                    {activeLesson.type === "video" && activeLesson.videoUrl ? (
-                      <video
-                        ref={videoRef}
-                        controls
-                        className="aspect-video w-full rounded bg-black"
-                        src={proxifyRemoteAssetUrl(activeLesson.videoUrl)}
-                      />
-                    ) : activeLesson.contentHtml ? (
-                      <div
-                        className="prose prose-sm max-w-none"
-                        dangerouslySetInnerHTML={{ __html: activeLesson.contentHtml }}
-                      />
-                    ) : (
-                      <p className="text-sm text-slate-400">暂无内容</p>
-                    )}
-                  </div>
-                ) : null}
-
                 <h3 className="text-base font-semibold">课程目录</h3>
-                {lessonError && !activeLesson ? (
+                {lessonError ? (
                   <p className="text-sm text-amber-600">{lessonError}</p>
                 ) : null}
                 <div className="divide-y divide-slate-100 rounded-lg border border-slate-100">
                   {lessons.map((lesson) => (
                     <div
                       key={lesson.id}
-                      className={`flex items-center gap-3 px-3 py-3 text-sm ${
-                        activeLesson?.id === lesson.id ? "bg-blue-50" : "bg-white"
-                      }`}
+                      className="flex items-center gap-3 bg-white px-3 py-3 text-sm"
                     >
-                      <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">
-                        {lesson.type === "video" ? "视频" : "图文"}
-                      </span>
                       <span className="min-w-0 flex-1 truncate text-slate-800">
                         {lesson.title}
                       </span>
@@ -254,19 +245,11 @@ export default function ClassroomDetailPage() {
                       ) : null}
                       {lesson.locked ? (
                         <Lock className="h-4 w-4 text-slate-400" />
-                      ) : activeLesson?.id === lesson.id ? (
-                        <button
-                          type="button"
-                          className="rounded bg-blue-500 px-2 py-1 text-xs text-white"
-                          onClick={() => void openLesson(lesson)}
-                        >
-                          学习中
-                        </button>
                       ) : (
                         <button
                           type="button"
                           className="inline-flex items-center gap-1 rounded border border-blue-200 px-2 py-1 text-xs text-blue-600 hover:bg-blue-50"
-                          onClick={() => void openLesson(lesson)}
+                          onClick={() => goLearn(lesson)}
                         >
                           <PlayCircle className="h-3.5 w-3.5" />
                           立即学习
@@ -284,7 +267,6 @@ export default function ClassroomDetailPage() {
         </div>
 
         <aside className="space-y-4">
-
           <div className="rounded-xl bg-white p-4 shadow-sm">
             <h3 className="mb-3 text-sm font-semibold">相关推荐</h3>
             <div className="space-y-3">

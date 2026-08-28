@@ -29,6 +29,7 @@ function ToolbarButton({
     <button
       type="button"
       title={title}
+      onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       className={`rounded px-2 py-1 text-xs ${
         active ? "bg-blue-100 text-blue-700" : "text-gray-600 hover:bg-gray-100"
@@ -64,6 +65,7 @@ export default function RichTextEditor({
     ],
     content: value || "",
     editable: !disabled,
+    immediatelyRender: false,
     onUpdate: ({ editor: ed }) => {
       if (syncingRef.current) return;
       onChange(ed.getHTML());
@@ -115,7 +117,7 @@ export default function RichTextEditor({
   }
 
   return (
-    <div className="overflow-hidden rounded border bg-white">
+    <div className="tiptap-editor overflow-hidden rounded border bg-white">
       <div className="flex flex-wrap gap-1 border-b bg-gray-50 px-2 py-1.5">
         <ToolbarButton
           title="加粗"
@@ -184,7 +186,7 @@ export default function RichTextEditor({
       </div>
       <EditorContent
         editor={editor}
-        className="prose prose-sm max-w-none px-3 py-2 [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[var(--editor-min-height)] [&_.ProseMirror_p.is-editor-empty:first-child::before]:pointer-events-none [&_.ProseMirror_p.is-editor-empty:first-child::before]:float-left [&_.ProseMirror_p.is-editor-empty:first-child::before]:h-0 [&_.ProseMirror_p.is-editor-empty:first-child::before]:text-gray-400 [&_.ProseMirror_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_img]:max-w-full"
+        className="tiptap-content px-3 py-2 [&_.ProseMirror]:min-h-[var(--editor-min-height)] [&_.ProseMirror]:outline-none [&_.ProseMirror_h2]:mb-2 [&_.ProseMirror_h2]:mt-3 [&_.ProseMirror_h2]:text-lg [&_.ProseMirror_h2]:font-semibold [&_.ProseMirror_h3]:mb-2 [&_.ProseMirror_h3]:mt-2 [&_.ProseMirror_h3]:text-base [&_.ProseMirror_h3]:font-semibold [&_.ProseMirror_ol]:my-2 [&_.ProseMirror_ol]:list-decimal [&_.ProseMirror_ol]:pl-6 [&_.ProseMirror_p.is-editor-empty:first-child::before]:pointer-events-none [&_.ProseMirror_p.is-editor-empty:first-child::before]:float-left [&_.ProseMirror_p.is-editor-empty:first-child::before]:h-0 [&_.ProseMirror_p.is-editor-empty:first-child::before]:text-gray-400 [&_.ProseMirror_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.ProseMirror_ul]:my-2 [&_.ProseMirror_ul]:list-disc [&_.ProseMirror_ul]:pl-6 [&_img]:max-w-full"
         style={{ ["--editor-min-height" as string]: `${minHeight}px` }}
       />
     </div>

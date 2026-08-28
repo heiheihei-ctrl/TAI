@@ -1151,14 +1151,14 @@ const SEEDANCE20_REFERENCE_VIDEO_MIN_DURATION_SEC = 2;
 const SEEDANCE20_REFERENCE_VIDEO_MAX_DURATION_SEC = 15.2;
 const SEEDANCE20_REFERENCE_VIDEO_TOTAL_MAX_DURATION_SEC = 15.2;
 const SEEDANCE15_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12];
-const SEEDANCE20_DURATIONS = [5, 10, 15, 20, 25, 30];
+const SEEDANCE20_DURATIONS = [5, 10, 15];
 const SEEDANCE25_DURATIONS = [5, 10, 15, 20, 25, 30];
 const SEEDANCE25_REFERENCE_VIDEO_MAX_DURATION_SEC = 30.2;
 const SEEDANCE25_REFERENCE_VIDEO_TOTAL_MAX_DURATION_SEC = 30.2;
 
-const snapSeedanceStepDuration = (value: number): number => {
+const snapSeedanceStepDuration = (value: number, max = 30): number => {
   const rounded = Math.round(value);
-  const clamped = Math.max(5, Math.min(30, rounded));
+  const clamped = Math.max(5, Math.min(max, rounded));
   return Math.round(clamped / 5) * 5;
 };
 
@@ -16132,14 +16132,14 @@ function FlowInner() {
           return [...SEEDANCE15_DURATIONS];
         })();
         if (isSeedanceNode && typeof clipDuration === "number" && Number.isFinite(clipDuration)) {
-          if (
-            isSeedance2FamilyRequest &&
-            (clipDuration < 5 || clipDuration > 30 || clipDuration % 5 !== 0)
-          ) {
-            failCurrentVideoNode(
-              `${seedanceFamilyLabel} 生成时长仅支持 5-30 秒，且需为 5 的倍数`
-            );
-            return;
+          if (isSeedance2FamilyRequest) {
+            const maxDuration = isSeedance25Request ? 30 : 15;
+            if (clipDuration < 5 || clipDuration > maxDuration || clipDuration % 5 !== 0) {
+              failCurrentVideoNode(
+                `${seedanceFamilyLabel} 生成时长仅支持 5-${maxDuration} 秒，且需为 5 的倍数`
+              );
+              return;
+            }
           }
           if (!isSeedance2FamilyRequest && (clipDuration < 4 || clipDuration > 12)) {
             failCurrentVideoNode("Seedance 1.5 生成时长仅支持 4-12 秒");
@@ -16847,7 +16847,7 @@ function FlowInner() {
             isSeedanceNode &&
             isSeedance2FamilyRequest &&
             clipDuration >= 5 &&
-            clipDuration <= 30 &&
+            clipDuration <= (isSeedance25Request ? 30 : 15) &&
             clipDuration % 5 === 0
           ) {
             durationForAPI = clipDuration;
