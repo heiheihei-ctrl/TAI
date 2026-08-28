@@ -695,13 +695,13 @@ export default function Home() {
                 </button>
               </div>
             ) : null}
-            {/* <button
+            <button
               type="button"
               className="hidden rounded-full border border-sky-400/40 bg-sky-500/15 px-3 py-1 text-xs text-sky-100 transition-colors hover:bg-sky-500/25 sm:inline-flex"
               onClick={() => openClassroomPage()}
             >
               TAI课堂
-            </button> */}
+            </button>
             {user ? (
               <button
                 type="button"
