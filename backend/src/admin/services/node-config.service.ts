@@ -658,17 +658,23 @@ export class NodeConfigService {
    * 按 serviceType 聚合 API 调用次数（用于节点面板 HOT 排序）
    */
   private async getServiceTypeUsageCountMap(): Promise<Map<string, number>> {
-    const rows = await this.prisma.apiUsageRecord.groupBy({
-      by: ['serviceType'],
-      _count: { _all: true },
-    });
-    const map = new Map<string, number>();
-    for (const row of rows) {
-      const key = typeof row.serviceType === 'string' ? row.serviceType.trim() : '';
-      if (!key) continue;
-      map.set(key, row._count._all);
+    try {
+      const rows = await this.prisma.apiUsageRecord.groupBy({
+        by: ['serviceType'],
+        _count: { _all: true },
+      });
+      const map = new Map<string, number>();
+      for (const row of rows) {
+        const key = typeof row.serviceType === 'string' ? row.serviceType.trim() : '';
+        if (!key) continue;
+        map.set(key, row._count._all);
+      }
+      return map;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`聚合 API 调用次数失败，将回退为 0: ${message}`);
+      return new Map();
     }
-    return map;
   }
 
   private resolveUsageCount(
@@ -779,9 +785,16 @@ export class NodeConfigService {
    * 获取所有节点配置（管理接口，包含隐藏的）
    */
   async getAllNodeConfigsAdmin() {
-    const configs = await this.prisma.nodeConfig.findMany({
-      orderBy: [{ sortOrder: 'asc' }],
-    });
+    let configs: Awaited<ReturnType<typeof this.prisma.nodeConfig.findMany>>;
+    try {
+      configs = await this.prisma.nodeConfig.findMany({
+        orderBy: [{ sortOrder: 'asc' }],
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`获取管理端节点配置失败: ${message}`);
+      throw error;
+    }
 
     // 管理端同样按：输入 → 图像 → 视频 → 其他 排序
     const categoryOrder: Record<string, number> = {
@@ -799,26 +812,32 @@ export class NodeConfigService {
       return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
     });
 
-    return sorted.map((config) => this.normalizeNodeConfigOutput({
-      id: config.id,
-      nodeKey: config.nodeKey,
-      nameZh: config.nameZh,
-      nameEn: config.nameEn,
-      category: config.category,
-      status: config.status,
-      statusMessage: config.statusMessage,
-      creditsPerCall: config.creditsPerCall,
-      priceYuan: config.priceYuan ? Number(config.priceYuan) : null,
-      serviceType: config.serviceType,
-      configSummary: config.configSummary,
-      sortOrder: config.sortOrder,
-      isVisible: config.isVisible,
-      isNew: config.isNew === true,
-      description: config.description,
-      metadata: config.metadata,
-      createdAt: config.createdAt,
-      updatedAt: config.updatedAt,
-    }));
+    return sorted.map((config) => {
+      const row = config as typeof config & {
+        configSummary?: string | null;
+        isNew?: boolean | null;
+      };
+      return this.normalizeNodeConfigOutput({
+        id: row.id,
+        nodeKey: row.nodeKey,
+        nameZh: row.nameZh,
+        nameEn: row.nameEn,
+        category: row.category,
+        status: row.status,
+        statusMessage: row.statusMessage,
+        creditsPerCall: row.creditsPerCall,
+        priceYuan: row.priceYuan ? Number(row.priceYuan) : null,
+        serviceType: row.serviceType,
+        configSummary: row.configSummary ?? null,
+        sortOrder: row.sortOrder,
+        isVisible: row.isVisible,
+        isNew: row.isNew === true,
+        description: row.description,
+        metadata: row.metadata,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      });
+    });
   }
 
   /**
