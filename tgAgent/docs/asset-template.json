@@ -1,0 +1,19 @@
+{
+  "_comment": "Asset 资产记录 — 画布上每张卡片/视频对应一条 Asset，由后端 registry.create 写入",
+  "id": "as_candidate_1",
+  "projectId": "proj_001",
+  "kind": "image",
+  "url": "/mock-assets/abc123.png",
+  "thumbUrl": "/mock-assets/abc123_thumb.png",
+  "width": 1024,
+  "height": 720,
+  "parentIds": [],
+  "operation": "newVariant",
+  "meta": {
+    "prompt": "现代极简办公楼，黄昏暖光，清水混凝土材质..."
+  },
+  "createdByJobId": "job_001",
+  "pick": "candidate",
+  "deleted": false,
+  "createdAt": "2026-08-28T10:05:00.000Z"
+}

@@ -1,0 +1,20 @@
+node_modules/
+dist/
+.env
+.mock-assets/
+*.log
+
+# pi 运行时数据（含会话/对话历史，勿入库）
+.pi-data/
+# 临时测试产物
+.tmp-tests/
+# WorkBuddy agent 内部状态
+.workbuddy/
+
+# 构建产物
+*.tsbuildinfo
+.next/
+out/
+
+# 工具生成的临时目录
+.commandcode/

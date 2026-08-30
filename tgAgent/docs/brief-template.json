@@ -1,0 +1,16 @@
+{
+  "_comment": "DesignBrief — 前端拉取 brief.updated 后收到的完整数据结构",
+  "projectType": "文化建筑",
+  "styleKeywords": ["新中式", "在地温度"],
+  "massing": "3层，坡屋顶",
+  "materials": ["清水混凝土", "木材"],
+  "context": "山地",
+  "camera": "人视入口",
+  "lighting": "黄昏暖光",
+  "mood": "宁静诗意",
+  "negative": ["高饱和", "玻璃幕墙"],
+  "freeText": "客户希望体量轻盈，有大面积挑檐。入口朝向山谷。",
+  "completeness": "ready",
+  "updatedAt": "2026-08-28T10:00:00.000Z",
+  "lastReason": "设计师手动修改：补充挑檐需求"
+}

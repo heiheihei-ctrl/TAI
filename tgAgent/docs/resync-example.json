@@ -1,0 +1,43 @@
+{
+  "_comment": "message.resync_batch — 客户端断线重连时携带 lastSeq，服务端返回环形缓冲中遗漏的消息",
+  "type": "message.resync_batch",
+  "messages": [
+    {
+      "seq": 43,
+      "body": {
+        "type": "conversation.delta",
+        "sessionId": "sess_abc123",
+        "delta": "方案 B 已..."
+      }
+    },
+    {
+      "seq": 44,
+      "body": {
+        "type": "canvas.place",
+        "sessionId": "sess_abc123",
+        "cards": [
+          {
+            "assetId": "as_iter2_1",
+            "url": "/mock-assets/iter2_1.png",
+            "pos": { "x": 400, "y": 450 },
+            "parentIds": ["as_candidate_1"],
+            "operation": "img2img",
+            "style": "candidate"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 45,
+      "body": {
+        "type": "tool.status",
+        "sessionId": "sess_abc123",
+        "callId": "tv_002abc12",
+        "name": "generate_rendering",
+        "state": "done",
+        "progress": { "stage": "completed", "percent": 100 }
+      }
+    }
+  ],
+  "truncated": false
+}

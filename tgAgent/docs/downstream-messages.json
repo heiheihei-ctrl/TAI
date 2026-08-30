@@ -1,0 +1,162 @@
+{
+  "_comment": "服务端 → 客户端下行消息集合，各消息 type 对应协议 DownstreamBody 联合类型",
+
+  "conversation_delta": {
+    "type": "conversation.delta",
+    "sessionId": "sess_abc123",
+    "delta": "好的，我来帮您生成一座现代极简风格的办公楼"
+  },
+
+  "tool_status_running": {
+    "type": "tool.status",
+    "sessionId": "sess_abc123",
+    "callId": "tv_001abc12",
+    "name": "generate_rendering",
+    "state": "running",
+    "progress": { "stage": "rendering", "percent": 65 }
+  },
+
+  "tool_status_done": {
+    "type": "tool.status",
+    "sessionId": "sess_abc123",
+    "callId": "tv_001abc12",
+    "name": "generate_rendering",
+    "state": "done",
+    "progress": { "stage": "completed", "percent": 100 }
+  },
+
+  "tool_status_error": {
+    "type": "tool.status",
+    "sessionId": "sess_abc123",
+    "callId": "tv_001abc12",
+    "name": "generate_video",
+    "state": "error",
+    "progress": { "stage": "encoding", "percent": 100 }
+  },
+
+  "canvas_place": {
+    "type": "canvas.place",
+    "sessionId": "sess_abc123",
+    "cards": [
+      {
+        "assetId": "as_candidate_1",
+        "url": "/mock-assets/abc123.png",
+        "thumbUrl": "/mock-assets/abc123_thumb.png",
+        "pos": { "x": 740, "y": 180 },
+        "parentIds": [],
+        "operation": "newVariant",
+        "style": "candidate"
+      },
+      {
+        "assetId": "as_candidate_2",
+        "url": "/mock-assets/def456.png",
+        "thumbUrl": "/mock-assets/def456_thumb.png",
+        "pos": { "x": 1040, "y": 180 },
+        "parentIds": [],
+        "operation": "newVariant",
+        "style": "candidate"
+      }
+    ]
+  },
+
+  "canvas_update": {
+    "type": "canvas.update",
+    "sessionId": "sess_abc123",
+    "updates": [
+      {
+        "assetId": "as_candidate_1",
+        "patch": { "pick": "final" }
+      },
+      {
+        "assetId": "as_candidate_2",
+        "patch": { "pick": "weak" }
+      }
+    ]
+  },
+
+  "brief_updated": {
+    "type": "brief.updated",
+    "sessionId": "sess_abc123",
+    "brief": {
+      "projectType": "办公楼",
+      "styleKeywords": ["现代极简"],
+      "lighting": "黄昏",
+      "materials": ["玻璃幕墙"],
+      "context": "城市",
+      "camera": "人视",
+      "mood": "简洁",
+      "negative": [],
+      "freeText": "客户想要大面积玻璃幕墙",
+      "completeness": "needMoreInfo",
+      "updatedAt": "2026-08-28T10:05:00.000Z",
+      "lastReason": "脚本大脑：从用户输入提取关键槽位"
+    }
+  },
+
+  "job_accepted": {
+    "type": "job.accepted",
+    "sessionId": "sess_abc123",
+    "job": {
+      "id": "job_001",
+      "projectId": "proj_001",
+      "kind": "video",
+      "params": {
+        "baseFrameAssetId": "as_candidate_1",
+        "motionPreset": "orbit",
+        "durationSec": 10
+      },
+      "status": "queued",
+      "progress": 0,
+      "stage": "queued",
+      "resultAssetIds": [],
+      "createdAt": "2026-08-28T10:06:00.000Z"
+    }
+  },
+
+  "video_completed": {
+    "type": "asset.video_completed",
+    "sessionId": "sess_abc123",
+    "jobId": "job_001",
+    "asset": {
+      "id": "as_video_001",
+      "projectId": "proj_001",
+      "kind": "video",
+      "url": "/mock-assets/vid_001.svg",
+      "parentIds": ["as_candidate_1"],
+      "operation": "video",
+      "meta": { "motionPreset": "orbit", "durationSec": 10 },
+      "createdByJobId": "job_001",
+      "pick": undefined,
+      "deleted": false,
+      "createdAt": "2026-08-28T10:10:00.000Z"
+    }
+  },
+
+  "presentation_ready": {
+    "type": "presentation.ready",
+    "sessionId": "sess_abc123",
+    "presentationId": "pres_xxx",
+    "url": "/mock-assets/pres_xxx.pptx",
+    "totalPages": 12
+  },
+
+  "error_rate_limited": {
+    "type": "error",
+    "sessionId": "sess_abc123",
+    "code": "rate_limited",
+    "message": "请求过于频繁，请稍后重试"
+  },
+
+  "error_generation_failed": {
+    "type": "error",
+    "sessionId": "sess_abc123",
+    "code": "generation_failed",
+    "message": "图像生成失败: 模型 overloaded"
+  },
+
+  "error_invalid_asset": {
+    "type": "error",
+    "code": "invalid_asset_ref",
+    "message": "资产不存在: as_unknown_id"
+  }
+}

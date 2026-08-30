@@ -1,0 +1,93 @@
+{
+  "_comment": "客户端 → 服务端上行消息集合，各消息 type 对应协议 UpstreamMessage 联合类型",
+
+  "message_send": {
+    "type": "message.send",
+    "projectId": "proj_001",
+    "sessionId": "sess_abc123",
+    "text": "帮我做一个办公楼方案，现代极简风格，黄昏光照，出图吧。",
+    "attachments": [
+      { "mediaType": "image/png", "data": "<base64...>" }
+    ],
+    "selectionRefs": [
+      {
+        "assetId": "as_x1y2z3",
+        "thumbUrl": "/mock-assets/prev.png",
+        "kind": "image",
+        "x": 400,
+        "y": 200,
+        "width": 300,
+        "regionRect": { "x": 100, "y": 50, "w": 200, "h": 150 }
+      }
+    ],
+    "clientId": "550e8400-e29b-41d4-a716-446655440000"
+  },
+
+  "brief_patch": {
+    "type": "brief.patch",
+    "projectId": "proj_001",
+    "sessionId": "sess_abc123",
+    "patch": {
+      "projectType": "办公楼",
+      "styleKeywords": ["现代极简"],
+      "lighting": "黄昏",
+      "completeness": "ready"
+    }
+  },
+
+  "selection_changed": {
+    "type": "selection.changed",
+    "projectId": "proj_001",
+    "selectionIds": ["as_x1y2z3", "as_a9b8c7"],
+    "selectionRefs": [
+      { "assetId": "as_x1y2z3", "kind": "image", "x": 400, "y": 200, "width": 300 }
+    ]
+  },
+
+  "card_mark": {
+    "type": "card.mark",
+    "projectId": "proj_001",
+    "sessionId": "sess_abc123",
+    "marks": [
+      { "assetId": "as_x1y2z3", "pick": "final", "rect": { "x": 400, "y": 200, "width": 300 } },
+      { "assetId": "as_a9b8c7", "pick": "candidate" }
+    ]
+  },
+
+  "card_delete": {
+    "type": "card.delete",
+    "projectId": "proj_001",
+    "sessionId": "sess_abc123",
+    "assetId": "as_old_card_id"
+  },
+
+  "message_resync": {
+    "type": "message.resync",
+    "projectId": "proj_001",
+    "sessionId": "sess_abc123",
+    "lastSeq": 42
+  },
+
+  "session_fork": {
+    "type": "session.fork",
+    "projectId": "proj_001",
+    "sessionId": "sess_abc123"
+  },
+
+  "message_steer": {
+    "type": "message.steer",
+    "sessionId": "sess_abc123",
+    "text": "把色调调暖一点"
+  },
+
+  "message_interrupt": {
+    "type": "message.interrupt",
+    "sessionId": "sess_abc123"
+  },
+
+  "task_cancel": {
+    "type": "task.cancel",
+    "sessionId": "sess_abc123",
+    "taskId": "gen_task_001"
+  }
+}
