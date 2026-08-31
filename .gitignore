@@ -45,3 +45,6 @@ frontend/bake/back/.env.production
 tmp_model_provider_mapping_v2_backup_*.json
 
 .npm-cache
+
+# tgagent 内嵌仓库历史备份（2026-09-01 迁移，保留本地提交历史）
+tgagent-git-history-backup/
