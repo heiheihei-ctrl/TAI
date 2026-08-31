@@ -19,7 +19,7 @@
 |---|---|---|---|
 | 1 | §6.3 经前端 command/undo 封装层执行 | TAI 是**快照式 history**（`frontend/src/services/historyService.ts`），API 为 `commit(label)` / `undo()` / `redo()`，并无 command 抽象 | **简化**：agent 写操作只需「改 store → `commit('agent:place')`」，天然可撤销 |
 | 2 | §12.2 Seedream 5.0 是「局部重绘首选」 | `seedream5.provider.ts:91` 的 `editImage()` **直接 throw**；`maskUrl` 无任何 provider 消费 | 局部重绘**必须**用 banana 系 + `edit-image-async` |
-| 3 | §12.3 画布内核为 React Flow | 那是 **TAI 平台前端**的事实；本项目 `qianduan/` 从未使用 React Flow（自研 div+SVG） | §12 描述的是平台，不是 qianduan |
+| 3 | §12.3 画布内核为 React Flow | **TAI 平台前端**使用 React Flow（`frontend/package.json` 有 `reactflow ^11.11.4`）；原型前端自研 div+SVG，未使用 React Flow | §12 描述的是平台 |
 | 4 | §12.4 框选区域作为 region 传入模型 | TAI 的局部重绘是「传原图整张 → 模型整图重绘 → 前端按 `cropRectNormalized` 合成回去」（`aiChatStore.ts:718` / `:770`），**区域不进后端** | 归一化坐标只用于前端合成与 prompt 描述 |
 
 另：**§9 数据模型暂不实现**——终态接入 TAI 平台，平台已有会话与资产持久化，
@@ -368,8 +368,8 @@ P0 生产加固项（会话键/入口防护/错误码消费）不属于"待决"�
 
 | # | 事项 | 影响 | 状态与下一步 |
 |---|---|---|---|
-| ⑦ | `canvas.place` React Flow 执行器 | 后端 `emit({ type: "canvas.place" })` 已通 | ⛔ **作废（2026-08-30）**。原「装 `@xyflow/react` 替换卡片」写于"做独立应用"的定位下，与终态冲突：qianduan 是原型不交付，而 **TAI 前端本身已是 React Flow 11**（`frontend/package.json` 有 `reactflow ^11.11.4`）。落位算法可复用，节点结构按平台现有节点重写即可，无需再引入 xyflow |
-| ⑧ | DesignBrief 属性面板 | 前端 `BriefPanel` 已实现 | ✅ **已完成（2026-08-30 核实）**。`qianduan/components/workspace/live-components.tsx:105` 的 `BriefPanel` 已支持真实字段编辑与 `onPatch` 回写。P4 阶段需要做的是**把它迁到 TAI 前端**，而非从零实现 |
+| ⑦ | `canvas.place` React Flow 执行器 | 后端 `emit({ type: "canvas.place" })` 已通 | ⛔ **作废（2026-08-30）**。原「装 `@xyflow/react` 替换卡片」写于"做独立应用"的定位下，与终态冲突。TAI 前端本身已是 React Flow 11（`frontend/package.json` 有 `reactflow ^11.11.4`）。落位算法可复用，节点结构按平台现有节点重写即可，无需再引入 xyflow |
+| ⑧ | DesignBrief 属性面板 | 原型前端已验证 Brief 面板交互（字段编辑 + `brief.patch` 回写） | ✅ 概念已验证（2026-08-30 核实）。P4 阶段在 TAI 前端重做，而非从零实现 |
 | ⑨ | PPT/汇报模板引擎（create_presentation） | 工具定义在 §4.5，后端实现待做 | v2 阶段，先出 DSL 原型 |
 | ⑩ | 方案分支树 UI | 会话树分支/切换的前端 | v2 阶段，后端 `session.fork/switch` 已路由（报错占位） |
 

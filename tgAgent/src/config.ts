@@ -57,6 +57,11 @@ export interface AppConfig {
   chatRateLimit: { max: number; windowMs: number };
   /** /chat 请求体上限（字节） */
   chatMaxBodyBytes: number;
+  /**
+   * 会话/资产持久化目录（相对 cwd）。
+   * "off"/"memory"/空 = 关闭持久化（纯内存，测试与本地联调默认）。
+   */
+  sessionStoreDir: string;
 }
 
 export function loadConfig(): AppConfig {
@@ -91,6 +96,7 @@ export function loadConfig(): AppConfig {
       windowMs: Number(process.env.CHAT_RATE_WINDOW_MS ?? 10_000),
     },
     chatMaxBodyBytes: Number(process.env.CHAT_MAX_BODY_BYTES ?? 1_048_576),
+    sessionStoreDir: (process.env.SESSION_STORE_DIR ?? ".tgagent-data").trim(),
   };
 }
 

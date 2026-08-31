@@ -8,13 +8,9 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "dev:offline": "tsx tests/dev-offline.ts",
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
-    "smoke": "tsx tests/smoke.ts",
     "test:tai": "tsx tests/tai-source.test.ts",
-    "verify": "tsx tests/pi-verify.ts",
-    "verify:vision": "tsx tests/pi-vision.ts",
     "test": "npx tsx tests/run-all.ts"
   },
   "dependencies": {

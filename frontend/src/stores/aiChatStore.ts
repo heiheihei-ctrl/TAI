@@ -9,6 +9,7 @@ import paper from "paper";
 import { aiImageService } from "@/services/aiImageService";
 import { paperSandboxService } from "@/services/paperSandboxService";
 import { fetchWithAuth } from "@/services/authFetch";
+import { notifyCreditsChanged } from "@/utils/creditsEvents";
 import {
   generateImageViaAPI,
   editImageViaAPI,
@@ -126,6 +127,28 @@ const AI_IMAGE_PARALLEL_CONCURRENCY_LIMIT = (() => {
   }
   return MAX_AI_IMAGE_PARALLEL_CONCURRENCY;
 })();
+
+// API 基础地址
+const API_BASE_URL = (() => {
+  const raw = import.meta.env?.VITE_API_BASE_URL?.trim();
+  if (raw && raw.length > 0) return raw.replace(/\/+$/, "");
+  if (typeof window !== "undefined" && window.location.hostname !== "localhost") {
+    return `${window.location.protocol}//${window.location.host}`;
+  }
+  return "http://localhost:4000";
+})();
+
+// 建筑设计模式：本轮 SSE 的中断句柄（新一轮开始时自动中止上一轮，避免多轮叠加）
+let architectureAbort: AbortController | null = null;
+
+// 建筑设计模式：每个会话已收到的最大下行 seq，下一轮请求回传给 tgagent。
+// 原因：视频完成等异步事件可能在本轮 SSE 关闭之后才到达，服务端会缓存进 ring，
+// 必须由客户端下一轮携带 lastSeq 触发补发，否则该事件永久丢失
+// （见 tgagent/src/shared/protocol.ts 顶部可靠性约定）。
+const architectureSeqCursor = new Map<string, number>();
+
+const architectureCursorKey = (projectId: string, sessionId: string) =>
+  `${projectId}/${sessionId}`;
 
 // IndexedDB 存储的会话数据结构
 interface IDBSessionsData {
@@ -510,7 +533,8 @@ export type ManualAIMode =
   | "blend"
   | "analyze"
   | "video"
-  | "vector";
+  | "vector"
+  | "architecture";
 type AvailableTool =
   | "generateImage"
   | "editImage"
@@ -2589,6 +2613,15 @@ interface AIChatState {
 
   // 智能工具选择功能
   processUserInput: (input: string) => Promise<void>;
+
+  // 🏗️ 建筑设计 AI 代理（tgagent BFF 流式对话）
+  architectureChat: (
+    input: string,
+    options?: { override?: MessageOverride },
+  ) => Promise<void>;
+
+  // 🏗️ 中止正在进行的建筑设计对话（释放 SSE 连接并把消息置为已结束）
+  cancelArchitectureChat: () => void;
 
   // 核心处理流程
   executeProcessFlow: (
@@ -7084,10 +7117,379 @@ export const useAIChatStore = create<AIChatState>()(
             logProcessStep(metrics, "img2Vector failed");
             throw error;
           }
-        },
+          },
 
-        // 🔄 核心处理流程 - 可重试的执行逻辑
-        executeProcessFlow: async (
+          // 🏗️ 建筑设计 AI 代理流式对话（tgagent BFF）
+          architectureChat: async (
+            input: string,
+            options?: { override?: MessageOverride },
+          ) => {
+            const state = get();
+            const override = options?.override;
+
+            // 确保有活跃会话
+            let sessionId =
+              state.currentSessionId || contextManager.getCurrentSessionId();
+            if (!sessionId) {
+              sessionId = contextManager.createSession();
+            } else if (contextManager.getCurrentSessionId() !== sessionId) {
+              contextManager.switchSession(sessionId);
+            }
+            if (sessionId !== state.currentSessionId) {
+              const ctx = contextManager.getSession(sessionId);
+              set({
+                currentSessionId: sessionId,
+                messages: ctx ? [...ctx.messages] : [],
+              });
+            }
+
+            // 构建 selectionRefs
+            const selectionRefs: any[] = [];
+
+
+            // 当前精准编辑上下文
+            if (state.preciseEditContext?.targetImageId) {
+              const pec = state.preciseEditContext;
+              const entry: any = {
+                assetId: pec.targetImageId,
+                kind: "image",
+                imageWidth: 0,
+                imageHeight: 0,
+              };
+              if (pec.cropRectNormalized) {
+                entry.normalizedRegion = {
+                  x: pec.cropRectNormalized.x,
+                  y: pec.cropRectNormalized.y,
+                  width: pec.cropRectNormalized.width,
+                  height: pec.cropRectNormalized.height,
+                };
+              }
+              selectionRefs.push(entry);
+            }
+
+            // 收集附带的图片作为 base64
+            const attachments: { mediaType: string; data: string }[] = [];
+            const MAX_ATTACHMENT_BYTES = 1024 * 1024; // 1MB
+            const MAX_ATTACHMENTS = 3;
+            const collectBase64 = (
+              candidates: (string | null | undefined)[],
+              mimeType: string,
+            ) => {
+              if (attachments.length >= MAX_ATTACHMENTS) return;
+              for (const raw of candidates) {
+                if (!raw || typeof raw !== "string") continue;
+                const trimmed = raw.trim();
+                if (!trimmed.startsWith("data:")) continue;
+                // 粗略大小限制（base64 编码后）
+                if (trimmed.length > MAX_ATTACHMENT_BYTES * 1.5) {
+                  console.warn(
+                    `[architectureChat] 附件过大（${(trimmed.length / 1024).toFixed(0)}KB），跳过`,
+                  );
+                  continue;
+                }
+                attachments.push({ mediaType: mimeType, data: trimmed });
+                if (attachments.length >= MAX_ATTACHMENTS) break;
+              }
+            };
+
+            collectBase64(
+              [
+                state.sourceImageForEditing,
+                state.preciseEditContext?.targetImageSource,
+              ],
+              "image/png",
+            );
+            if (state.sourceImagesForBlending.length > 0) {
+              collectBase64(state.sourceImagesForBlending, "image/png");
+            }
+
+            const aiMessageId =
+              override?.aiMessageId ?? get().addMessage({
+                type: "ai",
+                content: "正在思考设计方案...",
+                generationStatus: {
+                  isGenerating: true,
+                  progress: 5,
+                  error: null,
+                  stage: "思考中",
+                },
+                provider: state.aiProvider,
+              }).id;
+
+            if (override?.userMessageId) {
+              get().updateMessage(override.userMessageId, (msg) => ({
+                ...msg,
+              }));
+            }
+
+            // ⚠️ 项目 ID 必须取自项目 store：AIChatState 上没有 projectId 字段，
+            // 原先的 state.projectId 恒为 undefined，会让所有项目共用同一个 tgagent 会话。
+            const projectId =
+              useProjectContentStore.getState().projectId || "default";
+            const userMessageId = override?.userMessageId || "";
+            const cursorKey = architectureCursorKey(projectId, sessionId);
+
+            // 新一轮开始前先中止上一轮悬着的 SSE，避免多轮叠加与资源泄漏
+            architectureAbort?.abort();
+            const abortController = new AbortController();
+            architectureAbort = abortController;
+
+            // 流式累积的正文（提到 try 外，catch/finally 里也要用）
+            let fullText = "";
+
+            try {
+              const response = await fetchWithAuth(
+                `${API_BASE_URL}/ai/architecture-chat`,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    prompt: input,
+                    projectId,
+                    sessionId,
+                    selectionRefs: selectionRefs.length > 0 ? selectionRefs : undefined,
+                    attachments: attachments.length > 0 ? attachments : undefined,
+                    // 断线补发游标：让服务端把上一轮结束后才产生的事件（如视频完成）补回来
+                    lastSeq: architectureSeqCursor.get(cursorKey),
+                  }),
+                  signal: abortController.signal,
+                },
+              );
+
+              if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(
+                  errorData?.message || `HTTP ${response.status}`,
+                );
+              }
+
+              // 消费 SSE 流
+              const reader = response.body?.getReader();
+              const decoder = new TextDecoder();
+              if (!reader) {
+                throw new Error("无法读取响应流");
+              }
+
+              let buffer = "";
+              let hasReceivedDelta = false;
+
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split("\n");
+                buffer = lines.pop() || "";
+
+                for (const line of lines) {
+                  const trimmed = line.trim();
+                  if (!trimmed || trimmed.startsWith(":")) continue;
+
+                  if (trimmed.startsWith("event: done")) {
+                    // 流结束标记
+                    get().updateMessage(aiMessageId, (msg) => ({
+                      ...msg,
+                      generationStatus: {
+                        ...(msg.generationStatus || { isGenerating: true, progress: 100 }),
+                        isGenerating: false,
+                        progress: 100,
+                        error: null,
+                        stage: undefined,
+                      },
+                    }));
+                    continue;
+                  }
+
+                  if (trimmed.startsWith("event:")) continue;
+
+                  if (trimmed.startsWith("data:")) {
+                    const jsonStr = trimmed.slice(5).trim();
+                    if (!jsonStr) continue;
+
+                    try {
+                      const parsed = JSON.parse(jsonStr);
+                      const body = parsed?.body;
+
+                      // 推进补发游标：下一轮请求带回，用于补拉本轮结束后才产生的事件
+                      if (typeof parsed?.seq === "number") {
+                        architectureSeqCursor.set(cursorKey, parsed.seq);
+                      }
+
+                      if (body?.type === "conversation.delta") {
+                        const delta = String(body.delta || "");
+                        if (delta) {
+                          fullText += delta;
+                          get().updateMessage(aiMessageId, (msg) => ({
+                            ...msg,
+                            content: fullText,
+                          }));
+                          hasReceivedDelta = true;
+                        }
+                      } else if (body?.type === "error") {
+                        get().updateMessage(aiMessageId, (msg) => ({
+                          ...msg,
+                          content: fullText || `错误: ${body.message || "未知错误"}`,
+                          generationStatus: {
+                            ...(msg.generationStatus || { isGenerating: true, progress: 0 }),
+                            isGenerating: false,
+                            progress: 0,
+                            error: body.message || "unknown",
+                            stage: "错误",
+                          },
+                        }));
+                      } else if (body?.type === "tool.status") {
+                        // 工具进度只放进 stage，不覆盖已流式输出的正文
+                        const stageText =
+                          body.message || body.name || "执行工具中...";
+                        get().updateMessage(aiMessageId, (msg) => ({
+                          ...msg,
+                          content: fullText || stageText,
+                          generationStatus: {
+                            ...(msg.generationStatus || {
+                              isGenerating: true,
+                              progress: 0,
+                            }),
+                            isGenerating: true,
+                            progress:
+                              body.progress?.percent ??
+                              msg.generationStatus?.progress ??
+                              10,
+                            error: null,
+                            stage: stageText,
+                          },
+                        }));
+                      } else if (body?.type === "canvas.place") {
+                        // 画布落位：复用 generateImage 的落图通道，把 agent 出的图放到画布上
+                        const cards = Array.isArray(body.cards)
+                          ? body.cards
+                          : [];
+                        cards.forEach((card: any, index: number) => {
+                          const src = card?.url || card?.thumbUrl;
+                          if (!src) return;
+                          const fileName = `architecture-${
+                            card?.assetId || Date.now()
+                          }.png`;
+                          const payload = buildImagePayloadForUpload(
+                            src,
+                            fileName,
+                          );
+                          // 逐张错开，与并行生成一样避免同时落图冲突
+                          setTimeout(() => {
+                            window.dispatchEvent(
+                              new CustomEvent("triggerQuickImageUpload", {
+                                detail: {
+                                  imageData: payload,
+                                  fileName,
+                                  operationType: "generate",
+                                  smartPosition: card?.pos ?? undefined,
+                                  sourceImageId:
+                                    card?.parentIds?.[0] ?? undefined,
+                                  preferHorizontal: cards.length > 1,
+                                },
+                              }),
+                            );
+                          }, index * 300);
+                        });
+                        if (cards.length > 0) hasReceivedDelta = true;
+                      } else if (body?.type === "asset.video_completed") {
+                        const videoUrl = body?.asset?.url;
+                        if (videoUrl) {
+                          fullText = `${fullText ? `${fullText}\n\n` : ""}视频已生成：${videoUrl}`;
+                          get().updateMessage(aiMessageId, (msg) => ({
+                            ...msg,
+                            content: fullText,
+                          }));
+                          hasReceivedDelta = true;
+                        }
+                      } else if (body?.type === "presentation.ready") {
+                        const pptUrl = body?.url;
+                        if (pptUrl) {
+                          fullText = `${fullText ? `${fullText}\n\n` : ""}汇报 PPT 已生成（${body.totalPages ?? "?"} 页）：${pptUrl}`;
+                          get().updateMessage(aiMessageId, (msg) => ({
+                            ...msg,
+                            content: fullText,
+                          }));
+                          hasReceivedDelta = true;
+                        }
+                      }
+                    } catch {
+                      // 非 JSON data 行跳过
+                    }
+                  }
+                }
+              }
+
+              if (!hasReceivedDelta && !fullText) {
+                get().updateMessage(aiMessageId, (msg) => ({
+                  ...msg,
+                  content: "任务已提交，等待响应中...",
+                }));
+              }
+            } catch (error) {
+              // 用户主动中止（cancelArchitectureChat）不算失败
+              if (error instanceof DOMException && error.name === "AbortError") {
+                get().updateMessage(aiMessageId, (msg) => ({
+                  ...msg,
+                  content: fullText || "已停止生成",
+                  generationStatus: {
+                    ...(msg.generationStatus || {
+                      isGenerating: true,
+                      progress: 0,
+                    }),
+                    isGenerating: false,
+                    progress: 0,
+                    error: null,
+                    stage: undefined,
+                  },
+                }));
+                return;
+              }
+
+              const errorMessage =
+                error instanceof Error ? error.message : "建筑设计对话失败";
+              get().updateMessage(aiMessageId, (msg) => ({
+                ...msg,
+                content: `建筑设计服务暂时不可用: ${errorMessage}`,
+                generationStatus: {
+                  ...(msg.generationStatus || { isGenerating: true, progress: 0 }),
+                  isGenerating: false,
+                  progress: 0,
+                  error: errorMessage,
+                  stage: "错误",
+                },
+              }));
+
+              // 401/403 类鉴权错误通知前端
+              if (
+                errorMessage.includes("401") ||
+                errorMessage.includes("403") ||
+                errorMessage.includes("auth") ||
+                errorMessage.includes("credits")
+              ) {
+                notifyCreditsChanged();
+              }
+            } finally {
+              if (architectureAbort === abortController) {
+                architectureAbort = null;
+              }
+              get().refreshSessions();
+              // 清除本轮精准编辑上下文（防止影响下轮）
+              if (state.preciseEditContext?.targetImageId) {
+                set({ preciseEditContext: null });
+              }
+            }
+          },
+
+          // 🏗️ 中止建筑设计对话（释放 SSE 连接）
+          cancelArchitectureChat: () => {
+            architectureAbort?.abort();
+            architectureAbort = null;
+          },
+
+          // 🔄 核心处理流程 - 可重试的执行逻辑
+          executeProcessFlow: async (
           input: string,
           isRetry: boolean = false,
           groupInfo?: {
@@ -7255,6 +7657,7 @@ export const useAIChatStore = create<AIChatState>()(
             analyze: "analyzeImage",
             video: "generateVideo",
             vector: "generatePaperJS",
+            architecture: null,
           };
 
           let selectedTool: AvailableTool | null = options?.selectedTool ?? null;
@@ -7342,6 +7745,14 @@ export const useAIChatStore = create<AIChatState>()(
             set({ autoSelectedTool: selectedTool });
           } else {
             set({ autoSelectedTool: null });
+          }
+
+          // 🏗️ 建筑设计模式安全出口（通常已在 processUserInput 拦截，此处兜底）
+          if (manualMode === "architecture") {
+            await get().architectureChat(input, {
+              override: options?.override,
+            });
+            return;
           }
 
           // 根据选择的工具执行相应操作
@@ -7686,6 +8097,7 @@ export const useAIChatStore = create<AIChatState>()(
             analyze: "analyzeImage",
             video: "generateVideo",
             vector: "generatePaperJS",
+            architecture: null,
           };
 
           let selectedTool: AvailableTool | null = null;
@@ -7816,6 +8228,14 @@ export const useAIChatStore = create<AIChatState>()(
                   : "editImage";
               }
             }
+          }
+
+          // 🏗️ 建筑设计模式：直接走 tgagent 建筑设计师代理流
+          if (manualMode === "architecture") {
+            await get().architectureChat(input, {
+              override: messageOverride,
+            });
+            return;
           }
 
           if (!selectedTool) {

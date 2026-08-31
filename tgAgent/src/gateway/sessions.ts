@@ -16,7 +16,8 @@ import type {
 } from "../shared/protocol.js";
 import { mapTaskSourceErrorToProtocol } from "../shared/protocol.js";
 import type { AssetStore } from "../assets/store.js";
-import { CARD_H, CARD_W, layoutCandidates } from "../canvas/layout.js";
+import { CARD_H, CARD_W, layoutCandidates, type Rect } from "../canvas/layout.js";
+import type { PersistedSession, SessionStore } from "./sessionStore.js";
 import { TaskSourceError } from "../tasks/types.js";
 import type { GenerationTaskSource } from "../tasks/types.js";
 import type { ToolContext, VideoJobRegistry } from "../agent/tools/context.js";
@@ -28,6 +29,8 @@ import type { AppConfig } from "../config.js";
 const RING_SIZE = 500;
 const VIDEO_POLL_MS = 1500;
 const MAX_POLL_ERRORS = 10; // 单任务连续错误上限，超出后标记失败
+/** 落盘 debounce：一轮生图会触发几十次 emit，不能每次都写文件 */
+const PERSIST_DEBOUNCE_MS = 500;
 
 interface VideoJobEntry {
   job: GenJob;
@@ -52,10 +55,12 @@ export class SessionRecord {
   private pollTimer: NodeJS.Timeout | undefined;
   private brain: Brain | undefined;
   private ctxCache: ToolContext | undefined;
-  private placedRects: import("../canvas/layout.js").Rect[] = [];
+  private placedRects: Rect[] = [];
   /** 会话级 jwt 任务源（BFF 透传用户 JWT 时创建，见 applyBffAuth） */
   private jwtSource: GenerationTaskSource | undefined;
   private jwtAuth: { bearer: string; teamId?: string } | undefined;
+  /** 状态变更后通知 GatewaySessions 落盘（持久化钩子，见 gateway/sessionStore.ts） */
+  private readonly notifyDirty?: () => void;
 
   /** 当前生效的任务源：有会话级 jwt 源时优先，否则用共享源 */
   get effectiveTaskSource(): GenerationTaskSource {
@@ -70,10 +75,12 @@ export class SessionRecord {
     projectId: string,
     sessionId?: string,
     userId = "anon",
+    notifyDirty?: () => void,
   ) {
     this.projectId = projectId;
     this.sessionId = sessionId ?? `sess_${randomUUID().slice(0, 12)}`;
     this.userId = userId;
+    this.notifyDirty = notifyDirty;
   }
 
   // ---------- ToolContext（惰性构建，避免字段初始化顺序问题） ----------
@@ -163,6 +170,8 @@ export class SessionRecord {
       }
     }
     for (const d of dead) this.senders.delete(d);
+    // 状态已变（brief/画布/视频/选区变更都伴随下行事件）→ 标脏待落盘
+    this.notifyDirty?.();
   }
 
   resync(lastSeq: number | undefined): ResyncBatch {
@@ -227,6 +236,67 @@ export class SessionRecord {
     }
     this.jwtAuth = auth;
     this.jwtSource = this.taskSource.withUserAuth(auth.bearer, auth.teamId);
+    // 持久化恢复场景：重启前挂起的视频任务等用户凭证到位后立即恢复轮询。
+    // （restore() 里不自动轮询，就是为了避免无凭证时回退共享 apiKey 源 → 静默免单）
+    if (this.videoEntries.size > 0) this.ensureVideoPoller();
+  }
+
+  // ---------- 持久化（见 gateway/sessionStore.ts） ----------
+
+  /**
+   * 导出可重建状态。
+   * 不导出：pi 大脑上下文（重启后对话历史从空开始，属可接受降级——
+   * 需求档案与资产都在，agent 仍知道"做什么"）；用户 JWT（凭证绝不落盘，
+   * 恢复后由下一轮 BFF 重新注入，见 applyBffAuth）。
+   */
+  snapshot(): PersistedSession {
+    return {
+      version: 1,
+      key: `${this.projectId}/${this.userId}/${this.sessionId}`,
+      projectId: this.projectId,
+      sessionId: this.sessionId,
+      userId: this.userId,
+      seq: this.seq,
+      ring: [...this.ring],
+      brief: this.brief,
+      selection: [...this.selection],
+      mode: this.mode,
+      placedRects: this.placedRects.map((r) => ({ ...r })),
+      pendingVideoJobs: [...this.videoEntries.values()].map((e) => ({
+        job: { ...e.job },
+        baseFrameAssetId: e.baseFrameAssetId,
+        toolCallId: e.toolCallId,
+      })),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  /** 从快照恢复（seq/ring/brief/selection/mode/画布占位/挂起的视频任务）。 */
+  restore(snap: PersistedSession): void {
+    this.seq = typeof snap.seq === "number" ? snap.seq : 0;
+    this.ring = Array.isArray(snap.ring)
+      ? snap.ring.filter((m) => m && typeof m.seq === "number")
+      : [];
+    this.brief = snap.brief ?? emptyBrief();
+    this.selection = Array.isArray(snap.selection) ? snap.selection : [];
+    this.mode = snap.mode === "design" ? "design" : "chat";
+    this.placedRects = Array.isArray(snap.placedRects)
+      ? snap.placedRects.map((r) => ({ ...r }))
+      : [];
+    for (const v of snap.pendingVideoJobs ?? []) {
+      if (!v?.job?.id) continue;
+      this.videoEntries.set(v.job.id, {
+        job: v.job,
+        baseFrameAssetId: String(v.baseFrameAssetId ?? ""),
+        toolCallId: v.toolCallId ?? `tv_${v.job.id.slice(0, 8)}`,
+        consecutiveErrors: 0,
+      });
+    }
+    // 非 TAI 源（mock/qianwen）无计费风险，恢复后直接续上轮询；
+    // TAI 源等下一轮 BFF 注入用户 JWT 后再续（见 applyBffAuth 末尾）。
+    if (this.videoEntries.size > 0 && this.taskSource.name !== "tai") {
+      this.ensureVideoPoller();
+    }
   }
 
   /** 从选区中移除指定资产（删除卡片时使用） */
@@ -501,6 +571,11 @@ export class SessionRecord {
 
 export class GatewaySessions {
   private records = new Map<string, SessionRecord>();
+  /** 启动时加载的快照，getOrCreate 命中时才恢复成 SessionRecord（惰性） */
+  private snapshots = new Map<string, PersistedSession>();
+  /** 脏会话 → debounce 落盘句柄 */
+  private dirtyTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private store: SessionStore | undefined;
 
   constructor(
     private readonly cfg: AppConfig,
@@ -508,6 +583,26 @@ export class GatewaySessions {
     private readonly taskSource: GenerationTaskSource,
     private readonly log: (line: string) => void = console.log,
   ) {}
+
+  /**
+   * 注入持久化存储并加载既有快照（进程启动时调用一次；不调用 = 纯内存模式，
+   * 既有测试与本地联调均属此类，行为不变）。
+   */
+  async init(store: SessionStore): Promise<void> {
+    this.store = store;
+    if (!store.enabled) return;
+    const [snaps, assets] = await Promise.all([store.loadSessions(), store.loadAssets()]);
+    for (const s of snaps) {
+      if (s && typeof s.key === "string") this.snapshots.set(s.key, s);
+    }
+    const restoredAssets = this.assets.restore(assets);
+    if (snaps.length > 0 || restoredAssets > 0) {
+      this.log(
+        `[session] 持久化恢复：${snaps.length} 个会话、${restoredAssets} 个资产` +
+          `（快照在会话被再次访问时惰性激活）`,
+      );
+    }
+  }
 
   get(projectId: string, sessionId: string, userId = "anon"): SessionRecord | undefined {
     return this.records.get(this.key(projectId, userId, sessionId));
@@ -518,14 +613,66 @@ export class GatewaySessions {
     const k = this.key(projectId, userId, id);
     let rec = this.records.get(k);
     if (!rec) {
-      rec = new SessionRecord(this.assets, this.taskSource, this.cfg, this.log, projectId, id, userId);
+      rec = new SessionRecord(
+        this.assets,
+        this.taskSource,
+        this.cfg,
+        this.log,
+        projectId,
+        id,
+        userId,
+        () => this.markDirty(k),
+      );
+      const snap = this.snapshots.get(k);
+      if (snap) {
+        rec.restore(snap);
+        this.snapshots.delete(k);
+        this.log(
+          `[session] 恢复 ${id} (project=${projectId}, user=${userId}, seq=${snap.seq}, 缓存事件 ${snap.ring?.length ?? 0} 条)`,
+        );
+      } else {
+        this.log(`[session] 创建 ${id} (project=${projectId}, user=${userId})`);
+      }
       this.records.set(k, rec);
-      this.log(`[session] 创建 ${id} (project=${projectId}, user=${userId})`);
     }
     return rec;
   }
 
+  /** 会话状态变更（emit 触发）→ debounce 后落盘该会话快照 + 该项目资产表 */
+  private markDirty(sessionKey: string): void {
+    if (!this.store?.enabled) return;
+    if (this.dirtyTimers.has(sessionKey)) return; // 已排队，合并期间的全部变更
+    const timer = setTimeout(() => {
+      this.dirtyTimers.delete(sessionKey);
+      void this.persistSession(sessionKey);
+    }, PERSIST_DEBOUNCE_MS);
+    this.dirtyTimers.set(sessionKey, timer);
+  }
+
+  private async persistSession(sessionKey: string): Promise<void> {
+    if (!this.store?.enabled) return;
+    const rec = this.records.get(sessionKey);
+    if (!rec) return;
+    try {
+      await this.store.saveSession(rec.snapshot());
+      // 资产按项目存一份全集：会话快照之间可能互相引用对方的资产
+      await this.store.saveAssets(rec.projectId, this.assets.serialize(rec.projectId));
+    } catch (err) {
+      this.log(`[session] 落盘失败 ${sessionKey}: ${(err as Error)?.message ?? err}`);
+    }
+  }
+
+  /** 立即落盘全部活跃会话（进程退出前调用，见 index.ts 的 shutdown） */
+  async persistNow(): Promise<void> {
+    for (const [k, t] of this.dirtyTimers) {
+      clearTimeout(t);
+      this.dirtyTimers.delete(k);
+    }
+    await Promise.all([...this.records.keys()].map((k) => this.persistSession(k)));
+  }
+
   async disposeAll(): Promise<void> {
+    await this.persistNow().catch(() => undefined);
     for (const r of this.records.values()) await r.dispose();
     this.records.clear();
   }

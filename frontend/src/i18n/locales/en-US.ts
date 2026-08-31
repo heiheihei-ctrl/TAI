@@ -696,6 +696,7 @@ const enUS = {
       analyzeDesc: "Image analysis mode",
       videoDesc: "Video generation mode",
       vectorDesc: "Vector graphics mode",
+      architectureDesc: "Architectural design AI agent",
     },
     placeholder: {
       text: "Ask anything or start chatting. AI will reply instantly.",

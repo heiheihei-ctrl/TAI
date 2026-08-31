@@ -57,6 +57,7 @@ import {
   Copy,
   FileText,
   Play,
+  Square,
   RotateCcw,
   Pencil,
   Lock,
@@ -104,6 +105,11 @@ const BASE_MANUAL_MODE_OPTIONS: ManualModeOption[] = [
   { value: "analyze", label: "Analysis", description: "图像分析模式" },
   { value: "video", label: "Video", description: "视频生成模式" },
   { value: "vector", label: "Vector", description: "矢量图形模式" },
+  {
+    value: "architecture",
+    label: "Design",
+    description: "建筑设计代理",
+  },
 ];
 
 const EMPTY_PROJECT_CONTENT_IMAGES: any[] = [];
@@ -326,6 +332,8 @@ const AIChatDialog: React.FC = () => {
     setVideoDurationSeconds,
     manualAIMode,
     setManualAIMode,
+    architectureChat,
+    cancelArchitectureChat,
     autoSelectedTool,
     aiProvider,
     bananaImageRoute,
@@ -2428,6 +2436,8 @@ const AIChatDialog: React.FC = () => {
             return { supported: count === 0 };
           }
           return { supported: count >= 1 };
+        case "architecture":
+          return { supported: true };
         case "video":
           return { supported: count <= 1 };
         default:
@@ -2460,6 +2470,9 @@ const AIChatDialog: React.FC = () => {
         return `Blend模式在稳定通道下最多支持${tencentBananaMaxRefCount}张图片`;
       }
       return "Blend模式需要添加至少2张以上图片";
+    }
+    if (manualAIMode === "architecture") {
+      return null; // 建筑设计模式无需图片校验
     }
     if (manualAIMode === "analyze") {
       if (isTencentStableBanana && !isTencentBananaAnalyzeSupported()) {
@@ -3074,6 +3087,10 @@ const AIChatDialog: React.FC = () => {
     currentEffectiveImageLimitWarning ||
     currentEffectiveManualModeWarning ||
     sendShortcutHint;
+
+  // 建筑设计模式走 tgagent 长连接 SSE，单轮最长 180s，给用户一个中断出口
+  const architectureRunning =
+    manualAIMode === "architecture" && generationStatus.isGenerating;
 
   // 计算拖拽时是否使用自定义位置
   const useDragPosition = showHistory && !isMaximized && dragOffsetX !== null;
@@ -4202,23 +4219,33 @@ const AIChatDialog: React.FC = () => {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              {/* 发送按钮 */}
+              {/* 发送按钮（建筑设计模式生成中切换为停止） */}
               <Button
-                onClick={handleSend}
-                disabled={!canSend}
+                onClick={architectureRunning ? cancelArchitectureChat : handleSend}
+                disabled={architectureRunning ? false : !canSend}
                 size='sm'
                 variant='outline'
                 data-chat-primary-action='true'
-                title={sendButtonTitle}
+                title={
+                  architectureRunning
+                    ? lt("停止生成", "Stop generating")
+                    : sendButtonTitle
+                }
                 className={cn(
                   "absolute right-4 bottom-2 h-7 w-7 p-0 rounded-full transition-all duration-200",
                   "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
-                  canSend
-                    ? "hover:bg-liquid-glass-hover text-gray-700"
-                    : "opacity-50 cursor-not-allowed text-gray-400"
+                  architectureRunning
+                    ? "text-red-600 hover:bg-red-50"
+                    : canSend
+                      ? "hover:bg-liquid-glass-hover text-gray-700"
+                      : "opacity-50 cursor-not-allowed text-gray-400"
                 )}
               >
-                <Play className='h-3.5 w-3.5' />
+                {architectureRunning ? (
+                  <Square className='h-3 w-3 fill-current' />
+                ) : (
+                  <Play className='h-3.5 w-3.5' />
+                )}
               </Button>
             </div>
 

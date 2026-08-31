@@ -694,6 +694,7 @@ const zhCN = {
       analyzeDesc: "图像分析模式",
       videoDesc: "视频生成模式",
       vectorDesc: "矢量图形模式",
+      architectureDesc: "建筑设计 AI 代理",
     },
     placeholder: {
       text: "直接输入问题或开始聊天，AI将即时回复。",
