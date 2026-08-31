@@ -1557,6 +1557,42 @@ const BETA_NODE_KEYS = new Set([
   "generatePro4", // 临时隐藏：高级四图
 ]);
 
+/** 图像类节点面板：固定置顶（Gpt-Image-2 → Nano banana） */
+const IMAGE_PALETTE_PRIORITY_KEYS = ["gptImage2", "generate"] as const;
+
+/** 视频类节点面板：Seedance 优先，其次 Kling */
+const VIDEO_SEEDANCE_PALETTE_KEYS = ["seedance20Video", "doubaoVideo"] as const;
+const VIDEO_KLING_PALETTE_KEYS = [
+  "kling30Video",
+  "kling26Video",
+  "klingO1Video",
+  "klingVideo",
+] as const;
+
+const NODE_PALETTE_HOT_BADGE_COUNT = 2;
+
+const getPaletteSortPriorityRank = (
+  nodeKey: string,
+  groupKey: "image" | "video"
+): number => {
+  if (groupKey === "image") {
+    const idx = IMAGE_PALETTE_PRIORITY_KEYS.indexOf(
+      nodeKey as (typeof IMAGE_PALETTE_PRIORITY_KEYS)[number]
+    );
+    if (idx >= 0) return idx;
+    return 1000;
+  }
+  const seedanceIdx = VIDEO_SEEDANCE_PALETTE_KEYS.indexOf(
+    nodeKey as (typeof VIDEO_SEEDANCE_PALETTE_KEYS)[number]
+  );
+  if (seedanceIdx >= 0) return seedanceIdx;
+  const klingIdx = VIDEO_KLING_PALETTE_KEYS.indexOf(
+    nodeKey as (typeof VIDEO_KLING_PALETTE_KEYS)[number]
+  );
+  if (klingIdx >= 0) return VIDEO_SEEDANCE_PALETTE_KEYS.length + klingIdx;
+  return 1000;
+};
+
 type NodePanelGroupKey = "text" | "image" | "three" | "other" | "video" | "audio";
 
 const NODE_PANEL_GROUP_ORDER: NodePanelGroupKey[] = [
@@ -4201,48 +4237,49 @@ function FlowInner() {
     });
 
     (["image", "video"] as const).forEach((groupKey) => {
-      const ranked = [...grouped[groupKey]]
-        .filter((item) => item._usageCount > 0)
-        .sort((a, b) => b._usageCount - a._usageCount)
-        .slice(0, 3)
-        .map((item) => item.nodeKey);
-      const hotKeys = new Set(ranked);
-      grouped[groupKey] = grouped[groupKey].map((item) => ({
+      grouped[groupKey] = grouped[groupKey].sort((a, b) => {
+        if (a._inactive !== b._inactive) return a._inactive - b._inactive;
+        const aPriority = getPaletteSortPriorityRank(a.nodeKey, groupKey);
+        const bPriority = getPaletteSortPriorityRank(b.nodeKey, groupKey);
+        if (aPriority !== bPriority) return aPriority - bPriority;
+        const aNew = a.isNew ? 1 : 0;
+        const bNew = b.isNew ? 1 : 0;
+        if (aNew !== bNew) return bNew - aNew;
+        if (a._usageCount !== b._usageCount) {
+          return b._usageCount - a._usageCount;
+        }
+        return a._index - b._index;
+      });
+      grouped[groupKey] = grouped[groupKey].map((item, index) => ({
         ...item,
-        _isHot: hotKeys.has(item.nodeKey),
+        _isHot: index < NODE_PALETTE_HOT_BADGE_COUNT,
       }));
     });
 
     return NODE_PANEL_GROUP_ORDER
       .map((groupKey) => {
-        const shouldSortByUsage = groupKey === "image" || groupKey === "video";
-        const items = grouped[groupKey]
-          .sort((a, b) => {
-            if (a._inactive !== b._inactive) return a._inactive - b._inactive;
-            // HOT 优先，其次 NEW
-            const aHot = a._isHot ? 1 : 0;
-            const bHot = b._isHot ? 1 : 0;
-            if (aHot !== bHot) return bHot - aHot;
-            const aNew = a.isNew ? 1 : 0;
-            const bNew = b.isNew ? 1 : 0;
-            if (aNew !== bNew) return bNew - aNew;
-            if (shouldSortByUsage && a._usageCount !== b._usageCount) {
-              return b._usageCount - a._usageCount;
-            }
-            return a._index - b._index;
-          })
-          .map(
-            ({
-              _index: _ignoredIndex,
-              _inactive: _ignoredInactive,
-              _usageCount: _ignoredUsage,
-              _isHot,
-              ...item
-            }) => ({
-              ...item,
-              _isHot,
+        const shouldUseCustomSort = groupKey === "image" || groupKey === "video";
+        const items = (shouldUseCustomSort
+          ? grouped[groupKey]
+          : [...grouped[groupKey]].sort((a, b) => {
+              if (a._inactive !== b._inactive) return a._inactive - b._inactive;
+              const aNew = a.isNew ? 1 : 0;
+              const bNew = b.isNew ? 1 : 0;
+              if (aNew !== bNew) return bNew - aNew;
+              return a._index - b._index;
             })
-          );
+        ).map(
+          ({
+            _index: _ignoredIndex,
+            _inactive: _ignoredInactive,
+            _usageCount: _ignoredUsage,
+            _isHot,
+            ...item
+          }) => ({
+            ...item,
+            _isHot,
+          })
+        );
 
         if (items.length === 0) return null;
 
