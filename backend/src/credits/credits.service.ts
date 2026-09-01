@@ -1425,7 +1425,7 @@ export class CreditsService {
     return duration * CreditsService.VIDU_Q3_CREDITS_PER_SECOND;
   }
 
-  /** Seedance 2.5：按分辨率 × 时长动态计费（覆盖 managed pricing） */
+  /** Seedance 2.5：按分辨率 × 时长动态计费（覆盖 managed pricing），当前按 8 折结算 */
   private static readonly SEEDANCE25_CREDITS_PER_SECOND: Record<string, number> = {
     '480P': 110,
     '720P': 240,
@@ -1464,7 +1464,8 @@ export class CreditsService {
         ? Math.max(5, Math.min(30, Math.round(durationRaw / 5) * 5))
         : 5;
 
-    return Math.round(rate * duration);
+    // 限时 8 折：原价 rate*duration，结算按 80%
+    return Math.round(rate * duration * 0.8);
   }
 
   /**

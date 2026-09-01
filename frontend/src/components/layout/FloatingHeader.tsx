@@ -114,9 +114,6 @@ import { uploadToOSS } from "@/services/ossUploadService";
 import Qrcode from "@/assets/group-erweima.jpg";
 import ProfileCheckInReminderBanner from "@/components/reminder/ProfileCheckInReminderBanner";
 import ReminderBannerStack from "@/components/reminder/ReminderBannerStack";
-import CanvasPromoTopBanner, {
-  useCanvasPromoTopBannerVisible,
-} from "@/components/promo/CanvasPromoTopBanner";
 import ProfileCompletionSettingsPanel from "@/components/profile/ProfileCompletionSettingsPanel";
 import {
   markContactPopupShown,
@@ -1093,7 +1090,6 @@ const FloatingHeader: React.FC = () => {
   const showReminderBanner =
     reminderBannerVisible && hasReminderBannerContent;
 
-  const showPromoTopBanner = useCanvasPromoTopBannerVisible();
   const [bannerStackHeight, setBannerStackHeight] = useState(0);
 
   const handleBannerStackHeightChange = useCallback((height: number) => {
@@ -1101,10 +1097,10 @@ const FloatingHeader: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!showPromoTopBanner && !showReminderBanner) {
+    if (!showReminderBanner) {
       setBannerStackHeight(0);
     }
-  }, [showPromoTopBanner, showReminderBanner]);
+  }, [showReminderBanner]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -2432,19 +2428,16 @@ const FloatingHeader: React.FC = () => {
 
   return (
     <>
-      {showPromoTopBanner || showReminderBanner ? (
+      {showReminderBanner ? (
         <ReminderBannerStack onHeightChange={handleBannerStackHeightChange}>
-          {showPromoTopBanner ? <CanvasPromoTopBanner /> : null}
-          {showReminderBanner ? (
-            <ProfileCheckInReminderBanner
-              profile={extendedProfile}
-              checkInStatus={checkInStatus}
-              showProfile={showProfileBannerSection}
-              showCheckIn={showCheckInBannerSection}
-              fading={reminderBannerFading}
-              onDismiss={() => closeReminderBanner(true)}
-            />
-          ) : null}
+          <ProfileCheckInReminderBanner
+            profile={extendedProfile}
+            checkInStatus={checkInStatus}
+            showProfile={showProfileBannerSection}
+            showCheckIn={showCheckInBannerSection}
+            fading={reminderBannerFading}
+            onDismiss={() => closeReminderBanner(true)}
+          />
         </ReminderBannerStack>
       ) : null}
       <div

@@ -1,8 +1,8 @@
-/** 画布居中促销海报：2026-08-06 ~ 2026-08-21（含首尾日，本地时区） */
+/** 画布居中促销海报：2026-08-06 ~ 2026-09-30（含首尾日，本地时区） */
 export const CANVAS_SUMMER_PROMO = {
   id: "canvas-summer-promo-20260806",
   start: new Date(2026, 7, 6, 0, 0, 0, 0), // month is 0-indexed
-  end: new Date(2026, 7, 21, 23, 59, 59, 999),
+  end: new Date(2026, 8, 30, 23, 59, 59, 999),
   /** 与 MembershipPlan vip_69 对齐：月卡额度 7350 到账，签到共 1900，合计 9250 */
   dailyPlanMonthlyCredits: 9250,
   instantCredits: 7350,
@@ -23,6 +23,13 @@ export const CANVAS_SUMMER_PROMO = {
 export const CANVAS_SUMMER_PROMO_PURCHASED_EVENT = "canvas-summer-promo-purchased";
 export const CANVAS_SUMMER_PROMO_TOP_BANNER_DISMISS_EVENT =
   "canvas-summer-promo-top-banner-dismiss";
+/** 促销海报点击：打开画布节点面板，并可聚焦到指定分组 */
+export const FLOW_OPEN_ADD_PANEL_EVENT = "flow:open-add-panel";
+
+export type FlowOpenAddPanelDetail = {
+  tab?: "nodes" | "beta" | "custom" | "templates" | "personal";
+  focusGroup?: "text" | "image" | "video" | "audio" | "other" | "three";
+};
 
 export function isCanvasSummerPromoActive(now = new Date()): boolean {
   const t = now.getTime();

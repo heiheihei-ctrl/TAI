@@ -10,6 +10,7 @@ import LayerPanel from '@/components/panels/LayerPanel';
 import LibraryPanel from '@/components/panels/LibraryPanel';
 import AIChatDialog from '@/components/chat/AIChatDialog';
 import FloatingHeader from '@/components/layout/FloatingHeader';
+import ActivitySettingsModalHost from '@/components/home/ActivitySettingsModalHost';
 import CodeSandboxPanel from '@/components/sandbox/CodeSandboxPanel';
 import SelectionBoxOverlay from '@/components/canvas/SelectionBoxOverlay';
 import EraserCursorOverlay from '@/components/canvas/EraserCursorOverlay';
@@ -113,6 +114,7 @@ const Canvas: React.FC = () => {
           )}
 
           <FloatingHeader />
+          <ActivitySettingsModalHost />
           <FlowOverlay />
           <SelectionBoxOverlay />
           <ToolBar />

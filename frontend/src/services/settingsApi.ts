@@ -113,6 +113,24 @@ export async function fetchPublicEventSettings(): Promise<EventSettingsConfig> {
   }
 }
 
+export const ACTIVITY_SETTINGS_DISMISS_KEY = 'tai_activity_settings_dismissed';
+
+export type ActivitySettingsConfig = EventSettingsConfig;
+
+export async function fetchPublicActivitySettings(): Promise<ActivitySettingsConfig> {
+  try {
+    const apiBase = getApiBaseUrl();
+    const response = await fetch(`${apiBase}/api/settings/activity-settings`);
+    if (!response.ok) {
+      return { ...EMPTY_EVENT_SETTINGS };
+    }
+    const data = (await response.json()) as Partial<ActivitySettingsConfig>;
+    return parseEventSettingsPayload(data);
+  } catch {
+    return { ...EMPTY_EVENT_SETTINGS };
+  }
+}
+
 export function openEventSettingsLink(link: string): void {
   const trimmed = link.trim();
   if (!trimmed) return;

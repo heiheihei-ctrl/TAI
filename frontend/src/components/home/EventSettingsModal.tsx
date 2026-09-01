@@ -15,6 +15,7 @@ type EventSettingsModalProps = {
   open: boolean;
   config: EventSettingsConfig | null;
   onClose: () => void;
+  dismissStorageKey?: string;
 };
 
 function EventImageCarousel({ images }: { images: string[] }) {
@@ -100,15 +101,20 @@ function EventImageCarousel({ images }: { images: string[] }) {
   );
 }
 
-export default function EventSettingsModal({ open, config, onClose }: EventSettingsModalProps) {
+export default function EventSettingsModal({
+  open,
+  config,
+  onClose,
+  dismissStorageKey = EVENT_SETTINGS_DISMISS_KEY,
+}: EventSettingsModalProps) {
   const { t } = useTranslation();
 
   const handleClose = useCallback(() => {
     if (config) {
-      sessionStorage.setItem(EVENT_SETTINGS_DISMISS_KEY, getEventSettingsContentKey(config));
+      sessionStorage.setItem(dismissStorageKey, getEventSettingsContentKey(config));
     }
     onClose();
-  }, [config, onClose]);
+  }, [config, dismissStorageKey, onClose]);
 
   if (!open || !config) return null;
 

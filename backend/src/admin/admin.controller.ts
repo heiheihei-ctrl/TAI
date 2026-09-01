@@ -56,6 +56,10 @@ import {
 } from './dto/template.dto';
 import { MODEL_PROVIDER_MAPPING_SETTING_KEY } from '../ai/services/model-routing.service';
 import { WechatCustomMenuService } from './services/wechat-custom-menu.service';
+import {
+  PresetPromptService,
+  type ChatPresetPromptsData,
+} from './services/preset-prompt.service';
 import type { WechatCustomMenuDraft } from '../wechat-official/wechat-custom-menu.types';
 
 interface AuthenticatedUser {
@@ -112,6 +116,7 @@ export class AdminController {
     private readonly volcAssetService: VolcAssetService,
     private readonly usersService: UsersService,
     private readonly wechatCustomMenuService: WechatCustomMenuService,
+    private readonly presetPromptService: PresetPromptService,
   ) {}
 
   /**
@@ -472,6 +477,26 @@ export class AdminController {
     }
 
     return setting;
+  }
+
+  @Get('preset-prompts')
+  @ApiOperation({ summary: '获取 AI 对话框预设提示词（管理端）' })
+  async getPresetPrompts(@Request() req: AuthenticatedRequest) {
+    this.checkAdmin(req);
+    return this.presetPromptService.getData({ ensureDefault: false });
+  }
+
+  @Post('preset-prompts')
+  @ApiOperation({ summary: '保存 AI 对话框预设提示词（管理端）' })
+  async savePresetPrompts(
+    @Request() req: AuthenticatedRequest,
+    @Body() dto: ChatPresetPromptsData,
+  ) {
+    this.checkAdmin(req);
+    if (!dto || typeof dto !== 'object') {
+      throw new BadRequestException('无效的预设提示词数据');
+    }
+    return this.presetPromptService.saveData(dto, req.user.id);
   }
 
   @Get('wechat-custom-menu')

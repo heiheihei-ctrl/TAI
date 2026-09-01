@@ -2942,10 +2942,19 @@ const mergeNodePaletteConfig = (
 
 const buildNodePaletteCaption = (config: Partial<NodeConfig>): string | undefined => {
   const metadata = (config.metadata ?? {}) as Record<string, any>;
+  const nodeKey = String(config.nodeKey || "").trim();
+  const isSeedancePaletteNode =
+    nodeKey === "doubaoVideo" || nodeKey === "seedance20Video";
   const normalizeCaption = (raw: string): string => {
     const trimmed = raw.trim();
-    if (String(config.nodeKey || "").trim().toLowerCase() === "gptimage2") {
+    if (nodeKey.toLowerCase() === "gptimage2") {
       return trimmed.replace(/^apimart\s*/i, "").trim();
+    }
+    if (isSeedancePaletteNode) {
+      return trimmed
+        .replace(/生成时长[：:]\s*\d+\s*[-~～到至]\s*\d+\s*秒/, "生成时长：4-30 秒")
+        .replace(/Output duration:\s*\d+\s*-\s*\d+s?/i, "Output duration: 4-30s")
+        .replace(/\b\d+\s*-\s*\d+s\b/i, "4-30s");
     }
     return trimmed;
   };
@@ -2969,15 +2978,18 @@ const buildNodePaletteCaption = (config: Partial<NodeConfig>): string | undefine
     return caption || undefined;
   }
   if (vod) {
+    const durationLabel = isSeedancePaletteNode
+      ? "4-30s"
+      : Array.isArray(vod.outputConfig?.durations) && vod.outputConfig.durations.length > 0
+        ? `${Math.min(...vod.outputConfig.durations)}-${Math.max(...vod.outputConfig.durations)}s`
+        : undefined;
     const segments = [
       "VOD",
       vod.modelVersion ? `${vod.modelName || ""} ${vod.modelVersion}`.trim() : vod.modelName,
       Array.isArray(vod.outputConfig?.resolutions) && vod.outputConfig.resolutions.length > 0
         ? vod.outputConfig.resolutions.join("/")
         : undefined,
-      Array.isArray(vod.outputConfig?.durations) && vod.outputConfig.durations.length > 0
-        ? `${Math.min(...vod.outputConfig.durations)}-${Math.max(...vod.outputConfig.durations)}s`
-        : undefined,
+      durationLabel,
     ].filter(Boolean);
     if (segments.length > 0) return segments.join(" · ");
   }
@@ -3168,28 +3180,49 @@ const getNodePaletteGroupKey = (
 const setNodePaletteHover = (
   target: HTMLElement,
   hovered: boolean,
-  isDarkTheme = false
+  isDarkTheme = false,
+  highlighted = false
 ) => {
   target.style.background = isDarkTheme
     ? hovered
       ? "#262626"
-      : "#1d1d1d"
+      : highlighted
+        ? "#221a12"
+        : "#1d1d1d"
     : hovered
       ? "#f8fafc"
-      : "#fff";
-  target.style.borderColor = isDarkTheme
+      : highlighted
+        ? "#fffaf5"
+        : "#fff";
+  target.style.borderColor = highlighted
     ? hovered
-      ? "#4b4b4b"
-      : "#333333"
-    : hovered
-      ? "#d5dae3"
-      : "#e5e7eb";
+      ? isDarkTheme
+        ? "#fb923c"
+        : "#f97316"
+      : isDarkTheme
+        ? "#f97316"
+        : "#fb923c"
+    : isDarkTheme
+      ? hovered
+        ? "#4b4b4b"
+        : "#333333"
+      : hovered
+        ? "#d5dae3"
+        : "#e5e7eb";
   target.style.transform = hovered ? "translateY(-1px)" : "translateY(0)";
-  target.style.boxShadow = hovered
-    ? isDarkTheme
-      ? "0 12px 26px rgba(0, 0, 0, 0.38)"
-      : "0 12px 26px rgba(15, 23, 42, 0.12)"
-    : "none";
+  target.style.boxShadow = highlighted
+    ? hovered
+      ? isDarkTheme
+        ? "0 0 0 1px rgba(249, 115, 22, 0.55), 0 12px 26px rgba(0, 0, 0, 0.38)"
+        : "0 0 0 1px rgba(249, 115, 22, 0.35), 0 12px 26px rgba(15, 23, 42, 0.12)"
+      : isDarkTheme
+        ? "0 0 0 1px rgba(249, 115, 22, 0.45)"
+        : "0 0 0 1px rgba(249, 115, 22, 0.28)"
+    : hovered
+      ? isDarkTheme
+        ? "0 12px 26px rgba(0, 0, 0, 0.38)"
+        : "0 12px 26px rgba(15, 23, 42, 0.12)"
+      : "none";
 };
 
 const NodePaletteButton: React.FC<{
@@ -3204,6 +3237,7 @@ const NodePaletteButton: React.FC<{
   isDarkTheme?: boolean;
   showZh?: boolean;
   vipOnly?: boolean;
+  highlighted?: boolean;
   onboardingTarget?: string;
   onClick: () => void;
 }> = ({
@@ -3218,6 +3252,7 @@ const NodePaletteButton: React.FC<{
   isDarkTheme = false,
   showZh = true,
   vipOnly = false,
+  highlighted = false,
   onboardingTarget,
   onClick,
 }) => {
@@ -3282,12 +3317,19 @@ const NodePaletteButton: React.FC<{
     ...nodePaletteButtonStyle,
     ...(isDarkTheme
       ? {
-          border: "1px solid #333333",
-          background: "#1d1d1d",
+          border: highlighted ? "1.5px solid #f97316" : "1px solid #333333",
+          background: highlighted ? "#221a12" : "#1d1d1d",
           color: "#ffffff",
           justifyContent: showZh ? "space-between" : "flex-start",
+          boxShadow: highlighted ? "0 0 0 1px rgba(249, 115, 22, 0.45)" : "none",
         }
-      : {}),
+      : highlighted
+        ? {
+            border: "1.5px solid #fb923c",
+            background: "#fffaf5",
+            boxShadow: "0 0 0 1px rgba(249, 115, 22, 0.28)",
+          }
+        : {}),
     ...(disabled || isVipLocked ? {
       opacity: isDarkTheme ? 0.75 : 0.6,
       cursor: "not-allowed",
@@ -3303,10 +3345,12 @@ const NodePaletteButton: React.FC<{
       onClick={disabled || isVipLocked ? undefined : onClick}
       style={buttonStyle}
       onMouseEnter={(e) =>
-        !(disabled || isVipLocked) && setNodePaletteHover(e.currentTarget, true, isDarkTheme)
+        !(disabled || isVipLocked) &&
+        setNodePaletteHover(e.currentTarget, true, isDarkTheme, highlighted)
       }
       onMouseLeave={(e) =>
-        !(disabled || isVipLocked) && setNodePaletteHover(e.currentTarget, false, isDarkTheme)
+        !(disabled || isVipLocked) &&
+        setNodePaletteHover(e.currentTarget, false, isDarkTheme, highlighted)
       }
       disabled={Boolean(disabled || isVipLocked)}
       title={isVipLocked ? (isDarkTheme ? "VIP only" : "VIP 限定功能") : undefined}
@@ -7201,6 +7245,65 @@ function FlowInner() {
     },
     [openAddPanelAt]
   );
+
+  const addPanelNodesScrollRef = React.useRef<HTMLDivElement | null>(null);
+  const [pendingPaletteFocusGroup, setPendingPaletteFocusGroup] = React.useState<
+    NodePanelGroupKey | null
+  >(null);
+
+  React.useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        tab?: AddPanelTab;
+        focusGroup?: NodePanelGroupKey;
+      }>).detail;
+      const focusGroup =
+        detail?.focusGroup &&
+        NODE_PANEL_GROUP_ORDER.includes(detail.focusGroup)
+          ? detail.focusGroup
+          : null;
+      if (focusGroup) {
+        setPendingPaletteFocusGroup(focusGroup);
+      }
+      openAddPanelAtContainerCenter({
+        tab: detail?.tab || "nodes",
+      });
+    };
+    window.addEventListener("flow:open-add-panel", handler as EventListener);
+    return () =>
+      window.removeEventListener("flow:open-add-panel", handler as EventListener);
+  }, [openAddPanelAtContainerCenter]);
+
+  React.useEffect(() => {
+    if (!addPanel.visible || addTab !== "nodes" || !pendingPaletteFocusGroup) {
+      return;
+    }
+    let cancelled = false;
+    const tryScroll = () => {
+      if (cancelled) return;
+      const scrollRoot = addPanelNodesScrollRef.current;
+      const section = scrollRoot?.querySelector(
+        `[data-flow-node-palette-group="${pendingPaletteFocusGroup}"]`
+      ) as HTMLElement | null;
+      if (!scrollRoot || !section) {
+        window.requestAnimationFrame(tryScroll);
+        return;
+      }
+      const top =
+        scrollRoot.scrollTop +
+        (section.getBoundingClientRect().top - scrollRoot.getBoundingClientRect().top) -
+        8;
+      scrollRoot.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+      setPendingPaletteFocusGroup(null);
+    };
+    const timer = window.setTimeout(() => {
+      window.requestAnimationFrame(tryScroll);
+    }, 50);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [addPanel.visible, addTab, pendingPaletteFocusGroup]);
 
   const scrollOnboardingNodesIntoView = React.useCallback(
     async (
@@ -24346,6 +24449,7 @@ function FlowInner() {
             </div>
             {addTab === "nodes" ? (
               <div
+                ref={addPanelNodesScrollRef}
                 style={{
                   height: "min(70vh, 640px)",
                   overflowY: "auto",
@@ -24358,7 +24462,11 @@ function FlowInner() {
               >
                 <div style={{ padding: "0 20px 20px" }}>
                   {groupedNodePaletteConfigs.map((group) => (
-                    <section key={group.key} style={nodePaletteSectionStyle}>
+                    <section
+                      key={group.key}
+                      data-flow-node-palette-group={group.key}
+                      style={nodePaletteSectionStyle}
+                    >
                       <div style={nodePaletteSectionHeaderStyle}>
                         <div>
                           <div
@@ -24406,6 +24514,9 @@ function FlowInner() {
                             config.nodeKey === "seedance20Video" ||
                             (config.metadata as Record<string, any>)?.vipOnly === true;
                           const isVipLocked = !membershipActive && isVipNode;
+                          const isSeedancePaletteNode = (
+                            VIDEO_SEEDANCE_PALETTE_KEYS as readonly string[]
+                          ).includes(config.nodeKey);
                           const statusBadge = getStatusBadge(config.status);
                           const paletteBadges: Array<{
                             text: string;
@@ -24440,6 +24551,7 @@ function FlowInner() {
                               isDarkTheme={isFlowBlackTheme}
                               showZh={isZh}
                               vipOnly={isVipLocked}
+                              highlighted={isSeedancePaletteNode}
                               onboardingTarget={
                                 config.nodeKey === "textPrompt" ||
                                 config.nodeKey === "generate" ||

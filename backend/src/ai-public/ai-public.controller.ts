@@ -13,6 +13,7 @@ import { RemoveBackgroundDto } from '../ai/dto/background-removal.dto';
 import { VeoVideoService } from '../ai/services/veo-video.service';
 import { VeoGenerateVideoDto, VeoVideoResponseDto, VeoModelsResponseDto } from '../ai/dto/veo-video.dto';
 import { NodeConfigService } from '../admin/services/node-config.service';
+import { PresetPromptService } from '../admin/services/preset-prompt.service';
 
 /**
  * 公开 AI API 控制器
@@ -29,6 +30,7 @@ export class AiPublicController {
     private readonly backgroundRemoval: BackgroundRemovalService,
     private readonly veoVideoService: VeoVideoService,
     private readonly nodeConfigService: NodeConfigService,
+    private readonly presetPromptService: PresetPromptService,
   ) {}
 
   @Post('generate')
@@ -301,5 +303,14 @@ export class AiPublicController {
   async getNodeConfigs() {
     this.logger.log('📋 [PUBLIC] Node configs requested');
     return this.nodeConfigService.getAllNodeConfigs();
+  }
+
+  @Get('preset-prompts')
+  @ApiOperation({
+    summary: '获取预设提示词',
+    description: '获取 AI 对话框可用的预设提示词分类与条目。无需身份认证。',
+  })
+  async getPresetPrompts() {
+    return this.presetPromptService.getPublicData();
   }
 }

@@ -14,6 +14,7 @@ import { VolcAssetModule } from '../volc-asset/volc-asset.module';
 import { WechatOfficialModule } from '../wechat-official/wechat-official.module';
 import { WechatCustomMenuService } from './services/wechat-custom-menu.service';
 import { DashboardReportExportService } from './dashboard-report-export.service';
+import { PresetPromptService } from './services/preset-prompt.service';
 
 @Module({
   imports: [PrismaModule, CreditsModule, OssModule, BusinessPolicyModule, MembershipModule, VolcAssetModule, UsersModule, WechatOfficialModule],
@@ -24,8 +25,9 @@ import { DashboardReportExportService } from './dashboard-report-export.service'
     TemplateService,
     NodeConfigService,
     WechatCustomMenuService,
+    PresetPromptService,
   ],
-  exports: [AdminService, TemplateService, NodeConfigService, WechatCustomMenuService],
+  exports: [AdminService, TemplateService, NodeConfigService, WechatCustomMenuService, PresetPromptService],
 })
 export class AdminModule implements OnModuleInit {
   private readonly logger = new Logger(AdminModule.name);

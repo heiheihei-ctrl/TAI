@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 
 const EVENT_SETTINGS_KEY = 'event_settings';
+const ACTIVITY_SETTINGS_KEY = 'activity_settings';
 
 type EventSettingsPayload = {
   images: string[];
@@ -61,6 +62,14 @@ export class SettingsPublicController {
     const setting = await this.adminService.getSetting(EVENT_SETTINGS_KEY);
     return parseEventSettings(setting?.value);
   }
+
+  @Get('activity-settings')
+  @ApiOperation({ summary: '获取活动设置（公开接口，画布页展示）' })
+  async getActivitySettings() {
+    const setting = await this.adminService.getSetting(ACTIVITY_SETTINGS_KEY);
+    return parseEventSettings(setting?.value);
+  }
+
   @Get('default-language')
   @ApiOperation({ summary: '获取系统默认语言（公开接口）' })
   async getDefaultLanguage() {
@@ -70,5 +79,4 @@ export class SettingsPublicController {
     if (value === 'zh-CN' || value === 'zh') return 'zh-CN';
     return 'zh-CN';
   }
-
 }

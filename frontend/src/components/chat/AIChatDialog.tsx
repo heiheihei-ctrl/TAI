@@ -16,7 +16,6 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { fetchWithAuth } from "@/services/authFetch";
 import { Button } from "@/components/ui/button";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -30,7 +29,7 @@ import InlineImageMentionEditor from "@/components/common/InlineImageMentionEdit
 import SpeechToTextButton from "@/components/common/SpeechToTextButton";
 import SmartImage from "@/components/ui/SmartImage";
 import SmoothSmartImage from "@/components/ui/SmoothSmartImage";
-import { useAIChatStore, getTextModelForProvider } from "@/stores/aiChatStore";
+import { useAIChatStore } from "@/stores/aiChatStore";
 import { useCommentStore } from "@/stores/commentStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useProjectContentStore } from "@/stores/projectContentStore";
@@ -71,9 +70,7 @@ import type {
   MidjourneyMetadata,
   SupportedAIProvider,
 } from "@/types/ai";
-import PromptOptimizationPanel from "@/components/chat/PromptOptimizationPanel";
-import type { PromptOptimizationSettings } from "@/components/chat/PromptOptimizationPanel";
-import promptOptimizationService from "@/services/promptOptimizationService";
+import PresetPromptPanel from "@/components/chat/PresetPromptPanel";
 import { contextManager } from "@/services/contextManager";
 import { resolvePublicAssetUrlFromKey } from "@/utils/assetProxy";
 import { toRenderableImageSrc } from "@/utils/imageSource";
@@ -107,9 +104,6 @@ const BASE_MANUAL_MODE_OPTIONS: ManualModeOption[] = [
 ];
 
 const EMPTY_PROJECT_CONTENT_IMAGES: any[] = [];
-
-// 长按提示词扩写按钮触发面板的最小时长（毫秒）
-const LONG_PRESS_DURATION = 550;
 
 const AUTO_MODE_MULTIPLIERS = [1, 2, 4, 8] as const;
 const MULTIPLIER_ENABLED_MODES: ManualAIMode[] = [
@@ -402,6 +396,14 @@ const AIChatDialog: React.FC = () => {
   // isMaximized 现在从 store 获取
   const isMaximizedRef = useRef(isMaximized);
   const prevIsMaximizedRef = useRef(isMaximized);
+
+  // 全屏最大化已废弃（会白屏）；挂载时强制退出，避免残留状态
+  useEffect(() => {
+    if (isMaximized) {
+      setIsMaximized(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅挂载时清理一次
+  }, []);
   const [manuallyClosedHistory, setManuallyClosedHistory] = useState(() => {
     // 刷新页面时默认关闭历史记录
     return true;
@@ -412,7 +414,6 @@ const AIChatDialog: React.FC = () => {
   // 流式文本渲染状态（仅文本对话）
   const [streamingText, setStreamingText] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
-  const [autoOptimizeEnabled, setAutoOptimizeEnabled] = useState(false);
   // 拖拽移动状态
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffsetX, setDragOffsetX] = useState<number | null>(null);
@@ -426,16 +427,8 @@ const AIChatDialog: React.FC = () => {
     null
   );
   const resizeBottomGapRef = useRef(0);
-  const [autoOptimizing, setAutoOptimizing] = useState(false);
-  const textModel = useMemo(
-    () => getTextModelForProvider(aiProvider),
-    [aiProvider]
-  );
-  const [isPromptPanelOpen, setIsPromptPanelOpen] = useState(false);
+  const [isPresetPromptPanelOpen, setIsPresetPromptPanelOpen] = useState(false);
   const promptButtonRef = useRef<HTMLButtonElement>(null);
-  const promptPanelRef = useRef<HTMLDivElement>(null);
-  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const longPressTriggeredRef = useRef(false);
   // 比例面板
   const [isAspectOpen, setIsAspectOpen] = useState(false);
   const aspectPanelRef = useRef<HTMLDivElement | null>(null);
@@ -488,13 +481,6 @@ const AIChatDialog: React.FC = () => {
   }>({ top: 0, left: 0 });
   const [thinkingLevelReady, setThinkingLevelReady] = useState(false);
   const [aspectReady, setAspectReady] = useState(false);
-  const [promptSettings, setPromptSettings] =
-    useState<PromptOptimizationSettings>({
-      language: "中文",
-      tone: "",
-      focus: "",
-      lengthPreference: "balanced",
-    });
   // 🔥 跟踪已提交但还未开始生成的任务数量（敲击回车时立即增加）
   const [pendingTaskCount, setPendingTaskCount] = useState(0);
   const sendInFlightRef = useRef(false);
@@ -796,14 +782,6 @@ const AIChatDialog: React.FC = () => {
 
   useEffect(() => {
     return () => {
-      if (longPressTimerRef.current) {
-        clearTimeout(longPressTimerRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    return () => {
       if (ensureInputVisibleRafRef.current !== null) {
         if (typeof window !== "undefined") {
           cancelAnimationFrame(ensureInputVisibleRafRef.current);
@@ -818,7 +796,7 @@ const AIChatDialog: React.FC = () => {
     if (!isVisible) {
       setManuallyClosedHistory(false);
       setShowHistory(false);
-      setIsPromptPanelOpen(false);
+      setIsPresetPromptPanelOpen(false);
       historyInitialHeightRef.current = null;
     }
   }, [isVisible]);
@@ -1131,11 +1109,22 @@ const AIChatDialog: React.FC = () => {
     [isHistoryLocked, setIsMaximized]
   );
 
-  const toggleMaximize = useCallback(() => {
-    const next = !isMaximizedRef.current;
-    if (next && isHistoryLocked) return;
-    setIsMaximized(next);
-  }, [isHistoryLocked, setIsMaximized]);
+  // 双击应与顶部「放大/收起」一致：切换右侧展开历史面板，而不是全屏最大化（会白屏卡住）
+  const lastExpandToggleAtRef = useRef(0);
+  const requestToggleExpand = useCallback(() => {
+    const now = Date.now();
+    if (now - lastExpandToggleAtRef.current < 450) return;
+    lastExpandToggleAtRef.current = now;
+    if (isHistoryLocked) return;
+    // 若误入全屏最大化，双击先退出并回到紧凑态
+    if (isMaximizedRef.current) {
+      setIsMaximized(false);
+      setHistoryVisibility(false, true);
+      return;
+    }
+    const next = !showHistoryRef.current;
+    setHistoryVisibility(next, true);
+  }, [isHistoryLocked, setHistoryVisibility, setIsMaximized]);
 
   const handleCollapseToCompact = useCallback(() => {
     if (!showHistory) return;
@@ -1160,10 +1149,22 @@ const AIChatDialog: React.FC = () => {
     showHistory,
   ]);
 
-  const toggleMaximizeRef = useRef(toggleMaximize);
+  const toggleExpandRef = useRef(requestToggleExpand);
   useEffect(() => {
-    toggleMaximizeRef.current = toggleMaximize;
-  }, [toggleMaximize]);
+    toggleExpandRef.current = requestToggleExpand;
+  }, [requestToggleExpand]);
+
+  // 最大化白屏时可用 Esc 退出（浏览器返回无效，因为这是本地 UI 状态）
+  useEffect(() => {
+    if (!isMaximized) return;
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key !== "Escape") return;
+      ev.preventDefault();
+      setMaximizedSafely(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isMaximized, setMaximizedSafely]);
 
   const handleToggleHistoryLock = useCallback(() => {
     setIsHistoryLocked((prev) => {
@@ -1238,28 +1239,6 @@ const AIChatDialog: React.FC = () => {
     },
     []
   );
-
-  // 面板外点击关闭
-  useEffect(() => {
-    if (!isPromptPanelOpen) return;
-
-    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
-      const target = event.target as Node;
-      if (promptPanelRef.current && promptPanelRef.current.contains(target))
-        return;
-      if (promptButtonRef.current && promptButtonRef.current.contains(target))
-        return;
-      setIsPromptPanelOpen(false);
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("touchstart", handlePointerDown);
-
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("touchstart", handlePointerDown);
-    };
-  }, [isPromptPanelOpen]);
 
   // 智能历史记录显示：改为默认关闭，只有用户点击才展开
 
@@ -2006,63 +1985,9 @@ const AIChatDialog: React.FC = () => {
     );
   };
 
-  const startPromptButtonLongPress = () => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-    }
-    longPressTriggeredRef.current = false;
-    longPressTimerRef.current = setTimeout(() => {
-      longPressTriggeredRef.current = true;
-      setIsPromptPanelOpen(true);
-    }, LONG_PRESS_DURATION);
-  };
-
-  const cancelPromptButtonLongPress = () => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  };
-
-  const handlePromptButtonPointerDown = (
-    event: React.PointerEvent<HTMLButtonElement>
-  ) => {
-    if (generationStatus.isGenerating || autoOptimizing) return;
-    if (event.pointerType === "mouse" && event.button !== 0) {
-      return;
-    }
-    if (event.pointerType === "touch") {
-      event.preventDefault();
-    }
-    longPressTriggeredRef.current = false;
-    startPromptButtonLongPress();
-  };
-
-  const handlePromptButtonPointerUp = () => {
-    if (generationStatus.isGenerating || autoOptimizing) return;
-    cancelPromptButtonLongPress();
-    if (longPressTriggeredRef.current) {
-      longPressTriggeredRef.current = false;
-      return;
-    }
-    setAutoOptimizeEnabled((prev) => {
-      const next = !prev;
-      if (!next) {
-        // 关闭功能时，同时隐藏面板
-        setIsPromptPanelOpen(false);
-      }
-      return next;
-    });
-  };
-
-  const handlePromptButtonPointerLeave = () => {
-    cancelPromptButtonLongPress();
-    longPressTriggeredRef.current = false;
-  };
-
-  const handlePromptButtonPointerCancel = () => {
-    cancelPromptButtonLongPress();
-    longPressTriggeredRef.current = false;
+  const handleTogglePresetPromptPanel = () => {
+    if (generationStatus.isGenerating) return;
+    setIsPresetPromptPanelOpen((prev) => !prev);
   };
 
   // 计算比例面板定位：以输入区域为锚点，优先显示在输入框下方，空间不足时放在上方
@@ -2338,38 +2263,6 @@ const AIChatDialog: React.FC = () => {
     setIsVideoDurationOpen(false);
   }, [shouldHideImageParamControls]);
 
-  const handlePromptSettingsChange = (next: PromptOptimizationSettings) => {
-    setPromptSettings(next);
-  };
-
-  const handleApplyOptimizedToInput = (optimized: string) => {
-    setCurrentInput(optimized);
-    if (textareaRef.current) {
-      textareaRef.current.focus();
-    }
-    setIsPromptPanelOpen(false);
-    setAutoOptimizeEnabled(false);
-  };
-
-  const handleSendOptimizedFromPanel = async (optimized: string) => {
-    if (generationStatus.isGenerating || autoOptimizing || sendInFlightRef.current) return;
-    if (!isVisible) {
-      showDialog();
-    }
-    const trimmed = optimized.trim();
-    if (!trimmed) return;
-
-    sendInFlightRef.current = true;
-    try {
-      setIsPromptPanelOpen(false);
-      setAutoOptimizeEnabled(false);
-      clearInput();
-      await processUserInput(trimmed);
-    } finally {
-      sendInFlightRef.current = false;
-    }
-  };
-
   // 移除源图像
   const handleRemoveSourceImage = () => {
     revokeOwnedObjectUrl(sourceImageForEditing);
@@ -2484,7 +2377,6 @@ const AIChatDialog: React.FC = () => {
     if (
       !trimmedInput ||
       generationStatus.isGenerating ||
-      autoOptimizing ||
       sendInFlightRef.current
     )
       return;
@@ -2532,45 +2424,6 @@ const AIChatDialog: React.FC = () => {
       let promptToSend = mentionedImageUrls.length
         ? stripImageMentionTokens(trimmedInput)
         : trimmedInput;
-
-      if (autoOptimizeEnabled) {
-        setAutoOptimizing(true);
-        try {
-          const response = await promptOptimizationService.optimizePrompt({
-            input: trimmedInput,
-            language: promptSettings.language,
-            tone: promptSettings.tone || undefined,
-            focus: promptSettings.focus || undefined,
-            lengthPreference: promptSettings.lengthPreference,
-            aiProvider,
-            model:
-              bananaImageRoute === "stable"
-                ? textModel
-                : "gemini-2.5-flash-official",
-            providerOptions: {
-              banana: { imageRoute: bananaImageRoute },
-              bananaImageRoute,
-            },
-          });
-
-          if (response.success && response.data) {
-            promptToSend = response.data.optimizedPrompt;
-            setCurrentInput(promptToSend);
-          } else if (response.error) {
-            console.warn(
-              "⚠️ 提示词自动扩写失败，将使用原始提示词继续。",
-              response.error
-            );
-          }
-        } catch (error) {
-          console.error(
-            "❌ 自动扩写提示词时发生异常，将使用原始提示词继续。",
-            error
-          );
-        } finally {
-          setAutoOptimizing(false);
-        }
-      }
 
       if (mentionedImageUrls.length > 0) {
         const existingImages = [
@@ -2698,20 +2551,12 @@ const AIChatDialog: React.FC = () => {
 
   // 外圈双击放大/缩小 - 放宽触发区域：在对话框任意非交互区域双击即可切换
   const handleOuterDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (hasDraggedRef.current) return;
-    if (
-      !shouldToggleByDblClick(
-        e.clientX,
-        e.clientY,
-        e.target as HTMLElement | null
-      )
-    )
-      return;
-    cancelPendingHistoryToggle();
-    toggleMaximize();
+    // 仅拦截冒泡，真正切换由唯一捕获监听器处理，避免重复 toggle
+    e.preventDefault();
+    e.stopPropagation();
   };
 
-  // 捕获阶段拦截双击：阻止事件继续到画布，并根据状态触发缩放
+  // 捕获阶段拦截双击：阻止事件继续到画布；切换由 window 唯一监听器处理
   const handleDoubleClickCapture = (e: React.MouseEvent<HTMLDivElement>) => {
     // 如果刚刚拖拽过，不触发双击事件
     if (hasDraggedRef.current) {
@@ -2735,7 +2580,7 @@ const AIChatDialog: React.FC = () => {
     // @ts-ignore
     e.nativeEvent?.stopImmediatePropagation?.();
 
-    toggleMaximize();
+    requestToggleExpand();
     suppressHistoryClickRef.current = false;
   };
 
@@ -2760,7 +2605,8 @@ const AIChatDialog: React.FC = () => {
         cancelPendingHistoryToggle();
         ev.stopPropagation();
         ev.preventDefault();
-        toggleMaximizeRef.current?.();
+        // 若事件已在 React 捕获阶段处理过，短锁会吞掉这次重复调用
+        toggleExpandRef.current?.();
       }
 
       // 外部屏蔽：卡片外侧一定范围内，阻止冒泡，防止 Flow 弹出节点面板
@@ -2854,7 +2700,7 @@ const AIChatDialog: React.FC = () => {
     return () => window.removeEventListener("mousemove", onMove, true);
   }, [isHistoryLocked, isMaximized, showHistory]);
 
-  // 捕获阶段拦截双击，避免触发 Flow 节点面板；根据状态决定触发区域
+  // 捕获阶段拦截双击，避免触发 Flow 节点面板；切换逻辑统一走 requestToggleExpand（短锁防抖）
   // 放在 early return 之前，避免 Hook 顺序问题
   useEffect(() => {
     const handler = (ev: MouseEvent) => {
@@ -2877,7 +2723,7 @@ const AIChatDialog: React.FC = () => {
         cancelPendingHistoryToggle();
         ev.stopPropagation();
         ev.preventDefault();
-        toggleMaximizeRef.current?.();
+        toggleExpandRef.current?.();
       }
     };
     const el = containerRef.current;
@@ -3012,7 +2858,6 @@ const AIChatDialog: React.FC = () => {
       : null;
   const canSend =
     currentInput.trim().length > 0 &&
-    !autoOptimizing &&
     !currentEffectiveImageLimitWarning &&
     !currentEffectiveManualModeWarning;
   const hasHistoryContent = messages.length > 0 || isStreaming;
@@ -3286,7 +3131,7 @@ const AIChatDialog: React.FC = () => {
                 if (!t) {
                   e.preventDefault();
                   e.stopPropagation();
-                  toggleMaximize();
+                  requestToggleExpand();
                   return;
                 }
                 const r = t.getBoundingClientRect();
@@ -3297,7 +3142,7 @@ const AIChatDialog: React.FC = () => {
                 if (!insideText) {
                   e.preventDefault();
                   e.stopPropagation();
-                  toggleMaximize();
+                  requestToggleExpand();
                   return;
                 }
                 // 判断是否在"外圈框"区域：靠近边缘的环（阈值 24px）
@@ -3310,7 +3155,7 @@ const AIChatDialog: React.FC = () => {
                 if (edgeDist <= 24) {
                   e.preventDefault();
                   e.stopPropagation();
-                  toggleMaximize();
+                  requestToggleExpand();
                 }
               } catch {}
             }}
@@ -3464,83 +3309,361 @@ const AIChatDialog: React.FC = () => {
                 }}
               />
 
-              {/* 左侧按钮组 */}
-              <div className='absolute flex items-center gap-2 left-2 bottom-2'>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
+              {/* 底部工具栏：左 + / 模型 / 比例 / HD / 思考 / 联网 / 扩写；右 语音 / 发送 */}
+              <div className='absolute inset-x-2 bottom-2 flex items-center justify-between gap-2'>
+                <div className='flex min-w-0 flex-wrap items-center gap-1.5'>
+                  {/* + 上传 */}
+                  <DropdownMenu
+                    open={isUploadMenuOpen}
+                    onOpenChange={setIsUploadMenuOpen}
+                  >
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
+                        data-chat-secondary-action='true'
+                        disabled={generationStatus.isGenerating}
+                        className={cn(
+                          "h-7 w-7 p-0 rounded-full transition-all duration-200",
+                          "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
+                          !generationStatus.isGenerating
+                            ? "hover:bg-liquid-glass-hover text-gray-700"
+                            : "opacity-50 cursor-not-allowed text-gray-400"
+                        )}
+                        title={lt("上传文件", "Upload files")}
+                      >
+                        <Plus className='h-3.5 w-3.5' />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align='start'
+                      side='top'
+                      sideOffset={8}
+                      className='w-auto min-w-[120px] rounded-lg border border-gray-200 bg-white/95 shadow-lg backdrop-blur-md'
+                    >
+                      <DropdownMenuItem
+                        onClick={() => {
+                          fileInputRef.current?.click();
+                        }}
+                        className='flex items-center gap-2 px-3 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50'
+                      >
+                        <Image className='w-4 h-4' />
+                        <span>{lt("上传图片", "Upload image")}</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          pdfInputRef.current?.click();
+                        }}
+                        className='flex items-center gap-2 px-3 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50'
+                      >
+                        <FileText className='w-4 h-4' />
+                        <span>{lt("上传PDF", "Upload PDF")}</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  {/* 模型选择 GPT-image-2 等 */}
+                  {!shouldHideImageParamControls && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          disabled={false}
+                          data-dropdown-trigger='true'
+                          className={cn(
+                            "h-7 pl-2 pr-3 flex select-none items-center gap-1 rounded-full text-xs transition-all duration-200",
+                            "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
+                            !generationStatus.isGenerating
+                              ? "hover:bg-gray-100 text-gray-700"
+                              : "opacity-50 cursor-not-allowed text-gray-400"
+                          )}
+                          title={t("chat.labels.quickSwitchDomesticModel")}
+                        >
+                          <span className='font-medium'>{providerButtonLabel}</span>
+                          <ChevronDown className='h-3.5 w-3.5 opacity-60' />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align='start'
+                        side={dropdownSide}
+                        sideOffset={8}
+                        className='dropdown-menu-root min-w-[220px] rounded-lg border border-slate-200 bg-white/95 shadow-lg backdrop-blur-md dark:!border-slate-200 dark:!bg-white/95'
+                      >
+                        <DropdownMenuLabel className='px-3 py-2 text-[11px] uppercase tracking-wide text-slate-400 dark:!text-slate-400'>
+                          {t("chat.labels.quickSwitchModel")}
+                        </DropdownMenuLabel>
+                        {providerToggleOptions.map((option) => {
+                          const isActive = aiProvider === option.value;
+                          return (
+                            <DropdownMenuItem
+                              key={option.value}
+                              onClick={(event) => {
+                                if (aiProvider !== option.value) {
+                                  console.log(
+                                    "🤖 切换 AI 提供商:",
+                                    option.value
+                                  );
+                                  setAIProvider(option.value, { source: "dialog" });
+                                }
+                                const root = (
+                                  event.currentTarget as HTMLElement
+                                ).closest(".dropdown-menu-root");
+                                const trigger = root?.querySelector(
+                                  '[data-dropdown-trigger="true"]'
+                                ) as HTMLButtonElement | null;
+                                if (trigger && !trigger.disabled) {
+                                  trigger.click();
+                                }
+                              }}
+                              className={cn(
+                                "flex items-start gap-2 px-3 py-2 text-xs",
+                                isActive
+                                  ? "bg-gray-100 text-gray-800 dark:!bg-gray-100 dark:!text-gray-800"
+                                  : "text-slate-600 hover:bg-gray-100 dark:!text-slate-600 dark:hover:!bg-gray-100"
+                              )}
+                            >
+                              <div className='flex-1 space-y-0.5'>
+                                <div className='font-medium leading-none'>
+                                  {option.label}
+                                </div>
+                                <div className='text-[11px] text-slate-400 leading-snug dark:!text-slate-400'>
+                                  {option.description}
+                                </div>
+                              </div>
+                              {isActive && (
+                                <Check className='h-3.5 w-3.5 text-slate-700 dark:!text-slate-700' />
+                              )}
+                            </DropdownMenuItem>
+                          );
+                        })}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+
+                  {/* 长宽比 */}
+                  {!shouldHideImageParamControls && (
                     <Button
+                      ref={aspectButtonRef}
+                      onClick={() => setIsAspectOpen((v) => !v)}
+                      disabled={false}
                       size='sm'
                       variant='outline'
-                      disabled={false}
-                      data-dropdown-trigger='true'
                       className={cn(
-                        "h-7 pl-2 pr-3 flex select-none items-center gap-1 rounded-full text-xs transition-all duration-200",
+                        "h-7 p-0 rounded-full transition-all duration-200",
                         "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
-                        manualAIMode !== "auto"
-                          ? "bg-gray-100 text-gray-800 border-gray-200"
-                          : !generationStatus.isGenerating
-                          ? "hover:bg-gray-100 text-gray-700"
+                        aspectRatio
+                          ? isBlackTheme
+                            ? "bg-[#1d1d1d] text-white border-[#404040] hover:bg-[#262626] px-2"
+                            : "bg-slate-900 text-white border-slate-900 hover:bg-slate-900 px-2"
+                          : "w-7",
+                        !aspectRatio && !generationStatus.isGenerating
+                          ? isBlackTheme
+                            ? "text-white"
+                            : "text-slate-700"
+                          : !aspectRatio && "opacity-50 cursor-not-allowed text-gray-400"
+                      )}
+                      title={aspectRatio ? lt(`长宽比: ${aspectRatio}`, `Aspect ratio: ${aspectRatio}`) : lt("选择长宽比", "Select aspect ratio")}
+                    >
+                      {aspectRatio ? (
+                        <span className='text-[10px] font-medium leading-none'>{aspectRatio}</span>
+                      ) : (
+                        <AspectRatioIcon className='h-3.5 w-3.5' />
+                      )}
+                    </Button>
+                  )}
+
+                  {/* 视频尺寸 */}
+                  {isVideoMode && (
+                    <Button
+                      ref={videoAspectButtonRef}
+                      onClick={() => setIsVideoAspectOpen((v) => !v)}
+                      disabled={false}
+                      size='sm'
+                      variant='outline'
+                      className={cn(
+                        "h-7 p-0 rounded-full transition-all duration-200",
+                        "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
+                        videoAspectRatio
+                          ? isBlackTheme
+                            ? "bg-[#1d1d1d] text-white border-[#404040] hover:bg-[#262626] px-2"
+                            : "bg-slate-900 text-white border-slate-900 hover:bg-slate-900 px-2"
+                          : "w-7",
+                        !generationStatus.isGenerating
+                          ? "text-slate-700"
                           : "opacity-50 cursor-not-allowed text-gray-400"
                       )}
+                      title={
+                        videoAspectRatio
+                          ? lt(`尺寸: ${videoAspectRatio}`, `Size: ${videoAspectRatio}`)
+                          : lt("选择尺寸", "Select size")
+                      }
                     >
-                      <SlidersHorizontal className='h-3.5 w-3.5' />
-                      <span className='font-medium'>{manualButtonLabel}</span>
+                      {videoAspectRatio ? (
+                        <span className='text-[10px] font-medium leading-none text-white'>
+                          {videoAspectRatio}
+                        </span>
+                      ) : (
+                        <AspectRatioIcon className='h-3.5 w-3.5' />
+                      )}
                     </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align='start'
-                    side={dropdownSide}
-                    sideOffset={8}
-                    className='dropdown-menu-root min-w-[220px] max-h-[400px] overflow-y-auto rounded-lg border border-slate-200 bg-white/95 shadow-lg backdrop-blur-md'
-                  >
-                    <DropdownMenuLabel className='px-3 py-2 text-[11px] uppercase tracking-wide text-slate-400'>
-                      快速切换模式
-                    </DropdownMenuLabel>
-                    {availableManualModeOptions.map((option) => {
-                      const isActive = manualAIMode === option.value;
-                      return (
-                        <DropdownMenuItem
-                          key={option.value}
-                          onClick={(event) => {
-                            setManualAIMode(option.value);
-                            const root = (
-                              event.currentTarget as HTMLElement
-                            ).closest(".dropdown-menu-root");
-                            const trigger = root?.querySelector(
-                              '[data-dropdown-trigger="true"]'
-                            ) as HTMLButtonElement | null;
-                            if (trigger && !trigger.disabled) {
-                              trigger.click();
-                            }
-                          }}
-                          className={cn(
-                            "flex items-start gap-2 px-3 py-2 text-xs",
-                            isActive
-                              ? "bg-gray-100 text-gray-800"
-                              : "text-slate-600"
-                          )}
-                        >
-                          <div className='flex-1 space-y-0.5'>
-                            <div className='font-medium leading-none'>
-                              {option.label}
-                            </div>
-                            <div className='text-[11px] text-slate-400 leading-snug'>
-                              {t(
-                                `chat.manualMode.${option.value}Desc`,
-                                option.description
-                              )}
-                            </div>
-                          </div>
-                          {isActive && (
-                            <Check className='h-3.5 w-3.5 text-white' />
-                          )}
-                        </DropdownMenuItem>
-                      );
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                  )}
 
-                {!shouldHideImageParamControls && (
+                  {/* HD / 分辨率 */}
+                  {showImageSizeControls && (
+                    <Button
+                      ref={imageSizeButtonRef}
+                      onClick={() => setIsImageSizeOpen((v) => !v)}
+                      disabled={false}
+                      size='sm'
+                      variant='outline'
+                      className={cn(
+                        "h-7 w-7 p-0 rounded-full transition-all duration-200 text-xs",
+                        "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
+                        imageSize
+                          ? isBlackTheme
+                            ? "bg-[#1d1d1d] text-white border-[#404040] hover:bg-[#262626]"
+                            : "bg-slate-900 text-white border-slate-900 hover:bg-slate-900"
+                          : !generationStatus.isGenerating
+                          ? isBlackTheme
+                            ? "text-white"
+                            : "text-slate-700"
+                          : "opacity-50 cursor-not-allowed text-gray-400"
+                      )}
+                      title={imageSize ? lt(`分辨率: ${imageSize}`, `Resolution: ${imageSize}`) : lt("选择分辨率", "Select resolution")}
+                    >
+                      <span className='font-medium text-[10px] leading-none'>
+                        {imageSize || "HD"}
+                      </span>
+                    </Button>
+                  )}
+
+                  {/* 视频时长 */}
+                  {isVideoMode && (
+                    <Button
+                      ref={videoDurationButtonRef}
+                      onClick={() => setIsVideoDurationOpen((v) => !v)}
+                      disabled={false}
+                      size='sm'
+                      variant='outline'
+                      className={cn(
+                        "h-7 w-7 p-0 rounded-full transition-all duration-200 text-xs",
+                        "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
+                        videoDurationSeconds
+                          ? isBlackTheme
+                            ? "bg-[#1d1d1d] text-white border-[#404040] hover:bg-[#262626]"
+                            : "bg-slate-900 text-white border-slate-900 hover:bg-slate-900"
+                          : !generationStatus.isGenerating
+                          ? "text-slate-700"
+                          : "opacity-50 cursor-not-allowed text-gray-400"
+                      )}
+                      title={
+                        videoDurationSeconds
+                          ? lt(`时长: ${videoDurationSeconds}秒`, `Duration: ${videoDurationSeconds}s`)
+                          : lt("选择时长", "Select duration")
+                      }
+                    >
+                      {videoDurationSeconds ? (
+                        <span className='font-medium text-[10px] leading-none text-white'>
+                          {videoDurationSeconds}s
+                        </span>
+                      ) : (
+                        <Clock className='h-3.5 w-3.5' />
+                      )}
+                    </Button>
+                  )}
+
+                  {/* 思考级别 */}
+                  {showThinkingLevelControls && (
+                    <Button
+                      ref={thinkingLevelButtonRef}
+                      onClick={() => setIsThinkingLevelOpen((v) => !v)}
+                      disabled={false}
+                      size='sm'
+                      variant='outline'
+                      className={cn(
+                        "h-7 w-7 p-0 rounded-full transition-all duration-200",
+                        "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
+                        thinkingLevel
+                          ? isBlackTheme
+                            ? "bg-[#1d1d1d] text-white border-[#404040] hover:bg-[#262626]"
+                            : "bg-slate-900 text-white border-slate-900 hover:bg-slate-900"
+                          : !generationStatus.isGenerating
+                          ? isBlackTheme
+                            ? "text-white"
+                            : "text-slate-700"
+                          : "opacity-50 cursor-not-allowed text-gray-400"
+                      )}
+                      title={
+                        thinkingLevel
+                          ? lt(
+                              `思考级别: ${thinkingLevel === "high" ? "高" : "低"}`,
+                              `Thinking level: ${thinkingLevel === "high" ? "High" : "Low"}`
+                            )
+                          : lt("选择思考级别", "Select thinking level")
+                      }
+                    >
+                      <Brain className='h-3.5 w-3.5' />
+                    </Button>
+                  )}
+
+                  {/* 联网搜索 */}
+                  {!shouldHideImageParamControls && (
+                    <Button
+                      onClick={toggleWebSearch}
+                      disabled={false}
+                      size='sm'
+                      variant='outline'
+                      className={cn(
+                        "h-7 w-7 p-0 rounded-full transition-all duration-200",
+                        "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
+                        !generationStatus.isGenerating
+                          ? enableWebSearch
+                            ? isBlackTheme
+                              ? "bg-[#1d1d1d] text-white border-[#404040] hover:bg-[#262626]"
+                              : "bg-slate-900 text-white border-slate-900 hover:bg-slate-900"
+                            : "text-slate-700"
+                          : "opacity-50 cursor-not-allowed text-gray-400"
+                      )}
+                      title={lt(
+                        `联网搜索: ${enableWebSearch ? "开启" : "关闭"} - 让AI获取实时信息`,
+                        `Web search: ${enableWebSearch ? "On" : "Off"} - Allow AI to fetch real-time info`
+                      )}
+                    >
+                      <MinimalGlobeIcon className='h-3.5 w-3.5' />
+                    </Button>
+                  )}
+
+                  {/* 预设提示词（后台配置） */}
+                  {!shouldHideImageParamControls && (
+                    <Button
+                      ref={promptButtonRef}
+                      size='sm'
+                      variant='outline'
+                      data-chat-secondary-action='true'
+                      onClick={handleTogglePresetPromptPanel}
+                      className={cn(
+                        "h-7 w-7 p-0 rounded-full transition-all duration-200",
+                        "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
+                        isPresetPromptPanelOpen
+                          ? isBlackTheme
+                            ? "bg-[#1d1d1d] text-white border-[#404040] hover:bg-[#262626]"
+                            : "bg-slate-900 text-white border-slate-900 hover:bg-slate-900"
+                          : !generationStatus.isGenerating
+                          ? "text-slate-700"
+                          : "opacity-50 cursor-not-allowed text-gray-400"
+                      )}
+                      title={lt(
+                        "点击打开预设提示词",
+                        "Click to open preset prompts"
+                      )}
+                      aria-pressed={isPresetPromptPanelOpen}
+                    >
+                      <BookOpen className='h-3.5 w-3.5' />
+                    </Button>
+                  )}
+                  {/* 模式切换（图中未展示，保留为靠后的图标入口） */}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -3549,40 +3672,35 @@ const AIChatDialog: React.FC = () => {
                         disabled={false}
                         data-dropdown-trigger='true'
                         className={cn(
-                          "h-7 pl-2 pr-3 flex select-none items-center gap-1 rounded-full text-xs transition-all duration-200",
+                          "h-7 w-7 p-0 rounded-full transition-all duration-200",
                           "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
-                          !generationStatus.isGenerating
+                          manualAIMode !== "auto"
+                            ? "bg-gray-100 text-gray-800 border-gray-200"
+                            : !generationStatus.isGenerating
                             ? "hover:bg-gray-100 text-gray-700"
                             : "opacity-50 cursor-not-allowed text-gray-400"
                         )}
-                        title={t("chat.labels.quickSwitchDomesticModel")}
+                        title={lt(`模式: ${manualButtonLabel}`, `Mode: ${manualButtonLabel}`)}
                       >
-                        <span className='font-medium'>{providerButtonLabel}</span>
-                        <ChevronDown className='h-3.5 w-3.5 opacity-60' />
+                        <SlidersHorizontal className='h-3.5 w-3.5' />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
                       align='start'
                       side={dropdownSide}
                       sideOffset={8}
-                      className='dropdown-menu-root min-w-[220px] rounded-lg border border-slate-200 bg-white/95 shadow-lg backdrop-blur-md dark:!border-slate-200 dark:!bg-white/95'
+                      className='dropdown-menu-root min-w-[220px] max-h-[400px] overflow-y-auto rounded-lg border border-slate-200 bg-white/95 shadow-lg backdrop-blur-md'
                     >
-                      <DropdownMenuLabel className='px-3 py-2 text-[11px] uppercase tracking-wide text-slate-400 dark:!text-slate-400'>
-                        {t("chat.labels.quickSwitchModel")}
+                      <DropdownMenuLabel className='px-3 py-2 text-[11px] uppercase tracking-wide text-slate-400'>
+                        快速切换模式
                       </DropdownMenuLabel>
-                      {providerToggleOptions.map((option) => {
-                        const isActive = aiProvider === option.value;
+                      {availableManualModeOptions.map((option) => {
+                        const isActive = manualAIMode === option.value;
                         return (
                           <DropdownMenuItem
                             key={option.value}
                             onClick={(event) => {
-                              if (aiProvider !== option.value) {
-                                console.log(
-                                  "🤖 切换 AI 提供商:",
-                                  option.value
-                                );
-                                setAIProvider(option.value, { source: "dialog" });
-                              }
+                              setManualAIMode(option.value);
                               const root = (
                                 event.currentTarget as HTMLElement
                               ).closest(".dropdown-menu-root");
@@ -3596,255 +3714,112 @@ const AIChatDialog: React.FC = () => {
                             className={cn(
                               "flex items-start gap-2 px-3 py-2 text-xs",
                               isActive
-                                ? "bg-gray-100 text-gray-800 dark:!bg-gray-100 dark:!text-gray-800"
-                                : "text-slate-600 hover:bg-gray-100 dark:!text-slate-600 dark:hover:!bg-gray-100"
+                                ? "bg-gray-100 text-gray-800"
+                                : "text-slate-600"
                             )}
                           >
                             <div className='flex-1 space-y-0.5'>
                               <div className='font-medium leading-none'>
                                 {option.label}
                               </div>
-                              <div className='text-[11px] text-slate-400 leading-snug dark:!text-slate-400'>
-                                {option.description}
+                              <div className='text-[11px] text-slate-400 leading-snug'>
+                                {t(
+                                  `chat.manualMode.${option.value}Desc`,
+                                  option.description
+                                )}
                               </div>
                             </div>
                             {isActive && (
-                              <Check className='h-3.5 w-3.5 text-slate-700 dark:!text-slate-700' />
+                              <Check className='h-3.5 w-3.5 text-white' />
                             )}
                           </DropdownMenuItem>
                         );
                       })}
                     </DropdownMenuContent>
                   </DropdownMenu>
-                )}
 
-                {MULTIPLIER_ENABLED_MODES.includes(manualAIMode) && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type='button'
-                        className={cn(
-                          "h-7 px-2 text-[11px] font-normal text-slate-700 transition-colors duration-150",
-                          "hover:text-slate-900 active:translate-y-[0.5px]"
-                        )}
-                        title={lt("选择生成倍数", "Select multiplier")}
-                        aria-label={lt(`倍数 ${autoModeMultiplier}X`, `Multiplier ${autoModeMultiplier}X`)}
+                  {MULTIPLIER_ENABLED_MODES.includes(manualAIMode) && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type='button'
+                          className={cn(
+                            "h-7 px-2 text-[11px] font-normal text-slate-700 transition-colors duration-150",
+                            "hover:text-slate-900 active:translate-y-[0.5px]"
+                          )}
+                          title={lt("选择生成倍数", "Select multiplier")}
+                          aria-label={lt(`倍数 ${autoModeMultiplier}X`, `Multiplier ${autoModeMultiplier}X`)}
+                        >
+                          <span className='inline-flex items-baseline'>
+                            <span className='text-sm leading-none'>{autoModeMultiplier}</span>
+                            <span className='ml-0.5 text-[9px] leading-none'>X</span>
+                          </span>
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align='start'
+                        side={dropdownSide}
+                        sideOffset={8}
+                        className='min-w-[80px] rounded-lg border border-slate-200 bg-white/95 shadow-lg backdrop-blur-md'
                       >
-                        <span className='inline-flex items-baseline'>
-                          <span className='text-sm leading-none'>{autoModeMultiplier}</span>
-                          <span className='ml-0.5 text-[9px] leading-none'>X</span>
-                        </span>
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align='start'
-                      side={dropdownSide}
-                      sideOffset={8}
-                      className='min-w-[80px] rounded-lg border border-slate-200 bg-white/95 shadow-lg backdrop-blur-md'
-                    >
-                      <DropdownMenuLabel className='px-3 py-2 text-[11px] uppercase tracking-wide text-slate-400'>
-                        {lt("生成倍数", "Multiplier")}
-                      </DropdownMenuLabel>
-                      {AUTO_MODE_MULTIPLIERS.map((multiplier) => {
-                        const isActive = autoModeMultiplier === multiplier;
-                        return (
-                          <DropdownMenuItem
-                            key={multiplier}
-                            onClick={() => setAutoModeMultiplier(multiplier)}
-                            className={cn(
-                              "flex items-center gap-2 px-3 py-2 text-xs",
-                              isActive
-                                ? "bg-gray-100 text-gray-800"
-                                : "text-slate-600"
-                            )}
-                          >
-                            <span className='inline-flex items-baseline'>
-                              <span className='text-sm leading-none'>{multiplier}</span>
-                              <span className='ml-0.5 text-[9px] leading-none'>X</span>
-                            </span>
-                            {isActive && (
-                              <Check className='h-3.5 w-3.5 text-gray-600' />
-                            )}
-                          </DropdownMenuItem>
-                        );
-                      })}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
+                        <DropdownMenuLabel className='px-3 py-2 text-[11px] uppercase tracking-wide text-slate-400'>
+                          {lt("生成倍数", "Multiplier")}
+                        </DropdownMenuLabel>
+                        {AUTO_MODE_MULTIPLIERS.map((multiplier) => {
+                          const isActive = autoModeMultiplier === multiplier;
+                          return (
+                            <DropdownMenuItem
+                              key={multiplier}
+                              onClick={() => setAutoModeMultiplier(multiplier)}
+                              className={cn(
+                                "flex items-center gap-2 px-3 py-2 text-xs",
+                                isActive
+                                  ? "bg-gray-100 text-gray-800"
+                                  : "text-slate-600"
+                              )}
+                            >
+                              <span className='inline-flex items-baseline'>
+                                <span className='text-sm leading-none'>{multiplier}</span>
+                                <span className='ml-0.5 text-[9px] leading-none'>X</span>
+                              </span>
+                              {isActive && (
+                                <Check className='h-3.5 w-3.5 text-gray-600' />
+                              )}
+                            </DropdownMenuItem>
+                          );
+                        })}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
 
-                <SpeechToTextButton
-                  value={currentInput}
-                  onChange={setCurrentInput}
-                  disabled={generationStatus.isGenerating}
-                  onError={(message) => showToast(message, "error")}
-                />
+                </div>
+
+                <div className='flex shrink-0 items-center gap-1.5'>
+                  <SpeechToTextButton
+                    value={currentInput}
+                    onChange={setCurrentInput}
+                    disabled={generationStatus.isGenerating}
+                    onError={(message) => showToast(message, "error")}
+                  />
+                  <Button
+                    onClick={handleSend}
+                    disabled={!canSend}
+                    size='sm'
+                    variant='outline'
+                    data-chat-primary-action='true'
+                    title={sendButtonTitle}
+                    className={cn(
+                      "h-7 w-7 p-0 rounded-full transition-all duration-200",
+                      "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
+                      canSend
+                        ? "hover:bg-liquid-glass-hover text-gray-700"
+                        : "opacity-50 cursor-not-allowed text-gray-400"
+                    )}
+                  >
+                    <Play className='h-3.5 w-3.5' />
+                  </Button>
+                </div>
               </div>
-
-              {/* 长宽比选择按钮 */}
-              {!shouldHideImageParamControls && (
-                <Button
-                  ref={aspectButtonRef}
-                  onClick={() => setIsAspectOpen((v) => !v)}
-                  disabled={false}
-                  size='sm'
-                  variant='outline'
-                  className={cn(
-                    "absolute right-56 bottom-2 h-7 p-0 rounded-full transition-all duration-200",
-                    "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
-                    aspectRatio
-                      ? isBlackTheme
-                        ? "bg-[#1d1d1d] text-white border-[#404040] hover:bg-[#262626] px-2"
-                        : "bg-slate-900 text-white border-slate-900 hover:bg-slate-900 px-2"
-                      : "w-7",
-                    !aspectRatio && !generationStatus.isGenerating
-                      ? isBlackTheme
-                        ? "text-white"
-                        : "text-slate-700"
-                      : !aspectRatio && "opacity-50 cursor-not-allowed text-gray-400"
-                  )}
-                  title={aspectRatio ? lt(`长宽比: ${aspectRatio}`, `Aspect ratio: ${aspectRatio}`) : lt("选择长宽比", "Select aspect ratio")}
-                >
-                  {aspectRatio ? (
-                    <span className='text-[10px] font-medium leading-none'>{aspectRatio}</span>
-                  ) : (
-                    <AspectRatioIcon className='h-3.5 w-3.5' />
-                  )}
-                </Button>
-              )}
-
-              {/* 视频尺寸选择按钮 */}
-              {isVideoMode && (
-                <Button
-                  ref={videoAspectButtonRef}
-                  onClick={() => setIsVideoAspectOpen((v) => !v)}
-                  disabled={false}
-                  size='sm'
-                  variant='outline'
-                  className={cn(
-                    "absolute right-32 bottom-2 h-7 p-0 rounded-full transition-all duration-200",
-                    "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
-                    videoAspectRatio
-                      ? isBlackTheme
-                        ? "bg-[#1d1d1d] text-white border-[#404040] hover:bg-[#262626] px-2"
-                        : "bg-slate-900 text-white border-slate-900 hover:bg-slate-900 px-2"
-                      : "w-7",
-                    !generationStatus.isGenerating
-                      ? "text-slate-700"
-                      : "opacity-50 cursor-not-allowed text-gray-400"
-                  )}
-                  title={
-                    videoAspectRatio
-                      ? lt(`尺寸: ${videoAspectRatio}`, `Size: ${videoAspectRatio}`)
-                      : lt("选择尺寸", "Select size")
-                  }
-                >
-                  {videoAspectRatio ? (
-                    <span className='text-[10px] font-medium leading-none text-white'>
-                      {videoAspectRatio}
-                    </span>
-                  ) : (
-                    <AspectRatioIcon className='h-3.5 w-3.5' />
-                  )}
-                </Button>
-              )}
-
-              {/* 视频时长选择按钮 */}
-              {isVideoMode && (
-                <Button
-                  ref={videoDurationButtonRef}
-                  onClick={() => setIsVideoDurationOpen((v) => !v)}
-                  disabled={false}
-                  size='sm'
-                  variant='outline'
-                  className={cn(
-                    "absolute right-24 bottom-2 h-7 w-7 p-0 rounded-full transition-all duration-200 text-xs",
-                    "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
-                    videoDurationSeconds
-                      ? isBlackTheme
-                        ? "bg-[#1d1d1d] text-white border-[#404040] hover:bg-[#262626]"
-                        : "bg-slate-900 text-white border-slate-900 hover:bg-slate-900"
-                      : !generationStatus.isGenerating
-                      ? "text-slate-700"
-                      : "opacity-50 cursor-not-allowed text-gray-400"
-                  )}
-                  title={
-                    videoDurationSeconds
-                      ? lt(`时长: ${videoDurationSeconds}秒`, `Duration: ${videoDurationSeconds}s`)
-                      : lt("选择时长", "Select duration")
-                  }
-                >
-                  {videoDurationSeconds ? (
-                    <span className='font-medium text-[10px] leading-none text-white'>
-                      {videoDurationSeconds}s
-                    </span>
-                  ) : (
-                    <Clock className='h-3.5 w-3.5' />
-                  )}
-                </Button>
-              )}
-
-              {/* 高清图片设置按钮 - Gemini Pro 和 Banana API */}
-              {showImageSizeControls && (
-                <Button
-                  ref={imageSizeButtonRef}
-                  onClick={() => setIsImageSizeOpen((v) => !v)}
-                  disabled={false}
-                  size='sm'
-                  variant='outline'
-                  className={cn(
-                    "absolute right-48 bottom-2 h-7 w-7 p-0 rounded-full transition-all duration-200 text-xs",
-                    "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
-                    imageSize
-                      ? isBlackTheme
-                        ? "bg-[#1d1d1d] text-white border-[#404040] hover:bg-[#262626]"
-                        : "bg-slate-900 text-white border-slate-900 hover:bg-slate-900"
-                      : !generationStatus.isGenerating
-                      ? isBlackTheme
-                        ? "text-white"
-                        : "text-slate-700"
-                      : "opacity-50 cursor-not-allowed text-gray-400"
-                  )}
-                  title={imageSize ? lt(`分辨率: ${imageSize}`, `Resolution: ${imageSize}`) : lt("选择分辨率", "Select resolution")}
-                >
-                  <span className='font-medium text-[10px] leading-none'>
-                    {imageSize || "HD"}
-                  </span>
-                </Button>
-              )}
-
-              {/* 思考级别按钮 - Gemini Pro 和 Banana API */}
-              {showThinkingLevelControls && (
-                <Button
-                  ref={thinkingLevelButtonRef}
-                  onClick={() => setIsThinkingLevelOpen((v) => !v)}
-                  disabled={false}
-                  size='sm'
-                  variant='outline'
-                  className={cn(
-                    "absolute right-40 bottom-2 h-7 w-7 p-0 rounded-full transition-all duration-200",
-                    "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
-                    thinkingLevel
-                      ? isBlackTheme
-                        ? "bg-[#1d1d1d] text-white border-[#404040] hover:bg-[#262626]"
-                        : "bg-slate-900 text-white border-slate-900 hover:bg-slate-900"
-                      : !generationStatus.isGenerating
-                      ? isBlackTheme
-                        ? "text-white"
-                        : "text-slate-700"
-                      : "opacity-50 cursor-not-allowed text-gray-400"
-                  )}
-                  title={
-                    thinkingLevel
-                      ? lt(
-                          `思考级别: ${thinkingLevel === "high" ? "高" : "低"}`,
-                          `Thinking level: ${thinkingLevel === "high" ? "High" : "Low"}`
-                        )
-                      : lt("选择思考级别", "Select thinking level")
-                  }
-                >
-                  <Brain className='h-3.5 w-3.5' />
-                </Button>
-              )}
 
               {isAspectOpen &&
                 typeof document !== "undefined" &&
@@ -4086,151 +4061,14 @@ const AIChatDialog: React.FC = () => {
                   document.body
                 )}
 
-              {/* 联网搜索开关 */}
-              {!shouldHideImageParamControls && (
-                <Button
-                  onClick={toggleWebSearch}
-                  disabled={false}
-                  size='sm'
-                  variant='outline'
-                  className={cn(
-                    "absolute right-32 bottom-2 h-7 w-7 p-0 rounded-full transition-all duration-200",
-                    "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
-                    !generationStatus.isGenerating
-                      ? enableWebSearch
-                        ? isBlackTheme
-                          ? "bg-[#1d1d1d] text-white border-[#404040] hover:bg-[#262626]"
-                          : "bg-slate-900 text-white border-slate-900 hover:bg-slate-900"
-                        : "text-slate-700"
-                      : "opacity-50 cursor-not-allowed text-gray-400"
-                  )}
-                  title={lt(
-                    `联网搜索: ${enableWebSearch ? "开启" : "关闭"} - 让AI获取实时信息`,
-                    `Web search: ${enableWebSearch ? "On" : "Off"} - Allow AI to fetch real-time info`
-                  )}
-                >
-                  <MinimalGlobeIcon className='h-3.5 w-3.5' />
-                </Button>
-              )}
-
-              {/* 提示词扩写按钮：单击切换自动扩写，长按打开配置面板 */}
-              {!shouldHideImageParamControls && (
-                <Button
-                  ref={promptButtonRef}
-                  size='sm'
-                  variant='outline'
-                  data-chat-secondary-action='true'
-                  disabled={autoOptimizing}
-                  className={cn(
-                    "absolute right-24 bottom-2 h-7 w-7 p-0 rounded-full transition-all duration-200",
-                    "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
-                    autoOptimizeEnabled
-                      ? isBlackTheme
-                        ? "bg-[#1d1d1d] text-white border-[#404040] hover:bg-[#262626]"
-                        : "bg-slate-900 text-white border-slate-900 hover:bg-slate-900"
-                      : !generationStatus.isGenerating && !autoOptimizing
-                      ? "text-slate-700"
-                      : "opacity-50 cursor-not-allowed text-gray-400"
-                  )}
-                  title={
-                    autoOptimizeEnabled
-                      ? lt("自动扩写已开启（单击关闭，长按打开设置面板）", "Auto prompt expansion is on (click to disable, long-press for settings)")
-                      : lt("单击开启自动扩写，长按打开扩写设置面板", "Click to enable auto expansion, long-press for settings")
-                  }
-                  onPointerDown={handlePromptButtonPointerDown}
-                  onPointerUp={handlePromptButtonPointerUp}
-                  onPointerLeave={handlePromptButtonPointerLeave}
-                  onPointerCancel={handlePromptButtonPointerCancel}
-                  aria-pressed={autoOptimizeEnabled}
-                >
-                  {autoOptimizing ? (
-                    <LoadingSpinner size='sm' />
-                  ) : (
-                    <BookOpen className='h-3.5 w-3.5' />
-                  )}
-                </Button>
-              )}
-
-              {/* +号上传按钮 - 替换原来的上传图片按钮位置 */}
-              <DropdownMenu
-                open={isUploadMenuOpen}
-                onOpenChange={setIsUploadMenuOpen}
-              >
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type='button'
-                    size='sm'
-                    variant='outline'
-                    data-chat-secondary-action='true'
-                    disabled={generationStatus.isGenerating}
-                    className={cn(
-                      "absolute right-12 bottom-2 h-7 w-7 p-0 rounded-full transition-all duration-200",
-                      "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
-                      !generationStatus.isGenerating
-                        ? "hover:bg-liquid-glass-hover text-gray-700"
-                        : "opacity-50 cursor-not-allowed text-gray-400"
-                    )}
-                    title={lt("上传文件", "Upload files")}
-                  >
-                    <Plus className='h-3.5 w-3.5' />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align='end'
-                  side='top'
-                  sideOffset={40}
-                  className='w-auto min-w-[120px] rounded-lg border border-gray-200 bg-white/95 shadow-lg backdrop-blur-md'
-                >
-                  <DropdownMenuItem
-                    onClick={() => {
-                      fileInputRef.current?.click();
-                    }}
-                    className='flex items-center gap-2 px-3 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50'
-                  >
-                    <Image className='w-4 h-4' />
-                    <span>{lt("上传图片", "Upload image")}</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      pdfInputRef.current?.click();
-                    }}
-                    className='flex items-center gap-2 px-3 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50'
-                  >
-                    <FileText className='w-4 h-4' />
-                    <span>{lt("上传PDF", "Upload PDF")}</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              {/* 发送按钮 */}
-              <Button
-                onClick={handleSend}
-                disabled={!canSend}
-                size='sm'
-                variant='outline'
-                data-chat-primary-action='true'
-                title={sendButtonTitle}
-                className={cn(
-                  "absolute right-4 bottom-2 h-7 w-7 p-0 rounded-full transition-all duration-200",
-                  "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
-                  canSend
-                    ? "hover:bg-liquid-glass-hover text-gray-700"
-                    : "opacity-50 cursor-not-allowed text-gray-400"
-                )}
-              >
-                <Play className='h-3.5 w-3.5' />
-              </Button>
             </div>
 
-            <PromptOptimizationPanel
-              ref={promptPanelRef}
-              isOpen={isPromptPanelOpen}
-              currentInput={currentInput}
-              settings={promptSettings}
-              onSettingsChange={handlePromptSettingsChange}
-              onApplyToInput={handleApplyOptimizedToInput}
-              onSendOptimized={handleSendOptimizedFromPanel}
-              autoOptimizeEnabled={autoOptimizeEnabled}
+            <PresetPromptPanel
+              isOpen={isPresetPromptPanelOpen}
+              onClose={() => setIsPresetPromptPanelOpen(false)}
+              onSelectPrompt={(content) => {
+                setCurrentInput(content);
+              }}
               anchorRef={promptButtonRef}
               containerRef={dialogRef}
             />

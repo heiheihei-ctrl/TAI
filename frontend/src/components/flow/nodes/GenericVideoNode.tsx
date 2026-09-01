@@ -1257,14 +1257,14 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
             );
       return [
         lt("图片大小：单图建议不超过 30MB", "Image size: each image should be <= 30MB"),
-        lt("生成时长：4-15 秒", "Output duration: 4-15s"),
+        lt("生成时长：4-30 秒", "Output duration: 4-30s"),
         resolutionTip,
         lt("参考视频最多 3 条；音频最多 3 条且每条≤5秒", "Video refs <=3; audio refs <=3 and <=5s each"),
       ];
     }
     return [
       lt("图片大小：单图建议不超过 30MB", "Image size: each image should be <= 30MB"),
-      lt("生成时长：4-12 秒", "Output duration: 4-12s"),
+      lt("生成时长：4-30 秒", "Output duration: 4-30s"),
       lt("分辨率/尺寸：720P；16:9、9:16、1:1", "Resolution/ratio: 720P; 16:9, 9:16, 1:1"),
     ];
   }, [isSeedance20Model, isSeedanceModel, lt, seedanceModel]);
@@ -2355,7 +2355,32 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
               <HelpCircle size={14} />
             </button>
           )}
-          <button
+          <div style={{ position: "relative", display: "inline-flex" }}>
+            {isSeedance25Model ? (
+              <span
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  top: -7,
+                  right: -8,
+                  zIndex: 2,
+                  padding: "1px 5px",
+                  borderRadius: 999,
+                  background: "linear-gradient(135deg, #ef4444, #f97316)",
+                  color: "#fff",
+                  fontSize: 9,
+                  fontWeight: 800,
+                  lineHeight: 1.2,
+                  letterSpacing: "0.02em",
+                  boxShadow: "0 2px 6px rgba(249, 115, 22, 0.45)",
+                  pointerEvents: "none",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                8折
+              </span>
+            ) : null}
+            <button
             className="tanva-video-header-btn tanva-video-header-run run-btn-with-credit"
             onClick={onRun}
             onMouseDown={handleButtonMouseDown}
@@ -2391,7 +2416,8 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
                   ) : null}
                 </>
               )}
-          </button>
+            </button>
+          </div>
           <button
             className="tanva-video-header-btn tanva-video-header-share"
             onClick={() => copyVideoLink(data.videoUrl)}

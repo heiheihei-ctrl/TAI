@@ -1116,6 +1116,35 @@ export async function saveEventSettingsConfig(
   });
 }
 
+export const ACTIVITY_SETTINGS_KEY = "activity_settings";
+
+export type ActivitySettingsConfig = EventSettingsConfig;
+
+export async function getActivitySettingsConfig(): Promise<ActivitySettingsConfig> {
+  try {
+    const setting = await getSetting(ACTIVITY_SETTINGS_KEY);
+    return parseEventSettingsValue(setting.value);
+  } catch {
+    return { ...EMPTY_EVENT_SETTINGS };
+  }
+}
+
+export async function saveActivitySettingsConfig(
+  config: ActivitySettingsConfig
+): Promise<SystemSetting> {
+  return upsertSetting({
+    key: ACTIVITY_SETTINGS_KEY,
+    value: JSON.stringify({
+      images: config.images,
+      copy: config.copy.trim(),
+      link: config.link.trim(),
+      eventAt: config.eventAt.trim(),
+      eventEndAt: config.eventEndAt.trim(),
+    }),
+    description: "活动设置（画布页弹窗：多图、文案、跳转链接、开始/结束时间）",
+  });
+}
+
 export async function previewManagedPricing(
   data: ManagedPricingPreviewRequest
 ): Promise<ManagedPricingPreviewResponse> {
