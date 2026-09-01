@@ -6,6 +6,8 @@ dist/
 
 # pi 运行时数据（含会话/对话历史，勿入库）
 .pi-data/
+# 会话/资产持久化快照（含用户会话内容，勿入库；SESSION_STORE_DIR 可改位置）
+.tgagent-data/
 # 临时测试产物
 .tmp-tests/
 # WorkBuddy agent 内部状态

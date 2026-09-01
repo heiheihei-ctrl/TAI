@@ -371,6 +371,83 @@ async function main(): Promise<void> {
     await isoGw.close();
   }
 
+  // ---- ⑪ lastSeq 补发：上一轮 SSE 关闭之后才到达的事件不能丢 ----
+  // 真实场景：视频轮询是跨轮次的，视频完成往往在本轮 /chat 结束之后才落地，
+  // 那时旧连接已断开、事件只进了 ring 缓冲，必须由下一轮带 lastSeq 取回。
+  {
+    const rsCfg = { ...base, deepseek: { ...base.deepseek, apiKey: "" } };
+    const rsSessions = new GatewaySessions(
+      rsCfg, new AssetStore(), new MockTaskSource({ imageDelayMs: [100, 200] }), () => undefined,
+    );
+    const rsGw = await startGateway({ port: 0, sessions: rsSessions, log: () => undefined });
+    const rsOrigin = `http://127.0.0.1:${rsGw.port}`;
+    const token = "user-late-token";
+    const rsUserId = (await import("node:crypto"))
+      .createHash("sha256").update(token).digest("hex").slice(0, 16);
+
+    const round1 = await fetch(`${rsOrigin}/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ projectId: "p_resync", sessionId: "r1", text: "做一个办公楼方案" }),
+    });
+    const r1 = await readSse(round1);
+    assert(r1.sawDone && r1.events.length > 0, "⑪ 第一轮正常结束");
+    // 注意：收尾帧是 `event: done` + `data: {}`，没有 seq 字段，必须过滤掉，
+    // 否则 Math.max 会算出 NaN，lastSeq 传过去就成了 null（typeof 检查不通过）
+    const maxSeq = r1.events.reduce(
+      (m, e) => (typeof e.seq === "number" ? Math.max(m, e.seq) : m),
+      0,
+    );
+
+    // 模拟"本轮结束之后才到达"的视频完成事件
+    const rec = rsSessions.get("p_resync", "r1", rsUserId);
+    assert(!!rec, "⑪ 能取到第一轮创建的会话");
+    rec!.emit({
+      type: "asset.video_completed",
+      sessionId: "r1",
+      jobId: "job_late",
+      asset: {
+        id: "asset_late",
+        projectId: "p_resync",
+        kind: "video",
+        url: "https://example.com/late.mp4",
+        parentIds: [],
+        operation: "video",
+        meta: {},
+        deleted: false,
+        createdAt: new Date().toISOString(),
+      },
+    });
+
+    const round2 = await fetch(`${rsOrigin}/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        projectId: "p_resync", sessionId: "r1", text: "再改一版", lastSeq: maxSeq,
+      }),
+    });
+    const r2 = await readSse(round2);
+    assert(
+      r2.events.some((e) => e.body?.type === "asset.video_completed"),
+      "⑪ 带 lastSeq 的下一轮补发了漏掉的事件",
+    );
+
+    // 对照：不带 lastSeq 不应重放历史，否则每轮都会把老事件再发一遍
+    const round3 = await fetch(`${rsOrigin}/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ projectId: "p_resync", sessionId: "r1", text: "再改一版" }),
+    });
+    const r3 = await readSse(round3);
+    assert(
+      !r3.events.some((e) => e.body?.type === "asset.video_completed"),
+      "⑪ 不带 lastSeq 不补发（避免重复重放）",
+    );
+
+    await rsSessions.disposeAll();
+    await rsGw.close();
+  }
+
   if (failed > 0) {
     console.error(`\n${failed} 项失败`);
     process.exit(1);

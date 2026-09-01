@@ -25,7 +25,7 @@ export interface SelectionRef {
   x?: number;
   y?: number;
   width?: number;
-  /** Shift+框选产生的局部区域（图片**像素**坐标），qianduan 原型上报，存在时表示局部重绘意图 */
+  /** Shift+框选产生的局部区域（图片**像素**坐标），存在时表示局部重绘意图 */
   regionRect?: { x: number; y: number; w: number; h: number };
   /**
    * 局部区域（**归一化** 0–1），TAI 前端契约（`PreciseEditContext.cropRectNormalized`）。

@@ -8,6 +8,7 @@ import { MockTaskSource } from "./tasks/mockSource.js";
 import { TaiTaskSource } from "./tasks/taiSource.js";
 import { QianwenTaskSource } from "./tasks/qianwenSource.js";
 import { GatewaySessions } from "./gateway/sessions.js";
+import { SessionStore } from "./gateway/sessionStore.js";
 import { startGateway } from "./gateway/wsServer.js";
 import type { GenerationTaskSource } from "./tasks/types.js";
 
@@ -35,6 +36,10 @@ async function main(): Promise<void> {
   const sessions = new GatewaySessions(cfg, assets, taskSource);
   const log = (line: string) => console.log(`${new Date().toISOString()} ${line}`);
 
+  // 会话/资产持久化：默认 .tgagent-data（SESSION_STORE_DIR=off 可关闭）
+  const store = new SessionStore(cfg.sessionStoreDir, log);
+  await sessions.init(store);
+
   const gw = await startGateway({
     port: cfg.port,
     host: cfg.host,
@@ -53,6 +58,11 @@ async function main(): Promise<void> {
       (cfg.taskSource === "tai" && cfg.tai.apiBaseUrl
         ? `（后端: ${cfg.tai.apiBaseUrl}，生图: ${cfg.tai.imageProvider}，视频: ${cfg.tai.videoProvider}）`
         : ""),
+  );
+  log(
+    store.enabled
+      ? `  会话持久化: ${cfg.sessionStoreDir}（SESSION_STORE_DIR=off 可关闭）`
+      : `  会话持久化: 关闭（SESSION_STORE_DIR 未启用）`,
   );
   log(
     cfg.deepseek.apiKey

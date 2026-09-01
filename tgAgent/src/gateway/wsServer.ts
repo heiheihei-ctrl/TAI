@@ -273,27 +273,55 @@ export { MockTaskSource };
 /** 单轮总上限，仅作兜底——正常情况下 handleSend 返回即结束，此定时器不该被触发 */
 const BFF_CHAT_MAX_MS = 180_000;
 
-/** 每 IP 滑动窗口限流（每个网关实例独立桶） */
+/** 滑动窗口限流（每个网关实例独立桶；键可为 user: 或 ip: 前缀） */
 function chatRateLimited(
   buckets: Map<string, number[]>,
-  ip: string,
+  key: string,
   max: number,
   windowMs: number,
 ): boolean {
   const now = Date.now();
-  const arr = (buckets.get(ip) ?? []).filter((t) => now - t < windowMs);
+  const arr = (buckets.get(key) ?? []).filter((t) => now - t < windowMs);
   if (arr.length >= max) {
-    buckets.set(ip, arr);
+    buckets.set(key, arr);
     return true;
   }
   arr.push(now);
-  buckets.set(ip, arr);
+  buckets.set(key, arr);
   if (buckets.size > 10_000) {
     for (const [k, v] of buckets) {
       if (v.every((t) => now - t >= windowMs)) buckets.delete(k);
     }
   }
   return false;
+}
+
+/**
+ * 请求身份派生（BFF /chat）。
+ * 优先级：TAI 后端透传的稳定用户标识（X-User-Id） > bearer 哈希 > anon。
+ * ⚠️ 不能只用 bearer：TAI 的 access token 只有 900s 就刷新一次，token 一换
+ * 会话键 (projectId, userId, sessionId) 就变，上一轮的图与需求档案会全部失联。
+ * 不加来源前缀：保持 userId 形态稳定（既有会话键与测试均按裸 sha256 前 16 位派生）。
+ */
+function deriveIdentity(req: IncomingMessage): {
+  bearer: string;
+  teamId: string | undefined;
+  userId: string;
+  ip: string;
+} {
+  const authRaw = req.headers["authorization"];
+  const bearer = typeof authRaw === "string" ? authRaw.replace(/^Bearer\s+/i, "").trim() : "";
+  const teamRaw = req.headers["x-team-id"];
+  const teamId = typeof teamRaw === "string" && teamRaw.trim() ? teamRaw.trim() : undefined;
+  const stableRaw = req.headers["x-user-id"];
+  const stableUser = typeof stableRaw === "string" ? stableRaw.trim() : "";
+  const userId = stableUser
+    ? createHash("sha256").update(stableUser).digest("hex").slice(0, 16)
+    : bearer
+      ? createHash("sha256").update(bearer).digest("hex").slice(0, 16)
+      : "anon";
+  const ip = req.socket.remoteAddress ?? "unknown";
+  return { bearer, teamId, userId, ip };
 }
 
 /**
@@ -332,10 +360,13 @@ async function handleBffChat(
     }
   }
 
-  // ── 每 IP 限流 ──
-  const ip = req.socket.remoteAddress ?? "unknown";
+  // ── 限流：优先按用户维度（X-User-Id / bearer 派生 userId），无身份才回退 IP ──
+  // ⚠️ 不能按纯 IP：BFF 转发后所有用户共用同一个出口 IP，按 IP 限会互相误伤。
+  const identity = deriveIdentity(req);
   const rl = opts.chatRateLimit ?? { max: 10, windowMs: 10_000 };
-  if (chatRateLimited(opts.chatRateBuckets, ip, rl.max, rl.windowMs)) {
+  const rateKey =
+    identity.userId !== "anon" ? `user:${identity.userId}` : `ip:${identity.ip}`;
+  if (chatRateLimited(opts.chatRateBuckets, rateKey, rl.max, rl.windowMs)) {
     res.writeHead(429, { "content-type": "application/json" })
       .end(JSON.stringify({ error: "rate_limited" }));
     return;
@@ -368,6 +399,8 @@ async function handleBffChat(
     text?: string;
     selectionRefs?: SelectionRef[];
     attachments?: { mediaType: string; data: string }[];
+    /** 客户端已知最新下行 seq；带上来才会补发上一轮结束后的遗漏事件 */
+    lastSeq?: number;
   };
   try {
     payload = JSON.parse(Buffer.concat(chunks).toString("utf-8") || "{}");
@@ -384,21 +417,14 @@ async function handleBffChat(
     return;
   }
 
-  // ── 用户身份派生（bearer hash → userId，隔离不同租户的会话） ──
-  const authRaw = req.headers["authorization"];
-  const bearer = typeof authRaw === "string" ? authRaw.replace(/^Bearer\s+/i, "").trim() : "";
-  const teamRaw = req.headers["x-team-id"];
-  const userId = bearer
-    ? createHash("sha256").update(bearer).digest("hex").slice(0, 16)
-    : "anon";
+  // ── 用户身份派生（见 deriveIdentity：X-User-Id > bearer 哈希 > anon） ──
+  const { bearer, teamId, userId } = identity;
 
   const record = opts.sessions.getOrCreate(payload.projectId ?? "p_demo", payload.sessionId, userId);
 
   // ── 凭证注入（在 SSE 头之前，以便跨租户拒绝时返回 409 JSON） ──
   try {
-    record.applyBffAuth(
-      bearer ? { bearer, teamId: typeof teamRaw === "string" && teamRaw.trim() ? teamRaw.trim() : undefined } : undefined,
-    );
+    record.applyBffAuth(bearer ? { bearer, teamId } : undefined);
   } catch (err) {
     if (err instanceof TaskSourceError) {
       const { code, message } = mapTaskSourceErrorToProtocol(err);
@@ -454,6 +480,28 @@ async function handleBffChat(
       finish();
     }
   });
+
+  // ── 跨轮次补发 ──
+  // 视频完成等异步事件可能在本轮 SSE 关闭之后才到达（视频轮询是跨轮次的），
+  // 那时旧连接已断开，事件只进了 ring 缓冲。客户端下一轮携带 lastSeq 时在这里重放，
+  // 否则这些事件永久丢失。位置必须在 attach 之后、handleSend 之前：
+  // 本轮新产生的事件走上面的 attach 通道，不会与补发重复。
+  if (typeof payload.lastSeq === "number" && !finished) {
+    const batch = record.resync(payload.lastSeq);
+    for (const missed of batch.messages) {
+      try {
+        res.write(`data: ${JSON.stringify(missed)}\n\n`);
+      } catch {
+        finish();
+        break;
+      }
+    }
+    if (batch.truncated) {
+      log(
+        `[bff] /chat 会话 ${record.sessionId} 的 ring 缓冲已截断，部分历史事件无法补发`,
+      );
+    }
+  }
 
   try {
     await record.handleSend({

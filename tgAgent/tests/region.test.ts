@@ -1,7 +1,7 @@
 /**
  * 局部区域矩形转换测试（src/shared/region.ts）
  *
- * 背景：qianduan 原型上报**像素**坐标，TAI 前端契约用**归一化** 0–1
+ * 背景：前端上报像素坐标，TAI 前端契约用**归一化** 0–1
  * （PreciseEditContext.cropRectNormalized）。量纲混用不报错、只静默错位，
  * 故用测试锁住转换行为。
  *

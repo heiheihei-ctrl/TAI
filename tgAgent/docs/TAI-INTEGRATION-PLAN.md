@@ -9,14 +9,14 @@
 
 | | 当前形态 | 终态 |
 |---|---|---|
-| 前端 | `qianduan/` 自研 Next.js 画布（1249 行） | **TAI 平台前端**（React Flow 11，7.87 万行） |
+| 前端 | 原型前端（已退役） | **TAI 平台前端**（React Flow 11，7.87 万行） |
 | 通信 | 前端直连 `ws://tgagent:8712/ws` | 走 TAI 后端端点 |
 | 鉴权/积分 | 自研（`WS_TOKEN` 可选，实际不鉴权） | 复用 TAI JWT + 积分体系 |
 | tgagent 角色 | 独立全栈应用 | **TAI 的领域大脑服务** |
 
-**结论：`qianduan/` 应降级为原型与契约验证器，不是交付物。** 它的价值在于已验证了交互形态（Brief 面板、候选择优、视频进度卡），这些 UI 概念要迁移到 TAI 前端重做，而不是把 qianduan 塞进平台。
+**结论：原型前端应退役，交互概念在 TAI 前端重做。** 其验证价值在于：Brief 面板、候选择优、视频进度卡等交互形态已跑通，这些可直接在 TAI 前端复刻，无需保留独立前端代码。
 
-注意一个已确认的事实偏差：DESIGN.md §12.3 称「画布内核为 React Flow」——那是 **TAI 平台**的事实（`frontend/package.json` 有 `reactflow ^11.11.4`），qianduan 从未使用 React Flow。规划时应以 TAI 前端为准。
+注意一个已确认的事实偏差：DESIGN.md §12.3 称「画布内核为 React Flow」——那是 **TAI 平台**的事实（`frontend/package.json` 有 `reactflow ^11.11.4`）。原型前端自研 div+SVG，未使用 React Flow。规划时应以 TAI 前端为准。
 
 ---
 
@@ -113,10 +113,13 @@
 TAI 前端 (fetchWithAuth)
   │ Authorization: Bearer <accessToken> + X-Team-Id
   ▼
-TAI 后端 /api/ai/architecture-chat  (JwtAuthGuard → req.user)
+TAI 后端 /api/ai/architecture-chat  (ApiKeyOrJwtGuard → req.user)
   │ 转发时透传 Authorization 头
+  │ + X-User-Id（JWT sub，稳定身份，2026-09-01 起）
+  │ + x-bff-token（TGAGENT_BFF_SECRET，服务间鉴权，2026-09-01 起）
+  │ + lastSeq（跨轮事件补发游标，2026-09-01 起）
   ▼
-tgagent
+tgagent /chat（校验 x-bff-token；按 X-User-Id 派生会话身份与限流键）
   │ 回调 TAI 生图端点时携带同一 Authorization 头
   ▼
 TAI 后端 /api/ai/generate-image-async → getUserId() → 扣用户积分
@@ -154,6 +157,13 @@ TAI 后端 /api/ai/generate-image-async → getUserId() → 扣用户积分
    （含本轮结束后的视频轮询；有 jwt 源后绝不回退共享 apiKey 源）。
    离线验证：`tests/bff-chat.test.ts` ⑤⑥（假 TAI 后端断言只带 Bearer、无 x-api-key）
 5. 注意：异步生图端点的积分在 **worker 里预扣**（`authFetch.ts:24` 的 `CREDITS_DEDUCT_DEFERRED_PATH_PATTERNS` 含 `generate-image-async`），前端不会立即看到余额变化（平台侧行为，无需 tgagent 处理）
+6. ✅ **稳定身份透传**（2026-09-01）：后端解出 JWT `sub` 以 `X-User-Id` 转发，
+   tgagent 会话身份派生优先用它。此前用 `sha256(bearer)` 派生，而 accessToken 只有
+   **900s**（`JWT_ACCESS_TTL` 默认）就刷新，token 一换会话键就变 → 上一轮的图与
+   brief 全部失联（"聊着聊着失忆"）
+7. ✅ **服务间鉴权**（2026-09-01）：`BFF_SECRET`（tgagent）与 `TGAGENT_BFF_SECRET`
+   （TAI 后端）同值时启用，`/chat` 校验 `x-bff-token`；两侧任一为空 = 不启用（兼容
+   本地联调）。⚠️ 部署：只配 tgagent 侧而后端不配会全线 401；安全顺序是**先配后端**
 
 ---
 
@@ -176,24 +186,24 @@ historyService.resetToCurrent(label)            // 重置基线
 
 ## 9. 分阶段路线
 
-| 阶段 | 目标 | 依赖 | 状态（2026-08-30） |
+| 阶段 | 目标 | 依赖 | 状态（2026-09-01） |
 |---|---|---|---|
-| **P0 契约对齐** | 修 `baseImageUrl` 发送；坐标归一化；provider 按意图分流（首轮**并发** / 迭代走 `edit-image-async`+banana-3.1）；双凭证模式；并发门控改真信号量 | — | ✅ **完成**（9/9 测试验证） |
-| **P1 联调环境** | 起 TAI 后端：补 `backend/.env`、接 PostgreSQL、跑 50 个 migration、配 `AI_API_KEYS` | **可本地建库绕过，不必等外部 `DATABASE_URL`** | ⛔ **未启动**（步骤已就绪，见 [P1-ENV-SETUP.md](P1-ENV-SETUP.md)） |
-| **P2 BFF 打通** | TAI 新增 `architecture-chat` 端点，转发 tgagent 并透传流 | P1 才能联调 | 🟡 **代码已写完**（controller 132 行 + DTO + module 注册，过全量类型检查），**零运行验证** |
-| **P3 前端模式** | `ManualAIMode` 增列、分流分支、消息回写 | P2 | ⬜ 未开始（⚠️ `manualToolMap` 有两处，见 §4） |
-| **P4 能力迁移** | Brief 面板、血缘连线、候选择优、视频进度卡迁入 TAI 前端 | P3 | ⬜ 未开始 |
-| **P5 退役** | `qianduan/` 归档为原型 | P4 | ⬜ 未开始 |
+| **P0 契约对齐** | 修 `baseImageUrl` 发送；坐标归一化；provider 按意图分流（首轮**并发** / 迭代走 `edit-image-async`+banana-3.1）；双凭证模式；并发门控改真信号量 | — | ✅ **完成**（测试验证） |
+| **P1 联调环境** | 起 TAI 后端：补 `backend/.env`、接 PostgreSQL、跑 50 个 migration、配 `AI_API_KEYS` | **可本地建库绕过，不必等外部 `DATABASE_URL`** | 🟡 **部分**（`backend/.env` 已就位含 `TGAGENT_BASE_URL`/`TGAGENT_BFF_SECRET`；数据库/migration 未起，见 [P1-ENV-SETUP.md](P1-ENV-SETUP.md)） |
+| **P2 BFF 打通** | TAI 新增 `architecture-chat` 端点，转发 tgagent 并透传流 | P1 才能联调 | 🟡 **代码完成并加固**（透传 `x-bff-token`/`X-User-Id`/`lastSeq`；tgagent 侧 `/chat` 10 项端到端测试全绿；真实 TAI 环境待 P1 解锁） |
+| **P3 前端模式** | `ManualAIMode` 增列、分流分支、消息回写、落图 | P2 | ✅ **完成**（2026-09-01：`architecture` 模式、SSE 流式回写、`canvas.place` 落画布、视频/PPT 事件回写、`lastSeq` 补发游标、生成中可停止） |
+| **P4 能力迁移** | Brief 面板、血缘连线、候选择优、视频进度卡迁入 TAI 前端 | P3 | ⬜ 未开始（当前视频/PPT 以文本链接形式回写消息，进度卡未做） |
+| **P5 退役** | 原型前端归档退役 | P4 | ✅ 已清理（2026-08） |
 
 ### 完成度
 
 | 维度 | 进度 | 说明 |
 |---|---|---|
-| 契约与协议层 | **100%** | 生图/视频/鉴权/计费/坐标/分流/`Idempotency-Key` 均已对齐并有测试 |
-| tgagent 服务端 | **~95%** | 大脑、工具、BFF 入口就绪；代码审查 2026-08-29 识别的三项 P0 与四项 P1 **已全部关闭**（2026-08-30，含并发门控死锁与计费链路 500 两个回归的修复）。实测：`tsc` 0 错、`npm test` 9/9（2m54s）、`smoke` 5/5。持久化仍为零（内存态）——终态交由 TAI 平台，非缺陷。 |
-| TAI 后端接入 | **代码 ~90% / 验证 0%** | 骨架齐备并通过全量类型检查；**一次都没跑起来**，被 P1 环境阻塞 |
-| TAI 前端接入 | **0%** | 尚未改动一行 |
-| 整体可演示度 | **~40%** | 四层里三层就绪，但端到端从未在真实 TAI 环境跑通一次 |
+| 契约与协议层 | **100%** | 生图/视频/鉴权/计费/坐标/分流/`Idempotency-Key`/`lastSeq` 补发均已对齐并有测试 |
+| tgagent 服务端 | **~95%** | 大脑、工具、BFF 入口就绪；代码审查 P0/P1 全部关闭；限流按用户维度；**会话/资产持久化已做**（`.tgagent-data/`，JWT 绝不落盘）；`TASK_SOURCE=tai` + `BFF_SECRET` 已实测。实测：`tsc` 0 错、`npm test` 10 套件全 PASS。 |
+| TAI 后端接入 | **代码完成 / 真实环境验证 0%** | controller + DTO + 透传三头齐全，过全量类型检查；被 P1（数据库）阻塞 |
+| TAI 前端接入 | **~60%** | 模式入口、流式对话、落图、中止、补发游标已做（2026-09-01）；Brief 面板、候选卡择优、视频进度卡未做（P4） |
+| 整体可演示度 | **~60%** | 三侧代码全部就位且 tgagent 侧全绿；端到端仍在等 TAI 数据库环境 |
 
 > **读法提示**：tgagent 侧的百分比是「代码完成度」，不是「验证完成度」。
 > 除契约层外，其余均未经过真实环境验证——这正是 P1 必须解除的原因。
@@ -244,7 +254,7 @@ historyService.resetToCurrent(label)            // 重置基线
    acquire 成功之后才起算）。该缺陷**表现为测试挂起而非失败**，红灯被掩盖了 4 个提交。
    修复：`granted` 移交握手 + acquire 阶段独立超时；相关用例（⑩）另加 20s 超时保护。
 
-   **剩余 P2 打磨项**（不阻塞联调）：`qianduan` 的 vitest 未纳入 `npm test` 统一入口。
+   **剩余 P2 打磨项**（不阻塞联调）：无。
    ~~`not_configured` 走 default → `generation_failed`~~ 已修复（2026-08-30）：
    `ErrorMessage.code` 增列 `not_configured`，mapper 单列分支（文案「服务配置错误」），
    回归见 `tests/tai-source.test.ts` ⑰。

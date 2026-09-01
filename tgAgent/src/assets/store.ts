@@ -104,4 +104,23 @@ export class AssetStore {
   isDeleted(assetId: string): boolean {
     return this.byId.get(assetId)?.deleted ?? true;
   }
+
+  // ---------- 持久化（见 gateway/sessionStore.ts） ----------
+
+  /** 导出资产（可按项目过滤；含已软删除的——删除态也要跨重启保持） */
+  serialize(projectId?: string): Asset[] {
+    return [...this.byId.values()].filter((a) => !projectId || a.projectId === projectId);
+  }
+
+  /** 从快照恢复：按 id 去重（多个会话快照可能引用同一批资产），返回新恢复条数 */
+  restore(assets: Asset[]): number {
+    let restored = 0;
+    for (const a of assets) {
+      if (a && typeof a.id === "string" && !this.byId.has(a.id)) {
+        this.byId.set(a.id, a);
+        restored++;
+      }
+    }
+    return restored;
+  }
 }
