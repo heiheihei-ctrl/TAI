@@ -2652,7 +2652,8 @@ interface AIChatState {
     | "analyzePdf"
     | "text"
     | "video"
-    | "vector";
+    | "vector"
+    | "architecture";
 
   // 配置管理
   toggleAutoDownload: () => void;

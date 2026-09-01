@@ -3819,21 +3819,31 @@ const AIChatDialog: React.FC = () => {
                     onError={(message) => showToast(message, "error")}
                   />
                   <Button
-                    onClick={handleSend}
-                    disabled={!canSend}
+                    onClick={architectureRunning ? cancelArchitectureChat : handleSend}
+                    disabled={architectureRunning ? false : !canSend}
                     size='sm'
                     variant='outline'
                     data-chat-primary-action='true'
-                    title={sendButtonTitle}
+                    title={
+                      architectureRunning
+                        ? lt("停止生成", "Stop generating")
+                        : sendButtonTitle
+                    }
                     className={cn(
                       "h-7 w-7 p-0 rounded-full transition-all duration-200",
                       "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
-                      canSend
+                      architectureRunning
+                        ? "text-red-600 hover:bg-red-50"
+                        : canSend
                         ? "hover:bg-liquid-glass-hover text-gray-700"
                         : "opacity-50 cursor-not-allowed text-gray-400"
                     )}
                   >
-                    <Play className='h-3.5 w-3.5' />
+                    {architectureRunning ? (
+                      <Square className='h-3 w-3 fill-current' />
+                    ) : (
+                      <Play className='h-3.5 w-3.5' />
+                    )}
                   </Button>
                 </div>
               </div>
@@ -4078,150 +4088,6 @@ const AIChatDialog: React.FC = () => {
                   document.body
                 )}
 
-              {/* 联网搜索开关 */}
-              {!shouldHideImageParamControls && (
-                <Button
-                  onClick={toggleWebSearch}
-                  disabled={false}
-                  size='sm'
-                  variant='outline'
-                  className={cn(
-                    "absolute right-32 bottom-2 h-7 w-7 p-0 rounded-full transition-all duration-200",
-                    "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
-                    !generationStatus.isGenerating
-                      ? enableWebSearch
-                        ? isBlackTheme
-                          ? "bg-[#1d1d1d] text-white border-[#404040] hover:bg-[#262626]"
-                          : "bg-slate-900 text-white border-slate-900 hover:bg-slate-900"
-                        : "text-slate-700"
-                      : "opacity-50 cursor-not-allowed text-gray-400"
-                  )}
-                  title={lt(
-                    `联网搜索: ${enableWebSearch ? "开启" : "关闭"} - 让AI获取实时信息`,
-                    `Web search: ${enableWebSearch ? "On" : "Off"} - Allow AI to fetch real-time info`
-                  )}
-                >
-                  <MinimalGlobeIcon className='h-3.5 w-3.5' />
-                </Button>
-              )}
-
-              {/* 提示词扩写按钮：单击切换自动扩写，长按打开配置面板 */}
-              {!shouldHideImageParamControls && (
-                <Button
-                  ref={promptButtonRef}
-                  size='sm'
-                  variant='outline'
-                  data-chat-secondary-action='true'
-                  disabled={autoOptimizing}
-                  className={cn(
-                    "absolute right-24 bottom-2 h-7 w-7 p-0 rounded-full transition-all duration-200",
-                    "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
-                    autoOptimizeEnabled
-                      ? isBlackTheme
-                        ? "bg-[#1d1d1d] text-white border-[#404040] hover:bg-[#262626]"
-                        : "bg-slate-900 text-white border-slate-900 hover:bg-slate-900"
-                      : !generationStatus.isGenerating && !autoOptimizing
-                      ? "text-slate-700"
-                      : "opacity-50 cursor-not-allowed text-gray-400"
-                  )}
-                  title={
-                    autoOptimizeEnabled
-                      ? lt("自动扩写已开启（单击关闭，长按打开设置面板）", "Auto prompt expansion is on (click to disable, long-press for settings)")
-                      : lt("单击开启自动扩写，长按打开扩写设置面板", "Click to enable auto expansion, long-press for settings")
-                  }
-                  onPointerDown={handlePromptButtonPointerDown}
-                  onPointerUp={handlePromptButtonPointerUp}
-                  onPointerLeave={handlePromptButtonPointerLeave}
-                  onPointerCancel={handlePromptButtonPointerCancel}
-                  aria-pressed={autoOptimizeEnabled}
-                >
-                  {autoOptimizing ? (
-                    <LoadingSpinner size='sm' />
-                  ) : (
-                    <BookOpen className='h-3.5 w-3.5' />
-                  )}
-                </Button>
-              )}
-
-              {/* +号上传按钮 - 替换原来的上传图片按钮位置 */}
-              <DropdownMenu
-                open={isUploadMenuOpen}
-                onOpenChange={setIsUploadMenuOpen}
-              >
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type='button'
-                    size='sm'
-                    variant='outline'
-                    data-chat-secondary-action='true'
-                    disabled={generationStatus.isGenerating}
-                    className={cn(
-                      "absolute right-12 bottom-2 h-7 w-7 p-0 rounded-full transition-all duration-200",
-                      "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
-                      !generationStatus.isGenerating
-                        ? "hover:bg-liquid-glass-hover text-gray-700"
-                        : "opacity-50 cursor-not-allowed text-gray-400"
-                    )}
-                    title={lt("上传文件", "Upload files")}
-                  >
-                    <Plus className='h-3.5 w-3.5' />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align='end'
-                  side='top'
-                  sideOffset={40}
-                  className='w-auto min-w-[120px] rounded-lg border border-gray-200 bg-white/95 shadow-lg backdrop-blur-md'
-                >
-                  <DropdownMenuItem
-                    onClick={() => {
-                      fileInputRef.current?.click();
-                    }}
-                    className='flex items-center gap-2 px-3 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50'
-                  >
-                    <Image className='w-4 h-4' />
-                    <span>{lt("上传图片", "Upload image")}</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      pdfInputRef.current?.click();
-                    }}
-                    className='flex items-center gap-2 px-3 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50'
-                  >
-                    <FileText className='w-4 h-4' />
-                    <span>{lt("上传PDF", "Upload PDF")}</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              {/* 发送按钮（建筑设计模式生成中切换为停止） */}
-              <Button
-                onClick={architectureRunning ? cancelArchitectureChat : handleSend}
-                disabled={architectureRunning ? false : !canSend}
-                size='sm'
-                variant='outline'
-                data-chat-primary-action='true'
-                title={
-                  architectureRunning
-                    ? lt("停止生成", "Stop generating")
-                    : sendButtonTitle
-                }
-                className={cn(
-                  "absolute right-4 bottom-2 h-7 w-7 p-0 rounded-full transition-all duration-200",
-                  "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
-                  architectureRunning
-                    ? "text-red-600 hover:bg-red-50"
-                    : canSend
-                      ? "hover:bg-liquid-glass-hover text-gray-700"
-                      : "opacity-50 cursor-not-allowed text-gray-400"
-                )}
-              >
-                {architectureRunning ? (
-                  <Square className='h-3 w-3 fill-current' />
-                ) : (
-                  <Play className='h-3.5 w-3.5' />
-                )}
-              </Button>
             </div>
 
             <PresetPromptPanel
