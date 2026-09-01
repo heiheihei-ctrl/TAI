@@ -16,9 +16,17 @@ type EventSettingsModalProps = {
   config: EventSettingsConfig | null;
   onClose: () => void;
   dismissStorageKey?: string;
+  /** 点击弹窗内容时的回调（不含关闭按钮 / 遮罩 / 轮播控件）；设置后隐藏「跳转」按钮 */
+  onDialogClick?: () => void;
 };
 
-function EventImageCarousel({ images }: { images: string[] }) {
+function EventImageCarousel({
+  images,
+  stopPropagation = false,
+}: {
+  images: string[];
+  stopPropagation?: boolean;
+}) {
   const { t } = useTranslation();
   const [index, setIndex] = useState(0);
   const count = images.length;
@@ -36,13 +44,21 @@ function EventImageCarousel({ images }: { images: string[] }) {
     return () => window.clearInterval(timer);
   }, [count, hasMultiple]);
 
-  const goPrev = useCallback(() => {
-    setIndex((prev) => (prev - 1 + count) % count);
-  }, [count]);
+  const goPrev = useCallback(
+    (e?: React.MouseEvent) => {
+      e?.stopPropagation();
+      setIndex((prev) => (prev - 1 + count) % count);
+    },
+    [count],
+  );
 
-  const goNext = useCallback(() => {
-    setIndex((prev) => (prev + 1) % count);
-  }, [count]);
+  const goNext = useCallback(
+    (e?: React.MouseEvent) => {
+      e?.stopPropagation();
+      setIndex((prev) => (prev + 1) % count);
+    },
+    [count],
+  );
 
   if (count === 0) return null;
 
@@ -58,6 +74,7 @@ function EventImageCarousel({ images }: { images: string[] }) {
               src={url}
               alt={t('home.eventModal.imageAlt', { index: imageIndex + 1 })}
               className="block h-auto w-full"
+              draggable={false}
             />
           </div>
         ))}
@@ -81,7 +98,10 @@ function EventImageCarousel({ images }: { images: string[] }) {
           >
             <ChevronRight className="h-5 w-5" />
           </button>
-          <div className="absolute bottom-3 left-0 right-0 flex items-center justify-center gap-1.5">
+          <div
+            className="absolute bottom-3 left-0 right-0 flex items-center justify-center gap-1.5"
+            onClick={stopPropagation ? (e) => e.stopPropagation() : undefined}
+          >
             {images.map((url, dotIndex) => (
               <button
                 key={`dot-${url}-${dotIndex}`}
@@ -91,7 +111,10 @@ function EventImageCarousel({ images }: { images: string[] }) {
                   'h-1.5 rounded-full transition-all',
                   dotIndex === index ? 'w-5 bg-white' : 'w-1.5 bg-white/50',
                 )}
-                onClick={() => setIndex(dotIndex)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIndex(dotIndex);
+                }}
               />
             ))}
           </div>
@@ -106,6 +129,7 @@ export default function EventSettingsModal({
   config,
   onClose,
   dismissStorageKey = EVENT_SETTINGS_DISMISS_KEY,
+  onDialogClick,
 }: EventSettingsModalProps) {
   const { t } = useTranslation();
 
@@ -116,11 +140,17 @@ export default function EventSettingsModal({
     onClose();
   }, [config, dismissStorageKey, onClose]);
 
+  const handleDialogClick = useCallback(() => {
+    if (!onDialogClick) return;
+    handleClose();
+    onDialogClick();
+  }, [handleClose, onDialogClick]);
+
   if (!open || !config) return null;
 
   const hasImages = config.images.length > 0;
   const hasCopy = config.copy.trim().length > 0;
-  const hasLink = config.link.trim().length > 0;
+  const hasLink = config.link.trim().length > 0 && !onDialogClick;
   const hasFooter = hasCopy || hasLink;
 
   const modalContent = (
@@ -138,7 +168,9 @@ export default function EventSettingsModal({
         className={cn(
           'relative w-full max-w-[800px] overflow-hidden rounded-2xl bg-white shadow-2xl',
           !hasImages && 'rounded-2xl',
+          onDialogClick && 'cursor-pointer transition hover:brightness-[1.02] active:scale-[0.995]',
         )}
+        onClick={onDialogClick ? handleDialogClick : undefined}
       >
         <button
           type="button"
@@ -149,13 +181,21 @@ export default function EventSettingsModal({
               ? 'bg-black/45 text-white hover:bg-black/60'
               : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700',
           )}
-          onClick={handleClose}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleClose();
+          }}
         >
           <X className="h-5 w-5" />
         </button>
 
         <div className="flex flex-col">
-          {hasImages && <EventImageCarousel images={config.images} />}
+          {hasImages && (
+            <EventImageCarousel
+              images={config.images}
+              stopPropagation={Boolean(onDialogClick)}
+            />
+          )}
 
           {hasFooter && (
             <div
@@ -177,7 +217,10 @@ export default function EventSettingsModal({
                 <div className={cn('flex justify-center', hasCopy ? 'pt-1' : '')}>
                   <Button
                     className="h-11 min-w-[140px] rounded-xl bg-gray-700 px-8 text-base text-white hover:bg-gray-600"
-                    onClick={() => openEventSettingsLink(config.link)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openEventSettingsLink(config.link);
+                    }}
                   >
                     {t('home.eventModal.action')}
                   </Button>
