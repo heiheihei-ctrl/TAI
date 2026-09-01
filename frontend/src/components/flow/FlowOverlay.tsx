@@ -51,6 +51,7 @@ import {
 import TextPromptNode from "./nodes/TextPromptNode";
 import FlowOnboardingGuide from "./FlowOnboardingGuide";
 import FlowOnboardingAutoStepBridge from "./FlowOnboardingAutoStepBridge";
+import FlowAgentApplyBridge from "./FlowAgentApplyBridge";
 import {
   shouldAutoStartFlowOnboarding,
   useFlowOnboardingStore,
@@ -25046,6 +25047,13 @@ function FlowInner() {
         openAddPanelAtContainerCenter={openAddPanelAtContainerCenter}
         createNodeAtWorldCenter={createNodeAtWorldCenter}
         onConnect={onConnect}
+        rf={rf}
+      />
+      <FlowAgentApplyBridge
+        containerRef={containerRef}
+        createNodeAtWorldCenter={createNodeAtWorldCenter}
+        onConnect={onConnect}
+        runNode={runNode}
         rf={rf}
       />
       <FlowOnboardingGuide

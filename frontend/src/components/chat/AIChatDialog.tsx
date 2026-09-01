@@ -107,6 +107,11 @@ const BASE_MANUAL_MODE_OPTIONS: ManualModeOption[] = [
     label: "Design",
     description: "建筑设计代理",
   },
+  {
+    value: "workflow",
+    label: "Workflow",
+    description: "对话自动建节点生图",
+  },
 ];
 
 const EMPTY_PROJECT_CONTENT_IMAGES: any[] = [];
@@ -326,8 +331,8 @@ const AIChatDialog: React.FC = () => {
     setVideoDurationSeconds,
     manualAIMode,
     setManualAIMode,
-    architectureChat,
     cancelArchitectureChat,
+    cancelWorkflowChat,
     autoSelectedTool,
     aiProvider,
     bananaImageRoute,
@@ -2331,6 +2336,8 @@ const AIChatDialog: React.FC = () => {
           return { supported: count >= 1 };
         case "architecture":
           return { supported: true };
+        case "workflow":
+          return { supported: true };
         case "video":
           return { supported: count <= 1 };
         default:
@@ -2366,6 +2373,9 @@ const AIChatDialog: React.FC = () => {
     }
     if (manualAIMode === "architecture") {
       return null; // 建筑设计模式无需图片校验
+    }
+    if (manualAIMode === "workflow") {
+      return null; // 工作流 Agent：0 张文生图，有图则图生图
     }
     if (manualAIMode === "analyze") {
       if (isTencentStableBanana && !isTencentBananaAnalyzeSupported()) {
@@ -2933,9 +2943,15 @@ const AIChatDialog: React.FC = () => {
     currentEffectiveManualModeWarning ||
     sendShortcutHint;
 
-  // 建筑设计模式走 tgagent 长连接 SSE，单轮最长 180s，给用户一个中断出口
+  // 建筑设计 / 工作流 Agent：长连接 SSE，给用户中断出口
   const architectureRunning =
     manualAIMode === "architecture" && generationStatus.isGenerating;
+  const workflowRunning =
+    manualAIMode === "workflow" && generationStatus.isGenerating;
+  const agentStreamRunning = architectureRunning || workflowRunning;
+  const cancelAgentStream = architectureRunning
+    ? cancelArchitectureChat
+    : cancelWorkflowChat;
 
   // 计算拖拽时是否使用自定义位置
   const useDragPosition = showHistory && !isMaximized && dragOffsetX !== null;
@@ -3819,27 +3835,27 @@ const AIChatDialog: React.FC = () => {
                     onError={(message) => showToast(message, "error")}
                   />
                   <Button
-                    onClick={architectureRunning ? cancelArchitectureChat : handleSend}
-                    disabled={architectureRunning ? false : !canSend}
+                    onClick={agentStreamRunning ? cancelAgentStream : handleSend}
+                    disabled={agentStreamRunning ? false : !canSend}
                     size='sm'
                     variant='outline'
                     data-chat-primary-action='true'
                     title={
-                      architectureRunning
+                      agentStreamRunning
                         ? lt("停止生成", "Stop generating")
                         : sendButtonTitle
                     }
                     className={cn(
                       "h-7 w-7 p-0 rounded-full transition-all duration-200",
                       "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
-                      architectureRunning
+                      agentStreamRunning
                         ? "text-red-600 hover:bg-red-50"
                         : canSend
                         ? "hover:bg-liquid-glass-hover text-gray-700"
                         : "opacity-50 cursor-not-allowed text-gray-400"
                     )}
                   >
-                    {architectureRunning ? (
+                    {agentStreamRunning ? (
                       <Square className='h-3 w-3 fill-current' />
                     ) : (
                       <Play className='h-3.5 w-3.5' />

@@ -128,18 +128,24 @@ const AI_IMAGE_PARALLEL_CONCURRENCY_LIMIT = (() => {
   return MAX_AI_IMAGE_PARALLEL_CONCURRENCY;
 })();
 
-// API 基础地址
+// API 基础地址（与 aiBackendAPI 一致：VITE_API_BASE_URL + /api）
 const API_BASE_URL = (() => {
   const raw = import.meta.env?.VITE_API_BASE_URL?.trim();
-  if (raw && raw.length > 0) return raw.replace(/\/+$/, "");
-  if (typeof window !== "undefined" && window.location.hostname !== "localhost") {
-    return `${window.location.protocol}//${window.location.host}`;
-  }
-  return "http://localhost:4000";
+  const origin =
+    raw && raw.length > 0
+      ? raw.replace(/\/+$/, "")
+      : typeof window !== "undefined" && window.location.hostname !== "localhost"
+        ? `${window.location.protocol}//${window.location.host}`
+        : "http://localhost:4000";
+  // 若环境变量已带 /api 后缀则不再重复拼接
+  return /\/api$/i.test(origin) ? origin : `${origin}/api`;
 })();
 
 // 建筑设计模式：本轮 SSE 的中断句柄（新一轮开始时自动中止上一轮，避免多轮叠加）
 let architectureAbort: AbortController | null = null;
+
+// 工作流 Agent：SSE + 画布执行中断
+let workflowAbort: AbortController | null = null;
 
 // 建筑设计模式：每个会话已收到的最大下行 seq，下一轮请求回传给 tgagent。
 // 原因：视频完成等异步事件可能在本轮 SSE 关闭之后才到达，服务端会缓存进 ring，
@@ -149,6 +155,67 @@ const architectureSeqCursor = new Map<string, number>();
 
 const architectureCursorKey = (projectId: string, sessionId: string) =>
   `${projectId}/${sessionId}`;
+
+const isRemoteReferenceUrl = (value: unknown): value is string => {
+  if (typeof value !== "string") return false;
+  const t = value.trim();
+  if (!t || /^(data:|blob:)/i.test(t)) return false;
+  if (/^https?:\/\//i.test(t)) return true;
+  if (/^(templates|projects|uploads|videos)\//i.test(t.replace(/^\/+/, ""))) {
+    return true;
+  }
+  if (t.startsWith("/api/assets/") || t.startsWith("/assets/")) return true;
+  return false;
+};
+
+const waitForFlowAgentRunResult = (
+  requestId: string,
+  signal?: AbortSignal,
+  timeoutMs = 360_000
+): Promise<{
+  ok?: boolean;
+  error?: string;
+  imageUrl?: string;
+  generateNodeId?: string;
+  nodeIds?: string[];
+}> =>
+  new Promise((resolve, reject) => {
+    const cleanup = () => {
+      window.clearTimeout(timer);
+      window.removeEventListener(
+        "flow:agent-run-result",
+        handler as EventListener
+      );
+      signal?.removeEventListener("abort", onAbort);
+    };
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    const timer = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("工作流节点执行超时"));
+    }, timeoutMs);
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail as {
+        requestId?: string;
+        ok?: boolean;
+        error?: string;
+        imageUrl?: string;
+        generateNodeId?: string;
+        nodeIds?: string[];
+      };
+      if (detail?.requestId && detail.requestId !== requestId) return;
+      cleanup();
+      resolve(detail || {});
+    };
+    window.addEventListener("flow:agent-run-result", handler as EventListener);
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
+    signal?.addEventListener("abort", onAbort);
+  });
 
 // IndexedDB 存储的会话数据结构
 interface IDBSessionsData {
@@ -534,7 +601,8 @@ export type ManualAIMode =
   | "analyze"
   | "video"
   | "vector"
-  | "architecture";
+  | "architecture"
+  | "workflow";
 type AvailableTool =
   | "generateImage"
   | "editImage"
@@ -2623,6 +2691,14 @@ interface AIChatState {
   // 🏗️ 中止正在进行的建筑设计对话（释放 SSE 连接并把消息置为已结束）
   cancelArchitectureChat: () => void;
 
+  // 工作流 Agent：DeepSeek 规划 + 画布建节点/连线/Run
+  workflowChat: (
+    input: string,
+    options?: { override?: MessageOverride },
+  ) => Promise<void>;
+
+  cancelWorkflowChat: () => void;
+
   // 核心处理流程
   executeProcessFlow: (
     input: string,
@@ -2653,7 +2729,8 @@ interface AIChatState {
     | "text"
     | "video"
     | "vector"
-    | "architecture";
+    | "architecture"
+    | "workflow";
 
   // 配置管理
   toggleAutoDownload: () => void;
@@ -7489,6 +7566,337 @@ export const useAIChatStore = create<AIChatState>()(
             architectureAbort = null;
           },
 
+          // 工作流 Agent：DeepSeek 规划 → flow:agent-apply → 节点 Run
+          workflowChat: async (
+            input: string,
+            options?: { override?: MessageOverride },
+          ) => {
+            const state = get();
+            const override = options?.override;
+
+            let sessionId =
+              state.currentSessionId || contextManager.getCurrentSessionId();
+            if (!sessionId) {
+              sessionId = contextManager.createSession();
+            } else if (contextManager.getCurrentSessionId() !== sessionId) {
+              contextManager.switchSession(sessionId);
+            }
+            if (sessionId !== state.currentSessionId) {
+              const ctx = contextManager.getSession(sessionId);
+              set({
+                currentSessionId: sessionId,
+                messages: ctx ? [...ctx.messages] : [],
+              });
+            }
+
+            const aiMessageId =
+              override?.aiMessageId ??
+              get().addMessage({
+                type: "ai",
+                content: "正在规划工作流…",
+                generationStatus: {
+                  isGenerating: true,
+                  progress: 5,
+                  error: null,
+                  stage: "规划中",
+                },
+                provider: state.aiProvider,
+              }).id;
+
+            const projectId =
+              useProjectContentStore.getState().projectId || "default";
+
+            workflowAbort?.abort();
+            const abortController = new AbortController();
+            workflowAbort = abortController;
+
+            let fullText = "";
+
+            try {
+              // 参考图：优先远程 URL；本地 dataURL 先上传
+              const rawCandidates: string[] = [];
+              if (state.sourceImageForEditing) {
+                rawCandidates.push(state.sourceImageForEditing);
+              }
+              if (state.preciseEditContext?.targetImageSource) {
+                rawCandidates.push(state.preciseEditContext.targetImageSource);
+              }
+              for (const img of state.sourceImagesForBlending) {
+                if (img) rawCandidates.push(img);
+              }
+
+              const referenceImageUrls: string[] = [];
+              for (const raw of rawCandidates) {
+                if (referenceImageUrls.length >= 3) break;
+                if (isRemoteReferenceUrl(raw)) {
+                  referenceImageUrls.push(raw.trim());
+                  continue;
+                }
+                if (typeof raw === "string" && raw.startsWith("data:")) {
+                  try {
+                    const uploaded = await uploadImageToOSS(raw, projectId);
+                    if (isRemoteReferenceUrl(uploaded)) {
+                      referenceImageUrls.push(uploaded);
+                    }
+                  } catch (e) {
+                    console.warn("[workflowChat] 参考图上传失败", e);
+                  }
+                }
+              }
+
+              const response = await fetchWithAuth(
+                `${API_BASE_URL}/ai/workflow-chat`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    prompt: input,
+                    projectId,
+                    sessionId,
+                    referenceImageUrls:
+                      referenceImageUrls.length > 0
+                        ? referenceImageUrls
+                        : undefined,
+                  }),
+                  signal: abortController.signal,
+                }
+              );
+
+              if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(
+                  errorData?.message || `HTTP ${response.status}`
+                );
+              }
+
+              const reader = response.body?.getReader();
+              const decoder = new TextDecoder();
+              if (!reader) throw new Error("无法读取响应流");
+
+              let buffer = "";
+              let pendingFlowCommand: any = null;
+
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split("\n");
+                buffer = lines.pop() || "";
+
+                for (const line of lines) {
+                  const trimmed = line.trim();
+                  if (!trimmed || trimmed.startsWith(":")) continue;
+                  if (trimmed.startsWith("event: done")) continue;
+                  if (trimmed.startsWith("event:")) continue;
+                  if (!trimmed.startsWith("data:")) continue;
+
+                  const jsonStr = trimmed.slice(5).trim();
+                  if (!jsonStr) continue;
+                  try {
+                    const parsed = JSON.parse(jsonStr);
+                    const body = parsed?.body;
+                    if (!body || typeof body !== "object") continue;
+
+                    if (body.type === "assistant.delta") {
+                      const delta = String(body.delta || "");
+                      if (delta) {
+                        fullText += delta;
+                        get().updateMessage(aiMessageId, (msg) => ({
+                          ...msg,
+                          content: fullText,
+                        }));
+                      }
+                    } else if (body.type === "assistant.message") {
+                      const msgText = String(body.message || "");
+                      if (msgText && !fullText) {
+                        fullText = msgText;
+                        get().updateMessage(aiMessageId, (msg) => ({
+                          ...msg,
+                          content: fullText,
+                        }));
+                      }
+                    } else if (body.type === "tool.status") {
+                      get().updateMessage(aiMessageId, (msg) => ({
+                        ...msg,
+                        content: fullText || body.message || "执行中…",
+                        generationStatus: {
+                          ...(msg.generationStatus || {
+                            isGenerating: true,
+                            progress: 0,
+                          }),
+                          isGenerating: true,
+                          progress:
+                            body.progress?.percent ??
+                            msg.generationStatus?.progress ??
+                            20,
+                          error: null,
+                          stage: body.message || body.name || "执行中",
+                        },
+                      }));
+                    } else if (body.type === "flow.command") {
+                      pendingFlowCommand = body.command;
+                    } else if (body.type === "error") {
+                      const errMsg = String(body.message || "工作流 Agent 错误");
+                      get().updateMessage(aiMessageId, (msg) => ({
+                        ...msg,
+                        content: fullText || errMsg,
+                        generationStatus: {
+                          ...(msg.generationStatus || {
+                            isGenerating: true,
+                            progress: 0,
+                          }),
+                          isGenerating: false,
+                          progress: 0,
+                          error: errMsg,
+                          stage: "错误",
+                        },
+                      }));
+                      throw new Error(errMsg);
+                    } else if (body.type === "done") {
+                      // noop
+                    }
+                  } catch (parseErr) {
+                    if (parseErr instanceof Error && parseErr.message) {
+                      // 业务错误（含 SSE error 事件）向上抛
+                      if (
+                        !(parseErr instanceof SyntaxError) &&
+                        !/JSON|Unexpected token/i.test(parseErr.message)
+                      ) {
+                        throw parseErr;
+                      }
+                    }
+                  }
+                }
+              }
+
+              if (pendingFlowCommand?.type === "apply_graph") {
+                const requestId = `wf_${Date.now()}_${Math.random()
+                  .toString(36)
+                  .slice(2, 8)}`;
+                get().updateMessage(aiMessageId, (msg) => ({
+                  ...msg,
+                  content:
+                    fullText ||
+                    "已规划工作流，正在画布创建节点并生成…",
+                  generationStatus: {
+                    ...(msg.generationStatus || {
+                      isGenerating: true,
+                      progress: 55,
+                    }),
+                    isGenerating: true,
+                    progress: 60,
+                    error: null,
+                    stage: "画布执行中",
+                  },
+                }));
+
+                const resultPromise = waitForFlowAgentRunResult(
+                  requestId,
+                  abortController.signal
+                );
+                window.dispatchEvent(
+                  new CustomEvent("flow:agent-apply", {
+                    detail: {
+                      requestId,
+                      command: pendingFlowCommand,
+                    },
+                  })
+                );
+                const runResult = await resultPromise;
+
+                if (abortController.signal.aborted) {
+                  throw new DOMException("Aborted", "AbortError");
+                }
+
+                if (!runResult.ok) {
+                  throw new Error(runResult.error || "画布工作流执行失败");
+                }
+
+                const nodeHint = runResult.generateNodeId
+                  ? `\n\n已在画布节点 \`${runResult.generateNodeId}\` 完成生成。`
+                  : "\n\n已在画布创建工作流并完成生成。";
+                fullText = `${fullText || "工作流已执行。"}${nodeHint}`;
+                get().updateMessage(aiMessageId, (msg) => ({
+                  ...msg,
+                  content: fullText,
+                  imageData: runResult.imageUrl || msg.imageData,
+                  generationStatus: {
+                    ...(msg.generationStatus || {
+                      isGenerating: true,
+                      progress: 100,
+                    }),
+                    isGenerating: false,
+                    progress: 100,
+                    error: null,
+                    stage: undefined,
+                  },
+                }));
+              } else {
+                get().updateMessage(aiMessageId, (msg) => ({
+                  ...msg,
+                  content: fullText || "已完成。",
+                  generationStatus: {
+                    ...(msg.generationStatus || {
+                      isGenerating: true,
+                      progress: 100,
+                    }),
+                    isGenerating: false,
+                    progress: 100,
+                    error: null,
+                    stage: undefined,
+                  },
+                }));
+              }
+            } catch (error) {
+              if (error instanceof DOMException && error.name === "AbortError") {
+                get().updateMessage(aiMessageId, (msg) => ({
+                  ...msg,
+                  content: fullText || "已停止工作流",
+                  generationStatus: {
+                    ...(msg.generationStatus || {
+                      isGenerating: true,
+                      progress: 0,
+                    }),
+                    isGenerating: false,
+                    progress: 0,
+                    error: null,
+                    stage: undefined,
+                  },
+                }));
+                return;
+              }
+
+              const errorMessage =
+                error instanceof Error ? error.message : "工作流 Agent 失败";
+              get().updateMessage(aiMessageId, (msg) => ({
+                ...msg,
+                content: fullText
+                  ? `${fullText}\n\n错误：${errorMessage}`
+                  : `工作流 Agent 失败: ${errorMessage}`,
+                generationStatus: {
+                  ...(msg.generationStatus || {
+                    isGenerating: true,
+                    progress: 0,
+                  }),
+                  isGenerating: false,
+                  progress: 0,
+                  error: errorMessage,
+                  stage: "错误",
+                },
+              }));
+            } finally {
+              if (workflowAbort === abortController) {
+                workflowAbort = null;
+              }
+              get().refreshSessions();
+            }
+          },
+
+          cancelWorkflowChat: () => {
+            workflowAbort?.abort();
+            workflowAbort = null;
+          },
+
           // 🔄 核心处理流程 - 可重试的执行逻辑
           executeProcessFlow: async (
           input: string,
@@ -7659,6 +8067,7 @@ export const useAIChatStore = create<AIChatState>()(
             video: "generateVideo",
             vector: "generatePaperJS",
             architecture: null,
+            workflow: null,
           };
 
           let selectedTool: AvailableTool | null = options?.selectedTool ?? null;
@@ -7738,6 +8147,20 @@ export const useAIChatStore = create<AIChatState>()(
             );
           }
 
+          // 🏗️ 建筑设计 / 工作流 Agent：不走单工具映射，必须在「未选择工具」抛错之前拦截
+          if (manualMode === "architecture") {
+            await get().architectureChat(input, {
+              override: options?.override,
+            });
+            return;
+          }
+          if (manualMode === "workflow") {
+            await get().workflowChat(input, {
+              override: options?.override,
+            });
+            return;
+          }
+
           if (!selectedTool) {
             throw new Error("未选择执行工具");
           }
@@ -7746,14 +8169,6 @@ export const useAIChatStore = create<AIChatState>()(
             set({ autoSelectedTool: selectedTool });
           } else {
             set({ autoSelectedTool: null });
-          }
-
-          // 🏗️ 建筑设计模式安全出口（通常已在 processUserInput 拦截，此处兜底）
-          if (manualMode === "architecture") {
-            await get().architectureChat(input, {
-              override: options?.override,
-            });
-            return;
           }
 
           // 根据选择的工具执行相应操作
@@ -8099,6 +8514,7 @@ export const useAIChatStore = create<AIChatState>()(
             video: "generateVideo",
             vector: "generatePaperJS",
             architecture: null,
+            workflow: null,
           };
 
           let selectedTool: AvailableTool | null = null;
@@ -8234,6 +8650,14 @@ export const useAIChatStore = create<AIChatState>()(
           // 🏗️ 建筑设计模式：直接走 tgagent 建筑设计师代理流
           if (manualMode === "architecture") {
             await get().architectureChat(input, {
+              override: messageOverride,
+            });
+            return;
+          }
+
+          // 工作流 Agent：DeepSeek 规划 + 画布节点 Run
+          if (manualMode === "workflow") {
+            await get().workflowChat(input, {
               override: messageOverride,
             });
             return;
@@ -8799,6 +9223,8 @@ export const useAIChatStore = create<AIChatState>()(
           "analyze",
           "video",
           "vector",
+          "architecture",
+          "workflow",
         ];
         const validSendShortcuts = ["enter", "mod-enter"];
         const validExpandedStyles = ["transparent", "solid"];

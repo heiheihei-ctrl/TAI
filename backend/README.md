@@ -15,6 +15,10 @@ NestJS backend with Fastify adapter. Provides authentication (cookie-based JWT),
 - 配置 VEO 视频服务相关环境变量：
   - `VEO_API_KEY`：VEO 提供的 API Key（必填；也可复用 `BANANA_API_KEY` / `SORA2_API_KEY`）
   - `VEO_API_ENDPOINT`：可选，默认 `https://api1.147ai.com`
+- 配置工作流 Agent（对话驱动 Flow 生图，可选）：
+  - `DEEPSEEK_API_KEY`：DeepSeek API Key（未配置则 `POST /api/ai/workflow-chat` 返回 503）
+  - `DEEPSEEK_BASE_URL`：可选，默认 `https://api.deepseek.com`
+  - `DEEPSEEK_MODEL`：可选，默认 `deepseek-chat`
 - Apimart 代理（可选，生产国内服务器推荐配置）：
   - `API_PROXY_URL`：SOCKS5 代理地址，必须使用 `socks5h://user:pass@host:port`，确保 `api.apimart.ai` DNS 解析由海外代理执行；留空则直连。
   - `NANO2_API_KEY`：Apimart/Banana 文本与图像链路 API Key。

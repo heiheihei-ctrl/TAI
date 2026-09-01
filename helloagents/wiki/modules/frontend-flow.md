@@ -1,5 +1,8 @@
 # 前端模块：Flow（frontend-flow�?
 
+## 2026-09-01 Update
+- Workflow Agent：对话模式 `Workflow` 可通过 `flow:agent-apply` 自动创建 `textPrompt`→`generate`（可选 `image`）并 `runNode`；执行器见 `FlowAgentApplyBridge.tsx`，契约见 `frontend/docs/22-工作流Agent.md`。
+
 ## 2026-06-30 Update
 - `VideoComposeEditorModal` 初次打开时会先完成视频转存、metadata 读取、`MP4Clip` 解码实例创建与时间线缩略图生成，再结束 loading，避免“编辑器先出来但预览仍半初始化”的首屏抖动。
 - 视频合成预览区改为首屏可见后统一走 `canvas` 渲染，不再先挂原生 `<video>` 再切换到 `@webav/av-cliper` 的帧绘制路径；同时移除逐帧绘制前的强制清屏，并提高播放头刷新频率，以降低播放时黑屏闪烁与卡顿感。
