@@ -16,7 +16,6 @@ import {
   ArrowRightLeft,
   Rotate3d,
   Crop,
-  ImageUp,
   Type,
   Lock,
   Unlock,
@@ -47,9 +46,7 @@ import aiImageService from "@/services/aiImageService";
 import { globalImageHistoryApi, type GlobalImageHistoryItem } from "@/services/globalImageHistoryApi";
 import { loadImageElement } from "@/utils/imageHelper";
 import { imageUrlCache } from "@/services/imageUrlCache";
-import { imageUploadService } from "@/services/imageUploadService";
 import { useLocaleText } from "@/utils/localeText";
-import { optimizeHdImage } from "@/services/hdUpscaleService";
 import { isGroup, isRaster, projectToCanvasCssWithViewport } from "@/utils/paperCoords";
 import { editImageViaAPI } from "@/services/aiBackendAPI";
 import { useAIChatStore, getImageModelForProvider } from "@/stores/aiChatStore";
@@ -81,7 +78,6 @@ type ToolbarActionKey =
   | "fastRemoveBackground"
   | "layerSeparation"
   | "convertTo3D"
-  | "hdUpscale"
   | "expandImage"
   | "cropImage"
   | "editText"
@@ -101,7 +97,6 @@ type ToolbarAction = {
 const TOOLBAR_USAGE_STORAGE_KEY = "tanva:image-toolbar-usage:v1";
 const FIXED_TOOLBAR_KEYS: readonly ToolbarActionKey[] = [
   "fastRemoveBackground",
-  "hdUpscale",
   "generateNode",
 ];
 const ROTATABLE_TOOLBAR_KEYS: readonly ToolbarActionKey[] = [
@@ -573,7 +568,6 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
   const [isSeparatingLayers, setIsSeparatingLayers] = useState(false);
   const [isConvertingTo3D, setIsConvertingTo3D] = useState(false);
   const [isExpandingImage, setIsExpandingImage] = useState(false);
-  const [isOptimizingHd, setIsOptimizingHd] = useState(false);
   const [isRecognizingText, setIsRecognizingText] = useState(false);
   const [isApplyingTextEdit, setIsApplyingTextEdit] = useState(false);
   const [showTextEditPanel, setShowTextEditPanel] = useState(false);
@@ -1367,128 +1361,6 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
     projectId,
     resolveRenderedImageDataUrl,
   ]);
-
-  const resolveHdUpscaleSourceImageDataUrl = useCallback(
-    async (): Promise<string | null> => {
-      const ensureDataUrl = async (
-        input: string | null
-      ): Promise<string | null> => {
-        if (!input) return null;
-        return resolveImageToDataUrl(input, { preferProxy: true });
-      };
-
-      const preferredSources = [
-        getImageDataForEditing?.(imageData.id) || null,
-        imageData.remoteUrl || null,
-        imageData.url || null,
-        imageData.key || null,
-        imageData.src || null,
-        imageData.pendingUpload ? imageData.localDataUrl || null : null,
-      ];
-
-      for (const source of preferredSources) {
-        const dataUrl = await ensureDataUrl(source);
-        if (!dataUrl) continue;
-        void imageUrlCache.updateDataUrl(
-          imageData.id,
-          dataUrl,
-          projectId,
-          buildImageSourceFingerprint(source)
-        );
-        return dataUrl;
-      }
-
-      for (const source of preferredSources) {
-        const fingerprint = buildImageSourceFingerprint(source);
-        if (!fingerprint) continue;
-        const cachedDataUrl = await imageUrlCache.getCachedDataUrl(
-          imageData.id,
-          projectId,
-          fingerprint
-        );
-        if (cachedDataUrl) {
-          return cachedDataUrl;
-        }
-      }
-
-      console.warn("⚠️ 高清放大未找到可编辑原图，尝试从当前渲染图像抓取");
-      const renderedDataUrl = await resolveRenderedImageDataUrl();
-      if (!renderedDataUrl) {
-        return null;
-      }
-
-      const normalizedRenderedDataUrl = await ensureDataUrl(renderedDataUrl);
-      if (normalizedRenderedDataUrl) {
-        void imageUrlCache.updateDataUrl(
-          imageData.id,
-          normalizedRenderedDataUrl,
-          projectId,
-          buildImageSourceFingerprint(renderedDataUrl)
-        );
-      }
-      return normalizedRenderedDataUrl;
-    },
-    [
-      getImageDataForEditing,
-      imageData.id,
-      imageData.key,
-      imageData.localDataUrl,
-      imageData.pendingUpload,
-      imageData.remoteUrl,
-      imageData.src,
-      imageData.url,
-      projectId,
-      resolveRenderedImageDataUrl,
-    ]
-  );
-
-  const resolveHdUpscaleSourceImageUrl = useCallback(
-    async (): Promise<string | null> => {
-      const candidates = [
-        imageData.remoteUrl || null,
-        imageData.url || null,
-        imageData.key || null,
-        imageData.src || null,
-        getImageDataForEditing?.(imageData.id) || null,
-        imageData.pendingUpload ? imageData.localDataUrl || null : null,
-      ];
-
-      for (const source of candidates) {
-        if (typeof source !== "string") continue;
-        const normalized = normalizePersistableImageRef(source);
-        const renderable = toRenderableImageSrc(normalized || source);
-        if (renderable && isRemoteUrl(renderable)) {
-          return renderable;
-        }
-        if (normalized && isRemoteUrl(normalized)) {
-          return normalized;
-        }
-      }
-
-      const fallbackSource = await resolveHdUpscaleSourceImageDataUrl();
-      if (!fallbackSource) return null;
-
-      const upload = await imageUploadService.uploadImageSource(fallbackSource, {
-        projectId: projectId ?? undefined,
-        dir: "uploads/hd-upscale-sources/",
-        fileName: `hd-upscale-source-${Date.now()}.png`,
-        contentType: "image/png",
-      });
-      return upload.success && upload.asset?.url ? upload.asset.url : null;
-    },
-    [
-      getImageDataForEditing,
-      imageData.id,
-      imageData.key,
-      imageData.localDataUrl,
-      imageData.pendingUpload,
-      imageData.remoteUrl,
-      imageData.src,
-      imageData.url,
-      projectId,
-      resolveHdUpscaleSourceImageDataUrl,
-    ]
-  );
 
   const handleExtractPalette = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -3175,208 +3047,6 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
     [resolveImageDataUrl, imageData.id, realTimeBounds, setDrawMode]
   );
 
-  const handleOptimizeHdImage = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (isOptimizingHd) return;
-
-      const execute = async () => {
-        setIsOptimizingHd(true);
-        let hdPlaceholderId: string | null = null;
-        let hdProgressTimerId: number | null = null;
-        let hdProgressValue = 0;
-        try {
-          const updateHdProgress = (nextProgress: number) => {
-            if (!hdPlaceholderId) return;
-            hdProgressValue = Math.max(hdProgressValue, nextProgress);
-            window.dispatchEvent(
-              new CustomEvent("updatePlaceholderProgress", {
-                detail: {
-                  placeholderId: hdPlaceholderId,
-                  progress: hdProgressValue,
-                },
-              })
-            );
-          };
-
-          const stopHdProgressTimer = () => {
-            if (hdProgressTimerId !== null) {
-              window.clearInterval(hdProgressTimerId);
-              hdProgressTimerId = null;
-            }
-          };
-
-          const startHdProgressTimer = (startFrom: number) => {
-            hdProgressValue = startFrom;
-            stopHdProgressTimer();
-            hdProgressTimerId = window.setInterval(() => {
-              const remaining = 92 - hdProgressValue;
-              if (remaining <= 0.2) {
-                stopHdProgressTimer();
-                return;
-              }
-              const step = Math.max(0.6, remaining * 0.08);
-              updateHdProgress(
-                Math.min(92, Number((hdProgressValue + step).toFixed(1)))
-              );
-            }, 1500);
-          };
-
-          const placeholderGap = Math.max(
-            32,
-            Math.min(120, realTimeBounds.width * 0.1)
-          );
-          const placeholderCenter = {
-            x:
-              realTimeBounds.x +
-              realTimeBounds.width +
-              placeholderGap +
-              realTimeBounds.width / 2,
-            y: realTimeBounds.y + realTimeBounds.height / 2,
-          };
-          hdPlaceholderId = `hd-upscale_${imageData.id}_${Date.now()}_${Math.random()
-            .toString(36)
-            .slice(2, 8)}`;
-
-          window.dispatchEvent(
-            new CustomEvent("predictImagePlaceholder", {
-              detail: {
-                action: "add",
-                placeholderId: hdPlaceholderId,
-                center: placeholderCenter,
-                width: realTimeBounds.width,
-                height: realTimeBounds.height,
-                operationType: "hd-upscale",
-                sourceImageId: imageData.id,
-                preferHorizontal: true,
-              },
-            })
-          );
-
-          window.dispatchEvent(
-            new CustomEvent("updatePlaceholderProgress", {
-              detail: { placeholderId: hdPlaceholderId, progress: 8 },
-            })
-          );
-          hdProgressValue = 8;
-
-          const sourceImageUrl = await resolveHdUpscaleSourceImageUrl();
-          if (!sourceImageUrl) {
-            throw new Error("无法获取可放大的原图，请等待图片上传完成后重试");
-          }
-
-          updateHdProgress(18);
-
-          let sourceWidth: number | null = null;
-          let sourceHeight: number | null = null;
-          try {
-            const baseImageElement = await loadImageElement(sourceImageUrl);
-            sourceWidth = Math.max(
-              1,
-              baseImageElement.naturalWidth || baseImageElement.width || 1
-            );
-            sourceHeight = Math.max(
-              1,
-              baseImageElement.naturalHeight || baseImageElement.height || 1
-            );
-          } catch (error) {
-            logger.warn("高清放大源图尺寸读取失败，继续提交超分任务", error);
-          }
-
-          window.dispatchEvent(
-            new CustomEvent("toast", {
-              detail: {
-                message: "⏳ 开始高清放大（4K），请稍候...",
-                type: "info",
-              },
-            })
-          );
-
-          logger.info("📷 高清放大 - 使用 RealESRGAN x4", {
-            imageUrl: sourceImageUrl,
-            sourceWidth,
-            sourceHeight,
-          });
-
-          updateHdProgress(32);
-          startHdProgressTimer(36);
-
-          const upscaleResult = await optimizeHdImage({
-            imageUrl: sourceImageUrl,
-            resolution: "4k",
-            filenamePrefix: `hd-4k-${imageData.id}`,
-          });
-
-          stopHdProgressTimer();
-
-          if (!upscaleResult.success || !upscaleResult.imageUrl) {
-            throw new Error(upscaleResult.error || "高清放大失败");
-          }
-
-          updateHdProgress(96);
-
-          window.dispatchEvent(
-            new CustomEvent("triggerQuickImageUpload", {
-              detail: {
-                imageData: upscaleResult.imageUrl,
-                fileName: `hd-4k-${Date.now()}.png`,
-                selectedImageBounds: realTimeBounds,
-                smartPosition: placeholderCenter,
-                operationType: "hd-upscale",
-                sourceImageId: imageData.id,
-                placeholderId: hdPlaceholderId,
-                preferHorizontal: true,
-              },
-            })
-          );
-
-          window.dispatchEvent(
-            new CustomEvent("toast", {
-              detail: {
-                message: "✨ 高清放大完成，已在右侧生成新图",
-                type: "success",
-              },
-            })
-          );
-        } catch (error) {
-          if (hdProgressTimerId !== null) {
-            window.clearInterval(hdProgressTimerId);
-            hdProgressTimerId = null;
-          }
-          const message =
-            error instanceof Error ? error.message : "高清放大失败";
-          logger.error("高清放大失败", error);
-          if (hdPlaceholderId) {
-            window.dispatchEvent(
-              new CustomEvent("predictImagePlaceholder", {
-                detail: { action: "remove", placeholderId: hdPlaceholderId },
-              })
-            );
-          }
-          window.dispatchEvent(
-            new CustomEvent("toast", {
-              detail: { message, type: "error" },
-            })
-          );
-        } finally {
-          if (hdProgressTimerId !== null) {
-            window.clearInterval(hdProgressTimerId);
-          }
-          setIsOptimizingHd(false);
-        }
-      };
-
-      execute();
-    },
-    [
-      imageData.id,
-      isOptimizingHd,
-      realTimeBounds,
-      resolveHdUpscaleSourceImageUrl,
-    ]
-  );
-
   // 处理扩图取消
   const handleExpandCancel = useCallback(() => {
     setShowExpandSelector(false);
@@ -3551,20 +3221,6 @@ const ImageContainer: React.FC<ImageContainerProps> = ({
       onClick: (event) => {
         recordToolbarUsage("convertTo3D");
         handleConvertTo3D(event);
-      },
-    },
-    {
-      key: "hdUpscale",
-      label: lt("高清放大", "HD Upscale"),
-      title: isOptimizingHd
-        ? lt("正在高清放大...", "Upscaling...")
-        : lt("高清放大", "HD Upscale"),
-      icon: ImageUp,
-      disabled: isPendingUpload || isOptimizingHd,
-      loading: isOptimizingHd,
-      onClick: (event) => {
-        recordToolbarUsage("hdUpscale");
-        handleOptimizeHdImage(event);
       },
     },
     {

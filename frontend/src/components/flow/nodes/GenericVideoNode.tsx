@@ -1270,7 +1270,8 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
   }, [isSeedance20Model, isSeedanceModel, lt, seedanceModel]);
   const seedanceModeOptions = React.useMemo(
     () =>
-      isSeedance20Model
+      // 2.0 / 2.0 Fast / 2.5 共用：全能参考 + 首尾帧；不展示 1.5 的「图生视频」
+      isSeedance2FamilyModel
         ? [
             {
               value: "reference_images",
@@ -1306,7 +1307,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
               description: lt("首帧(image) + 尾帧(image-2)，总共 1-2 张图", "Start frame (image) + end frame (image-2), 1-2 images total"),
             },
           ],
-    [isSeedance20Model, lt]
+    [isSeedance2FamilyModel, lt]
   );
 
   React.useEffect(() => {
@@ -1314,6 +1315,19 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       setAspectMenuOpen(false);
     }
   }, [shouldShowAspectSelector]);
+
+  // Seedance 2.x 若残留 1.5 的 text/image 模式，纠正为 reference_images
+  React.useEffect(() => {
+    if (!isSeedance2FamilyModel) return;
+    const raw = String(data.seedanceMode || "").trim().toLowerCase();
+    if (!raw || isSeedance20ModeValue(raw)) return;
+    if (raw === "start_end" || raw === "first_frame") return;
+    window.dispatchEvent(
+      new CustomEvent("flow:updateNodeData", {
+        detail: { id, patch: { seedanceMode: "reference_images" } },
+      })
+    );
+  }, [data.seedanceMode, id, isSeedance2FamilyModel]);
 
   React.useEffect(() => {
     if (!managedRoutesMetadata || managedRoutesMetadata.vendors.length === 0) return;
@@ -1592,6 +1606,9 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
   const handleSeedanceModeChange = React.useCallback(
     (value: SeedanceMode) => {
       if (!isSeedanceModel || value === seedanceMode) return;
+      // 2.x 仅允许 reference_images / start_end；1.5 仅允许 text / image / start_end
+      if (isSeedance2FamilyModel && !isSeedance20ModeValue(value)) return;
+      if (!isSeedance2FamilyModel && !isSeedance15ModeValue(value)) return;
       const spec = isSeedance2FamilyModel
         ? getSeedance20ModeSpec(value as Seedance20Mode)
         : getSeedance15ModeSpec(value as Seedance15Mode);
@@ -2734,13 +2751,17 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
             options={seedanceModeOptions}
             onChange={(value) => handleSeedanceModeChange(value as SeedanceMode)}
             menuLabel={
-              isSeedance20Model
-                ? lt("Seedance 2.0 模式", "Seedance 2.0 modes")
+              isSeedance2FamilyModel
+                ? isSeedance25Model
+                  ? lt("Seedance 2.5 模式", "Seedance 2.5 modes")
+                  : lt("Seedance 2.0 模式", "Seedance 2.0 modes")
                 : lt("Seedance 1.5 模式", "Seedance 1.5 modes")
             }
             title={
-              isSeedance20Model
-                ? lt("选择 Seedance 2.0 模式", "Select Seedance 2.0 mode")
+              isSeedance2FamilyModel
+                ? isSeedance25Model
+                  ? lt("选择 Seedance 2.5 模式", "Select Seedance 2.5 mode")
+                  : lt("选择 Seedance 2.0 模式", "Select Seedance 2.0 mode")
                 : lt("选择 Seedance 1.5 模式", "Select Seedance 1.5 mode")
             }
           />

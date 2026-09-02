@@ -570,18 +570,3 @@ export class ExpandImageDto {
   @IsObject()
   providerOptions?: Record<string, any>;
 }
-
-export class UpscaleImageDto {
-  @IsString()
-  @IsNotEmpty()
-  imageUrl!: string;
-
-  @IsOptional()
-  @IsString()
-  @IsIn(['2k', '4k'])
-  resolution?: '2k' | '4k' = '4k';
-
-  @IsOptional()
-  @IsString()
-  filenamePrefix?: string;
-}

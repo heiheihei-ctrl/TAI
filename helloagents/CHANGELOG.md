@@ -10,6 +10,9 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Deployment brand: `DEPLOYMENT_BRAND=tai|linglong` (backend) / `VITE_DEPLOYMENT_BRAND` (frontend) — distinguishes credit pricing per product line; Seedream 5.0 Pro resolution pricing: tai `1K/1.5K/2K = 65/90/140`, linglong `100/130/180`.
 - Upload storage mode: `UPLOAD_MODE=tos|local` — local writes to `LOCAL_UPLOAD_ROOT` (nginx html) and serves via `LOCAL_UPLOAD_PUBLIC_BASE_URL`; TOS mode unchanged. Frontend follows `presign.mode` / `VITE_UPLOAD_MODE` and uses `/api/uploads/file` for local multipart. Old TOS URLs remap by key when `VITE_ASSET_PUBLIC_BASE_URL` points at nginx.
 
+### Removed
+- 画布图片工具栏「高清放大」功能及后端 `POST /api/ai/upscale-image` 接口（`hdUpscaleService`、`ExpandImageService.upscaleImage`）。
+
 ### Changed
 - Linglong brand: node palette restricted to free + Seedream + Seedance nodes; Seedream/Seedance credits +50% (`LINGLONG_CREDIT_MULTIPLIER=1.5`) via `DEPLOYMENT_BRAND=linglong` / runtime `deploymentBrand`.
 - Membership credits: VIP 69 月卡额度 `8700` → `7350`（`signupBonusCredits=0`，展示合计约 `9250`=7350+签到1900）；migration `202608220001_set_vip69_monthly_quota_7350`。

@@ -68,11 +68,6 @@
 - 提交时复用 `editImageViaAPI`，固定提示词为“智能填充红色蒙版区域并与原图融合”，输出 `png`；生成结果作为新图片通过 `triggerQuickImageUpload` 插回画布，而不是覆盖原图。
 - `ExpandImageSelector` 的预览底色与实际提交蒙版保持一致（红色），且只有当目标框至少一边超出原图时才允许发送。
 
-## 高清放大
-- 画布图片工具栏的“高清放大”走 `frontend/src/services/hdUpscaleService.ts` 的 RealESRGAN x4 工作流，不走 `editImageViaAPI`/提示词型图片编辑，避免模型重绘内容。
-- `ImageContainer` 优先把当前图片的 `remoteUrl/url/key/src` 解析为可公网访问的图片 URL；若只有临时 `data:`/`blob:`，会先上传到 OSS 后再提交超分服务。
-- 放大结果仍通过 `triggerQuickImageUpload` 插回画布并走统一上传/历史记录链路。
-
 ## 图片调色板条
 - `ImageContainer` 的图片操作菜单新增 `提取调色板`（位于“更多”菜单候选项内）。
 - 点击后会基于当前图片数据做降采样与主色聚类，提取 6 个主色，并生成一张独立的竖向调色板图片放在原图右侧（复用 `triggerQuickImageUpload` 链路）。
