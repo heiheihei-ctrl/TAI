@@ -2615,30 +2615,50 @@ export class CreditsService {
     client: PrismaService | Prisma.TransactionClient,
     userId: string,
   ): Promise<boolean> {
-    const [paidOrder, activeMembership, userProfile] = await Promise.all([
-      client.paymentOrder.findFirst({
-        where: {
-          userId,
-          status: 'paid',
-        },
-        select: { id: true },
-      }),
-      client.userMembershipSubscription.findFirst({
-        where: {
-          userId,
-          status: 'active',
-          currentPeriodStartAt: { lte: new Date() },
-          currentPeriodEndAt: { gt: new Date() },
-        },
-        select: { id: true },
-      }),
-      client.user.findUnique({
-        where: { id: userId },
-        select: { role: true, noWatermark: true },
-      }),
-    ]);
+    const [paidOrder, activeMembership, userProfile, enterpriseMembership] =
+      await Promise.all([
+        client.paymentOrder.findFirst({
+          where: {
+            userId,
+            status: 'paid',
+          },
+          select: { id: true },
+        }),
+        client.userMembershipSubscription.findFirst({
+          where: {
+            userId,
+            status: 'active',
+            currentPeriodStartAt: { lte: new Date() },
+            currentPeriodEndAt: { gt: new Date() },
+          },
+          select: { id: true },
+        }),
+        client.user.findUnique({
+          where: { id: userId },
+          select: { role: true, noWatermark: true },
+        }),
+        // 已加入企业工作区的成员不受免费日/月配额限制
+        client.teamMembership.findFirst({
+          where: {
+            userId,
+            team: {
+              status: 'active',
+              isPersonal: false,
+              enterpriseEnabled: true,
+            },
+          },
+          select: { teamId: true },
+        }),
+      ]);
 
-    if (paidOrder || activeMembership || userProfile?.noWatermark === true) return true;
+    if (
+      paidOrder ||
+      activeMembership ||
+      userProfile?.noWatermark === true ||
+      enterpriseMembership
+    ) {
+      return true;
+    }
     const role = typeof userProfile?.role === 'string' ? userProfile.role.toLowerCase() : '';
     return role === 'admin' || role === 'normal_admin';
   }
@@ -2791,14 +2811,17 @@ export class CreditsService {
     serviceType: ServiceType,
     requestedOutputImageCount?: number,
   ): Promise<void> {
+    const skipQuota = await this.shouldSkipFreeUsageQuota(this.prisma, userId);
     await this.enforceFreeUserImageQuota(this.prisma, {
       userId,
       serviceType,
       requestedOutputImageCount,
+      skipQuota,
     });
     await this.enforceFreeUserVideoQuota(this.prisma, {
       userId,
       serviceType,
+      skipQuota,
     });
   }
 

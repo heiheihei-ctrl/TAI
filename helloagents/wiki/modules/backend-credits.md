@@ -49,6 +49,7 @@
   - 任意存在 `paymentOrder.status=paid` 的用户
   - 活跃会员
   - 白名单用户（`user.noWatermark=true`）
+  - 已加入企业工作区的成员（`TeamMembership` → `Team.enterpriseEnabled=true` 且 `status=active`、非个人团队）
   - `admin/normal_admin`
 - 生图上限：
   - 每天最多 `20` 张（UTC 日）

@@ -7251,12 +7251,22 @@ function FlowInner() {
   const [pendingPaletteFocusGroup, setPendingPaletteFocusGroup] = React.useState<
     NodePanelGroupKey | null
   >(null);
+  /** 仅从居中海报点入时高亮 Seedance；普通打开节点面板不高亮 */
+  const [highlightSeedanceFromPromo, setHighlightSeedanceFromPromo] =
+    React.useState(false);
+
+  React.useEffect(() => {
+    if (!addPanel.visible) {
+      setHighlightSeedanceFromPromo(false);
+    }
+  }, [addPanel.visible]);
 
   React.useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<{
         tab?: AddPanelTab;
         focusGroup?: NodePanelGroupKey;
+        highlightSeedance?: boolean;
       }>).detail;
       const focusGroup =
         detail?.focusGroup &&
@@ -7266,6 +7276,7 @@ function FlowInner() {
       if (focusGroup) {
         setPendingPaletteFocusGroup(focusGroup);
       }
+      setHighlightSeedanceFromPromo(detail?.highlightSeedance === true);
       openAddPanelAtContainerCenter({
         tab: detail?.tab || "nodes",
       });
@@ -24552,7 +24563,9 @@ function FlowInner() {
                               isDarkTheme={isFlowBlackTheme}
                               showZh={isZh}
                               vipOnly={isVipLocked}
-                              highlighted={isSeedancePaletteNode}
+                              highlighted={
+                                isSeedancePaletteNode && highlightSeedanceFromPromo
+                              }
                               onboardingTarget={
                                 config.nodeKey === "textPrompt" ||
                                 config.nodeKey === "generate" ||

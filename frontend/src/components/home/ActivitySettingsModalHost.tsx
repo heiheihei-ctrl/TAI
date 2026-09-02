@@ -4,6 +4,7 @@ import {
   FLOW_OPEN_ADD_PANEL_EVENT,
   type FlowOpenAddPanelDetail,
 } from '@/config/canvasSummerPromo';
+import { getDeploymentBrand } from '@/config/deploymentBrand';
 import {
   ACTIVITY_SETTINGS_DISMISS_KEY,
   fetchPublicActivitySettings,
@@ -18,6 +19,9 @@ export default function ActivitySettingsModalHost() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
+    // 玲珑品牌不展示居中海报/活动弹窗
+    if (getDeploymentBrand() === 'linglong') return;
+
     void fetchPublicActivitySettings().then((data) => {
       if (!isEventSettingsActive(data)) return;
 
@@ -33,11 +37,16 @@ export default function ActivitySettingsModalHost() {
     const detail: FlowOpenAddPanelDetail = {
       tab: 'nodes',
       focusGroup: 'video',
+      highlightSeedance: true,
     };
     window.dispatchEvent(
       new CustomEvent(FLOW_OPEN_ADD_PANEL_EVENT, { detail }),
     );
   }, []);
+
+  if (getDeploymentBrand() === 'linglong') {
+    return null;
+  }
 
   return (
     <EventSettingsModal

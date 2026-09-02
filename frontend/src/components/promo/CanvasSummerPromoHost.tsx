@@ -35,6 +35,7 @@ export default function CanvasSummerPromoHost() {
 
   const evaluateOpen = useCallback(async () => {
     const seq = ++evaluateSeq.current;
+    // shouldShowCanvasSummerPromo 已包含 linglong 品牌拦截
     if (!isCanvasSummerPromoActive()) {
       if (seq === evaluateSeq.current) setOpen(false);
       return;
@@ -105,6 +106,7 @@ export default function CanvasSummerPromoHost() {
     const detail: FlowOpenAddPanelDetail = {
       tab: "nodes",
       focusGroup: "video",
+      highlightSeedance: true,
     };
     window.dispatchEvent(
       new CustomEvent(FLOW_OPEN_ADD_PANEL_EVENT, { detail }),

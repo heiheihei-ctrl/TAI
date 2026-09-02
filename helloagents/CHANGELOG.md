@@ -14,6 +14,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - 画布图片工具栏「高清放大」功能及后端 `POST /api/ai/upscale-image` 接口（`hdUpscaleService`、`ExpandImageService.upscaleImage`）。
 
 ### Changed
+- Credits/Quota: 已加入企业工作区（`Team.enterpriseEnabled=true`）的成员豁免免费日/月生图与生视频配额限制。
 - Linglong brand: node palette restricted to free + Seedream + Seedance nodes; Seedream/Seedance credits +50% (`LINGLONG_CREDIT_MULTIPLIER=1.5`) via `DEPLOYMENT_BRAND=linglong` / runtime `deploymentBrand`.
 - Membership credits: VIP 69 月卡额度 `8700` → `7350`（`signupBonusCredits=0`，展示合计约 `9250`=7350+签到1900）；migration `202608220001_set_vip69_monthly_quota_7350`。
 - Prompt optimize (normal route): ToAPIs upstream model fixed to `gemini-2.5-flash-official`; stable route keeps existing text-model mapping.

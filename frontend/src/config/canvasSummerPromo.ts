@@ -1,3 +1,5 @@
+import { getDeploymentBrand } from "@/config/deploymentBrand";
+
 /** 画布居中促销海报：2026-08-06 ~ 2026-09-30（含首尾日，本地时区） */
 export const CANVAS_SUMMER_PROMO = {
   id: "canvas-summer-promo-20260806",
@@ -29,6 +31,8 @@ export const FLOW_OPEN_ADD_PANEL_EVENT = "flow:open-add-panel";
 export type FlowOpenAddPanelDetail = {
   tab?: "nodes" | "beta" | "custom" | "templates" | "personal";
   focusGroup?: "text" | "image" | "video" | "audio" | "other" | "three";
+  /** 仅从居中促销海报点入时为 true：节点面板内高亮 Seedance */
+  highlightSeedance?: boolean;
 };
 
 export function isCanvasSummerPromoActive(now = new Date()): boolean {
@@ -191,6 +195,8 @@ export function hasCanvasSummerPromoPurchased(userId: string | null | undefined)
  * - 本会话已关闭且非「登录后挂起」→ 否
  */
 export function shouldShowCanvasSummerPromo(userId?: string | null): boolean {
+  // 玲珑品牌不展示居中促销海报
+  if (getDeploymentBrand() === "linglong") return false;
   if (!isCanvasSummerPromoActive()) return false;
   if (hasCanvasSummerPromoPurchased(userId)) return false;
   if (hasCanvasSummerPromoLoginPending()) return true;
