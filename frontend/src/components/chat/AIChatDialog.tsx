@@ -62,6 +62,11 @@ import {
   Lock,
   Unlock,
 } from "lucide-react";
+import ChatModelPickerPanel from "@/components/chat/ChatModelPickerPanel";
+import {
+  getChatModelOption,
+  resolveChatModelKeyFromState,
+} from "@/config/chatModelOptions";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -335,6 +340,8 @@ const AIChatDialog: React.FC = () => {
     cancelWorkflowChat,
     autoSelectedTool,
     aiProvider,
+    chatModelKey,
+    setChatModelKey,
     bananaImageRoute,
     setAIProvider,
     autoModeMultiplier,
@@ -486,6 +493,8 @@ const AIChatDialog: React.FC = () => {
 
   // 上传菜单状态
   const [isUploadMenuOpen, setIsUploadMenuOpen] = useState(false);
+  const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
+  const modelPickerRef = useRef<HTMLDivElement | null>(null);
   const thinkingLevelPanelRef = useRef<HTMLDivElement | null>(null);
   const thinkingLevelButtonRef = useRef<HTMLButtonElement | null>(null);
   const [thinkingLevelPos, setThinkingLevelPos] = useState<{
@@ -547,11 +556,21 @@ const AIChatDialog: React.FC = () => {
     ],
     [t]
   );
+  const activeChatModelKey = useMemo(
+    () =>
+      resolveChatModelKeyFromState({
+        aiProvider,
+        manualAIMode,
+        chatModelKey,
+      }),
+    [aiProvider, manualAIMode, chatModelKey]
+  );
+  const activeChatModelOption = useMemo(
+    () => getChatModelOption(activeChatModelKey),
+    [activeChatModelKey]
+  );
   const currentProviderOption =
     providerToggleOptions.find((option) => option.value === aiProvider) ?? null;
-  const isDomesticProvider = providerToggleOptions.some(
-    (option) => option.value === aiProvider
-  );
   const isFastMode = aiProvider === "banana-2.5";
   const isUltraMode = aiProvider === "banana-3.1";
   const isVideoMode =
@@ -566,7 +585,9 @@ const AIChatDialog: React.FC = () => {
     (aiProvider === "gemini-pro" ||
       aiProvider === "banana" ||
       aiProvider === "banana-2.5" ||
-      aiProvider === "banana-3.1");
+      aiProvider === "banana-3.1" ||
+      aiProvider === "seedream5Pro" ||
+      chatModelKey === "gpt-image-2");
   const showThinkingLevelControls =
     !shouldHideImageParamControls &&
     (aiProvider === "gemini-pro" ||
@@ -618,6 +639,19 @@ const AIChatDialog: React.FC = () => {
     isMaximizedRef.current = isMaximized;
   }, [isMaximized]);
 
+  useEffect(() => {
+    if (!isModelPickerOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target || !modelPickerRef.current) return;
+      if (modelPickerRef.current.contains(target)) return;
+      setIsModelPickerOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [isModelPickerOpen]);
+
+
   // 记录最新的历史面板状态，供原生事件监听使用
   useEffect(() => {
     showHistoryRef.current = showHistory;
@@ -628,7 +662,13 @@ const AIChatDialog: React.FC = () => {
     availableManualModeOptions[0]?.label ??
     t("chat.labels.selectMode");
   const providerButtonLabel =
-    currentProviderOption?.label ?? t("chat.labels.domesticModel");
+    activeChatModelOption?.label ??
+    currentProviderOption?.label ??
+    t("chat.labels.domesticModel");
+  const modelPickerButtonLabel =
+    i18n.language?.startsWith("en")
+      ? activeChatModelOption?.labelEn ?? providerButtonLabel
+      : activeChatModelOption?.label ?? providerButtonLabel;
   // 统一向上展开（最大化时避免溢出，紧凑模式保持原有行为）
   const dropdownSide: "top" | "bottom" = "top";
 
@@ -3396,83 +3436,42 @@ const AIChatDialog: React.FC = () => {
                     </DropdownMenuContent>
                   </DropdownMenu>
 
-                  {/* 模型选择 GPT-image-2 等 */}
+                  {/* 模型选择：常用 / 其它模型面板 */}
                   {!shouldHideImageParamControls && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          size='sm'
-                          variant='outline'
-                          disabled={false}
-                          data-dropdown-trigger='true'
-                          className={cn(
-                            "h-7 pl-2 pr-3 flex select-none items-center gap-1 rounded-full text-xs transition-all duration-200",
-                            "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
-                            !generationStatus.isGenerating
-                              ? "hover:bg-gray-100 text-gray-700"
-                              : "opacity-50 cursor-not-allowed text-gray-400"
-                          )}
-                          title={t("chat.labels.quickSwitchDomesticModel")}
-                        >
-                          <span className='font-medium'>{providerButtonLabel}</span>
-                          <ChevronDown className='h-3.5 w-3.5 opacity-60' />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent
-                        align='start'
-                        side={dropdownSide}
-                        sideOffset={8}
-                        className='dropdown-menu-root min-w-[220px] rounded-lg border border-slate-200 bg-white/95 shadow-lg backdrop-blur-md dark:!border-slate-200 dark:!bg-white/95'
+                    <div ref={modelPickerRef} className="relative">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={generationStatus.isGenerating}
+                        data-dropdown-trigger="true"
+                        onClick={() => setIsModelPickerOpen((open) => !open)}
+                        className={cn(
+                          "h-7 max-w-[168px] px-2.5 rounded-full transition-all duration-200 gap-1",
+                          "bg-liquid-glass backdrop-blur-liquid backdrop-saturate-125 border border-liquid-glass shadow-liquid-glass",
+                          !generationStatus.isGenerating
+                            ? "hover:bg-liquid-glass-hover text-gray-700"
+                            : "opacity-50 cursor-not-allowed text-gray-400"
+                        )}
+                        title={modelPickerButtonLabel}
                       >
-                        <DropdownMenuLabel className='px-3 py-2 text-[11px] uppercase tracking-wide text-slate-400 dark:!text-slate-400'>
-                          {t("chat.labels.quickSwitchModel")}
-                        </DropdownMenuLabel>
-                        {providerToggleOptions.map((option) => {
-                          const isActive = aiProvider === option.value;
-                          return (
-                            <DropdownMenuItem
-                              key={option.value}
-                              onClick={(event) => {
-                                if (aiProvider !== option.value) {
-                                  console.log(
-                                    "🤖 切换 AI 提供商:",
-                                    option.value
-                                  );
-                                  setAIProvider(option.value, { source: "dialog" });
-                                }
-                                const root = (
-                                  event.currentTarget as HTMLElement
-                                ).closest(".dropdown-menu-root");
-                                const trigger = root?.querySelector(
-                                  '[data-dropdown-trigger="true"]'
-                                ) as HTMLButtonElement | null;
-                                if (trigger && !trigger.disabled) {
-                                  trigger.click();
-                                }
-                              }}
-                              className={cn(
-                                "flex items-start gap-2 px-3 py-2 text-xs",
-                                isActive
-                                  ? "bg-gray-100 text-gray-800 dark:!bg-gray-100 dark:!text-gray-800"
-                                  : "text-slate-600 hover:bg-gray-100 dark:!text-slate-600 dark:hover:!bg-gray-100"
-                              )}
-                            >
-                              <div className='flex-1 space-y-0.5'>
-                                <div className='font-medium leading-none'>
-                                  {option.label}
-                                </div>
-                                <div className='text-[11px] text-slate-400 leading-snug dark:!text-slate-400'>
-                                  {option.description}
-                                </div>
-                              </div>
-                              {isActive && (
-                                <Check className='h-3.5 w-3.5 text-slate-700 dark:!text-slate-700' />
-                              )}
-                            </DropdownMenuItem>
-                          );
-                        })}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                        <span className="min-w-0 truncate text-xs font-medium">
+                          {modelPickerButtonLabel}
+                        </span>
+                        <ChevronDown className="h-3 w-3 shrink-0 opacity-70" />
+                      </Button>
+                      {isModelPickerOpen ? (
+                        <div className="absolute left-0 bottom-[calc(100%+8px)] z-[12000]">
+                          <ChatModelPickerPanel
+                            value={activeChatModelKey}
+                            locale={i18n.language?.startsWith("en") ? "en" : "zh"}
+                            onSelect={(option) => {
+                              setChatModelKey(option.key);
+                              setIsModelPickerOpen(false);
+                            }}
+                          />
+                        </div>
+                      ) : null}
+                    </div>
                   )}
 
                   {/* 长宽比 */}

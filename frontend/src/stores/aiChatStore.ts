@@ -37,6 +37,11 @@ import {
   formatReferenceImageSizeError,
   validateReferenceImageInputs,
 } from "@/utils/referenceImageValidation";
+import type { ChatModelKey } from "@/config/chatModelOptions";
+import {
+  applyChatModelSelection,
+  getChatModelOption,
+} from "@/config/chatModelOptions";
 import { createSafeStorage } from "@/stores/storageUtils";
 import { recordImageHistoryEntry } from "@/services/imageHistoryService";
 import { useImageHistoryStore } from "@/stores/imageHistoryStore";
@@ -156,7 +161,7 @@ const architectureSeqCursor = new Map<string, number>();
 const architectureCursorKey = (projectId: string, sessionId: string) =>
   `${projectId}/${sessionId}`;
 
-const isRemoteReferenceUrl = (value: unknown): value is string => {
+const isRemoteReferenceUrl = (value: unknown): boolean => {
   if (typeof value !== "string") return false;
   const t = value.trim();
   if (!t || /^(data:|blob:)/i.test(t)) return false;
@@ -663,6 +668,8 @@ const BANANA_31_IMAGE_MODEL = "gemini-3.1-flash-image-preview";
 /** Ultra 图像分析走 ToAPIs 官方通道多模态模型 */
 const BANANA_31_ANALYZE_MODEL = "gemini-3.1-pro-preview-official";
 const SEEDREAM5_IMAGE_MODEL = "doubao-seedream-5-0-260128";
+const SEEDREAM5_PRO_IMAGE_MODEL = "doubao-seedream-5-0-pro-260628";
+const GPT_IMAGE2_MODEL = "gpt-image-2-official";
 export const SORA2_VIDEO_MODELS = {
   hd: "sora-2-pro-reverse",
   sd: "sora-2-reverse",
@@ -1012,6 +1019,9 @@ export const getImageModelForProvider = (provider: AIProviderType): string => {
   }
   if (provider === "seedream5") {
     return SEEDREAM5_IMAGE_MODEL;
+  }
+  if (provider === "seedream5Pro") {
+    return SEEDREAM5_PRO_IMAGE_MODEL;
   }
   return DEFAULT_IMAGE_MODEL;
 };
@@ -2560,6 +2570,7 @@ interface AIChatState {
   manualAIMode: ManualAIMode;
   autoSelectedTool: AvailableTool | null; // Auto 模式最近一次选择的工具
   aiProvider: AIProviderType; // AI提供商选择 (gemini: Google Gemini, banana: 147 API, runninghub: SU截图转效果, midjourney: 147 Midjourney)
+  chatModelKey: ChatModelKey;
   bananaImageRoute: BananaImageRoute;
   autoModeMultiplier: AutoModeMultiplier;
   sendShortcut: SendShortcut;
@@ -2759,6 +2770,7 @@ interface AIChatState {
   setVideoDurationSeconds: (seconds: AIChatVideoDurationSeconds | null) => void;
   setManualAIMode: (mode: ManualAIMode) => void;
   setAIProvider: (provider: AIProviderType, options?: SetAIProviderOptions) => void; // 设置AI提供商
+  setChatModelKey: (key: ChatModelKey) => void;
   setBananaImageRoute: (route: BananaImageRoute) => void;
   setAutoModeMultiplier: (multiplier: AutoModeMultiplier) => void;
   setSendShortcut: (shortcut: SendShortcut) => void;
@@ -3067,6 +3079,7 @@ export const useAIChatStore = create<AIChatState>()(
         manualAIMode: "auto",
         autoSelectedTool: null,
         aiProvider: "banana-2.5", // 默认Fast版
+        chatModelKey: "nano-banana-fast",
         bananaImageRoute: "stable",
         autoModeMultiplier: 1,
         sendShortcut: "enter",
@@ -3721,16 +3734,18 @@ export const useAIChatStore = create<AIChatState>()(
               });
             }, 1000);
 
-            // 联网开启时，Ultra 强制走 nano2(apimart gemini-3.1) 以对齐 Nano2 节点行为。
             const effectiveProvider: AIProviderType =
-              state.aiProvider === "banana-3.1" && state.enableWebSearch
+              state.chatModelKey === "gpt-image-2"
                 ? "nano2"
-                : state.aiProvider;
-            // nano2 与 banana-3.1 使用同一 3.1 图像模型名
+                : state.aiProvider === "banana-3.1" && state.enableWebSearch
+                  ? "nano2"
+                  : state.aiProvider;
             const modelToUse =
-              effectiveProvider === "nano2"
-                ? BANANA_31_IMAGE_MODEL
-                : getImageModelForProvider(effectiveProvider);
+              state.chatModelKey === "gpt-image-2"
+                ? GPT_IMAGE2_MODEL
+                : effectiveProvider === "nano2"
+                  ? BANANA_31_IMAGE_MODEL
+                  : getImageModelForProvider(effectiveProvider);
             const enableWebSearchForRequest =
               effectiveProvider === "nano2"
                 ? undefined
@@ -3822,9 +3837,15 @@ export const useAIChatStore = create<AIChatState>()(
             const generateRequest =
               effectiveProvider === "nano2"
                 ? {
-                    // 与 Nano2 节点保持同一请求字段集合
                     prompt,
                     aiProvider: "nano2" as const,
+                    ...(state.chatModelKey === "gpt-image-2"
+                      ? {
+                          model: GPT_IMAGE2_MODEL,
+                          officialFallback: false,
+                          quality: "medium" as const,
+                        }
+                      : {}),
                     providerOptions,
                     aspectRatio: state.aspectRatio || undefined,
                     imageSize: state.imageSize ?? "1K",
@@ -3836,8 +3857,14 @@ export const useAIChatStore = create<AIChatState>()(
                     parallelGroupId,
                     parallelGroupIndex,
                     parallelGroupTotal,
-                    googleSearch: state.enableWebSearch,
-                    googleImageSearch: state.enableWebSearch,
+                    googleSearch:
+                      state.chatModelKey === "gpt-image-2"
+                        ? undefined
+                        : state.enableWebSearch,
+                    googleImageSearch:
+                      state.chatModelKey === "gpt-image-2"
+                        ? undefined
+                        : state.enableWebSearch,
                   }
                 : {
                     prompt,
@@ -7632,10 +7659,10 @@ export const useAIChatStore = create<AIChatState>()(
                   referenceImageUrls.push(raw.trim());
                   continue;
                 }
-                if (typeof raw === "string" && raw.startsWith("data:")) {
+                if (raw.startsWith("data:")) {
                   try {
                     const uploaded = await uploadImageToOSS(raw, projectId);
-                    if (isRemoteReferenceUrl(uploaded)) {
+                    if (uploaded && isRemoteReferenceUrl(uploaded)) {
                       referenceImageUrls.push(uploaded);
                     }
                   } catch (e) {
@@ -9101,6 +9128,27 @@ export const useAIChatStore = create<AIChatState>()(
             );
           }
         },
+        setChatModelKey: (key) => {
+          const option = getChatModelOption(key);
+          if (!option) return;
+          const applied = applyChatModelSelection(option);
+          set({
+            chatModelKey: applied.chatModelKey,
+            aiProvider: applied.provider,
+            manualAIMode: applied.manualMode,
+            autoSelectedTool: null,
+          });
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent(FLOW_MODEL_PROVIDER_SYNC_EVENT, {
+                detail: {
+                  provider: applied.provider,
+                  source: "dialog",
+                },
+              })
+            );
+          }
+        },
         setBananaImageRoute: (route) => {
           set({ bananaImageRoute: route });
           if (typeof window !== "undefined") {
@@ -9232,9 +9280,22 @@ export const useAIChatStore = create<AIChatState>()(
         const validVideoRatios = ["16:9", "9:16"];
         const validVideoDurations = AI_CHAT_VIDEO_DURATION_OPTIONS.map(String);
         const validBananaImageRoutes = ["normal", "stable"];
+        const validChatModelKeys = [
+          "nano-banana-pro",
+          "nano-banana-ultra",
+          "gpt-image-2",
+          "seedream-5-pro",
+          "seedance",
+          "nano-banana-fast",
+          "gemini-pro",
+          "midjourney",
+        ];
 
         return {
           ...state,
+          chatModelKey: validChatModelKeys.includes(String(state.chatModelKey))
+            ? (state.chatModelKey as AIChatState["chatModelKey"])
+            : "nano-banana-fast",
           manualAIMode: validManualModes.includes(String(state.manualAIMode))
             ? (state.manualAIMode as AIChatState["manualAIMode"])
             : "auto",
@@ -9268,6 +9329,7 @@ export const useAIChatStore = create<AIChatState>()(
       partialize: (state) => ({
         manualAIMode: state.manualAIMode,
         aiProvider: state.aiProvider,
+        chatModelKey: state.chatModelKey,
         bananaImageRoute: state.bananaImageRoute,
         autoDownload: state.autoDownload,
         enableWebSearch: state.enableWebSearch,
