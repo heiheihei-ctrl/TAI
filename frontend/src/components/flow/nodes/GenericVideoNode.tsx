@@ -258,7 +258,11 @@ type SeedanceModeSpec = {
   audioHandleMax: number;
 };
 
-const getSeedance20ModeSpec = (mode: Seedance20Mode): SeedanceModeSpec => {
+const getSeedance20ModeSpec = (
+  mode: Seedance20Mode,
+  options?: { isSeedance25?: boolean }
+): SeedanceModeSpec => {
+  const isSeedance25 = options?.isSeedance25 === true;
   switch (mode) {
     case "start_end":
       return {
@@ -271,10 +275,11 @@ const getSeedance20ModeSpec = (mode: Seedance20Mode): SeedanceModeSpec => {
     case "reference_images":
       return {
         visibleHandles: ["text", "image", "video", "audio"],
-        imageHandleMax: 9,
+        // 2.0: 图≤9 / 视频≤3 / 音频≤3；2.5 官方: 图≤30 / 视频≤10 / 音频≤10
+        imageHandleMax: isSeedance25 ? 30 : 9,
         image2HandleMax: 0,
-        videoHandleMax: 3,
-        audioHandleMax: 3,
+        videoHandleMax: isSeedance25 ? 10 : 3,
+        audioHandleMax: isSeedance25 ? 10 : 3,
       };
     default:
       return {
@@ -523,9 +528,11 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       !isSeedanceModel
         ? null
         : isSeedance2FamilyModel
-        ? getSeedance20ModeSpec(seedanceMode as Seedance20Mode)
+        ? getSeedance20ModeSpec(seedanceMode as Seedance20Mode, {
+            isSeedance25: isSeedance25Model,
+          })
         : getSeedance15ModeSpec(seedanceMode as Seedance15Mode),
-    [isSeedance2FamilyModel, isSeedanceModel, seedanceMode]
+    [isSeedance2FamilyModel, isSeedance25Model, isSeedanceModel, seedanceMode]
   );
   const seedanceHandleTopMap = React.useMemo(
     () => (seedanceModeSpec ? getSeedanceHandleTopMap(seedanceModeSpec.visibleHandles) : {}),
@@ -1129,6 +1136,10 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
   );
   const filteredSeedanceModelOptions = React.useMemo(
     () => {
+      // 玲珑仅开放 Seedance 1.5 Pro
+      if (isLinglongRestrictedPalette()) {
+        return seedanceModelOptions.filter((opt) => opt.value === "seedance-1.5-pro");
+      }
       if (seedance20AvailableForCurrentUser || seedance20RestrictedForCurrentUser) {
         return seedanceModelOptions;
       }
@@ -1156,6 +1167,26 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       supportedModels,
     ]
   );
+  React.useEffect(() => {
+    if (!isLinglongRestrictedPalette() || provider !== "doubao") return;
+    if (seedanceModel === "seedance-1.5-pro") return;
+    const nextDuration =
+      clipDuration && clipDuration >= 4 && clipDuration <= 12 ? clipDuration : 5;
+    window.dispatchEvent(
+      new CustomEvent("flow:updateNodeData", {
+        detail: {
+          id,
+          patch: {
+            seedanceModel: "seedance-1.5-pro",
+            seedanceMode: "text",
+            clipDuration: nextDuration,
+            vendorKey: "tianyi",
+            platformKey: "tianyi",
+          },
+        },
+      })
+    );
+  }, [clipDuration, id, provider, seedanceModel]);
   React.useEffect(() => {
     if (!seedance20RestrictedForCurrentUser || !isSeedance2FamilyModel) return;
     const nextDuration =
@@ -1264,6 +1295,17 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
               "分辨率/尺寸：480P、720P、1080P；21:9、16:9、4:3、1:1、3:4、9:16",
               "Resolution/ratio: 480P, 720P, 1080P; 21:9, 16:9, 4:3, 1:1, 3:4, 9:16"
             );
+      if (isSeedance25Model) {
+        return [
+          lt("图片大小：单图建议不超过 30MB", "Image size: each image should be <= 30MB"),
+          lt("生成时长：4-30 秒", "Output duration: 4-30s"),
+          resolutionTip,
+          lt(
+            "全能参考：图≤30，视频≤10，音频≤10（合计≤50；音频每条≤5秒）",
+            "Omni reference: image<=30, video<=10, audio<=10 (total<=50; audio<=5s each)"
+          ),
+        ];
+      }
       return [
         lt("图片大小：单图建议不超过 30MB", "Image size: each image should be <= 30MB"),
         lt("生成时长：4-30 秒", "Output duration: 4-30s"),
@@ -1276,7 +1318,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       lt("生成时长：4-30 秒", "Output duration: 4-30s"),
       lt("分辨率/尺寸：720P；16:9、9:16、1:1", "Resolution/ratio: 720P; 16:9, 9:16, 1:1"),
     ];
-  }, [isSeedance20Model, isSeedanceModel, lt, seedanceModel]);
+  }, [isSeedance20Model, isSeedance25Model, isSeedanceModel, lt, seedanceModel]);
   const seedanceModeOptions = React.useMemo(
     () =>
       // 2.0 / 2.0 Fast / 2.5 共用：全能参考 + 首尾帧；不展示 1.5 的「图生视频」
@@ -1285,10 +1327,15 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
             {
               value: "reference_images",
               label: lt("全能参考", "Omni reference"),
-              description: lt(
-                "文不限，图≤9，视频≤3，音频≤3（每条≤5秒）",
-                "Text unlimited, image<=9, video<=3, audio<=3 (<=5s each)"
-              ),
+              description: isSeedance25Model
+                ? lt(
+                    "文不限，图≤30，视频≤10，音频≤10（合计≤50）",
+                    "Text unlimited, image<=30, video<=10, audio<=10 (total<=50)"
+                  )
+                : lt(
+                    "文不限，图≤9，视频≤3，音频≤3（每条≤5秒）",
+                    "Text unlimited, image<=9, video<=3, audio<=3 (<=5s each)"
+                  ),
             },
             {
               value: "start_end",
@@ -1316,7 +1363,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
               description: lt("首帧(image) + 尾帧(image-2)，总共 1-2 张图", "Start frame (image) + end frame (image-2), 1-2 images total"),
             },
           ],
-    [isSeedance2FamilyModel, lt]
+    [isSeedance2FamilyModel, isSeedance25Model, lt]
   );
 
   React.useEffect(() => {
@@ -1644,7 +1691,9 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       if (isSeedance2FamilyModel && !isSeedance20ModeValue(value)) return;
       if (!isSeedance2FamilyModel && !isSeedance15ModeValue(value)) return;
       const spec = isSeedance2FamilyModel
-        ? getSeedance20ModeSpec(value as Seedance20Mode)
+        ? getSeedance20ModeSpec(value as Seedance20Mode, {
+            isSeedance25: isSeedance25Model,
+          })
         : getSeedance15ModeSpec(value as Seedance15Mode);
 
       setEdges((edges) => {
@@ -1697,7 +1746,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
         })
       );
     },
-    [id, isSeedance2FamilyModel, isSeedanceModel, seedanceMode, setEdges]
+    [id, isSeedance2FamilyModel, isSeedance25Model, isSeedanceModel, seedanceMode, setEdges]
   );
 
   const handleManagedRouteChange = React.useCallback(

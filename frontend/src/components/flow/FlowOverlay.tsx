@@ -1154,6 +1154,11 @@ const SEEDANCE20_REFERENCE_VIDEO_TOTAL_MAX_DURATION_SEC = 15.2;
 const SEEDANCE15_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12];
 const SEEDANCE20_DURATIONS = [5, 10, 15];
 const SEEDANCE25_DURATIONS = [5, 10, 15, 20, 25, 30];
+/** Seedance 2.5 全能参考：图≤30、视频≤10、音频≤10，合计≤50 */
+const SEEDANCE25_REFERENCE_IMAGE_MAX = 30;
+const SEEDANCE25_REFERENCE_VIDEO_MAX = 10;
+const SEEDANCE25_REFERENCE_AUDIO_MAX = 10;
+const SEEDANCE25_REFERENCE_TOTAL_MAX = 50;
 const SEEDANCE25_REFERENCE_VIDEO_MAX_DURATION_SEC = 30.2;
 const SEEDANCE25_REFERENCE_VIDEO_TOTAL_MAX_DURATION_SEC = 30.2;
 
@@ -9933,13 +9938,19 @@ function FlowInner() {
       node?: Node | null
     ): {
       isSeedance20: boolean;
+      isSeedance25: boolean;
+      isSeedance2Family: boolean;
       model: "seedance-1.5-pro" | "seedance-2.0" | "seedance-2.0-fast" | "seedance-2.5";
     } | null => {
       if (!isSeedanceVideoNode(node)) return null;
       const nodeData = (node?.data || {}) as Record<string, any>;
       const model = normalizeSeedanceModelValue(nodeData.seedanceModel);
+      const isSeedance20 = isSeedance20ModelValue(model);
+      const isSeedance25 = isSeedance25ModelValue(model);
       return {
-        isSeedance20: isSeedance20ModelValue(model),
+        isSeedance20,
+        isSeedance25,
+        isSeedance2Family: isSeedance20 || isSeedance25,
         model,
       };
     },
@@ -9953,7 +9964,8 @@ function FlowInner() {
 
       const nodeData = (node.data || {}) as Record<string, any>;
       const legacyMode = String(nodeData.seedanceMode || "").trim().toLowerCase();
-      if (profile.isSeedance20) {
+      // 2.0 / 2.0-fast / 2.5 共用全能参考 + 首尾帧
+      if (profile.isSeedance2Family) {
         if (isSeedance20ModeValue(nodeData.seedanceMode)) {
           return nodeData.seedanceMode;
         }
@@ -10002,13 +10014,21 @@ function FlowInner() {
         };
       }
       const mode = inferSeedanceMode(node);
-      if (profile.isSeedance20) {
+      if (profile.isSeedance2Family) {
         if (mode === "start_end") {
           return {
             imageHandleMax: 2,
             image2HandleMax: 0,
             videoHandleMax: 0,
             audioHandleMax: 0,
+          };
+        }
+        if (profile.isSeedance25) {
+          return {
+            imageHandleMax: SEEDANCE25_REFERENCE_IMAGE_MAX,
+            image2HandleMax: 0,
+            videoHandleMax: SEEDANCE25_REFERENCE_VIDEO_MAX,
+            audioHandleMax: SEEDANCE25_REFERENCE_AUDIO_MAX,
           };
         }
         return {
@@ -16154,15 +16174,31 @@ function FlowInner() {
             }
 
             if (seedanceImageCount > seedanceModeSpec.imageHandleMax) {
-              failCurrentVideoNode("Seedance 2.0 最多支持 9 张图片参考");
+              failCurrentVideoNode(
+                `${seedanceFamilyLabel} 最多支持 ${seedanceModeSpec.imageHandleMax} 张图片参考`
+              );
               return;
             }
             if (seedanceVideoCount > seedanceModeSpec.videoHandleMax) {
-              failCurrentVideoNode("Seedance 2.0 最多支持 3 条视频参考");
+              failCurrentVideoNode(
+                `${seedanceFamilyLabel} 最多支持 ${seedanceModeSpec.videoHandleMax} 条视频参考`
+              );
               return;
             }
             if (seedanceAudioCount > seedanceModeSpec.audioHandleMax) {
-              failCurrentVideoNode("Seedance 2.0 最多支持 3 条音频参考");
+              failCurrentVideoNode(
+                `${seedanceFamilyLabel} 最多支持 ${seedanceModeSpec.audioHandleMax} 条音频参考`
+              );
+              return;
+            }
+            if (
+              isSeedance25Request &&
+              seedanceTotalImageCount + seedanceVideoCount + seedanceAudioCount >
+                SEEDANCE25_REFERENCE_TOTAL_MAX
+            ) {
+              failCurrentVideoNode(
+                `Seedance 2.5 参考素材合计不能超过 ${SEEDANCE25_REFERENCE_TOTAL_MAX} 个`
+              );
               return;
             }
           } else {
@@ -16663,8 +16699,13 @@ function FlowInner() {
             return;
           }
 
-          if (connectedAudioUrls.length > SEEDANCE20_REFERENCE_AUDIO_MAX) {
-            failCurrentVideoNode("Seedance 2.0 最多支持 3 条音频参考");
+          const seedanceAudioMax = isSeedance25Request
+            ? SEEDANCE25_REFERENCE_AUDIO_MAX
+            : SEEDANCE20_REFERENCE_AUDIO_MAX;
+          if (connectedAudioUrls.length > seedanceAudioMax) {
+            failCurrentVideoNode(
+              `${seedanceFamilyLabel} 最多支持 ${seedanceAudioMax} 条音频参考`
+            );
             return;
           }
 
@@ -16680,7 +16721,7 @@ function FlowInner() {
             }
           });
 
-          for (const audioUrl of connectedAudioUrls.slice(0, SEEDANCE20_REFERENCE_AUDIO_MAX)) {
+          for (const audioUrl of connectedAudioUrls.slice(0, seedanceAudioMax)) {
             const hintedDuration = connectedAudioDurationHints.get(audioUrl);
             const duration =
               typeof hintedDuration === "number" && Number.isFinite(hintedDuration)
@@ -16688,7 +16729,7 @@ function FlowInner() {
                 : await readAudioDurationFromUrl(audioUrl);
             if (duration > 5) {
               failCurrentVideoNode(
-                `Seedance 2.0 音频每条需不超过 5 秒，当前约 ${duration.toFixed(1)} 秒`
+                `${seedanceFamilyLabel} 音频每条需不超过 5 秒，当前约 ${duration.toFixed(1)} 秒`
               );
               return;
             }
@@ -16696,9 +16737,9 @@ function FlowInner() {
 
           seedanceAudioUrlsForAPI =
             connectedAudioUrls.length > 0
-              ? connectedAudioUrls.slice(0, SEEDANCE20_REFERENCE_AUDIO_MAX)
+              ? connectedAudioUrls.slice(0, seedanceAudioMax)
               : Array.isArray(rawNodeData.audioUrls) && rawNodeData.audioUrls.length > 0
-              ? rawNodeData.audioUrls.slice(0, SEEDANCE20_REFERENCE_AUDIO_MAX)
+              ? rawNodeData.audioUrls.slice(0, seedanceAudioMax)
               : undefined;
         }
 
@@ -16770,7 +16811,10 @@ function FlowInner() {
 
           referenceVideoUrls = Array.from(new Set(resolvedVideoUrls));
           if (isSeedanceNode && isSeedance2FamilyRequest) {
-            referenceVideoUrls = referenceVideoUrls.slice(0, SEEDANCE20_REFERENCE_VIDEO_MAX);
+            const seedanceVideoMax = isSeedance25Request
+              ? SEEDANCE25_REFERENCE_VIDEO_MAX
+              : SEEDANCE20_REFERENCE_VIDEO_MAX;
+            referenceVideoUrls = referenceVideoUrls.slice(0, seedanceVideoMax);
           } else {
             referenceVideoUrls = referenceVideoUrls.slice(0, 1);
           }

@@ -1,8 +1,10 @@
 import {
   getPublicAssetBaseUrl,
+  isLegacyCloudAssetHost,
   proxifyRemoteAssetUrl,
   resolvePublicAssetUrlFromKey,
 } from "@/utils/assetProxy";
+import { getDeploymentBrand } from "@/config/deploymentBrand";
 import {
   FLOW_IMAGE_ASSET_PREFIX,
   getFlowImageBlob,
@@ -23,11 +25,32 @@ const DEFAULT_IMAGE_FETCH_RETRIES = 1;
 const WEAK_NETWORK_IMAGE_FETCH_RETRIES = 2;
 const RETRYABLE_IMAGE_FETCH_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 
-// 优先使用环境变量配置的 OSS/CDN 基础地址；未配置则返回 null。
+// 优先使用环境变量配置的公共基址；linglong/本地模式下不回落到 TOS。
 const getOssBaseUrl = (): string | null => {
   const envBase = getPublicAssetBaseUrl();
   if (envBase) return envBase.endsWith("/") ? envBase : `${envBase}/`;
+  if (getDeploymentBrand() === "linglong") return null;
   return `https://${DEFAULT_MANAGED_ASSET_HOST}/`;
+};
+
+/** 仅当「旧云主机 URL」需要迁到当前公共 base 时才改写 host */
+const maybeRemapLegacyCloudUrlToPublicBase = (absoluteUrl: string): string | null => {
+  try {
+    const parsed = new URL(absoluteUrl);
+    const pathKey = decodeURIComponent(parsed.pathname).replace(/^\/+/, "");
+    if (!isAssetKeyRef(pathKey)) return null;
+    if (!isLegacyCloudAssetHost(parsed.hostname)) return null;
+
+    const publicBase = getPublicAssetBaseUrl();
+    if (!publicBase) return null;
+    const publicHost = normalizeUrlHost(publicBase);
+    if (!publicHost || publicHost === parsed.hostname.toLowerCase()) return null;
+
+    const direct = resolvePublicAssetUrlFromKey(pathKey);
+    return direct || null;
+  } catch {
+    return null;
+  }
 };
 
 const shouldAvoidSameOriginDirectBase = (baseUrl: string): boolean => {
@@ -343,13 +366,17 @@ export const isLikelyManagedAssetUrl = (url: string): boolean => {
 };
 
 /**
- * 上传成功后写入节点的持久化引用：优先可直接访问的 OSS/CDN URL，
- * 避免仅用 key 时必须依赖 /api/assets/proxy（代理或 API 域名配置异常时易裂图）。
+ * 上传成功后写入节点的持久化引用：
+ * - 优先保留上传接口返回的绝对 URL（linglong 本地落盘常为 localhost）
+ * - 其次才用公共 base + key（避免把本地 URL 改写成 TOS）
  */
 export function pickPersistedImageRefFromUploadAsset(
   asset: { url?: string; key?: string } | undefined,
   plannedKey: string
 ): string {
+  const url = typeof asset?.url === "string" ? asset.url.trim() : "";
+  if (url && /^https?:\/\//i.test(url)) return url;
+
   const assetKey = typeof asset?.key === "string" ? asset.key.trim() : "";
   if (assetKey) {
     const direct = resolvePublicAssetUrlFromKey(assetKey);
@@ -357,8 +384,6 @@ export function pickPersistedImageRefFromUploadAsset(
     return assetKey;
   }
 
-  const url = typeof asset?.url === "string" ? asset.url.trim() : "";
-  if (url && /^https?:\/\//i.test(url)) return url;
   const k =
     assetKey ||
     (typeof plannedKey === "string" ? plannedKey.trim() : "");
@@ -468,48 +493,25 @@ export const toRenderableImageSrc = (value?: string | null): string | null => {
     return withoutLeading.startsWith("/") ? withoutLeading : `/${withoutLeading}`;
   }
   if (isRemoteUrl(trimmed)) {
-    const managedDirect = trimmed;
-    if (isLikelyManagedAssetUrl(managedDirect)) {
-      try {
-        const parsed = new URL(managedDirect);
-        const pathKey = parsed.pathname.replace(/^\/+/, "");
-        if (isAssetKeyRef(pathKey)) {
-          const direct = resolvePublicAssetUrlFromKey(pathKey);
-          if (direct) return direct;
-          const directBase = getOssBaseUrl();
-          if (directBase && !shouldAvoidSameOriginDirectBase(directBase)) {
-            return `${directBase}${pathKey}`;
-          }
-        }
-      } catch {
-        // ignore
-      }
-      return managedDirect;
-    }
-    try {
-      const parsed = new URL(managedDirect);
-      const pathKey = parsed.pathname.replace(/^\/+/, "");
-      if (isAssetKeyRef(pathKey)) {
-        const direct = resolvePublicAssetUrlFromKey(pathKey);
-        if (direct) return direct;
-        const directBase = getOssBaseUrl();
-        if (directBase && !shouldAvoidSameOriginDirectBase(directBase)) {
-          return `${directBase}${pathKey}`;
-        }
-      }
+    // 绝对 URL：默认原样使用（DB 返回什么就渲染什么）。
+    // 仅当主机是历史 TOS/云存储、且当前公共 base 不同时，才按 key 迁到新 base。
+    const remapped = maybeRemapLegacyCloudUrlToPublicBase(trimmed);
+    if (remapped) return remapped;
 
+    try {
+      const parsed = new URL(trimmed);
       const host = parsed.hostname.toLowerCase();
       const hotlinkSensitiveHosts = ["apimart.ai"];
       const needsDisplayProxy = hotlinkSensitiveHosts.some(
         (h) => host === h || host.endsWith(`.${h}`)
       );
       if (needsDisplayProxy) {
-        return proxifyRemoteAssetUrl(managedDirect, { forceProxy: true });
+        return proxifyRemoteAssetUrl(trimmed, { forceProxy: true });
       }
     } catch {
       // ignore
     }
-    return proxifyRemoteAssetUrl(managedDirect);
+    return proxifyRemoteAssetUrl(trimmed);
   }
   if (
     trimmed.startsWith("/") ||

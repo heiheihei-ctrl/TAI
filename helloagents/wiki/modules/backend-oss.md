@@ -38,7 +38,8 @@
 - `VITE_UPLOAD_MODE=local`（可选；linglong 品牌未配置时也会默认本地中转；后端 `presign.mode=local` 同样触发）
 - `VITE_ASSET_PUBLIC_BASE_URL`：与 `LOCAL_UPLOAD_PUBLIC_BASE_URL` 保持一致  
   这样历史 TOS 全路径（`https://xxx.volces.com/uploads/...`）会按 **同一 key** 重写到本机 nginx，新旧路径兼容。
-  **linglong 部署请勿继续指向火山 TOS CDN**，否则新上传到本地的资源可能仍按 TOS 基址拼接。
+  **linglong 部署请勿继续指向火山 TOS CDN**；若误配 TOS，前端会自动回退到 `VITE_API_BASE_URL`。
+- **绝对 URL 渲染原则**：DB/接口返回的 `http(s)://...` 地址原样用于展示；仅当主机是历史云存储（TOS/阿里云等）且当前公共 base 不同时，才按 key 迁到新 base。禁止把 `localhost` 改写成 TOS。
 
 ### Linglong
 - `DEPLOYMENT_BRAND=linglong` 时，上传链路默认本地落盘（`OssService.getUploadMode()`），前端 `uploadToOSS` 走 `/api/uploads/image|file` multipart，不再 PUT 预签名直传云存储。

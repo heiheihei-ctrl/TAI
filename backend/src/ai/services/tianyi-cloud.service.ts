@@ -18,6 +18,7 @@ export class TianyiCloudService {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly seedreamModel: string;
+  private readonly seedance15Model: string;
   private readonly seedance20Model: string;
   private readonly seedance25Model: string;
   private readonly seedreamWatermark: boolean;
@@ -33,6 +34,10 @@ export class TianyiCloudService {
     this.seedreamModel =
       this.config.get<string>('TIANYI_SEEDREAM_MODEL')?.trim() ||
       'doubao-seedream-5.0-pro';
+    this.seedance15Model =
+      this.config.get<string>('TIANYI_SEEDANCE_15_MODEL')?.trim() ||
+      this.config.get<string>('TIANYI_SEEDANCE_MODEL')?.trim() ||
+      'doubao-seedance-1-5-pro-251215';
     this.seedance20Model =
       this.config.get<string>('TIANYI_SEEDANCE_20_MODEL')?.trim() || '';
     this.seedance25Model =
@@ -74,6 +79,22 @@ export class TianyiCloudService {
   }
 
   resolveSeedanceModel(modelVersion: TianyiSeedanceModelVersion): string {
+    // 玲珑仅开放 Seedance 1.5 Pro
+    if (getDeploymentBrand() === 'linglong' && modelVersion !== '1.5-pro') {
+      throw new BadRequestException(
+        '玲珑仅支持 Seedance 1.5 Pro，请切换模型后重试',
+      );
+    }
+
+    if (modelVersion === '1.5-pro') {
+      if (!this.seedance15Model) {
+        throw new ServiceUnavailableException(
+          '未配置 TIANYI_SEEDANCE_15_MODEL，请在 backend .env 填写天翼云 Seedance 1.5 Pro 模型调用名',
+        );
+      }
+      return this.seedance15Model;
+    }
+
     if (modelVersion === '2.5') {
       if (!this.seedance25Model) {
         throw new ServiceUnavailableException(
@@ -83,7 +104,6 @@ export class TianyiCloudService {
       return this.seedance25Model;
     }
 
-    // 2.0 / 2.0-fast / 1.5-pro 共用 2.0 配置项（玲珑主要使用 2.0/2.5）
     if (!this.seedance20Model) {
       throw new ServiceUnavailableException(
         '未配置 TIANYI_SEEDANCE_20_MODEL，请在 backend .env 填写天翼云 Seedance 2.0 模型调用名',

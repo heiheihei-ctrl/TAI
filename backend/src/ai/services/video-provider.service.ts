@@ -1740,10 +1740,15 @@ export class VideoProviderService {
   ): Promise<VideoGenerationResult> {
     const resolved = this.resolveManagedSeedanceModel(options);
 
-    // linglong：统一走电信天翼云，不区分普通/尊享/toapis/tencent 路线
+    // linglong：统一走电信天翼云，仅 Seedance 1.5 Pro
     if (getDeploymentBrand() === "linglong") {
       try {
-        return await this.generateSeedanceViaTianyi(options, resolved);
+        const linglongResolved = {
+          modelKey: "seedance-1.5" as const,
+          modelVersion: "1.5-pro" as const,
+          label: "Seedance 1.5-Pro",
+        };
+        return await this.generateSeedanceViaTianyi(options, linglongResolved);
       } catch (error) {
         throw this.wrapSeedanceException(error, options);
       }

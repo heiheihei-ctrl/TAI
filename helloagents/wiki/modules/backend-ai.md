@@ -21,4 +21,4 @@
 - 若历史数据库里的 `model_provider_mapping_v2` 仍残留 `new_api` vendor，需要同步改成 `apimart` 或其他现行 vendor，避免旧配置回灌。
 - `Sora2VideoService` 里仍有独立上游 `newapi.megabyai.cc` 兼容逻辑；这不是仓库内已移除的 `new-api` 网关。
 - 工作流 Agent **不**在后端调生图 API，避免与 Flow 节点计费分叉；未配置 DeepSeek 时接口返回明确错误。
-- Linglong 下 Seedance 需填写 `TIANYI_SEEDANCE_20_MODEL` / `TIANYI_SEEDANCE_25_MODEL`（天翼云实际模型调用名）；任务 ID 前缀为 `tianyi-seedance:`。
+- Linglong 下 Seedance **仅 1.5 Pro**：配置 `TIANYI_SEEDANCE_15_MODEL`（也兼容 `TIANYI_SEEDANCE_MODEL`；默认 `doubao-seedance-1-5-pro-251215`）。前端隐藏 2.x 模型选项与 `seedance20Video` 节点；后端强制走 1.5-pro。任务 ID 前缀为 `tianyi-seedance:`。

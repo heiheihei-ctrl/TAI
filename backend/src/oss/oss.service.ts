@@ -550,8 +550,9 @@ export class OssService {
     if (this.isLocalMode()) {
       const base = this.getLocalPublicBaseUrl();
       if (base) return `${base}/${normalizedKey}`;
-      // 无公网 base 时返回同源相对路径，nginx 可直接托管
-      return `/${normalizedKey}`;
+      // 未配置公网 base 时，默认拼本机 API，配合 main.ts 的本地静态挂载
+      const port = String(this.config.get<string>('PORT') || process.env.PORT || '4000').trim();
+      return `http://localhost:${port || '4000'}/${normalizedKey}`;
     }
 
     const { cdnHost, bucket, endpoint } = this.conf;

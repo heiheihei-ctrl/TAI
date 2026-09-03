@@ -16,6 +16,8 @@ import { AppModule } from "./app.module";
 import { OpenObserveTelemetryService } from "./telemetry/openobserve-telemetry.service";
 import { EnvHttpProxyAgent, setGlobalDispatcher } from "undici";
 import { WsCollabGateway } from "./team-collab/ws-collab.gateway";
+import { OssService } from "./oss/oss.service";
+import type { FastifyReply, FastifyRequest } from "fastify";
 
 // 配置 undici ProxyAgent 以支持代理（修复 Node.js 20+ 中 @google/genai 的代理问题）
 function configureProxyForUndici() {
@@ -303,6 +305,38 @@ async function bootstrap() {
   const wsGateway = app.get(WsCollabGateway);
   wsGateway.setOriginCheck((origin: string) => isOriginAllowed(origin));
   wsGateway.attach(fastifyInstance.server);
+
+  // local/linglong：直接托管落盘资源，使 http://localhost:4000/uploads/... 等 DB 地址可访问
+  const ossService = app.get(OssService);
+  if (ossService.isLocalMode()) {
+    const managedPrefixes = ["uploads", "templates", "projects", "videos", "ai"];
+    for (const prefix of managedPrefixes) {
+      await fastifyInstance.get(
+        `/${prefix}/*`,
+        async (request: FastifyRequest, reply: FastifyReply) => {
+          const rawUrl = String(request.url || "").split("?")[0] || "";
+          const key = decodeURIComponent(rawUrl.replace(/^\/+/, ""));
+          if (!key || key.includes("..")) {
+            return reply.code(400).send({ message: "Invalid asset path" });
+          }
+          const local = await ossService.openLocalReadStream(key);
+          if (!local) {
+            return reply.code(404).send({ message: "Asset not found" });
+          }
+          if (local.contentType) {
+            reply.header("Content-Type", local.contentType);
+          }
+          reply.header("Cache-Control", "public, max-age=31536000, immutable");
+          reply.header("Access-Control-Allow-Origin", "*");
+          return reply.send(local.stream);
+        },
+      );
+    }
+    // eslint-disable-next-line no-console
+    console.log(
+      `[OSS] local static mounts: /${managedPrefixes.join(", /")} root=${ossService.getLocalRoot()}`,
+    );
+  }
 
   const port = Number(process.env.PORT || configService.get("PORT") || 4000);
   const host = process.env.HOST || "0.0.0.0";

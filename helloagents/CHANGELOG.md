@@ -16,6 +16,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ### Changed
 - Credits/Quota: 已加入企业工作区（`Team.enterpriseEnabled=true`）的成员豁免免费日/月生图与生视频配额限制。
 - AI/Linglong: `DEPLOYMENT_BRAND=linglong` 时 Seedream/Seedance 统一走电信天翼云 `ai.ctaigw.cn`（`TianyiCloudService`），不再走 ToAPIs/多 vendor 路线；配置 `TIANYI_CLOUD_API_KEY` 等。
+- Linglong Seedance: 仅开放 **1.5 Pro**（`TIANYI_SEEDANCE_15_MODEL`，默认 `doubao-seedance-1-5-pro-251215`）；隐藏 2.x UI/节点，后端强制 1.5-pro，不再误用 `TIANYI_SEEDANCE_20_MODEL`。
+- Linglong assets: 渲染时保留 DB/接口返回的绝对 URL（含 `localhost`）；仅历史 TOS 主机才按 key 迁到 `VITE_ASSET_PUBLIC_BASE_URL`；linglong 若误配 TOS 基址则回退 `VITE_API_BASE_URL`；上传持久化优先保留上传接口返回的 url。
 - Linglong upload: `DEPLOYMENT_BRAND=linglong`（及前端 `VITE_DEPLOYMENT_BRAND`/runtime brand）未显式配置 `UPLOAD_MODE`/`VITE_UPLOAD_MODE` 时，默认本地落盘（`OssService` + `/api/uploads/*` multipart），不再直传 COS/TOS；可用 `UPLOAD_MODE=tos` / `VITE_UPLOAD_MODE=tos` 强制覆盖。
 - Linglong brand: node palette restricted to free + Seedream + Seedance nodes; Seedream/Seedance credits +50% (`LINGLONG_CREDIT_MULTIPLIER=1.5`) via `DEPLOYMENT_BRAND=linglong` / runtime `deploymentBrand`.
 - Membership credits: VIP 69 月卡额度 `8700` → `7350`（`signupBonusCredits=0`，展示合计约 `9250`=7350+签到1900）；migration `202608220001_set_vip69_monthly_quota_7350`。

@@ -1,3 +1,5 @@
+import { getDeploymentBrand } from "@/config/deploymentBrand";
+
 // 获取 API 基础地址
 function normalizeApiBaseUrl(raw: string): string {
   const trimmed = typeof raw === "string" ? raw.trim() : "";
@@ -32,10 +34,58 @@ function normalizePublicAssetBaseUrl(raw: string): string {
   return trimmed.replace(/\/+$/, "");
 }
 
-// 直连 OSS/CDN 的公共 base（用于将 key 拼成可访问 URL；例如 https://cdn.example.com）
+const DEFAULT_TOS_ASSET_HOST = "tai-ai.tos-cn-guangzhou.volces.com";
+
+function isCloudObjectStorageHost(hostname: string): boolean {
+  const host = String(hostname || "").trim().toLowerCase();
+  if (!host) return false;
+  return (
+    host === DEFAULT_TOS_ASSET_HOST ||
+    host.endsWith(".volces.com") ||
+    host.endsWith(".ivolces.com") ||
+    host.endsWith(".aliyuncs.com") ||
+    host.endsWith(".myqcloud.com") ||
+    host.endsWith(".tencentcos.cn")
+  );
+}
+
+function looksLikeCloudObjectStorageBase(baseUrl: string): boolean {
+  try {
+    return isCloudObjectStorageHost(new URL(baseUrl).hostname);
+  } catch {
+    return /volces\.com|aliyuncs\.com|myqcloud\.com|tencentcos\.cn/i.test(baseUrl);
+  }
+}
+
+function isFrontendLocalUploadMode(): boolean {
+  const raw = String(
+    (import.meta.env.VITE_UPLOAD_MODE as string | undefined) || "",
+  )
+    .trim()
+    .toLowerCase();
+  if (raw === "local" || raw === "disk" || raw === "nginx") return true;
+  if (raw === "tos" || raw === "oss" || raw === "s3" || raw === "cos") return false;
+  return getDeploymentBrand() === "linglong";
+}
+
+/** 是否应将「旧云存储主机」上的 key 重写到当前公共 base（迁移场景） */
+export function isLegacyCloudAssetHost(hostname: string): boolean {
+  return isCloudObjectStorageHost(hostname);
+}
+
+// 直连 OSS/CDN/本地静态的公共 base（用于将 key 拼成可访问 URL）
 export function getPublicAssetBaseUrl(): string {
-  const raw = import.meta.env.VITE_ASSET_PUBLIC_BASE_URL as string | undefined;
-  return normalizePublicAssetBaseUrl(String(raw || ""));
+  const raw = normalizePublicAssetBaseUrl(
+    String((import.meta.env.VITE_ASSET_PUBLIC_BASE_URL as string | undefined) || ""),
+  );
+
+  // linglong / 本地上传：禁止继续用 TOS 作为公共基址，否则 localhost 资源会被改写成 TOS
+  if (isFrontendLocalUploadMode()) {
+    if (raw && !looksLikeCloudObjectStorageBase(raw)) return raw;
+    return getApiBaseUrl();
+  }
+
+  return raw;
 }
 
 function isAssetProxyPath(pathname: string): boolean {
