@@ -30,6 +30,7 @@ import { VideoWatermarkService } from './services/video-watermark.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { Nano2Service } from './services/nano2.service';
 import { Seedream5Service } from './services/seedream5.service';
+import { TianyiCloudService } from './services/tianyi-cloud.service';
 import { MinimaxSpeechService } from './services/minimax-speech.service';
 import { MinimaxMusicService } from './services/minimax-music.service';
 import { TencentSpeechService } from './services/tencent-speech.service';
@@ -73,6 +74,7 @@ import { ContentModerationModule } from '../content-moderation/content-moderatio
     VideoWatermarkService,
     Nano2Service,
     Seedream5Service,
+    TianyiCloudService,
     MinimaxSpeechService,
     MinimaxMusicService,
     TencentSpeechService,

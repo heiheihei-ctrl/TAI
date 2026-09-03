@@ -35,6 +35,11 @@ import {
 } from "../../utils/apimartHttpClient";
 import { extractUpstreamImageTaskId } from "../../utils/upstreamImageTask.util";
 import { getToapisApiBaseUrl } from "../../utils/toapisHttpClient";
+import { getDeploymentBrand } from "../../config/deployment-brand";
+import {
+  TianyiCloudService,
+  TIANYI_SEEDANCE_TASK_PREFIX,
+} from "./tianyi-cloud.service";
 
 // 默认请求超时时间（毫秒）
 const DEFAULT_FETCH_TIMEOUT = 180000; // 3分钟
@@ -203,6 +208,7 @@ export class VideoProviderService {
     private readonly tencentVodAigcService: TencentVodAigcService,
     private readonly modelRoutingService: ModelRoutingService,
     private readonly volcAssetService: VolcAssetService,
+    private readonly tianyiCloudService: TianyiCloudService,
   ) {}
 
   private async validateVolcAssetId(assetId: string): Promise<boolean> {
@@ -1010,6 +1016,10 @@ export class VideoProviderService {
       return this.queryOmniFlashExtTask(taskId);
     }
 
+    if (taskId.startsWith(TIANYI_SEEDANCE_TASK_PREFIX)) {
+      return this.querySeedanceViaTianyi(taskId);
+    }
+
     if (
       provider === "doubao" &&
       taskId.startsWith(SEEDANCE25_TOAPIS_TASK_PREFIX)
@@ -1729,6 +1739,16 @@ export class VideoProviderService {
     options: VideoProviderRequestDto
   ): Promise<VideoGenerationResult> {
     const resolved = this.resolveManagedSeedanceModel(options);
+
+    // linglong：统一走电信天翼云，不区分普通/尊享/toapis/tencent 路线
+    if (getDeploymentBrand() === "linglong") {
+      try {
+        return await this.generateSeedanceViaTianyi(options, resolved);
+      } catch (error) {
+        throw this.wrapSeedanceException(error, options);
+      }
+    }
+
     const managedResult = await this.executeManagedRouteWithFallback(
       resolved.modelKey,
       options.vendorKey,
@@ -3168,6 +3188,141 @@ export class VideoProviderService {
   /**
    * Seedance 1.5 Pro视频生成
    */
+  private async generateSeedanceViaTianyi(
+    options: VideoProviderRequestDto,
+    resolved: {
+      modelKey: "seedance-1.5" | "seedance-2.0" | "seedance-2.5";
+      modelVersion: SeedanceManagedModelVersion;
+      label: string;
+    },
+  ): Promise<VideoGenerationResult> {
+    const modelVersion = resolved.modelVersion;
+    const isSeedance2Model = modelVersion === "2.0" || modelVersion === "2.0-fast";
+    const isSeedance25Model = modelVersion === "2.5";
+    const normalizedPrompt =
+      typeof options.prompt === "string" ? options.prompt.trim() : "";
+
+    if (isSeedance2Model || isSeedance25Model) {
+      await this.assertSeedance20ReferenceVideoLimits(
+        options,
+        isSeedance25Model ? "seedance-2.5" : "seedance-2.0",
+      );
+    }
+
+    const content: any[] = [];
+    const referenceVideos = this.normalizeManagedV2ReferenceVideos(options);
+    const referenceAudios = this.normalizeManagedV2ReferenceAudios(options);
+
+    if (normalizedPrompt) {
+      content.push({ type: "text", text: normalizedPrompt });
+    }
+
+    const { uploadedStringUrls, objectItems } =
+      await this.splitAndUploadReferenceImages(options.referenceImages);
+
+    const normalizedImageUrls: string[] = [];
+    for (const imageUrl of uploadedStringUrls) {
+      normalizedImageUrls.push(imageUrl);
+    }
+    for (const item of objectItems) {
+      normalizedImageUrls.push(item.url);
+    }
+
+    normalizedImageUrls.forEach((url, index) => {
+      const imageItem: Record<string, any> = {
+        type: "image_url",
+        image_url: { url },
+      };
+      if (isSeedance2Model || isSeedance25Model) {
+        imageItem.role = "reference_image";
+      } else if (options.videoMode === "start-end2video") {
+        imageItem.role = index === 0 ? "first_frame" : index === 1 ? "last_frame" : undefined;
+      }
+      content.push(imageItem);
+    });
+
+    for (const videoUrl of referenceVideos) {
+      content.push({
+        type: "video_url",
+        video_url: { url: videoUrl },
+        role: "reference_video",
+      });
+    }
+
+    for (const audioUrl of referenceAudios) {
+      content.push({
+        type: "audio_url",
+        audio_url: { url: audioUrl },
+        role: "reference_audio",
+      });
+    }
+
+    let duration: number | undefined;
+    if (typeof options.duration === "number" && Number.isFinite(options.duration)) {
+      const normalizedDuration = Math.round(options.duration);
+      if (isSeedance25Model) {
+        duration = snapSeedanceStepDuration(normalizedDuration, 5, 30);
+      } else if (isSeedance2Model) {
+        duration = snapSeedanceStepDuration(normalizedDuration, 5, 15);
+      } else {
+        duration = Math.max(4, Math.min(12, normalizedDuration));
+      }
+    }
+
+    const created = await this.tianyiCloudService.createSeedanceTask({
+      modelVersion,
+      content,
+      ratio:
+        typeof options.aspectRatio === "string" && options.aspectRatio.trim()
+          ? options.aspectRatio.trim()
+          : undefined,
+      duration,
+      resolution:
+        typeof options.resolution === "string" && options.resolution.trim()
+          ? options.resolution.trim()
+          : undefined,
+      generateAudio:
+        typeof options.generateAudio === "boolean" ? options.generateAudio : undefined,
+      videoMode:
+        typeof options.videoMode === "string" && options.videoMode.trim()
+          ? options.videoMode.trim()
+          : undefined,
+      cameraFixed:
+        typeof options.camerafixed === "boolean" ? options.camerafixed : undefined,
+    });
+
+    return {
+      taskId: created.taskId,
+      status: created.status,
+      execution: {
+        modelKey: resolved.modelKey,
+        vendorKey: "tianyi",
+        platformKey: "tianyi",
+        route: "legacy",
+        providerChannel: "tianyi",
+        routedProvider: "tianyi",
+        fallbackUsed: false,
+      },
+    };
+  }
+
+  private async querySeedanceViaTianyi(
+    taskId: string,
+  ): Promise<{ status: string; videoUrl?: string; thumbnailUrl?: string }> {
+    const result = await this.tianyiCloudService.querySeedanceTask(taskId);
+    if (result.status === "succeeded" && result.videoUrl) {
+      if (this.isOssPublicUrl(result.videoUrl)) {
+        return { status: "succeeded", videoUrl: result.videoUrl };
+      }
+      const ossUrl = await this.uploadRemoteVideoToOss(result.videoUrl, taskId);
+      return { status: "succeeded", videoUrl: ossUrl };
+    }
+    if (result.status === "failed") {
+      return { status: "failed" };
+    }
+    return { status: "processing" };
+  }
+
   private async generateDoubao(
     options: VideoProviderRequestDto,
     apiKey: string,

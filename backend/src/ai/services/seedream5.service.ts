@@ -1,8 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
+import { getDeploymentBrand } from '../../config/deployment-brand';
+import { TianyiCloudService } from './tianyi-cloud.service';
 
-export type Seedream5ProviderType = 'doubao' | 'watcha';
+export type Seedream5ProviderType = 'doubao' | 'watcha' | 'tianyi';
 export const SEEDREAM5_PROVIDER_SETTING_KEY = 'seedream5_provider';
 
 interface Seedream5ProviderConfig {
@@ -11,6 +13,7 @@ interface Seedream5ProviderConfig {
   apiKey: string;
   model: string;
   generationPath: string;
+  watermark: boolean;
 }
 
 @Injectable()
@@ -28,6 +31,7 @@ export class Seedream5Service {
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly tianyiCloudService: TianyiCloudService,
   ) {
     this.doubaoApiKey = this.normalizeApiKey(
       this.config.get<string>('ARK_API_KEY') ||
@@ -141,6 +145,23 @@ export class Seedream5Service {
   private async resolveProviderConfig(
     overrideModel?: string,
   ): Promise<Seedream5ProviderConfig> {
+    if (getDeploymentBrand() === 'linglong') {
+      if (!this.tianyiCloudService.isConfigured()) {
+        throw new Error(
+          'DEPLOYMENT_BRAND=linglong requires TIANYI_CLOUD_API_KEY for Seedream',
+        );
+      }
+      return {
+        provider: 'tianyi',
+        endpoint: this.tianyiCloudService.getBaseUrl(),
+        apiKey: this.tianyiCloudService.getApiKey(),
+        // linglong 统一使用天翼云配置的模型名，忽略 Pro/Lite 内部型号覆盖
+        model: this.tianyiCloudService.getSeedreamModel(),
+        generationPath: '/v1/images/generations',
+        watermark: this.tianyiCloudService.getSeedreamWatermark(),
+      };
+    }
+
     const provider = await this.getConfiguredProvider();
 
     if (provider === 'watcha') {
@@ -155,6 +176,7 @@ export class Seedream5Service {
         apiKey: this.watchaApiKey,
         model: overrideModel || this.watchaModel,
         generationPath: '/v3/images/generations',
+        watermark: false,
       };
     }
 
@@ -167,6 +189,7 @@ export class Seedream5Service {
       apiKey: this.doubaoApiKey,
       model: overrideModel || 'doubao-seedream-5-0-260128',
       generationPath: '/api/v3/images/generations',
+      watermark: false,
     };
   }
 
@@ -192,6 +215,16 @@ export class Seedream5Service {
     model?: string;
   }): Promise<{ imageUrl?: string; imageUrls?: string[] }> {
     const providerConfig = await this.resolveProviderConfig(params.model);
+
+    if (providerConfig.provider === 'tianyi') {
+      return this.tianyiCloudService.generateSeedreamImage({
+        prompt: params.prompt,
+        size: this.normalizeSize(params.size),
+        imageUrls: params.image_urls,
+        model: providerConfig.model,
+      });
+    }
+
     const normalizedSize = this.normalizeSizeForProvider(
       providerConfig.provider,
       this.normalizeSize(params.size),
@@ -205,7 +238,7 @@ export class Seedream5Service {
       response_format: 'url',
       size: normalizedSize,
       stream: false,
-      watermark: false,
+      watermark: providerConfig.watermark,
     };
 
     if (!isProModel) {

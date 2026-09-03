@@ -82,6 +82,7 @@ import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useGlobalPaymentPoll } from "@/hooks/useGlobalPaymentPoll";
 import MembershipPanel from "@/components/payment/MembershipPanel";
 import { SHOW_TEAM_COLLABORATION, SHOW_ENTERPRISE_CONSOLE, SHOW_WORKSPACE_SWITCHER } from "@/config/featureFlags";
+import { isLinglongRestrictedPalette } from "@/config/linglongPalette";
 import { TeamSwitcher } from "@/components/team/TeamSwitcher";
 import { EnterpriseLedgerModal } from "@/components/team/EnterpriseLedgerModal";
 import { EnterpriseJoinCodeModal } from "@/components/team/EnterpriseJoinCodeModal";
@@ -361,6 +362,9 @@ const FloatingHeader: React.FC = () => {
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [enterpriseEntryBusy, setEnterpriseEntryBusy] = useState(false);
   const [joinCodeModalOpen, setJoinCodeModalOpen] = useState(false);
+  const isLinglongBrand = isLinglongRestrictedPalette();
+  const showEnterpriseEntry = SHOW_ENTERPRISE_CONSOLE && !isLinglongBrand;
+  const showBananaRouteSelector = !isLinglongBrand;
   const [teamMyQuota, setTeamMyQuota] = useState<MyTeamQuota | null>(null);
   const [teamMyQuotaLoading, setTeamMyQuotaLoading] = useState(false);
   const [gridSizeInput, setGridSizeInput] = useState(String(gridSize));
@@ -2122,7 +2126,8 @@ const FloatingHeader: React.FC = () => {
               </div>
             </div>
 
-            {/* Nano Banana/Gemini 闂傚倸鍊峰ù鍥х暦閸偅鍙忕€规洖娲︽刊浼存煥閺囩偛鈧悂宕归崒鐐寸厵闁诡垳澧楅ˉ澶愭煕濮橆剛绉烘鐐寸墬濞煎繘宕滆钃卞┑鐘愁問閸ㄤ即濡堕幖浣歌摕婵炴垯鍨圭粻缁樹繆閵堝倸浜鹃梺鐟板暱缁绘﹢骞?*/}
+            {/* Nano Banana/Gemini 线路（普通/尊享）；linglong 下隐藏 */}
+            {showBananaRouteSelector ? (
             <div className='p-5 border shadow-sm rounded-2xl border-slate-200 bg-white/90 backdrop-blur dark:border-slate-700 dark:bg-slate-800/90'>
               <div className='mb-1 text-sm font-medium text-slate-700 dark:text-slate-200'>
                 {t("workspace.settings.aiTab.bananaRoute.title")}
@@ -2193,6 +2198,7 @@ const FloatingHeader: React.FC = () => {
                 </div>
               )}
             </div>
+            ) : null}
 
             {false && (
             <div className='p-5 border shadow-sm rounded-2xl border-slate-200 bg-white/90 backdrop-blur'>
@@ -2703,7 +2709,7 @@ const FloatingHeader: React.FC = () => {
               <TeamSwitcher variant="header" />
             )}
 
-            {SHOW_ENTERPRISE_CONSOLE &&
+            {showEnterpriseEntry &&
             isTeamMode &&
             activeTeamForCredits?.id &&
             canAccessEnterpriseConsole(activeTeamForCredits) ? (
@@ -2717,7 +2723,7 @@ const FloatingHeader: React.FC = () => {
                 <Building2 className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">{t("enterprise.header.console")}</span>
               </Button>
-            ) : SHOW_ENTERPRISE_CONSOLE && !isTeamMode ? (
+            ) : showEnterpriseEntry && !isTeamMode ? (
               <Button
                 variant="ghost"
                 size="sm"
@@ -2731,7 +2737,7 @@ const FloatingHeader: React.FC = () => {
               </Button>
             ) : null}
 
-            {SHOW_ENTERPRISE_CONSOLE && !isTeamMode ? (
+            {showEnterpriseEntry && !isTeamMode ? (
               <Button
                 variant="ghost"
                 size="sm"
@@ -2786,6 +2792,7 @@ const FloatingHeader: React.FC = () => {
               </Tooltip>
             </TooltipProvider>
 
+            {showBananaRouteSelector ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -2867,6 +2874,7 @@ const FloatingHeader: React.FC = () => {
                 </div>
               </DropdownMenuContent>
             </DropdownMenu>
+            ) : null}
 
             <Button
               variant='ghost'
@@ -3300,7 +3308,7 @@ const FloatingHeader: React.FC = () => {
             document.body
           )}
 
-        {SHOW_ENTERPRISE_CONSOLE && joinCodeModalOpen ? (
+        {showEnterpriseEntry && joinCodeModalOpen ? (
           <EnterpriseJoinCodeModal onClose={() => setJoinCodeModalOpen(false)} />
         ) : null}
 

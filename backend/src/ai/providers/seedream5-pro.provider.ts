@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { IAIProvider } from './ai-provider.interface';
 import { Seedream5Service } from '../services/seedream5.service';
+import { getDeploymentBrand } from '../../config/deployment-brand';
 
 export const SEEDREAM5_PRO_MODEL_ID = 'doubao-seedream-5-0-pro-260628';
 
@@ -16,6 +17,14 @@ export class Seedream5ProProvider implements IAIProvider {
   ) {}
 
   async initialize(): Promise<void> {
+    if (getDeploymentBrand() === 'linglong') {
+      this.available = !!this.config.get<string>('TIANYI_CLOUD_API_KEY')?.trim();
+      this.logger.log(
+        `Seedream5Pro provider initialized (linglong/tianyi): ${this.available ? 'available' : 'unavailable'}`,
+      );
+      return;
+    }
+
     const doubaoApiKey =
       this.config.get<string>('ARK_API_KEY') ||
       this.config.get<string>('DOUBAO_API_KEY');

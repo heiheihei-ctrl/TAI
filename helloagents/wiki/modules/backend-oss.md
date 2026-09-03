@@ -17,8 +17,9 @@
 
 ### 模式开关
 - `UPLOAD_MODE=tos|local`（也兼容 `OSS_UPLOAD_MODE`）
-  - 默认 `tos`
-  - 物理机 nginx 静态目录：设为 `local`
+  - 显式配置优先
+  - **未配置时**：`DEPLOYMENT_BRAND=linglong` 默认 `local`（不上云 COS/TOS）；`tai` 默认 `tos`
+  - 物理机 nginx 静态目录：设为 `local`（或依赖 linglong 品牌默认）
 
 ### TOS 模式
 - `OSS_REGION`、`OSS_BUCKET`
@@ -34,9 +35,14 @@
   对象 key `uploads/a.png` → 公开 URL `https://your-domain.com/uploads/a.png`
 
 ### 前端配套
-- `VITE_UPLOAD_MODE=local`（可选；后端 `presign.mode=local` 也会自动走中转）
+- `VITE_UPLOAD_MODE=local`（可选；linglong 品牌未配置时也会默认本地中转；后端 `presign.mode=local` 同样触发）
 - `VITE_ASSET_PUBLIC_BASE_URL`：与 `LOCAL_UPLOAD_PUBLIC_BASE_URL` 保持一致  
   这样历史 TOS 全路径（`https://xxx.volces.com/uploads/...`）会按 **同一 key** 重写到本机 nginx，新旧路径兼容。
+  **linglong 部署请勿继续指向火山 TOS CDN**，否则新上传到本地的资源可能仍按 TOS 基址拼接。
+
+### Linglong
+- `DEPLOYMENT_BRAND=linglong` 时，上传链路默认本地落盘（`OssService.getUploadMode()`），前端 `uploadToOSS` 走 `/api/uploads/image|file` multipart，不再 PUT 预签名直传云存储。
+- 若需临时强制云存储：后端设 `UPLOAD_MODE=tos`，前端设 `VITE_UPLOAD_MODE=tos`。
 
 ## 物理机部署要点
 

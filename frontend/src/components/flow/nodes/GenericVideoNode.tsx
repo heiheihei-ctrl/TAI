@@ -29,6 +29,7 @@ import {
   getManagedRoutesMetadata,
   resolveManagedRoutePricing,
 } from "../managedRoutePricing";
+import { isLinglongRestrictedPalette } from "@/config/linglongPalette";
 
 export type VideoProvider = "kling" | "kling-2.6" | "kling-o3" | "vidu" | "viduq3-pro" | "doubao";
 type ViduModel = ViduModelValue;
@@ -435,10 +436,18 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
     data.nodeConfigMetadata && typeof data.nodeConfigMetadata === "object"
       ? (data.nodeConfigMetadata as Record<string, any>)
       : {};
-  const managedRoutesMetadata = React.useMemo(
-    () => getManagedRoutesMetadata(nodeConfigMetadata),
-    [nodeConfigMetadata]
-  );
+  const managedRoutesMetadata = React.useMemo(() => {
+    const metadata = getManagedRoutesMetadata(nodeConfigMetadata);
+    // 玲珑品牌 Seedance：不展示/不绑定普通·尊享多路线，统一后端天翼云
+    if (
+      metadata &&
+      isLinglongRestrictedPalette() &&
+      provider === "doubao"
+    ) {
+      return null;
+    }
+    return metadata;
+  }, [nodeConfigMetadata, provider]);
   const selectedManagedRoute = React.useMemo(
     () => getManagedRouteOption(nodeConfigMetadata, data.vendorKey),
     [data.vendorKey, nodeConfigMetadata]
@@ -1330,6 +1339,25 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
   }, [data.seedanceMode, id, isSeedance2FamilyModel]);
 
   React.useEffect(() => {
+    // 玲珑 Seedance：固定天翼云渠道，忽略模型管理中的多 vendor
+    if (isLinglongRestrictedPalette() && provider === "doubao") {
+      const currentVendor =
+        typeof data.vendorKey === "string" ? data.vendorKey.trim().toLowerCase() : "";
+      if (currentVendor === "tianyi") return;
+      window.dispatchEvent(
+        new CustomEvent("flow:updateNodeData", {
+          detail: {
+            id,
+            patch: {
+              vendorKey: "tianyi",
+              platformKey: "tianyi",
+            },
+          },
+        })
+      );
+      return;
+    }
+
     if (!managedRoutesMetadata || managedRoutesMetadata.vendors.length === 0) return;
     if (selectedManagedRoute) return;
     const fallbackVendor =
@@ -1354,7 +1382,13 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
         },
       })
     );
-  }, [id, managedRoutesMetadata, selectedManagedRoute]);
+  }, [
+    data.vendorKey,
+    id,
+    managedRoutesMetadata,
+    provider,
+    selectedManagedRoute,
+  ]);
 
   React.useEffect(() => {
     if (!(provider === "vidu" || provider === "viduq3-pro")) return;

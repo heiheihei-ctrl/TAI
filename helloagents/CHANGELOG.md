@@ -15,6 +15,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ### Changed
 - Credits/Quota: 已加入企业工作区（`Team.enterpriseEnabled=true`）的成员豁免免费日/月生图与生视频配额限制。
+- AI/Linglong: `DEPLOYMENT_BRAND=linglong` 时 Seedream/Seedance 统一走电信天翼云 `ai.ctaigw.cn`（`TianyiCloudService`），不再走 ToAPIs/多 vendor 路线；配置 `TIANYI_CLOUD_API_KEY` 等。
+- Linglong upload: `DEPLOYMENT_BRAND=linglong`（及前端 `VITE_DEPLOYMENT_BRAND`/runtime brand）未显式配置 `UPLOAD_MODE`/`VITE_UPLOAD_MODE` 时，默认本地落盘（`OssService` + `/api/uploads/*` multipart），不再直传 COS/TOS；可用 `UPLOAD_MODE=tos` / `VITE_UPLOAD_MODE=tos` 强制覆盖。
 - Linglong brand: node palette restricted to free + Seedream + Seedance nodes; Seedream/Seedance credits +50% (`LINGLONG_CREDIT_MULTIPLIER=1.5`) via `DEPLOYMENT_BRAND=linglong` / runtime `deploymentBrand`.
 - Membership credits: VIP 69 月卡额度 `8700` → `7350`（`signupBonusCredits=0`，展示合计约 `9250`=7350+签到1900）；migration `202608220001_set_vip69_monthly_quota_7350`。
 - Prompt optimize (normal route): ToAPIs upstream model fixed to `gemini-2.5-flash-official`; stable route keeps existing text-model mapping.

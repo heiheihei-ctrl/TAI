@@ -8,6 +8,7 @@ import { mkdir, readFile, writeFile, access } from 'fs/promises';
 import { dirname, resolve, sep } from 'path';
 import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
+import { getDeploymentBrand } from '../config/deployment-brand';
 
 export type UploadStorageMode = 'tos' | 'local';
 
@@ -33,16 +34,24 @@ export class OssService {
     };
   }
 
-  /** `tos` = 火山 TOS/S3；`local` = 写本地磁盘（配合 nginx 静态目录） */
+  /**
+   * `tos` = 火山 TOS/S3；`local` = 写本地磁盘（配合 nginx 静态目录）
+   * - 显式 `UPLOAD_MODE` / `OSS_UPLOAD_MODE` 优先
+   * - 未配置时：`DEPLOYMENT_BRAND=linglong` 默认 local（不上云 COS/TOS）
+   */
   getUploadMode(): UploadStorageMode {
     const raw = String(
       this.config.get<string>('UPLOAD_MODE') ||
         this.config.get<string>('OSS_UPLOAD_MODE') ||
-        'tos',
+        '',
     )
       .trim()
       .toLowerCase();
-    return raw === 'local' || raw === 'disk' || raw === 'nginx' ? 'local' : 'tos';
+    if (raw === 'local' || raw === 'disk' || raw === 'nginx') return 'local';
+    if (raw === 'tos' || raw === 'oss' || raw === 's3' || raw === 'cos') return 'tos';
+    // linglong 部署默认本地落盘，避免走公有云对象存储
+    if (getDeploymentBrand() === 'linglong') return 'local';
+    return 'tos';
   }
 
   isLocalMode(): boolean {

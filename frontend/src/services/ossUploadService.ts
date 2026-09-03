@@ -1,3 +1,4 @@
+import { getDeploymentBrand } from "@/config/deploymentBrand";
 import { logger } from "@/utils/logger";
 import { fetchWithAuth } from "./authFetch";
 import { dataUrlToBlob, fileToDataUrl } from "@/utils/imageConcurrency";
@@ -42,14 +43,22 @@ function getApiBaseUrl(): string {
     : "http://localhost:4000";
 }
 
-/** 前端也可强制指定；优先以后端 presign 返回的 mode 为准 */
+/**
+ * 前端也可强制指定；优先以后端 presign 返回的 mode 为准。
+ * - 显式 `VITE_UPLOAD_MODE` 优先
+ * - 未配置时：linglong 品牌默认走后端 multipart 本地落盘（不直传 COS/TOS）
+ */
 function isFrontendLocalUploadMode(): boolean {
   const raw = String(
     (import.meta.env.VITE_UPLOAD_MODE as string | undefined) || "",
   )
     .trim()
     .toLowerCase();
-  return raw === "local" || raw === "disk" || raw === "nginx";
+  if (raw === "local" || raw === "disk" || raw === "nginx") return true;
+  if (raw === "tos" || raw === "oss" || raw === "s3" || raw === "cos") {
+    return false;
+  }
+  return getDeploymentBrand() === "linglong";
 }
 
 function isBackendImageRelayEnabled(): boolean {
