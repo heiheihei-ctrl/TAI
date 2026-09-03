@@ -1740,8 +1740,11 @@ export class VideoProviderService {
   ): Promise<VideoGenerationResult> {
     const resolved = this.resolveManagedSeedanceModel(options);
 
-    // linglong：统一走电信天翼云，仅 Seedance 1.5 Pro
-    if (getDeploymentBrand() === "linglong") {
+    // linglong / 显式 tianyi：统一走星辰 TokenHub（ai.ctaigw.cn），仅 Seedance 1.5 Pro
+    const vendorKey = String(options.vendorKey || options.platformKey || '')
+      .trim()
+      .toLowerCase();
+    if (getDeploymentBrand() === "linglong" || vendorKey === "tianyi") {
       try {
         const linglongResolved = {
           modelKey: "seedance-1.5" as const,
@@ -3280,17 +3283,21 @@ export class VideoProviderService {
       ratio:
         typeof options.aspectRatio === "string" && options.aspectRatio.trim()
           ? options.aspectRatio.trim()
-          : undefined,
+          : "16:9",
       duration,
-      resolution:
-        typeof options.resolution === "string" && options.resolution.trim()
+      // 1.5 Pro 对齐 TokenHub 官方示例：不传 resolution / videoMode=text2video
+      resolution: isSeedance2Model || isSeedance25Model
+        ? typeof options.resolution === "string" && options.resolution.trim()
           ? options.resolution.trim()
-          : undefined,
+          : undefined
+        : undefined,
       generateAudio:
         typeof options.generateAudio === "boolean" ? options.generateAudio : undefined,
       videoMode:
-        typeof options.videoMode === "string" && options.videoMode.trim()
-          ? options.videoMode.trim()
+        isSeedance2Model || isSeedance25Model
+          ? typeof options.videoMode === "string" && options.videoMode.trim()
+            ? options.videoMode.trim()
+            : undefined
           : undefined,
       cameraFixed:
         typeof options.camerafixed === "boolean" ? options.camerafixed : undefined,

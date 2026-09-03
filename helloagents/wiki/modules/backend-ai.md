@@ -6,7 +6,7 @@
 - `generate-image`、`edit-image`、`text-chat` 统一走现有 provider 直连链路；不再存在 `NEW_API_IMAGE_MODELS` / `NEW_API_CHAT_MODELS` 白名单分流。
 - `volc-enhance-video` 相关后端入口已移除，不再对外暴露增强任务创建/轮询接口。
 - **工作流 Agent**：`POST /api/ai/workflow-chat`（DeepSeek 规划 prompt + Flow 图，SSE；生图由前端节点 Run）。需配置 `DEEPSEEK_API_KEY`。详见 `frontend/docs/22-工作流Agent.md`。
-- **Linglong / 天翼云**：当 `DEPLOYMENT_BRAND=linglong` 时，Seedream（文生图/图生图）与 Seedance（视频）统一走电信天翼云 `ai.ctaigw.cn`，不区分普通/尊享/toapis/tencent 路线。配置见 `TIANYI_CLOUD_*` / `TIANYI_SEEDREAM_*` / `TIANYI_SEEDANCE_*`。实现：`backend/src/ai/services/tianyi-cloud.service.ts`。
+- **Linglong / 星辰 TokenHub**：当 `DEPLOYMENT_BRAND=linglong`（或请求 `vendorKey=tianyi`）时，Seedream / Seedance 统一走 `https://ai.ctaigw.cn`。Seedance 1.5 Pro 创建任务对齐官方示例：`POST /v1/contents/generations/tasks`（`model` + `content` + `ratio` + `duration` + `watermark`），查询 `GET /v1/contents/generations/tasks/{taskId}`。模型调用名配置 `TIANYI_SEEDANCE_15_MODEL`（须在 TokenHub 控制台开通）。
 
 ## 关键文件
 - `backend/src/ai/ai.controller.ts`：`/api/ai/*` 主入口。

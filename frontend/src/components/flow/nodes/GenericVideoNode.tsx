@@ -1390,7 +1390,15 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
     if (isLinglongRestrictedPalette() && provider === "doubao") {
       const currentVendor =
         typeof data.vendorKey === "string" ? data.vendorKey.trim().toLowerCase() : "";
-      if (currentVendor === "tianyi") return;
+      const expectedManagedKey =
+        seedanceModel === "seedance-2.5"
+          ? "seedance-2.5"
+          : seedanceModel === "seedance-2.0" || seedanceModel === "seedance-2.0-fast"
+          ? "seedance-2.0"
+          : "seedance-1.5";
+      const currentManagedKey =
+        typeof data.managedModelKey === "string" ? data.managedModelKey.trim() : "";
+      if (currentVendor === "tianyi" && currentManagedKey === expectedManagedKey) return;
       window.dispatchEvent(
         new CustomEvent("flow:updateNodeData", {
           detail: {
@@ -1398,6 +1406,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
             patch: {
               vendorKey: "tianyi",
               platformKey: "tianyi",
+              managedModelKey: expectedManagedKey,
             },
           },
         })
@@ -1430,10 +1439,12 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       })
     );
   }, [
+    data.managedModelKey,
     data.vendorKey,
     id,
     managedRoutesMetadata,
     provider,
+    seedanceModel,
     selectedManagedRoute,
   ]);
 
@@ -1635,6 +1646,12 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
         value === "seedance-2.0" ||
         value === "seedance-2.0-fast" ||
         value === "seedance-2.5";
+      const nextManagedModelKey =
+        value === "seedance-2.5"
+          ? "seedance-2.5"
+          : isSeedance2FamilySelection
+          ? "seedance-2.0"
+          : "seedance-1.5";
       const nextMode: SeedanceMode = isSeedance2FamilySelection ? "reference_images" : "text";
       const snapSeedanceStepDuration = (value?: number, max = 30) => {
         const base =
@@ -1659,6 +1676,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
             id,
             patch: {
               seedanceModel: value,
+              managedModelKey: nextManagedModelKey,
               seedanceMode: nextMode,
               clipDuration: nextDuration,
               generateAudio: isSeedance2FamilySelection

@@ -1217,6 +1217,16 @@ const normalizeSeedanceModelValue = (
   return "seedance-1.5-pro";
 };
 
+/** seedanceModel → 后端 managedModelKey（勿沿用节点上残留的 2.0 key） */
+const resolveSeedanceManagedModelKey = (
+  value?: unknown
+): "seedance-1.5" | "seedance-2.0" | "seedance-2.5" => {
+  const model = normalizeSeedanceModelValue(value);
+  if (model === "seedance-2.5") return "seedance-2.5";
+  if (model === "seedance-2.0" || model === "seedance-2.0-fast") return "seedance-2.0";
+  return "seedance-1.5";
+};
+
 const isSeedance25ModelValue = (value?: unknown): boolean => {
   const normalized = normalizeSeedanceModelValue(value);
   return normalized === "seedance-2.5";
@@ -17225,6 +17235,12 @@ function FlowInner() {
                 ? rawNodeData.platformKey.trim()
                 : undefined,
           };
+          if (isSeedanceNode) {
+            // 以当前 seedanceModel 为准，避免节点残留 managedModelKey=seedance-2.0
+            managedRoutePayload.managedModelKey = resolveSeedanceManagedModelKey(
+              seedanceModelForRequest
+            );
+          }
           if (isSeedanceNode && isSeedance25Request) {
             const activeRoute =
               useAIChatStore.getState().bananaImageRoute || bananaImageRoute;
@@ -22216,14 +22232,17 @@ function FlowInner() {
             ? { nodeConfigMetadata: managedRuntime.nodeConfigMetadata }
             : {}),
         } as Record<string, any>;
-        if (
-          (n.type === "doubaoVideo" || n.type === "seedance20Video") &&
-          isSeedance25ModelValue(normalizeSeedanceModelValue(runtimeNodeData.seedanceModel))
-        ) {
-          const seedance25Vendor = resolveSeedance25VendorKey(bananaImageRoute);
-          runtimeNodeData.vendorKey = seedance25Vendor;
-          runtimeNodeData.platformKey = seedance25Vendor;
-          runtimeNodeData.managedModelKey = "seedance-2.5";
+        if (n.type === "doubaoVideo" || n.type === "seedance20Video") {
+          const normalizedSeedanceModel = normalizeSeedanceModelValue(
+            runtimeNodeData.seedanceModel
+          );
+          runtimeNodeData.managedModelKey =
+            resolveSeedanceManagedModelKey(normalizedSeedanceModel);
+          if (isSeedance25ModelValue(normalizedSeedanceModel)) {
+            const seedance25Vendor = resolveSeedance25VendorKey(bananaImageRoute);
+            runtimeNodeData.vendorKey = seedance25Vendor;
+            runtimeNodeData.platformKey = seedance25Vendor;
+          }
         }
         const defaultCreditsPerCall =
           (typeof runtimeNodeData.creditsPerCall === "number"

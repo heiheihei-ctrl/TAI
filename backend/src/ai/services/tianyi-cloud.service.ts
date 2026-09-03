@@ -242,6 +242,9 @@ export class TianyiCloudService {
     }
 
     const model = this.resolveSeedanceModel(params.modelVersion);
+    const isSeedance15 = params.modelVersion === '1.5-pro';
+
+    // 星辰 TokenHub Seedance 1.5 Pro 官方示例字段：model / content / ratio / duration / watermark
     const payload: Record<string, unknown> = {
       model,
       content: params.content,
@@ -251,23 +254,37 @@ export class TianyiCloudService {
           : this.seedanceWatermark,
     };
 
-    if (typeof params.videoMode === 'string' && params.videoMode.trim()) {
-      payload.video_mode = params.videoMode.trim();
-    }
     if (typeof params.ratio === 'string' && params.ratio.trim()) {
       payload.ratio = params.ratio.trim();
     }
     if (typeof params.duration === 'number' && Number.isFinite(params.duration)) {
       payload.duration = Math.round(params.duration);
     }
-    if (typeof params.resolution === 'string' && params.resolution.trim()) {
-      payload.resolution = params.resolution.trim().toLowerCase();
-    }
-    if (typeof params.cameraFixed === 'boolean') {
-      payload.camera_fixed = params.cameraFixed;
-    }
-    if (typeof params.generateAudio === 'boolean') {
-      payload.generate_audio = params.generateAudio;
+
+    if (isSeedance15) {
+      if (typeof params.cameraFixed === 'boolean') {
+        payload.camera_fixed = params.cameraFixed;
+      }
+      if (typeof params.generateAudio === 'boolean') {
+        payload.generate_audio = params.generateAudio;
+      }
+    } else {
+      // 2.x：可带更多控制字段；不传 text2video 这种前端语义值
+      if (typeof params.videoMode === 'string' && params.videoMode.trim()) {
+        const mode = params.videoMode.trim();
+        if (mode !== 'text2video' && mode !== 'text') {
+          payload.video_mode = mode;
+        }
+      }
+      if (typeof params.resolution === 'string' && params.resolution.trim()) {
+        payload.resolution = params.resolution.trim().toLowerCase();
+      }
+      if (typeof params.cameraFixed === 'boolean') {
+        payload.camera_fixed = params.cameraFixed;
+      }
+      if (typeof params.generateAudio === 'boolean') {
+        payload.generate_audio = params.generateAudio;
+      }
     }
 
     const requestUrl = this.buildUrl('/v1/contents/generations/tasks');
