@@ -17,7 +17,6 @@ import { OpenObserveTelemetryService } from "./telemetry/openobserve-telemetry.s
 import { EnvHttpProxyAgent, setGlobalDispatcher } from "undici";
 import { WsCollabGateway } from "./team-collab/ws-collab.gateway";
 import { OssService } from "./oss/oss.service";
-import type { FastifyReply, FastifyRequest } from "fastify";
 
 // 配置 undici ProxyAgent 以支持代理（修复 Node.js 20+ 中 @google/genai 的代理问题）
 function configureProxyForUndici() {
@@ -311,9 +310,7 @@ async function bootstrap() {
   if (ossService.isLocalMode()) {
     const managedPrefixes = ["uploads", "templates", "projects", "videos", "ai"];
     for (const prefix of managedPrefixes) {
-      await fastifyInstance.get(
-        `/${prefix}/*`,
-        async (request: FastifyRequest, reply: FastifyReply) => {
+      await fastifyInstance.get(`/${prefix}/*`, async (request, reply) => {
           const rawUrl = String(request.url || "").split("?")[0] || "";
           const key = decodeURIComponent(rawUrl.replace(/^\/+/, ""));
           if (!key || key.includes("..")) {
@@ -329,8 +326,7 @@ async function bootstrap() {
           reply.header("Cache-Control", "public, max-age=31536000, immutable");
           reply.header("Access-Control-Allow-Origin", "*");
           return reply.send(local.stream);
-        },
-      );
+        });
     }
     // eslint-disable-next-line no-console
     console.log(
