@@ -82,14 +82,19 @@ export class Nano2Service {
         : '';
     const message = String(err.message || '');
 
+    // toapisRequest 主备均失败时已带完整诊断，勿再改写成「仅主域 DNS 失败」
+    if (message.includes('主备域名均不可达')) {
+      return new ServiceUnavailableException(`${message}。${context}`) as unknown as Error;
+    }
+
     if (causeCode === 'ENOTFOUND') {
       return new ServiceUnavailableException(
-        `ToAPIs 域名解析失败（${getToapisApiBaseUrl()}），请检查服务器 DNS 或代理网络。${context}`,
+        `ToAPIs 域名解析失败（${getToapisApiBaseUrl()}），请检查服务器 DNS 或系统 HTTP(S)_PROXY。${context}`,
       ) as unknown as Error;
     }
     if (causeCode === 'ETIMEDOUT' || err.name === 'AbortError') {
       return new ServiceUnavailableException(
-        `ToAPIs 网络连接超时，请检查服务器到 ${getToapisApiBaseUrl()} 的网络链路或代理配置。${context}`,
+        `ToAPIs 网络连接超时，请检查服务器到 ${getToapisApiBaseUrl()} 的网络链路或系统代理。${context}`,
       ) as unknown as Error;
     }
     if (

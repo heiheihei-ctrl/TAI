@@ -115,18 +115,31 @@ export function getToapisProxyUrl(): string | null {
   return proxyUrl || null;
 }
 
-export function getToapisProxySummary(): string {
-  const proxyUrl = getToapisProxyUrl();
-  if (!proxyUrl) return 'direct';
-
+function maskProxyUrl(raw: string): string {
   try {
-    const parsed = new URL(proxyUrl);
+    const parsed = new URL(raw);
     parsed.username = parsed.username ? '***' : '';
     parsed.password = parsed.password ? '***' : '';
     return parsed.toString();
   } catch {
     return 'invalid';
   }
+}
+
+export function getToapisProxySummary(): string {
+  const proxyUrl = getToapisProxyUrl();
+  if (proxyUrl) return maskProxyUrl(proxyUrl);
+
+  const envProxy =
+    process.env.HTTPS_PROXY ||
+    process.env.https_proxy ||
+    process.env.HTTP_PROXY ||
+    process.env.http_proxy ||
+    process.env.ALL_PROXY ||
+    process.env.all_proxy ||
+    '';
+  if (envProxy.trim()) return `env:${maskProxyUrl(envProxy.trim())}`;
+  return 'direct';
 }
 
 function getProxyAgent(): SocksProxyAgent | null {
@@ -268,19 +281,28 @@ async function axiosToapisOnce<T>(
   },
 ): Promise<AxiosResponse<T>> {
   const agent = getProxyAgent();
+  // 仅在显式配置 API_PROXY_URL（socks5h）时禁用 axios 默认代理。
+  // 未配置时必须跟随系统 HTTP(S)_PROXY（与 curl 一致）；此前写死 proxy:false
+  // 会导致本机 Clash/系统代理被绕过，直连海外 DNS 污染 IP 后超时。
   return axios.request<T>({
     validateStatus: () => true,
     ...config,
     timeout: config.timeout ?? 45000,
-    proxy: false,
-    httpAgent: agent ?? undefined,
-    httpsAgent: agent ?? undefined,
+    ...(agent
+      ? {
+          proxy: false as const,
+          httpAgent: agent,
+          httpsAgent: agent,
+        }
+      : {}),
   });
 }
 
 /**
  * ToAPIs 请求：默认走 toapis.com；仅网络不可达时自动切换 toapis.xyz 重试一次。
  */
+let loggedToapisProxyMode = false;
+
 export async function toapisRequest<T = unknown>(
   config: Omit<AxiosRequestConfig, 'url' | 'method'> & {
     url: string;
@@ -288,6 +310,12 @@ export async function toapisRequest<T = unknown>(
     timeout?: number;
   },
 ): Promise<AxiosResponse<T>> {
+  if (!loggedToapisProxyMode) {
+    loggedToapisProxyMode = true;
+    // eslint-disable-next-line no-console
+    console.log(`[ToAPIs] outbound proxy mode: ${getToapisProxySummary()}`);
+  }
+
   try {
     return await axiosToapisOnce<T>(config);
   } catch (error) {
@@ -310,11 +338,16 @@ export async function toapisRequest<T = unknown>(
     } catch (fallbackError) {
       const primaryHint = getToapisApiBaseUrl();
       const fallbackHint = getToapisFallbackApiBaseUrl();
-      const code = extractErrorCode(fallbackError) || extractErrorCode(error);
+      const primaryCode = extractErrorCode(error) || 'unknown';
+      const fallbackCode = extractErrorCode(fallbackError) || 'unknown';
+      const proxyMode = getToapisProxySummary();
       const err = new Error(
-        `ToAPIs 主备域名均不可达（primary=${primaryHint}, fallback=${fallbackHint}, code=${code || 'unknown'}）`,
+        `ToAPIs 主备域名均不可达（primary=${primaryHint} code=${primaryCode}, fallback=${fallbackHint} code=${fallbackCode}, proxy=${proxyMode}）`,
       );
       (err as any).cause = fallbackError;
+      (err as any).code = fallbackCode !== 'unknown' ? fallbackCode : primaryCode;
+      (err as any).primaryCode = primaryCode;
+      (err as any).fallbackCode = fallbackCode;
       throw err;
     }
   }
