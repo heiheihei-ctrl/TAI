@@ -1,16 +1,60 @@
 import axios, { AxiosRequestConfig, AxiosResponse, Method } from 'axios';
 import { SocksProxyAgent } from 'socks-proxy-agent';
 
-// 备用域名（国内更稳）：https://toapis.xyz/v1
-// 原域名 toapis.com 在部分网络不可用，仅作兼容回退参考
-const DEFAULT_TOAPIS_BASE = 'https://toapis.xyz/v1';
+/** 主域名：默认优先使用 */
+const PRIMARY_TOAPIS_BASE = 'https://toapis.com/v1';
+/** 备用域名：仅在主域名网络不可达时回退 */
+const FALLBACK_TOAPIS_BASE = 'https://toapis.xyz/v1';
 
 let cachedProxyUrl: string | null | undefined;
 let cachedAgent: SocksProxyAgent | null = null;
 
+function normalizeApiBase(raw: string): string {
+  return String(raw || '')
+    .trim()
+    .replace(/\/+$/, '');
+}
+
+function isToapisXyzBase(base: string): boolean {
+  try {
+    const host = new URL(base).hostname.toLowerCase();
+    return host === 'toapis.xyz' || host === 'www.toapis.xyz';
+  } catch {
+    return /toapis\.xyz/i.test(base);
+  }
+}
+
+function isToapisComBase(base: string): boolean {
+  try {
+    const host = new URL(base).hostname.toLowerCase();
+    return host === 'toapis.com' || host === 'www.toapis.com';
+  } catch {
+    return /toapis\.com/i.test(base);
+  }
+}
+
+/**
+ * 主 API Base（始终优先 toapis.com）。
+ * 若环境变量误配成 toapis.xyz，仍回落到主域名，避免直接打备用域。
+ */
 export function getToapisApiBaseUrl(): string {
-  const raw = process.env.TOAPIS_API_BASE_URL || process.env.TOAPIS_API_ENDPOINT || DEFAULT_TOAPIS_BASE;
-  return String(raw).trim().replace(/\/+$/, '');
+  const raw = normalizeApiBase(
+    process.env.TOAPIS_API_BASE_URL ||
+      process.env.TOAPIS_API_ENDPOINT ||
+      PRIMARY_TOAPIS_BASE,
+  );
+  if (!raw || isToapisXyzBase(raw)) {
+    return PRIMARY_TOAPIS_BASE;
+  }
+  return raw;
+}
+
+/** 备用 API Base（toapis.xyz） */
+export function getToapisFallbackApiBaseUrl(): string {
+  const raw = normalizeApiBase(
+    process.env.TOAPIS_API_FALLBACK_BASE_URL || FALLBACK_TOAPIS_BASE,
+  );
+  return raw || FALLBACK_TOAPIS_BASE;
 }
 
 export function getToapisApiKey(): string | null {
@@ -157,7 +201,66 @@ export function rewriteToapisLegacyUrl(rawUrl: string): string {
   }
 }
 
-export async function toapisRequest<T = unknown>(
+function extractErrorCode(error: unknown): string {
+  const err = error as any;
+  if (typeof err?.code === 'string') return err.code;
+  if (typeof err?.cause?.code === 'string') return err.cause.code;
+  if (typeof err?.cause?.cause?.code === 'string') return err.cause.cause.code;
+  return '';
+}
+
+/** 主域名网络层失败时才切备用（DNS / 连接 / 超时） */
+export function isToapisNetworkFailoverError(error: unknown): boolean {
+  const code = extractErrorCode(error).toUpperCase();
+  const message = String((error as any)?.message || '').toLowerCase();
+  return (
+    code === 'ENOTFOUND' ||
+    code === 'EAI_AGAIN' ||
+    code === 'ECONNREFUSED' ||
+    code === 'ECONNRESET' ||
+    code === 'ETIMEDOUT' ||
+    code === 'ECONNABORTED' ||
+    code === 'UND_ERR_CONNECT_TIMEOUT' ||
+    code === 'UND_ERR_SOCKET' ||
+    message.includes('enotfound') ||
+    message.includes('getaddrinfo') ||
+    message.includes('econnrefused') ||
+    message.includes('econnreset') ||
+    message.includes('etimedout') ||
+    message.includes('socket hang up') ||
+    message.includes('network error') ||
+    message.includes('fetch failed')
+  );
+}
+
+/** 把请求 URL 从主域名改写到备用域名（仅 toapis.com → toapis.xyz） */
+export function rewriteToapisUrlToFallback(url: string): string | null {
+  const input = typeof url === 'string' ? url.trim() : '';
+  if (!input) return null;
+  try {
+    const parsed = new URL(input);
+    const host = parsed.hostname.toLowerCase();
+    if (host !== 'toapis.com' && host !== 'www.toapis.com') {
+      return null;
+    }
+    const fallbackBase = getToapisFallbackApiBaseUrl();
+    const fallbackHost = new URL(
+      fallbackBase.startsWith('http') ? fallbackBase : `https://${fallbackBase}`,
+    ).hostname;
+    parsed.hostname = fallbackHost;
+    return parsed.toString();
+  } catch {
+    // 相对或残缺 URL：按 base 前缀替换
+    const primary = getToapisApiBaseUrl();
+    const fallback = getToapisFallbackApiBaseUrl();
+    if (input.startsWith(primary)) {
+      return `${fallback}${input.slice(primary.length)}`;
+    }
+    return null;
+  }
+}
+
+async function axiosToapisOnce<T>(
   config: Omit<AxiosRequestConfig, 'url' | 'method'> & {
     url: string;
     method: Method;
@@ -165,7 +268,6 @@ export async function toapisRequest<T = unknown>(
   },
 ): Promise<AxiosResponse<T>> {
   const agent = getProxyAgent();
-
   return axios.request<T>({
     validateStatus: () => true,
     ...config,
@@ -174,4 +276,46 @@ export async function toapisRequest<T = unknown>(
     httpAgent: agent ?? undefined,
     httpsAgent: agent ?? undefined,
   });
+}
+
+/**
+ * ToAPIs 请求：默认走 toapis.com；仅网络不可达时自动切换 toapis.xyz 重试一次。
+ */
+export async function toapisRequest<T = unknown>(
+  config: Omit<AxiosRequestConfig, 'url' | 'method'> & {
+    url: string;
+    method: Method;
+    timeout?: number;
+  },
+): Promise<AxiosResponse<T>> {
+  try {
+    return await axiosToapisOnce<T>(config);
+  } catch (error) {
+    if (!isToapisNetworkFailoverError(error)) {
+      throw error;
+    }
+
+    const fallbackUrl = rewriteToapisUrlToFallback(config.url);
+    if (!fallbackUrl || fallbackUrl === config.url) {
+      throw error;
+    }
+
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[ToAPIs] primary host failed (${extractErrorCode(error) || 'network'}), fallback → ${fallbackUrl}`,
+    );
+
+    try {
+      return await axiosToapisOnce<T>({ ...config, url: fallbackUrl });
+    } catch (fallbackError) {
+      const primaryHint = getToapisApiBaseUrl();
+      const fallbackHint = getToapisFallbackApiBaseUrl();
+      const code = extractErrorCode(fallbackError) || extractErrorCode(error);
+      const err = new Error(
+        `ToAPIs 主备域名均不可达（primary=${primaryHint}, fallback=${fallbackHint}, code=${code || 'unknown'}）`,
+      );
+      (err as any).cause = fallbackError;
+      throw err;
+    }
+  }
 }
