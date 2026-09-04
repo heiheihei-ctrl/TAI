@@ -73,6 +73,15 @@ const makeCanvas = (width: number, height: number): HTMLCanvasElement | Offscree
   return canvas;
 };
 
+type Canvas2DContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+
+const getCanvas2dContext = (
+  canvas: HTMLCanvasElement | OffscreenCanvas,
+): Canvas2DContext | null => {
+  const ctx = canvas.getContext('2d');
+  return ctx as Canvas2DContext | null;
+};
+
 const readFrameImageFromVideoExtractNode = (
   data: Record<string, unknown>
 ): string => {
@@ -181,7 +190,7 @@ const cropImageToBlob = async (crop: CropSpec): Promise<Blob | null> => {
       const sh = Math.max(1, Math.min(naturalH - sy, shRaw));
 
       const canvas = makeCanvas(outputW, outputH);
-      const ctx = canvas.getContext('2d');
+      const ctx = getCanvas2dContext(canvas);
       if (!ctx) return null;
 
       ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, outputW, outputH);
@@ -219,7 +228,7 @@ const cropImageToBlob = async (crop: CropSpec): Promise<Blob | null> => {
     const sh = Math.max(1, Math.min(naturalH - sy, shRaw));
 
     const canvas = makeCanvas(outputW, outputH);
-    const ctx = canvas.getContext('2d');
+    const ctx = getCanvas2dContext(canvas);
     if (!ctx) return null;
 
     ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outputW, outputH);
@@ -250,7 +259,7 @@ const compressBlob = async (
     const outH = Math.max(1, Math.round(sourceHeight * targetScale));
 
     const canvas = makeCanvas(outW, outH);
-    const ctx = canvas.getContext('2d');
+    const ctx = getCanvas2dContext(canvas);
     if (!ctx) throw new Error(pickLocaleText('Canvas 不可用', 'Canvas is not available'));
 
     if ('imageSmoothingEnabled' in ctx) {

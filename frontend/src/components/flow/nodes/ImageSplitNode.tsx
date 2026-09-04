@@ -301,6 +301,15 @@ const makeCanvas = (width: number, height: number): HTMLCanvasElement | Offscree
   return canvas;
 };
 
+type Canvas2DContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+
+const getCanvas2dContext = (
+  canvas: HTMLCanvasElement | OffscreenCanvas,
+): Canvas2DContext | null => {
+  const ctx = canvas.getContext('2d');
+  return ctx as Canvas2DContext | null;
+};
+
 const cropImageToBlob = async (params: CropInfo): Promise<Blob | null> => {
   const baseRef = params.baseRef?.trim?.() || '';
   if (!baseRef) return null;
@@ -341,7 +350,7 @@ const cropImageToBlob = async (params: CropInfo): Promise<Blob | null> => {
       const sh = Math.max(1, Math.min(naturalH - sy, shRaw));
 
       const canvas = makeCanvas(outW, outH);
-      const ctx = canvas.getContext('2d');
+      const ctx = getCanvas2dContext(canvas);
       if (!ctx) return null;
       try {
         // @ts-ignore - 部分环境无此字段
@@ -386,7 +395,7 @@ const cropImageToBlob = async (params: CropInfo): Promise<Blob | null> => {
     const sh = Math.max(1, Math.min(naturalH - sy, shRaw));
 
     const canvas = makeCanvas(outW, outH);
-    const ctx = canvas.getContext('2d');
+    const ctx = getCanvas2dContext(canvas);
     if (!ctx) return null;
     try {
       // @ts-ignore - 部分环境无此字段
@@ -418,7 +427,7 @@ const normalizeBlobForRuntime = async (blob: Blob): Promise<Blob> => {
     if (!estimateSafeCanvas(width, height)) return blob;
 
     const canvas = makeCanvas(width, height);
-    const ctx = canvas.getContext('2d');
+    const ctx = getCanvas2dContext(canvas);
     if (!ctx) return blob;
 
     ctx.drawImage(bitmap, 0, 0, width, height);
