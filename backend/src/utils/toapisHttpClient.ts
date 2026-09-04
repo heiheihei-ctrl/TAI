@@ -82,7 +82,7 @@ export function formatToapisHttpError(
   if (
     /mirror|10\s*mb|10mb|reference image|must not be larger/.test(normalized)
   ) {
-    return `参考图不符合 ToAPIs 要求（≤10MB 且可公网访问）: ${errorData}`;
+    return `参考图不符合 ToAPIs 要求（单张 ≤10MB 且可公网访问）: ${errorData}`;
   }
   if (
     normalized.includes('deadline exceeded') ||

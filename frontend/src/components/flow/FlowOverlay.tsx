@@ -219,7 +219,7 @@ import {
   assertReferenceImageBytesWithinLimit,
   estimateDataUrlByteLength,
   formatReferenceImageSizeError,
-  validateReferenceImageInputs,
+  ensureReferenceImagesWithinLimit,
 } from "@/utils/referenceImageValidation";
 import { personalLibraryApi } from "@/services/personalLibraryApi";
 import {
@@ -13423,7 +13423,14 @@ function FlowInner() {
               ctx.imageSmoothingEnabled = true;
             } catch {}
             ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, outW, outH);
-            const outBlob = await canvasToBlob(canvas, { type: "image/png" });
+            // PNG 重编码易膨胀；超 10MB 时回退 JPEG，避免单张误判超限
+            let outBlob = await canvasToBlob(canvas, { type: "image/png" });
+            if (outBlob.size > REFERENCE_IMAGE_MAX_SIZE) {
+              outBlob = await canvasToBlob(canvas, {
+                type: "image/jpeg",
+                quality: 0.92,
+              });
+            }
             return await blobToDataUrl(outBlob);
           } finally {
             try {
@@ -13479,7 +13486,13 @@ function FlowInner() {
             ctx.imageSmoothingEnabled = true;
           } catch {}
           ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outW, outH);
-          const outBlob = await canvasToBlob(canvas, { type: "image/png" });
+          let outBlob = await canvasToBlob(canvas, { type: "image/png" });
+          if (outBlob.size > REFERENCE_IMAGE_MAX_SIZE) {
+            outBlob = await canvasToBlob(canvas, {
+              type: "image/jpeg",
+              quality: 0.92,
+            });
+          }
           return await blobToDataUrl(outBlob);
         } finally {
           try {
@@ -17018,7 +17031,7 @@ function FlowInner() {
                     failCurrentVideoNode(
                       isSeedanceNode
                         ? `Seedance 图片单图需不超过 30MB，当前约 ${(bytes / 1024 / 1024).toFixed(1)}MB`
-                        : `参考图文件过大，请选择小于 10MB 的图片，当前约 ${(bytes / 1024 / 1024).toFixed(1)}MB`
+                        : `参考图单张过大，请选择小于 10MB 的图片，当前约 ${(bytes / 1024 / 1024).toFixed(1)}MB`
                     );
                     return;
                   }
@@ -17048,7 +17061,7 @@ function FlowInner() {
                   const dataUrl = await fetchRemoteImageAsDataUrl(trimmed);
                   const bytes = estimateDataUrlByteLength(dataUrl);
                   if (typeof bytes === "number" && Number.isFinite(bytes) && bytes > REFERENCE_IMAGE_MAX_SIZE) {
-                    failCurrentVideoNode(`参考图文件过大，请选择小于 10MB 的图片，当前约 ${(bytes / 1024 / 1024).toFixed(1)}MB`);
+                    failCurrentVideoNode(`参考图单张过大，请选择小于 10MB 的图片，当前约 ${(bytes / 1024 / 1024).toFixed(1)}MB`);
                     return;
                   }
                   referenceImageUrls.push(dataUrl);
@@ -17056,7 +17069,7 @@ function FlowInner() {
                   const dataUrl = ensureDataUrl(trimmed);
                   const bytes = estimateDataUrlByteLength(dataUrl);
                   if (typeof bytes === "number" && Number.isFinite(bytes) && bytes > REFERENCE_IMAGE_MAX_SIZE) {
-                    failCurrentVideoNode(`参考图文件过大，请选择小于 10MB 的图片，当前约 ${(bytes / 1024 / 1024).toFixed(1)}MB`);
+                    failCurrentVideoNode(`参考图单张过大，请选择小于 10MB 的图片，当前约 ${(bytes / 1024 / 1024).toFixed(1)}MB`);
                     return;
                   }
                   referenceImageUrls.push(dataUrl);
@@ -19124,7 +19137,7 @@ function FlowInner() {
         const imgEdges = currentEdges
           .filter((e) => e.target === nodeId && e.targetHandle === "img")
           .slice(0, maxReferenceImages);
-        const imageDatas = Array.from(
+        let imageDatas = Array.from(
           new Set([
             ...(await resolveEdgesAsDataUrls(imgEdges)),
             ...(imageMentionUrls || []),
@@ -19132,7 +19145,7 @@ function FlowInner() {
         );
 
         try {
-          await validateReferenceImageInputs(imageDatas);
+          imageDatas = await ensureReferenceImagesWithinLimit(imageDatas);
         } catch (sizeError) {
           setNodes((ns) =>
             ns.map((n) =>
@@ -19145,7 +19158,7 @@ function FlowInner() {
                       error:
                         sizeError instanceof Error
                           ? sizeError.message
-                          : "参考图文件过大，请选择小于 10MB 的图片",
+                          : "参考图单张过大，请选择小于 10MB 的图片",
                     },
                   }
                 : n
@@ -19427,12 +19440,12 @@ function FlowInner() {
         const connectedImageDatas = await resolveEdgesAsDataUrls(
           totalImgEdges.slice(0, 5)
         );
-        const imageDatas = Array.from(
+        let imageDatas = Array.from(
           new Set([...connectedImageDatas, ...promptMentionImageUrls])
         ).slice(0, 5);
 
         try {
-          await validateReferenceImageInputs(imageDatas);
+          imageDatas = await ensureReferenceImagesWithinLimit(imageDatas);
         } catch (sizeError) {
           setNodes((ns) =>
             ns.map((n) =>
@@ -19445,7 +19458,7 @@ function FlowInner() {
                       error:
                         sizeError instanceof Error
                           ? sizeError.message
-                          : "参考图文件过大，请选择小于 10MB 的图片",
+                          : "参考图单张过大，请选择小于 10MB 的图片",
                     },
                   }
                 : n
@@ -19638,12 +19651,12 @@ function FlowInner() {
         const connectedImageDatas = await resolveEdgesAsDataUrls(
           totalImgEdges.slice(0, 5)
         );
-        const imageDatas = Array.from(
+        let imageDatas = Array.from(
           new Set([...connectedImageDatas, ...promptMentionImageUrls])
         ).slice(0, 5);
 
         try {
-          await validateReferenceImageInputs(imageDatas);
+          imageDatas = await ensureReferenceImagesWithinLimit(imageDatas);
         } catch (sizeError) {
           setNodes((ns) =>
             ns.map((n) =>
@@ -19656,7 +19669,7 @@ function FlowInner() {
                       error:
                         sizeError instanceof Error
                           ? sizeError.message
-                          : "参考图文件过大，请选择小于 10MB 的图片",
+                          : "参考图单张过大，请选择小于 10MB 的图片",
                     },
                   }
                 : n
@@ -19969,10 +19982,11 @@ function FlowInner() {
       }
 
       try {
-        await validateReferenceImageInputs(imageDatas);
+        // 逐张确保 ≤10MB（必要时压缩）；禁止多图合计判定
+        imageDatas = await ensureReferenceImagesWithinLimit(imageDatas);
       } catch (sizeError) {
         failWithMessage(
-          sizeError instanceof Error ? sizeError.message : "参考图文件过大，请选择小于 10MB 的图片",
+          sizeError instanceof Error ? sizeError.message : "参考图单张过大，请选择小于 10MB 的图片",
         );
         return;
       }
@@ -20018,7 +20032,7 @@ function FlowInner() {
               failWithMessage(
                 sizeError instanceof Error
                   ? sizeError.message
-                  : "参考图文件过大，请选择小于 10MB 的图片",
+                  : "参考图单张过大，请选择小于 10MB 的图片",
               );
               return;
             }

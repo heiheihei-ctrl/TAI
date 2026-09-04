@@ -35,6 +35,7 @@ import { ossUploadService, dataURLToBlob, dataURLToBlobAsync } from "@/services/
 import { imageUploadService, REFERENCE_IMAGE_MAX_SIZE } from "@/services/imageUploadService";
 import {
   formatReferenceImageSizeError,
+  ensureReferenceImagesWithinLimit,
   validateReferenceImageInputs,
 } from "@/utils/referenceImageValidation";
 import type { ChatModelKey } from "@/config/chatModelOptions";
@@ -2156,7 +2157,9 @@ export async function uploadImageToOSS(
       console.error("❌ 图片上传异常:", error);
       if (
         error instanceof Error &&
-        (error.message.includes("文件过大") || error.message.includes("10MB"))
+        (error.message.includes("文件过大") ||
+          error.message.includes("单张过大") ||
+          error.message.includes("10MB"))
       ) {
         throw error;
       }
@@ -5271,8 +5274,11 @@ export const useAIChatStore = create<AIChatState>()(
 
             // 🔥 统一改为先上传到 OSS，用 URL 传给后端
             const projectIdBlend = useProjectContentStore.getState().projectId;
-            await validateReferenceImageInputs(sourceImages, "融合参考图");
-            const sourceImageUrls = await mapWithLimit(sourceImages, 2, async (img, index) => {
+            const ensuredSourceImages = await ensureReferenceImagesWithinLimit(
+              sourceImages,
+              "融合参考图",
+            );
+            const sourceImageUrls = await mapWithLimit(ensuredSourceImages, 2, async (img, index) => {
               const remoteUrl = normalizeRemoteUrl(img);
               const remoteAllowed = Boolean(
                 remoteUrl && isLikelyBackendAllowedRemoteUrl(remoteUrl)

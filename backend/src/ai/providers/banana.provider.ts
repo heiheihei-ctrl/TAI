@@ -1739,7 +1739,7 @@ export class BananaProvider implements IAIProvider {
         const combined = `${status}${detail}`;
         if (/mirror|10\s*mb|10mb|reference image|must not be larger/i.test(combined)) {
           throw new Error(
-            `参考图不符合 ToAPIs 要求（≤10MB 且可公网访问）${detail}`,
+            `参考图不符合 ToAPIs 要求（单张 ≤10MB 且可公网访问）${detail}`,
           );
         }
         if (/deadline exceeded|timeout|polling timeout|context deadline/i.test(combined)) {

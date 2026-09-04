@@ -2500,7 +2500,7 @@ export class VideoProviderService {
 
     const normalized = text.toLowerCase();
     if (normalized.includes("image pixel is invalid")) {
-      return "参考图片不符合要求，请上传 jpg/png 图片，确保最小边不少于 300px、宽高比不要超过 2.5:1，且文件大小不超过 10MB";
+      return "参考图片不符合要求，请上传 jpg/png 图片，确保最小边不少于 300px、宽高比不要超过 2.5:1，且单张文件大小不超过 10MB";
     }
 
     return text;

@@ -787,8 +787,8 @@ function KlingO1VideoNode({ id, data, selected }: Props) {
           if (file.size > TENCENT_STORYBOARD_IMAGE_MAX_BYTES) {
             setStoryboardUploadError(
               lt(
-                `图片 ${file.name} 超过 10MB，请压缩后再上传`,
-                `Image ${file.name} exceeds 10MB, please compress and retry`
+                `图片 ${file.name} 单张超过 10MB，请压缩后再上传`,
+                `Image ${file.name} exceeds 10MB each, please compress and retry`
               )
             );
             continue;
@@ -1902,8 +1902,8 @@ function KlingO1VideoNode({ id, data, selected }: Props) {
                 }}
               >
                 {lt(
-                  "输入限制：图片仅支持 jpg/jpeg/png 且不超过 10MB。参考视频仅支持 mp4/mov/avi，时长 3-10 秒且不超过 100MB。",
-                  "Limits: image jpg/jpeg/png <=10MB; video mp4/mov/avi, 3-10s, <=100MB."
+                  "输入限制：图片仅支持 jpg/jpeg/png 且单张不超过 10MB。参考视频仅支持 mp4/mov/avi，时长 3-10 秒且不超过 100MB。",
+                  "Limits: each image jpg/jpeg/png <=10MB; video mp4/mov/avi, 3-10s, <=100MB."
                 )}
               </div>
               <div

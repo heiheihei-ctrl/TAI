@@ -1435,7 +1435,7 @@ function ImageNodeInner({ id, data, selected }: Props) {
     const file = files[0];
     if (!file.type.startsWith("image/")) return;
     if (file.size > REFERENCE_IMAGE_MAX_SIZE) {
-      notifyToast(lt(`图片文件过大，请选择小于 10MB 的图片`, `Image file is too large, please select images smaller than 10MB`), "error");
+      notifyToast(lt(`单张图片不能超过 10MB，请压缩后重试`, `Each image must be under 10MB, please compress and retry`), "error");
       return;
     }
     const normalizedFileName = (file.name || "").trim();

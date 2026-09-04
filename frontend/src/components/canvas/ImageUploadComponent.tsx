@@ -43,7 +43,7 @@ const ImageUploadComponent: React.FC<ImageUploadComponentProps> = ({
 
     if (file.size > REFERENCE_IMAGE_MAX_SIZE) {
       resetInputValue();
-      onUploadError(lt('图片文件过大，请选择小于 10MB 的图片', 'Image file is too large, please select images smaller than 10MB'));
+      onUploadError(lt('单张图片不能超过 10MB，请压缩后重试', 'Each image must be under 10MB, please compress and retry'));
       return;
     }
 
