@@ -1,10 +1,13 @@
 import axios, { AxiosRequestConfig, AxiosResponse, Method } from 'axios';
 import { SocksProxyAgent } from 'socks-proxy-agent';
 
-/** 主域名：默认优先使用 */
-const PRIMARY_TOAPIS_BASE = 'https://toapis.com/v1';
-/** 备用域名：仅在主域名网络不可达时回退 */
-const FALLBACK_TOAPIS_BASE = 'https://toapis.xyz/v1';
+/**
+ * 国内加速主域名（ToAPIs 线路升级：CN → toapis.cn）。
+ * 海外线路仍可用 toapis.com，见 TOAPIS_USE_OVERSEAS。
+ */
+const PRIMARY_TOAPIS_BASE = 'https://toapis.cn/v1';
+/** 备用域名：主域名网络不可达时回退（海外官方域） */
+const FALLBACK_TOAPIS_BASE = 'https://toapis.com/v1';
 
 let cachedProxyUrl: string | null | undefined;
 let cachedAgent: SocksProxyAgent | null = null;
@@ -15,27 +18,40 @@ function normalizeApiBase(raw: string): string {
     .replace(/\/+$/, '');
 }
 
-function isToapisXyzBase(base: string): boolean {
+function hostnameOfBase(base: string): string {
   try {
-    const host = new URL(base).hostname.toLowerCase();
-    return host === 'toapis.xyz' || host === 'www.toapis.xyz';
+    return new URL(base.startsWith('http') ? base : `https://${base}`).hostname.toLowerCase();
   } catch {
-    return /toapis\.xyz/i.test(base);
+    return '';
   }
+}
+
+function isToapisXyzBase(base: string): boolean {
+  const host = hostnameOfBase(base);
+  return host === 'toapis.xyz' || host === 'www.toapis.xyz' || /toapis\.xyz/i.test(base);
 }
 
 function isToapisComBase(base: string): boolean {
-  try {
-    const host = new URL(base).hostname.toLowerCase();
-    return host === 'toapis.com' || host === 'www.toapis.com';
-  } catch {
-    return /toapis\.com/i.test(base);
-  }
+  const host = hostnameOfBase(base);
+  return host === 'toapis.com' || host === 'www.toapis.com' || /toapis\.com/i.test(base);
+}
+
+function isToapisCnBase(base: string): boolean {
+  const host = hostnameOfBase(base);
+  return host === 'toapis.cn' || host === 'www.toapis.cn' || /toapis\.cn/i.test(base);
+}
+
+function useOverseasToapisLine(): boolean {
+  const flag = String(process.env.TOAPIS_USE_OVERSEAS || '')
+    .trim()
+    .toLowerCase();
+  return flag === '1' || flag === 'true' || flag === 'yes';
 }
 
 /**
- * 主 API Base（始终优先 toapis.com）。
- * 若环境变量误配成 toapis.xyz，仍回落到主域名，避免直接打备用域。
+ * 主 API Base：默认国内 toapis.cn。
+ * - 旧配置 toapis.xyz / toapis.com（未开海外开关）会纠正到 toapis.cn，避免国内 DNS 污染/超时
+ * - TOAPIS_USE_OVERSEAS=1 时允许显式使用 toapis.com
  */
 export function getToapisApiBaseUrl(): string {
   const raw = normalizeApiBase(
@@ -46,15 +62,25 @@ export function getToapisApiBaseUrl(): string {
   if (!raw || isToapisXyzBase(raw)) {
     return PRIMARY_TOAPIS_BASE;
   }
+  if (isToapisComBase(raw) && !useOverseasToapisLine()) {
+    return PRIMARY_TOAPIS_BASE;
+  }
   return raw;
 }
 
-/** 备用 API Base（toapis.xyz） */
+/** 备用 API Base（默认海外 toapis.com） */
 export function getToapisFallbackApiBaseUrl(): string {
   const raw = normalizeApiBase(
     process.env.TOAPIS_API_FALLBACK_BASE_URL || FALLBACK_TOAPIS_BASE,
   );
-  return raw || FALLBACK_TOAPIS_BASE;
+  const fallback = raw || FALLBACK_TOAPIS_BASE;
+  // 备用不能与主域名相同
+  if (hostnameOfBase(fallback) === hostnameOfBase(getToapisApiBaseUrl())) {
+    return isToapisCnBase(getToapisApiBaseUrl())
+      ? FALLBACK_TOAPIS_BASE
+      : PRIMARY_TOAPIS_BASE;
+  }
+  return fallback;
 }
 
 export function getToapisApiKey(): string | null {
@@ -177,7 +203,7 @@ export function getToapisOrigin(): string {
 
 /**
  * 规范化 ToAPIs 返回的结果图外链。
- * - 文件 CDN 固定为 files.toapis.com，禁止改写成 API 域名 toapis.xyz
+ * - 文件 CDN 固定为 files.toapis.com，禁止改写成 API 域名
  * - 若上游给出 API 域上的 /__files/ 别名，还原为 files.toapis.com
  * - API 域名切换只影响 /v1 接口，不影响结果图 CDN
  */
@@ -196,8 +222,10 @@ export function rewriteToapisLegacyUrl(rawUrl: string): string {
 
     // API 域上的 /__files/... 是文件 CDN 别名，还原到 files.toapis.com
     if (
-      (host === 'toapis.com' ||
+      (host === 'toapis.cn' ||
+        host === 'toapis.com' ||
         host === 'toapis.xyz' ||
+        host === 'www.toapis.cn' ||
         host === 'www.toapis.com' ||
         host === 'www.toapis.xyz') &&
       pathname.startsWith('/__files/')
@@ -207,7 +235,7 @@ export function rewriteToapisLegacyUrl(rawUrl: string): string {
       return parsed.toString();
     }
 
-    // 其它 *.toapis.com / *.toapis.xyz 结果图链接保持原样，避免误伤 CDN
+    // 其它结果图链接保持原样，避免误伤 CDN
     return input;
   } catch {
     return input;
@@ -246,20 +274,22 @@ export function isToapisNetworkFailoverError(error: unknown): boolean {
   );
 }
 
-/** 把请求 URL 从主域名改写到备用域名（仅 toapis.com → toapis.xyz） */
+/** 把请求 URL 从当前主域名改写到备用域名（如 toapis.cn → toapis.com） */
 export function rewriteToapisUrlToFallback(url: string): string | null {
   const input = typeof url === 'string' ? url.trim() : '';
   if (!input) return null;
   try {
     const parsed = new URL(input);
     const host = parsed.hostname.toLowerCase();
-    if (host !== 'toapis.com' && host !== 'www.toapis.com') {
+    const primaryHost = hostnameOfBase(getToapisApiBaseUrl());
+    const fallbackBase = getToapisFallbackApiBaseUrl();
+    const fallbackHost = hostnameOfBase(fallbackBase);
+    if (!primaryHost || !fallbackHost || host === fallbackHost) {
       return null;
     }
-    const fallbackBase = getToapisFallbackApiBaseUrl();
-    const fallbackHost = new URL(
-      fallbackBase.startsWith('http') ? fallbackBase : `https://${fallbackBase}`,
-    ).hostname;
+    if (host !== primaryHost && host !== `www.${primaryHost}`) {
+      return null;
+    }
     parsed.hostname = fallbackHost;
     return parsed.toString();
   } catch {
@@ -299,7 +329,7 @@ async function axiosToapisOnce<T>(
 }
 
 /**
- * ToAPIs 请求：默认走 toapis.com；仅网络不可达时自动切换 toapis.xyz 重试一次。
+ * ToAPIs 请求：默认走国内 toapis.cn；仅网络不可达时自动切换 toapis.com 重试一次。
  */
 let loggedToapisProxyMode = false;
 

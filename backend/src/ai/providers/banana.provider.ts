@@ -99,7 +99,7 @@ export const BANANA_TEXT_PROVIDER_SETTING_KEY = "banana_text_provider";
 
 /**
  * Banana API Provider - 经 ToAPIs OpenAI 兼容网关调用 Gemini 等模型
- * Base URL: https://toapis.xyz/v1（备用域名；原 toapis.com 部分网络不可用）
+ * Base URL: https://toapis.cn/v1（国内加速主域名；海外可用 toapis.com）
  */
 @Injectable()
 export class BananaProvider implements IAIProvider {

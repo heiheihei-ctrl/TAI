@@ -622,6 +622,7 @@ export class OssService {
       'amazonaws.com.cn',
       'amazonaws.com',
       's3.cn-northwest-1.amazonaws.com.cn',
+      'toapis.cn',
       'toapis.com',
       'toapis.xyz',
       'files.toapis.com',
