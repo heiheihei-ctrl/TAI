@@ -36,6 +36,8 @@ import ClassroomListPage from '@/pages/classroom/ClassroomListPage';
 import ClassroomDetailPage from '@/pages/classroom/ClassroomDetailPage';
 import ClassroomLearnPage from '@/pages/classroom/ClassroomLearnPage';
 import ClassroomPurchasesPage from '@/pages/classroom/ClassroomPurchasesPage';
+import PptModePage from '@/pages/ppt/PptModePage';
+import PptPlaceholderPage from '@/pages/ppt/PptPlaceholderPage';
 
 function RootRoutes() {
   const user = useAuthStore((s) => s.user);
@@ -73,6 +75,25 @@ function RootRoutes() {
         <Route path="/admin" element={<Admin />} />
         <Route path="/my-credits" element={<MyCredits />} />
         <Route path="/membership" element={<MembershipSubscribePage />} />
+        <Route path="/ppt" element={<PptModePage />} />
+        <Route
+          path="/ppt/create"
+          element={
+            <PptPlaceholderPage
+              title="PPT 创作"
+              description="已进入创作流程，后续步骤将在此承接上传方案或编辑大纲。"
+            />
+          }
+        />
+        <Route
+          path="/ppt/history"
+          element={
+            <PptPlaceholderPage
+              title="创作记录"
+              description="这里将展示你的 PPT 创作历史记录。"
+            />
+          }
+        />
         {SHOW_ENTERPRISE_CONSOLE ? (
           <Route path="/enterprise/:teamId" element={<EnterpriseLayout />}>
             <Route index element={<Navigate to="projects" replace />} />

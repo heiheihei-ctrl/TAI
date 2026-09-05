@@ -5,6 +5,7 @@ import {
   setTokens,
 } from "./authTokenStorage";
 import { fetchWithAuth } from "./authFetch";
+import { ACCESS_TOKEN_TTL_MS } from "./authTokenConfig";
 
 export type UserInfo = {
   id: string;
@@ -63,11 +64,29 @@ const LS_TOKEN_EXPIRY = "token_expiry";
 const LS_LAST_AUTH_AT = "last_auth_at";
 const FIXED_SMS_CODE = "336699";
 
-// Token过期时间管理
+// Token过期时间管理（旧本地缓存也会按 3 天新规截断）
 export function getStoredTokenExpiry(): number | null {
   try {
-    const expiry = localStorage.getItem(LS_TOKEN_EXPIRY);
-    return expiry ? parseInt(expiry) : null;
+    const expiryRaw = localStorage.getItem(LS_TOKEN_EXPIRY);
+    if (!expiryRaw) return null;
+    let expiry = parseInt(expiryRaw, 10);
+    if (!Number.isFinite(expiry)) return null;
+
+    const lastAuth = getStoredLastAuthAt();
+    if (lastAuth && Number.isFinite(lastAuth) && Date.now() - lastAuth > ACCESS_TOKEN_TTL_MS) {
+      clearStoredTokenExpiry();
+      return null;
+    }
+
+    const maxByAuth =
+      lastAuth && Number.isFinite(lastAuth)
+        ? lastAuth + ACCESS_TOKEN_TTL_MS
+        : Date.now() + ACCESS_TOKEN_TTL_MS;
+    if (expiry > maxByAuth) {
+      expiry = maxByAuth;
+      setStoredTokenExpiry(expiry);
+    }
+    return expiry;
   } catch {
     return null;
   }
@@ -158,7 +177,7 @@ function completeAuthSession<T extends { user: UserInfo; tokens?: { accessToken?
     setTokens(out.tokens);
   }
   saveSession(out.user);
-  setStoredTokenExpiry(Date.now() + 24 * 60 * 60 * 1000);
+  setStoredTokenExpiry(Date.now() + ACCESS_TOKEN_TTL_MS);
   setStoredLastAuthAt(Date.now());
   return out;
 }
@@ -328,9 +347,9 @@ export const authApi = {
             ? (data.user as UserInfo)
             : (data as UserInfo);
 
-        // 更新本地token过期时间（假设24小时有效期）
+        // 更新本地token过期时间（与 JWT_ACCESS_TTL=3d 对齐）
         if (user) {
-          setStoredTokenExpiry(Date.now() + 24 * 60 * 60 * 1000);
+          setStoredTokenExpiry(Date.now() + ACCESS_TOKEN_TTL_MS);
           setStoredLastAuthAt(Date.now());
         }
 
@@ -363,9 +382,9 @@ export const authApi = {
                   ? (data.user as UserInfo)
                   : (data as UserInfo);
 
-              // 更新本地token过期时间
+              // 更新本地token过期时间（与 JWT_ACCESS_TTL=3d 对齐）
               if (user) {
-                setStoredTokenExpiry(Date.now() + 24 * 60 * 60 * 1000);
+                setStoredTokenExpiry(Date.now() + ACCESS_TOKEN_TTL_MS);
                 setStoredLastAuthAt(Date.now());
               }
 

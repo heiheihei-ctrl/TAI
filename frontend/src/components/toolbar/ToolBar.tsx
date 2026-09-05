@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
-import { Eraser, Square, Trash2, Box, Image, Layers, Sparkles, Type, GitBranch, MousePointer2, LayoutTemplate, FolderOpen, HelpCircle, MessageSquare, Copy, ClipboardPaste } from 'lucide-react';
+import { Eraser, Square, Trash2, Box, Image, Layers, Sparkles, Type, GitBranch, MousePointer2, LayoutTemplate, FolderOpen, HelpCircle, MessageSquare, Copy, ClipboardPaste, Presentation } from 'lucide-react';
 import TextStylePanel from './TextStylePanel';
 import ColorPicker from './ColorPicker';
 import AbrBrushPicker from './AbrBrushPicker';
@@ -785,6 +785,31 @@ const ToolBar: React.FC<ToolBarProps> = ({ onClearCanvas }) => {
           </TooltipContent>
         </Tooltip>
       )}
+
+      {/* PPT 生成：新标签页打开，不离开当前画布 */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className="p-0 h-8 w-8 rounded-full"
+            onClick={() => {
+              logger.tool('工具栏：新页面打开 PPT 生成模式');
+              const base = import.meta.env.BASE_URL || '/';
+              const originWithBase = `${window.location.origin}${
+                base.endsWith('/') ? base : `${base}/`
+              }`;
+              const href = new URL('ppt', originWithBase).href;
+              window.open(href, '_blank', 'noopener,noreferrer');
+            }}
+          >
+            <Presentation className="w-4 h-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="right">
+          {lt('PPT 生成', 'PPT Generation')}
+        </TooltipContent>
+      </Tooltip>
 
       {/* Flow 节点跨项目复制 */}
       {flowUIEnabled && showFlowPanel && (
