@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
@@ -12,6 +12,17 @@ function cookieExtractor(req: Request, name: string): string | null {
   if (fromCookie) return fromCookie as string;
   const fromHeader = req.headers?.authorization?.replace('Bearer ', '') ?? null;
   return fromHeader || null;
+}
+
+function assertNotForceLoggedOut(payload: any, sessionsInvalidatedAt?: Date | null) {
+  if (!sessionsInvalidatedAt) return;
+  const iatSec = typeof payload?.iat === 'number' ? payload.iat : NaN;
+  if (!Number.isFinite(iatSec)) {
+    throw new UnauthorizedException('访问令牌无效');
+  }
+  if (iatSec * 1000 < sessionsInvalidatedAt.getTime()) {
+    throw new UnauthorizedException('登录已失效，请重新登录');
+  }
 }
 
 @Injectable()
@@ -38,6 +49,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     // 获取完整用户信息
     const user = await this.usersService.findAuthUserById(payload.sub);
     if (!user) return null;
+    const sessionsInvalidatedAt = await this.usersService.getSessionsInvalidatedAt(user.id);
+    assertNotForceLoggedOut(payload, sessionsInvalidatedAt);
     void this.usersService.touchLastLoginAt(user.id).catch(() => undefined);
     const result = {
       sub: user.id,  // 标准JWT字段

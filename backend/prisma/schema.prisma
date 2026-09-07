@@ -38,6 +38,8 @@ model User {
   googleOfficialVerified     Boolean                @default(false)
   googleOfficialVerifiedAt   DateTime?
   lastLoginAt                DateTime?
+  /// 强制下线时间：JWT iat 早于此刻的 access/refresh 一律视为过期
+  sessionsInvalidatedAt      DateTime?
   createdAt                  DateTime               @default(now())
   updatedAt                  DateTime               @updatedAt
   invitedById                String?

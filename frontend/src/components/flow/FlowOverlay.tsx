@@ -9468,7 +9468,15 @@ function FlowInner() {
           (data as any).nodeConfigNameZh = "生成节点";
         }
       }
-      const newNode = { id, type, position: pos, data } as RFNode;
+      const newNode = {
+        id,
+        type,
+        position: pos,
+        data,
+        // MiniMap 只认 width/height；同步写入避免未进视口节点在小地图上消失
+        width: size.w,
+        height: size.h,
+      } as RFNode;
       const nextNodes = (nodesRef.current as RFNode[]).concat([newNode]);
       setNodes(nextNodes);
       commitFlowSnapshotImmediately("flow-add-node", nextNodes);
@@ -23141,12 +23149,12 @@ function FlowInner() {
         )}
         {isLargeGraphForMiniMapImageOverlay && (
           <span style={{ fontSize: 12, color: "#6b7280" }}>
-            大图模式已自动关闭 MiniMap 图片层
+            大图模式已自动关闭 MiniMap 图片层（仍显示节点占位）
           </span>
         )}
         {effectiveFlowLowDetailMode && (
           <span style={{ fontSize: 12, color: "#4b5563" }}>
-            低缩放已隐藏连线与 MiniMap（节点 UI 保留）
+            低缩放已隐藏连线（MiniMap 仍保留节点占位）
           </span>
         )}
         <label
@@ -24088,12 +24096,6 @@ function FlowInner() {
         )}
         {!effectiveFlowLowDetailMode && (
           <>
-            {/* 视口由 Canvas 驱动，禁用 MiniMap 交互避免竞态 */}
-            <MiniMap pannable={false} zoomable={false} />
-            {/* 将画布上的图片以绿色块显示在 MiniMap 内；大图时关闭该叠加层以减负 */}
-            {!isLargeGraphForMiniMapImageOverlay && (
-              <MiniMapImageOverlay viewportContainerRef={containerRef} />
-            )}
             {SHOW_TEAM_COLLABORATION && activeTeamForCollab && (
               <RemoteFlowSelectionOverlays
                 nodes={nodes as RFNode[]}
@@ -24102,6 +24104,30 @@ function FlowInner() {
               />
             )}
           </>
+        )}
+        {/* MiniMap 始终保留：低缩放时仍要能定位节点；仅关闭重负载的图片叠加层 */}
+        <MiniMap
+          pannable={false}
+          zoomable={false}
+          nodeColor={(node) => {
+            if (node.selected) return "#0f766e";
+            return "#64748b";
+          }}
+          nodeStrokeColor="#1e293b"
+          nodeStrokeWidth={1.5}
+          maskColor="rgba(15, 23, 42, 0.28)"
+          style={{ backgroundColor: "#f8fafc" }}
+        />
+        {!effectiveFlowLowDetailMode &&
+          !isLargeGraphForMiniMapImageOverlay && (
+            <MiniMapImageOverlay viewportContainerRef={containerRef} />
+          )}
+        {/* 低细节模式也保留轻量节点占位，避免小地图只剩空白 */}
+        {(effectiveFlowLowDetailMode || isLargeGraphForMiniMapImageOverlay) && (
+          <MiniMapImageOverlay
+            viewportContainerRef={containerRef}
+            nodesOnly
+          />
         )}
       </ReactFlow>
 

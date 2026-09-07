@@ -92,6 +92,13 @@ export class UsersService {
     });
   }
 
+  async getSessionsInvalidatedAt(userId: string): Promise<Date | null> {
+    const rows = await this.prisma.$queryRaw<Array<{ sessionsInvalidatedAt: Date | null }>>`
+      SELECT "sessionsInvalidatedAt" FROM "User" WHERE id = ${userId} LIMIT 1
+    `;
+    return rows[0]?.sessionsInvalidatedAt ?? null;
+  }
+
   async touchLastLoginAt(userId: string, throttleMs = 60 * 1000) {
     const now = new Date();
     const threshold = new Date(now.getTime() - throttleMs);

@@ -161,6 +161,11 @@ body.tanva-flow-multi-resizing .tanva-flow-overlay .react-flow__pane {
   user-select: none;
 }
 
+/* 节点占位改由 MiniMapImageOverlay 绘制（兼容 boxW/boxH），隐藏 RF 默认浅灰块以免重叠 */
+.tanva-flow-overlay .react-flow__minimap-node {
+  display: none !important;
+}
+
 .tanva-textnote-editor[contenteditable="true"]:empty:before {
   content: attr(data-placeholder);
   color: #cbd5f5;

@@ -2,7 +2,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import paper from 'paper';
-import { useReactFlow } from 'reactflow';
+import { useReactFlow, useStore } from 'reactflow';
 import { useCanvasStore } from '@/stores';
 import {
   clampWorldPointToContentBounds,
@@ -11,36 +11,82 @@ import {
 
 /**
  * MiniMapImageOverlay
- * Adds a <g> layer above the React Flow MiniMap <svg>,
- * reads canvas image instances (window.tanvaImageInstances),
- * and renders them as green rectangles.
- *
- * Notes:
- * - FlowOverlay already syncs ReactFlow viewport with Canvas pan/zoom.
- * - MiniMap viewBox matches world coordinates, so image world bounds can be used directly.
+ * Adds a <g> layer above the React Flow MiniMap <svg>:
+ * - Flow 节点：用 boxW/boxH（或 width/height）画占位，避免 RF MiniMap 因缺 width/height 空白
+ * - 画布图片：绿色块（可按 nodesOnly 关闭）
  */
 type MiniMapImageOverlayProps = {
   viewportContainerRef?: React.RefObject<HTMLElement | null>;
+  /** 仅绘制 Flow 节点占位（低细节 / 大图模式用，减负） */
+  nodesOnly?: boolean;
 };
 
 const PAN_LIMIT = 1_000_000;
 const POSITION_EPSILON = 0.01;
 const DRAG_THRESHOLD_PX = 3;
+const DEFAULT_NODE_W = 200;
+const DEFAULT_NODE_H = 150;
 
 const clampPan = (value: number) => {
   if (!Number.isFinite(value)) return 0;
   return Math.max(-PAN_LIMIT, Math.min(PAN_LIMIT, value));
 };
 
+type MiniRect = {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  kind: 'node' | 'image';
+  selected?: boolean;
+};
+
+const resolveNodeSize = (node: any): { width: number; height: number } => {
+  const styleW = Number(node?.style?.width);
+  const styleH = Number(node?.style?.height);
+  const width = Number(
+    node?.width ??
+      node?.data?.boxW ??
+      (Number.isFinite(styleW) ? styleW : undefined) ??
+      DEFAULT_NODE_W
+  );
+  const height = Number(
+    node?.height ??
+      node?.data?.boxH ??
+      (Number.isFinite(styleH) ? styleH : undefined) ??
+      DEFAULT_NODE_H
+  );
+  return {
+    width: Number.isFinite(width) && width > 0 ? width : DEFAULT_NODE_W,
+    height: Number.isFinite(height) && height > 0 ? height : DEFAULT_NODE_H,
+  };
+};
+
 const MiniMapImageOverlay: React.FC<MiniMapImageOverlayProps> = ({
   viewportContainerRef,
+  nodesOnly = false,
 }) => {
   const rf = useReactFlow();
+  // 订阅节点几何变化，保证小地图随拖拽/增删更新
+  const nodeSignature = useStore((s) => {
+    try {
+      return s
+        .getNodes()
+        .map((n) => {
+          const { width, height } = resolveNodeSize(n);
+          return `${n.id}:${n.position?.x ?? 0},${n.position?.y ?? 0},${width}x${height},${n.selected ? 1 : 0},${n.hidden ? 1 : 0}`;
+        })
+        .join('|');
+    } catch {
+      return '';
+    }
+  });
   const [svgEl, setSvgEl] = React.useState<SVGSVGElement | null>(null);
   const [graphEl, setGraphEl] = React.useState<SVGGElement | null>(null);
   const [targetEl, setTargetEl] = React.useState<SVGGElement | SVGSVGElement | null>(null);
-  const [images, setImages] = React.useState<Array<{ id: string; x: number; y: number; width: number; height: number }>>([]);
-  const lastSigRef = React.useRef("");
+  const [rects, setRects] = React.useState<MiniRect[]>([]);
+  const lastSigRef = React.useRef('');
   const dragState = React.useRef<{
     active: boolean;
     pointerId: number | null;
@@ -119,50 +165,21 @@ const MiniMapImageOverlay: React.FC<MiniMapImageOverlayProps> = ({
   }, [graphEl, svgEl]);
 
   const findHitCenter = React.useCallback((worldX: number, worldY: number) => {
-    try {
-      const nodes = rf.getNodes?.() || [];
-      for (const node of nodes) {
-        const x = Number(node?.position?.x);
-        const y = Number(node?.position?.y);
-        const width = Number(node?.data?.boxW ?? node?.width ?? 0);
-        const height = Number(node?.data?.boxH ?? node?.height ?? 0);
-        if (
-          !Number.isFinite(x) ||
-          !Number.isFinite(y) ||
-          !Number.isFinite(width) ||
-          !Number.isFinite(height) ||
-          width <= 0 ||
-          height <= 0
-        ) {
-          continue;
-        }
-        if (
-          worldX >= x &&
-          worldX <= x + width &&
-          worldY >= y &&
-          worldY <= y + height
-        ) {
-          return { x: x + width / 2, y: y + height / 2 };
-        }
-      }
-    } catch {}
-
-    const hitImage = images.find(
+    const hit = rects.find(
       (item) =>
         worldX >= item.x &&
         worldX <= item.x + item.width &&
         worldY >= item.y &&
         worldY <= item.y + item.height
     );
-    if (hitImage) {
+    if (hit) {
       return {
-        x: hitImage.x + hitImage.width / 2,
-        y: hitImage.y + hitImage.height / 2,
+        x: hit.x + hit.width / 2,
+        y: hit.y + hit.height / 2,
       };
     }
-
     return { x: worldX, y: worldY };
-  }, [images, rf]);
+  }, [rects]);
 
   const clampClientToMiniMap = React.useCallback((clientX: number, clientY: number) => {
     if (!svgEl) return { x: clientX, y: clientY };
@@ -192,7 +209,6 @@ const MiniMapImageOverlay: React.FC<MiniMapImageOverlayProps> = ({
       const graph = host?.querySelector('.react-flow__minimap-graph') as SVGGElement | null;
       const target = (graph || host) as any;
       if (target) {
-        try { if (!(window as any).__minimap_found__) { console.log('[MiniMapImageOverlay] Found MiniMap Graph'); (window as any).__minimap_found__ = true; } } catch {}
         setGraphEl(graph);
         setTargetEl(target);
         if (host) setSvgEl(host);
@@ -205,41 +221,76 @@ const MiniMapImageOverlay: React.FC<MiniMapImageOverlayProps> = ({
     return () => observer.disconnect();
   }, []);
 
-  const updateImages = React.useCallback(() => {
+  const updateRects = React.useCallback(() => {
     try {
-      const list = (window as any).tanvaImageInstances || [];
-      const visible = list.filter((img: any) => img && (img.visible !== false));
-      const dpr = (window.devicePixelRatio || 1);
-      const mapped = visible.map((img: any) => ({
-        id: img.id,
-        x: Number(img.bounds?.x || 0) / dpr,
-        y: Number(img.bounds?.y || 0) / dpr,
-        width: Number(img.bounds?.width || 0) / dpr,
-        height: Number(img.bounds?.height || 0) / dpr,
-      }));
-      const sig = JSON.stringify(mapped);
+      const next: MiniRect[] = [];
+
+      const nodes = rf.getNodes?.() || [];
+      for (const node of nodes) {
+        if (!node || (node as any).hidden) continue;
+        const x = Number(node.position?.x);
+        const y = Number(node.position?.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+        const { width, height } = resolveNodeSize(node);
+        next.push({
+          id: `node:${node.id}`,
+          x,
+          y,
+          width,
+          height,
+          kind: 'node',
+          selected: Boolean(node.selected),
+        });
+      }
+
+      if (!nodesOnly) {
+        const list = (window as any).tanvaImageInstances || [];
+        const visible = list.filter((img: any) => img && img.visible !== false);
+        const dpr = window.devicePixelRatio || 1;
+        for (const img of visible) {
+          const x = Number(img.bounds?.x || 0) / dpr;
+          const y = Number(img.bounds?.y || 0) / dpr;
+          const width = Number(img.bounds?.width || 0) / dpr;
+          const height = Number(img.bounds?.height || 0) / dpr;
+          if (!Number.isFinite(x) || !Number.isFinite(y) || width <= 0 || height <= 0) continue;
+          next.push({
+            id: `image:${img.id}`,
+            x,
+            y,
+            width,
+            height,
+            kind: 'image',
+          });
+        }
+      }
+
+      const sig = JSON.stringify(next);
       if (sig !== lastSigRef.current) {
         lastSigRef.current = sig;
-        setImages(mapped);
+        setRects(next);
       }
     } catch {}
-  }, []);
+  }, [nodesOnly, rf]);
 
   React.useEffect(() => {
-    const onUpdate = () => updateImages();
-    window.addEventListener("tanva-image-instances-updated", onUpdate);
-    return () => window.removeEventListener("tanva-image-instances-updated", onUpdate);
-  }, [updateImages]);
+    updateRects();
+  }, [updateRects, nodeSignature, nodesOnly]);
 
   React.useEffect(() => {
-    const id = window.setInterval(() => updateImages(), 1000);
+    const onUpdate = () => updateRects();
+    window.addEventListener('tanva-image-instances-updated', onUpdate);
+    return () => window.removeEventListener('tanva-image-instances-updated', onUpdate);
+  }, [updateRects]);
+
+  React.useEffect(() => {
+    const id = window.setInterval(() => updateRects(), 1000);
     return () => window.clearInterval(id);
-  }, [updateImages]);
+  }, [updateRects]);
 
   React.useEffect(() => {
     if (!targetEl) return;
-    updateImages();
-  }, [targetEl, updateImages]);
+    updateRects();
+  }, [targetEl, updateRects]);
 
   React.useEffect(() => {
     const el = svgEl;
@@ -332,18 +383,26 @@ const MiniMapImageOverlay: React.FC<MiniMapImageOverlayProps> = ({
     };
   }, [svgEl, clientToWorldForInteraction, findHitCenter, panToWorldCenter]);
 
-  if (!targetEl || images.length === 0) return null;
+  if (!targetEl || rects.length === 0) return null;
 
   return createPortal(
     <g className="tanva-minimap-images" style={{ pointerEvents: 'none' as const }}>
-      {images.map((img) => (
+      {rects.map((item) => (
         <rect
-          key={img.id}
-          x={img.x}
-          y={img.y}
-          width={Math.max(0, img.width)}
-          height={Math.max(0, img.height)}
-          fill="#10b98155"
+          key={item.id}
+          x={item.x}
+          y={item.y}
+          width={Math.max(0, item.width)}
+          height={Math.max(0, item.height)}
+          fill={
+            item.kind === 'image'
+              ? '#10b98155'
+              : item.selected
+                ? '#0f766eaa'
+                : '#64748baa'
+          }
+          stroke={item.kind === 'node' ? '#1e293b' : 'none'}
+          strokeWidth={item.kind === 'node' ? 1 : 0}
           rx={2}
           ry={2}
         />

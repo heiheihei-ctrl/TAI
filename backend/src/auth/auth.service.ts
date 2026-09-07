@@ -2187,6 +2187,29 @@ export class AuthService implements OnModuleInit {
     });
   }
 
+  /** 强制使某用户当前所有 JWT/会话立即失效（含未过期的 access token） */
+  async invalidateUserSessions(userId: string) {
+    const now = new Date();
+    await this.prisma.$executeRaw`
+      UPDATE "User" SET "sessionsInvalidatedAt" = ${now} WHERE id = ${userId}
+    `;
+    await this.prisma.refreshToken.updateMany({
+      where: { userId, isRevoked: false },
+      data: { isRevoked: true },
+    });
+    return { userId, sessionsInvalidatedAt: now };
+  }
+
+  /** 按手机号强制下线 */
+  async invalidateUserSessionsByPhone(phone: string) {
+    const normalized = String(phone || '').trim();
+    const user = await this.usersService.findByPhone(normalized);
+    if (!user) {
+      throw new BadRequestException(`用户不存在: ${normalized}`);
+    }
+    return this.invalidateUserSessions(user.id);
+  }
+
   setAuthCookies(reply: any, tokens: TokenPair, request?: any) {
     const base = this.cookieOptions(request);
     const accessTtl = parseJwtTtlMs(
