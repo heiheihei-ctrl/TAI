@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, ChevronRight, Play } from "lucide-react";
+import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type PptMode = "scheme" | "outline";
@@ -169,9 +169,13 @@ export default function PptModePage() {
           <button
             type="button"
             className="h-12 flex-1 rounded-xl bg-[#2f3540] text-sm font-medium text-white transition hover:bg-[#252a33]"
-            onClick={() =>
-              navigate(`/ppt/create?mode=${encodeURIComponent(mode)}`)
-            }
+            onClick={() => {
+              if (mode === "scheme") {
+                navigate("/ppt/scheme");
+              } else {
+                navigate("/ppt/outline");
+              }
+            }}
           >
             下一步
           </button>

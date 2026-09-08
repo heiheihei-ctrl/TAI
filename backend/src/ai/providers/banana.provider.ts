@@ -471,6 +471,10 @@ export class BananaProvider implements IAIProvider {
 
   private normalizeApimartTextModel(model: string): string {
     const normalized = this.normalizeModelName(model);
+    // GPT-6 Astra：原样透传给 ToAPIs
+    if (normalized === "gpt-6-astra" || normalized.startsWith("gpt-6")) {
+      return "gpt-6-astra";
+    }
     // 提示词优化普通路线：保留 ToAPIs official 模型名
     if (normalized === "gemini-2.5-flash-official") {
       return "gemini-2.5-flash-official";
@@ -1281,11 +1285,17 @@ export class BananaProvider implements IAIProvider {
     _config?: any
   ): Promise<{ imageBytes: string | null; textResponse: string }> {
     const apiKey = this.ensureApimartApiKey();
-    const payload = {
-      model,
+    const normalizedModel = this.normalizeModelName(model);
+    const isGpt6 = normalizedModel === "gpt-6-astra" || normalizedModel.startsWith("gpt-6");
+    const payload: Record<string, unknown> = {
+      model: normalizedModel,
       stream: false,
       messages: await this.buildApimartChatMessagesAsync(contents),
     };
+    if (isGpt6) {
+      payload.max_tokens = 4096;
+      payload.temperature = 0.7;
+    }
 
     let response: {
       status: number;
@@ -2876,6 +2886,20 @@ export class BananaProvider implements IAIProvider {
     request: TextChatRequest
   ): Promise<AIProviderResponse<TextResult>> {
     this.logger.log(`Generating text response using Banana provider...`);
+    const requestedModel = this.normalizeModelName(request.model || "");
+    const isGpt6 =
+      requestedModel === "gpt-6-astra" || requestedModel.startsWith("gpt-6");
+    // GPT-6 仅走 ToAPIs chat/completions，不走腾讯文本通道
+    if (isGpt6) {
+      this.logger.log(
+        "[Banana/Text] gpt-6-astra -> force channel=apimart (ToAPIs)"
+      );
+      return this.generateTextViaChannel(
+        { ...request, model: "gpt-6-astra" },
+        "apimart",
+      );
+    }
+
     const explicitRoute = this.getUserBananaImageRoute(request.providerOptions);
     const userRoute = explicitRoute ?? "stable";
 

@@ -7,6 +7,8 @@ import { AiController } from './ai.controller';
 import { ArchitectureController } from './architecture.controller';
 import { WorkflowAgentController } from './workflow-agent/workflow-agent.controller';
 import { WorkflowAgentService } from './workflow-agent/workflow-agent.service';
+import { PptOutlineController } from './ppt/ppt-outline.controller';
+import { PptOutlineService } from './ppt/ppt-outline.service';
 import { GeminiProProvider } from './providers/gemini-pro.provider';
 import { BananaProvider } from './providers/banana.provider';
 import { RunningHubProvider } from './providers/runninghub.provider';
@@ -84,12 +86,19 @@ import { ContentModerationModule } from '../content-moderation/content-moderatio
     UpstreamImageUrlService,
     ImageTaskService, // 添加图像任务服务
     WorkflowAgentService,
+    PptOutlineService,
     ApiKeyOrJwtGuard,
   ],
   // ArchitectureController = 建筑设计 AI（tgagent）BFF 转发，路由 /api/ai/architecture-chat。
   // WorkflowAgentController = 对话驱动 Flow 生图工作流（DeepSeek 规划，前端建节点 Run）。
+  // PptOutlineController = PPT 一句话大纲（DeepSeek）。
   // 与巨型 AiController 分开成文件，避免继续往 7200+ 行的单体里塞东西。
-  controllers: [AiController, ArchitectureController, WorkflowAgentController],
+  controllers: [
+    AiController,
+    ArchitectureController,
+    WorkflowAgentController,
+    PptOutlineController,
+  ],
   exports: [AIProviderFactory, CostCalculatorService, BackgroundRemovalService, VeoVideoService], // 导出工厂和成本计算器供其他模块使用
 })
 export class AiModule {}

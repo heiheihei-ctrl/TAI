@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from "react";
-import { HelpCircle, Image as ImageIcon, Sparkles, Video } from "lucide-react";
+import { HelpCircle, Image as ImageIcon, MessageSquare, Sparkles, Video } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   getVisibleChatModelOptions,
   type ChatModelKey,
+  type ChatModelMediaType,
   type ChatModelOption,
 } from "@/config/chatModelOptions";
 
@@ -14,9 +15,14 @@ type Props = {
   className?: string;
 };
 
-function ModelMediaIcon({ type }: { type: "image" | "video" }) {
+function ModelMediaIcon({ type }: { type: ChatModelMediaType }) {
   if (type === "video") {
     return <Video className="h-4 w-4 shrink-0 opacity-80" strokeWidth={1.75} />;
+  }
+  if (type === "text") {
+    return (
+      <MessageSquare className="h-4 w-4 shrink-0 opacity-80" strokeWidth={1.75} />
+    );
   }
   return (
     <ImageIcon className="h-4 w-4 shrink-0 opacity-80" strokeWidth={1.75} />

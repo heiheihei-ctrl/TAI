@@ -1049,7 +1049,12 @@ const TEXT_MODEL_BY_PROVIDER: Record<AIProviderType, string> = {
   seedream5Pro: DEFAULT_TEXT_MODEL,
 };
 
-export const getTextModelForProvider = (provider: AIProviderType): string => {
+export const getTextModelForProvider = (
+  provider: AIProviderType,
+  chatModelKey?: ChatModelKey | null,
+): string => {
+  const option = chatModelKey ? getChatModelOption(chatModelKey) : undefined;
+  if (option?.textModel) return option.textModel;
   return TEXT_MODEL_BY_PROVIDER[provider] || DEFAULT_TEXT_MODEL;
 };
 
@@ -6405,12 +6410,15 @@ export const useAIChatStore = create<AIChatState>()(
 
             // 调用后端API生成文本
             const state = get();
-            const modelToUse = getTextModelForProvider(state.aiProvider);
+            const modelToUse = getTextModelForProvider(
+              state.aiProvider,
+              state.chatModelKey,
+            );
             const contextPrompt = contextManager.buildContextPrompt(prompt);
             const providerOptions = withBananaRouteProviderOptions(
               state.aiProvider,
               undefined,
-              state.bananaImageRoute
+              state.chatModelKey === "gpt-6" ? "normal" : state.bananaImageRoute,
             );
 
             logProcessStep(
@@ -9290,6 +9298,7 @@ export const useAIChatStore = create<AIChatState>()(
           "nano-banana-pro",
           "nano-banana-ultra",
           "gpt-image-2",
+          "gpt-6",
           "seedream-5-pro",
           "seedance",
           "nano-banana-fast",

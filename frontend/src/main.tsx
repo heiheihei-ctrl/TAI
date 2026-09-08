@@ -38,6 +38,11 @@ import ClassroomLearnPage from '@/pages/classroom/ClassroomLearnPage';
 import ClassroomPurchasesPage from '@/pages/classroom/ClassroomPurchasesPage';
 import PptModePage from '@/pages/ppt/PptModePage';
 import PptPlaceholderPage from '@/pages/ppt/PptPlaceholderPage';
+import PptOutlineMethodPage from '@/pages/ppt/PptOutlineMethodPage';
+import PptSchemeUploadPage from '@/pages/ppt/PptSchemeUploadPage';
+import PptOneShotPage from '@/pages/ppt/PptOneShotPage';
+import PptCustomOutlinePage from '@/pages/ppt/PptCustomOutlinePage';
+import PptEditOutlinePage from '@/pages/ppt/PptEditOutlinePage';
 
 function RootRoutes() {
   const user = useAuthStore((s) => s.user);
@@ -76,6 +81,11 @@ function RootRoutes() {
         <Route path="/my-credits" element={<MyCredits />} />
         <Route path="/membership" element={<MembershipSubscribePage />} />
         <Route path="/ppt" element={<PptModePage />} />
+        <Route path="/ppt/scheme" element={<PptSchemeUploadPage />} />
+        <Route path="/ppt/outline" element={<PptOutlineMethodPage />} />
+        <Route path="/ppt/outline/oneshot" element={<PptOneShotPage />} />
+        <Route path="/ppt/outline/custom" element={<PptCustomOutlinePage />} />
+        <Route path="/ppt/outline/edit" element={<PptEditOutlinePage />} />
         <Route
           path="/ppt/create"
           element={

@@ -6,13 +6,14 @@ export type ChatModelKey =
   | "nano-banana-pro"
   | "nano-banana-ultra"
   | "gpt-image-2"
+  | "gpt-6"
   | "seedream-5-pro"
   | "seedance"
   | "nano-banana-fast"
   | "gemini-pro"
   | "midjourney";
 
-export type ChatModelMediaType = "image" | "video";
+export type ChatModelMediaType = "image" | "video" | "text";
 
 export type ChatModelOption = {
   key: ChatModelKey;
@@ -25,7 +26,11 @@ export type ChatModelOption = {
   manualMode: ManualAIMode;
   /** gpt-image-2 专用：走 nano2 + 指定 model */
   imageModel?: string;
+  /** 文本模型 ID（如 gpt-6-astra） */
+  textModel?: string;
 };
+
+export const GPT6_TEXT_MODEL = "gpt-6-astra";
 
 export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
   {
@@ -55,6 +60,17 @@ export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
     provider: "nano2",
     manualMode: "generate",
     imageModel: "gpt-image-2-official",
+  },
+  {
+    key: "gpt-6",
+    label: "GPT-6",
+    labelEn: "GPT-6",
+    tab: "common",
+    mediaType: "text",
+    isNew: true,
+    provider: "banana",
+    manualMode: "text",
+    textModel: GPT6_TEXT_MODEL,
   },
   {
     key: "seedream-5-pro",
@@ -133,6 +149,7 @@ export function resolveChatModelKeyFromState(input: {
     const found = getChatModelOption(input.chatModelKey);
     if (found) return input.chatModelKey;
   }
+  if (input.manualAIMode === "text") return "gpt-6";
   if (input.manualAIMode === "video") return "seedance";
   if (input.aiProvider === "seedream5Pro") return "seedream-5-pro";
   if (input.aiProvider === "nano2") return "gpt-image-2";

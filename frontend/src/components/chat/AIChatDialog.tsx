@@ -579,9 +579,13 @@ const AIChatDialog: React.FC = () => {
   const isVectorMode =
     manualAIMode === "vector" ||
     (manualAIMode === "auto" && autoSelectedTool === "generatePaperJS");
+  const isTextChatMode =
+    manualAIMode === "text" || chatModelKey === "gpt-6";
   const shouldHideImageParamControls = isVideoMode || isVectorMode;
+  const shouldHideImageOnlyParams =
+    shouldHideImageParamControls || isTextChatMode;
   const showImageSizeControls =
-    !shouldHideImageParamControls &&
+    !shouldHideImageOnlyParams &&
     (aiProvider === "gemini-pro" ||
       aiProvider === "banana" ||
       aiProvider === "banana-2.5" ||
@@ -589,7 +593,7 @@ const AIChatDialog: React.FC = () => {
       aiProvider === "seedream5Pro" ||
       chatModelKey === "gpt-image-2");
   const showThinkingLevelControls =
-    !shouldHideImageParamControls &&
+    !shouldHideImageOnlyParams &&
     (aiProvider === "gemini-pro" ||
       aiProvider === "banana" ||
       aiProvider === "banana-2.5" ||
@@ -3475,7 +3479,7 @@ const AIChatDialog: React.FC = () => {
                   )}
 
                   {/* 长宽比 */}
-                  {!shouldHideImageParamControls && (
+                  {!shouldHideImageOnlyParams && (
                     <Button
                       ref={aspectButtonRef}
                       onClick={() => setIsAspectOpen((v) => !v)}
@@ -3641,7 +3645,7 @@ const AIChatDialog: React.FC = () => {
                   )}
 
                   {/* 联网搜索 */}
-                  {!shouldHideImageParamControls && (
+                  {!shouldHideImageOnlyParams && (
                     <Button
                       onClick={toggleWebSearch}
                       disabled={false}
