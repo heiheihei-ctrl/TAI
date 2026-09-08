@@ -5,6 +5,10 @@ All notable changes to this knowledge base will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning (knowledge-base versioning).
 
 ## [Unreleased]
+### Fixed
+- GPT-6 文本请求不再沿用快速模型 20 秒超时：主备单次 90 秒、总预算 185 秒，前端同步等待 240 秒，保留超时取消与模型路由，增加预算回归测试。
+- Banana 文本主备超时预算冲突：ToAPIs 单次请求调整为 20 秒，通道总预算维持 45 秒；总超时取消在途请求并阻止取消后的备用请求，清理超时定时器，补充主备切换/取消回归测试。
+
 ### Added
 - Workflow Agent：AI 对话框 `Workflow` 模式 → NestJS `POST /api/ai/workflow-chat`（DeepSeek 写 prompt + 规划 textPrompt→generate）→ 前端 `flow:agent-apply` 建节点/连线/`runNode`；结果留在画布节点。配置 `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL`。文档 `frontend/docs/22-工作流Agent.md`。
 - Deployment brand: `DEPLOYMENT_BRAND=tai|linglong` (backend) / `VITE_DEPLOYMENT_BRAND` (frontend) — distinguishes credit pricing per product line; Seedream 5.0 Pro resolution pricing: tai `1K/1.5K/2K = 65/90/140`, linglong `100/130/180`.

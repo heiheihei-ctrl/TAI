@@ -349,7 +349,7 @@ export async function toapisRequest<T = unknown>(
   try {
     return await axiosToapisOnce<T>(config);
   } catch (error) {
-    if (!isToapisNetworkFailoverError(error)) {
+    if (config.signal?.aborted || axios.isCancel(error) || !isToapisNetworkFailoverError(error)) {
       throw error;
     }
 
@@ -366,6 +366,9 @@ export async function toapisRequest<T = unknown>(
     try {
       return await axiosToapisOnce<T>({ ...config, url: fallbackUrl });
     } catch (fallbackError) {
+      if (config.signal?.aborted || axios.isCancel(fallbackError)) {
+        throw fallbackError;
+      }
       const primaryHint = getToapisApiBaseUrl();
       const fallbackHint = getToapisFallbackApiBaseUrl();
       const primaryCode = extractErrorCode(error) || 'unknown';

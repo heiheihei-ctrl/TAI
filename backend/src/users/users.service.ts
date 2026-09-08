@@ -93,10 +93,25 @@ export class UsersService {
   }
 
   async getSessionsInvalidatedAt(userId: string): Promise<Date | null> {
-    const rows = await this.prisma.$queryRaw<Array<{ sessionsInvalidatedAt: Date | null }>>`
-      SELECT "sessionsInvalidatedAt" FROM "User" WHERE id = ${userId} LIMIT 1
-    `;
-    return rows[0]?.sessionsInvalidatedAt ?? null;
+    try {
+      const rows = await this.prisma.$queryRaw<
+        Array<{ sessionsInvalidatedAt: Date | null }>
+      >`
+        SELECT "sessionsInvalidatedAt" FROM "User" WHERE id = ${userId} LIMIT 1
+      `;
+      return rows[0]?.sessionsInvalidatedAt ?? null;
+    } catch (error: any) {
+      // 测试/生产未执行迁移时列不存在，不应拖垮全部鉴权接口
+      const message = String(error?.message || error || '');
+      if (
+        message.includes('sessionsInvalidatedAt') ||
+        message.includes('does not exist') ||
+        error?.code === '42703'
+      ) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   async touchLastLoginAt(userId: string, throttleMs = 60 * 1000) {

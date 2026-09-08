@@ -1629,10 +1629,14 @@ export async function generateTextResponseViaAPI(
   const { request: requestWithRoute, bananaImageRoute } =
     attachBananaRouteToProviderOptions(request);
   const controller = new AbortController();
+  // GPT-6 后端主备预算 185 秒，额外预留鉴权、扣费与退款时间。
+  const textTimeoutMs = requestWithRoute.model?.trim().toLowerCase().startsWith("gpt-6")
+    ? 240_000
+    : TEXT_CHAT_TIMEOUT_MS;
   const timeoutId =
     typeof window !== "undefined"
-      ? window.setTimeout(() => controller.abort(), TEXT_CHAT_TIMEOUT_MS)
-      : setTimeout(() => controller.abort(), TEXT_CHAT_TIMEOUT_MS);
+      ? window.setTimeout(() => controller.abort(), textTimeoutMs)
+      : setTimeout(() => controller.abort(), textTimeoutMs);
   try {
     const response = await fetchWithAuth(`${API_BASE_URL}/ai/text-chat`, {
       method: "POST",
@@ -1688,7 +1692,7 @@ export async function generateTextResponseViaAPI(
       provider: requestWithRoute.aiProvider,
       model: requestWithRoute.model,
       error: isTimeout
-        ? `Request timeout (${TEXT_CHAT_TIMEOUT_MS}ms)`
+        ? `Request timeout (${textTimeoutMs}ms)`
         : error instanceof Error
         ? error.message
         : "Unknown error",
@@ -1698,7 +1702,7 @@ export async function generateTextResponseViaAPI(
       error: {
         code: isTimeout ? "TIMEOUT_ERROR" : "NETWORK_ERROR",
         message: isTimeout
-          ? `文本请求超时（${Math.floor(TEXT_CHAT_TIMEOUT_MS / 1000)}秒）`
+          ? `文本请求超时（${Math.floor(textTimeoutMs / 1000)}秒）`
           : error instanceof Error
           ? error.message
           : "Network error",

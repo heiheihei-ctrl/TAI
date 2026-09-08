@@ -34,6 +34,7 @@ import {
   getToapisApiKey,
 } from "../../utils/apimartHttpClient";
 import { getToapisApiBaseUrl, rewriteToapisLegacyUrl } from "../../utils/toapisHttpClient";
+import { getTextRequestTimeout } from "../../utils/textRequestTimeout";
 import {
   buildUpstreamImageTaskQueryUrls,
   extractUpstreamImageTaskError,
@@ -881,11 +882,16 @@ export class BananaProvider implements IAIProvider {
   private async withTimeout<T>(
     promise: Promise<T>,
     timeoutMs: number = this.DEFAULT_TIMEOUT,
-    operationType?: string
+    operationType?: string,
+    abortController?: AbortController
   ): Promise<T> {
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Request timeout")), timeoutMs)
-    );
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error("Request timeout"));
+        abortController?.abort();
+      }, timeoutMs);
+    });
 
     const startTime = Date.now();
 
@@ -903,6 +909,8 @@ export class BananaProvider implements IAIProvider {
         `${operationType || "API call"} failed after ${duration}ms: ${message}`
       );
       throw error;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -1311,7 +1319,9 @@ export class BananaProvider implements IAIProvider {
           "Content-Type": "application/json",
         },
         data: payload,
-        timeout: this.TEXT_TIMEOUT,
+        // 主备各有独立预算；GPT-6 非流式生成不能沿用快速文本的 20 秒限制。
+        timeout: getTextRequestTimeout(normalizedModel).attemptMs,
+        signal: _config?.signal,
       });
     } catch (error) {
       throw this.wrapApimartNetworkError(error, "Banana 文本普通路线请求失败");
@@ -1457,6 +1467,7 @@ export class BananaProvider implements IAIProvider {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
+      signal: _config?.signal,
     });
 
     const rawText = await response.text();
@@ -2761,6 +2772,9 @@ export class BananaProvider implements IAIProvider {
           this.logger.log("馃攳 Web search enabled");
         }
 
+        // 总预算包含主备切换；超时取消在途请求，防止退款后继续调用。
+        const abortController = new AbortController();
+        apiConfig.signal = abortController.signal;
         const result = await this.withTimeout(
           (async () => {
             return await this.makeTextRequest(
@@ -2770,8 +2784,11 @@ export class BananaProvider implements IAIProvider {
               channel
             );
           })(),
-          this.TEXT_TIMEOUT,
-          `Text generation (${this.formatTextChannelLabel(channel)})`
+          channel === "tencent"
+            ? this.TEXT_TIMEOUT
+            : getTextRequestTimeout(currentModel).totalMs,
+          `Text generation (${this.formatTextChannelLabel(channel)})`,
+          abortController
         );
 
         if (usedFallback) {

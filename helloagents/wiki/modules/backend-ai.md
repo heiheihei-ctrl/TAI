@@ -17,6 +17,7 @@
 - `backend/src/ai/providers/*`：图像/文本供应商适配。
 
 ## 注意事项
+- Banana 快速文本生成通道总预算 45 秒，ToAPIs 主备 HTTP 单次各 20 秒；GPT-6 非流式生成单次 90 秒、通道总预算 185 秒，前端等待 240 秒。总超时通过 AbortSignal 取消在途请求，已取消请求不再触发主备切换，完成后清理定时器。部署反向代理的读取超时需覆盖 GPT-6 等待时间；上游自身故障仍需供应商处理。
 - `Omni Flash Ext` 仍使用 `backend/src/ai/services/omni-flash-ext.adapter.ts` 做请求规范化，但最终上游为 APIMart 直连。
 - 若历史数据库里的 `model_provider_mapping_v2` 仍残留 `new_api` vendor，需要同步改成 `apimart` 或其他现行 vendor，避免旧配置回灌。
 - `Sora2VideoService` 里仍有独立上游 `newapi.megabyai.cc` 兼容逻辑；这不是仓库内已移除的 `new-api` 网关。
