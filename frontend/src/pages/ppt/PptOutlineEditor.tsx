@@ -33,6 +33,7 @@ type Props = {
   showImageAction?: boolean;
   onBack: () => void;
   onNext: (pages: OutlinePage[]) => void;
+  nextLabel?: string;
 };
 
 export default function PptOutlineEditor({
@@ -42,6 +43,7 @@ export default function PptOutlineEditor({
   showImageAction = true,
   onBack,
   onNext,
+  nextLabel = "生成",
 }: Props) {
   const [pages, setPages] = React.useState<OutlinePage[]>(() => {
     if (initialPages?.length) {
@@ -67,17 +69,21 @@ export default function PptOutlineEditor({
     });
   };
 
-  const canNext = pages.some((p) => p.title.trim() || p.content.trim());
+  const validPages = pages.filter((p) => p.title.trim() || p.content.trim());
+  const canNext = validPages.length > 0;
 
   return (
     <PptWizardLayout
       title={title}
       subtitle={subtitle}
       onBack={onBack}
-      onNext={() => onNext(pages)}
+      onNext={() => onNext(validPages)}
       nextDisabled={!canNext}
+      nextLabel={nextLabel}
+      nextCost={validPages.length * 200}
       contentClassName="max-w-[720px]"
     >
+      <p className="mb-3 text-xs text-slate-500">每页 200 积分为预估报价，实际按后端图片模型计费；失败重试会提交新的生成请求。</p>
       <div className="mb-3">
         <button
           type="button"

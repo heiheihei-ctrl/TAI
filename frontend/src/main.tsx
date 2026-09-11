@@ -39,6 +39,7 @@ import ClassroomPurchasesPage from '@/pages/classroom/ClassroomPurchasesPage';
 import PptModePage from '@/pages/ppt/PptModePage';
 import PptPlaceholderPage from '@/pages/ppt/PptPlaceholderPage';
 import PptOutlineMethodPage from '@/pages/ppt/PptOutlineMethodPage';
+import PptCreatePage from "./pages/ppt/PptCreatePage";
 import PptSchemeUploadPage from '@/pages/ppt/PptSchemeUploadPage';
 import PptOneShotPage from '@/pages/ppt/PptOneShotPage';
 import PptCustomOutlinePage from '@/pages/ppt/PptCustomOutlinePage';
@@ -89,10 +90,7 @@ function RootRoutes() {
         <Route
           path="/ppt/create"
           element={
-            <PptPlaceholderPage
-              title="PPT 创作"
-              description="已进入创作流程，后续步骤将在此承接上传方案或编辑大纲。"
-            />
+            <PptCreatePage />
           }
         />
         <Route

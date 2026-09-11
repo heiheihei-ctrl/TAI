@@ -2784,9 +2784,7 @@ export class BananaProvider implements IAIProvider {
               channel
             );
           })(),
-          channel === "tencent"
-            ? this.TEXT_TIMEOUT
-            : getTextRequestTimeout(currentModel).totalMs,
+          getTextRequestTimeout(currentModel).totalMs,
           `Text generation (${this.formatTextChannelLabel(channel)})`,
           abortController
         );

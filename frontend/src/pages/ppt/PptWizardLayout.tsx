@@ -9,6 +9,7 @@ type Props = {
   onNext: () => void;
   nextDisabled?: boolean;
   nextLabel?: string;
+  nextCost?: number;
   className?: string;
   contentClassName?: string;
 };
@@ -21,6 +22,7 @@ export default function PptWizardLayout({
   onNext,
   nextDisabled,
   nextLabel = "下一步",
+  nextCost,
   className,
   contentClassName,
 }: Props) {
@@ -64,7 +66,7 @@ export default function PptWizardLayout({
             className="h-12 flex-1 rounded-xl bg-[#2f3540] text-sm font-medium text-white transition hover:bg-[#252a33] disabled:cursor-not-allowed disabled:opacity-50"
             onClick={onNext}
           >
-            {nextLabel}
+            {nextLabel}{nextCost ? ` · ${nextCost} 积分` : ""}
           </button>
         </div>
       </div>

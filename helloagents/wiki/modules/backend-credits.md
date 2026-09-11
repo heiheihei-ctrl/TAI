@@ -180,7 +180,7 @@
 - `AiController.buildCreditRequestParams` now writes explicit billing `channel` from `bananaImageRoute` (`normal => apimart`, `stable => tencent`) before pre-deduct.
 - `CreditsService.normalizeChannel` and `AiController.normalizeChannelName` now normalize `nano2` to `apimart` (no longer treated as Tencent).
 - Tencent Banana matrix resolution now gives highest priority to explicit route: `stable` always Tencent pricing matrix, `normal` always non-Tencent pricing matrix.
-- Current flat text-side pricing follows the latest table: `gemini-text = 2`、`gemini-prompt-optimize = 5`、`gemini-tool-selection = 2`; these no longer vary by Banana route.
+- Current text pricing: GPT-6 (`gpt-6*`) `gemini-text` requests are 10 credits/call; other text requests keep their configured pricing.
 - `storyboardSplit` is treated as a local split node and should stay free in public/admin node config output.
 - Banana stable-route Ultra pricing is `0.5K=30`、`1K=50`、`2K=70`、`4K=110`.
 - Pre-deduct dedup now uses `idempotencyKey` as the sole primary key when present; `requestFingerprint` fallback is only used when idempotency key is absent, avoiding accidental merge of two user-initiated consecutive runs.

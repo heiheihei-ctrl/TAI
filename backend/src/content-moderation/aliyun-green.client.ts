@@ -8,6 +8,7 @@ import Green20220302, {
 } from '@alicloud/green20220302';
 import { Config } from '@alicloud/openapi-client';
 import { ALIYUN_GREEN_DEFAULTS } from './content-moderation.types';
+import { greenTimeout, retryGreenConnection } from './green-network.util';
 
 type GreenClient = InstanceType<typeof Green20220302>;
 
@@ -76,7 +77,10 @@ export class AliyunGreenClient {
       }),
     });
 
-    const response = await client.textModerationPlus(request);
+    const response = await retryGreenConnection(
+      () => client.textModerationPlus(request),
+      () => this.logger.warn('[AliyunGreen] text connection timed out; retrying once'),
+    );
     const body = response?.body as any;
     const code = Number(body?.code ?? response?.statusCode ?? 0);
     const data = body?.data || {};
@@ -336,6 +340,8 @@ export class AliyunGreenClient {
       accessKeySecret,
       endpoint,
       regionId,
+      connectTimeout: greenTimeout(this.config.get<string>('ALIYUN_GREEN_CONNECT_TIMEOUT_MS'), 10000),
+      readTimeout: greenTimeout(this.config.get<string>('ALIYUN_GREEN_READ_TIMEOUT_MS'), 30000),
     });
 
     // @alicloud/green20220302 default export

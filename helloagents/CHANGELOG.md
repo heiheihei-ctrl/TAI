@@ -6,10 +6,13 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 ### Fixed
+- 阿里云文本审核增加一次连接超时重试及可配置连接/读取超时；保留审核策略与真实风险结果，增加网络恢复回归测试。
 - GPT-6 文本请求不再沿用快速模型 20 秒超时：主备单次 90 秒、总预算 185 秒，前端同步等待 240 秒，保留超时取消与模型路由，增加预算回归测试。
 - Banana 文本主备超时预算冲突：ToAPIs 单次请求调整为 20 秒，通道总预算维持 45 秒；总超时取消在途请求并阻止取消后的备用请求，清理超时定时器，补充主备切换/取消回归测试。
 
 ### Added
+- PPT 结果页新增将全部已生成页面按 16:9 合并导出为 PDF 的功能。
+- PPT 结果页接入 gpt-image-2-official 逐页串行生图，增加进度、缩略图、下载和单页重试；保存远程 URL 会话快照，避免刷新自动重提在途任务，明确积分为预估报价。
 - Workflow Agent：AI 对话框 `Workflow` 模式 → NestJS `POST /api/ai/workflow-chat`（DeepSeek 写 prompt + 规划 textPrompt→generate）→ 前端 `flow:agent-apply` 建节点/连线/`runNode`；结果留在画布节点。配置 `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL`。文档 `frontend/docs/22-工作流Agent.md`。
 - Deployment brand: `DEPLOYMENT_BRAND=tai|linglong` (backend) / `VITE_DEPLOYMENT_BRAND` (frontend) — distinguishes credit pricing per product line; Seedream 5.0 Pro resolution pricing: tai `1K/1.5K/2K = 65/90/140`, linglong `100/130/180`.
 - Upload storage mode: `UPLOAD_MODE=tos|local` — local writes to `LOCAL_UPLOAD_ROOT` (nginx html) and serves via `LOCAL_UPLOAD_PUBLIC_BASE_URL`; TOS mode unchanged. Frontend follows `presign.mode` / `VITE_UPLOAD_MODE` and uses `/api/uploads/file` for local multipart. Old TOS URLs remap by key when `VITE_ASSET_PUBLIC_BASE_URL` points at nginx.
@@ -18,6 +21,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - 画布图片工具栏「高清放大」功能及后端 `POST /api/ai/upscale-image` 接口（`hdUpscaleService`、`ExpandImageService.upscaleImage`）。
 
 ### Changed
+- AI 对话框请求超时统一调整为 120 秒；GPT-6 文本模型固定按 10 积分/次扣费。
+- AI 对话框请求超时调整为 120 秒；GPT-6 文本模型固定按 10 积分扣费，其他文本模型价格不变。
 - Credits/Quota: 已加入企业工作区（`Team.enterpriseEnabled=true`）的成员豁免免费日/月生图与生视频配额限制。
 - AI/Linglong: `DEPLOYMENT_BRAND=linglong` 时 Seedream/Seedance 统一走电信天翼云 `ai.ctaigw.cn`（`TianyiCloudService`），不再走 ToAPIs/多 vendor 路线；配置 `TIANYI_CLOUD_API_KEY` 等。
 - ToAPIs: 国内主域名改为 `https://toapis.cn/v1`（线路升级）；网络不可达时回退 `https://toapis.com/v1`。旧 `.com`/`.xyz` 配置默认纠正到 `.cn`（`TOAPIS_USE_OVERSEAS=1` 时保留海外 `.com`）。

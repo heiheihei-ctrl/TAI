@@ -2,7 +2,7 @@ import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import PptOutlineEditor, { type OutlinePage } from "./PptOutlineEditor";
 import type { PptOutlinePageInput } from "@/services/pptOutlineService";
-import { readPptOutlineDraft } from "./pptOutlineDraft";
+import { persistPptOutlineDraft, readPptOutlineDraft } from "./pptOutlineDraft";
 
 type LocationState = {
   pages?: PptOutlinePageInput[];
@@ -36,7 +36,12 @@ export default function PptEditOutlinePage() {
       initialPages={initialPages}
       showImageAction={false}
       onBack={() => navigate("/ppt/outline/oneshot")}
-      onNext={(_pages: OutlinePage[]) => navigate("/ppt/create?mode=oneshot")}
+       onNext={(pages: OutlinePage[]) => {
+         const prompt = state.prompt ?? readPptOutlineDraft()?.prompt;
+         persistPptOutlineDraft(pages, prompt);
+         navigate("/ppt/create?mode=oneshot", { state: { pages, prompt } });
+       }}
+       nextLabel="生成"
     />
   );
 }

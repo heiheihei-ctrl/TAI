@@ -97,6 +97,20 @@ const quoteCases: QuoteCase[] = [
     expectedCredits: 5,
   },
   {
+    name: 'gemini-text gpt6',
+    serviceType: 'gemini-text',
+    model: 'gpt-6-astra',
+    requestParams: { bananaImageRoute: 'normal' },
+    expectedCredits: 10,
+  },
+  {
+    name: 'gpt6 stable normalized model',
+    serviceType: 'gemini-text',
+    model: ' GPT-6-ASTRA ',
+    requestParams: { bananaImageRoute: 'stable' },
+    expectedCredits: 10,
+  },
+  {
     name: 'gemini-text stable ultra',
     serviceType: 'gemini-text',
     model: 'gemini-3.1-pro-preview',

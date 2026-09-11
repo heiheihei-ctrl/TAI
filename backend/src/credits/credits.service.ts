@@ -1681,6 +1681,9 @@ export class CreditsService {
     if (serviceType !== 'gemini-text' && serviceType !== 'gemini-prompt-optimize') {
       return defaultCredits;
     }
+    if (serviceType === 'gemini-text' && typeof model === 'string' && model.trim().toLowerCase().startsWith('gpt-6')) {
+      return 10;
+    }
 
     const route = this.resolveBananaRouteFromRequestParams(requestParams) || 'normal';
     const tier =

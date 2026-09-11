@@ -253,7 +253,7 @@ const attachBananaRouteToProviderOptions = <T extends {
 // 统一收敛为单次请求，容错交给后端 provider 内部重试与 fallback。
 const MAX_IMAGE_GENERATION_ATTEMPTS = 1;
 const NO_IMAGE_RETRY_DELAY_MS = 800;
-const TEXT_CHAT_TIMEOUT_MS = 60_000;
+const TEXT_CHAT_TIMEOUT_MS = 120_000;
 const IMAGE_TASK_POLL_INTERVAL_MS = 2_000;
 const IMAGE_TASK_MAX_WAIT_MS = 20 * 60 * 1000;
 const IMAGE_TASK_PENDING_STATUSES = new Set(["queued", "processing", "pending", "in_progress"]);
@@ -1629,10 +1629,8 @@ export async function generateTextResponseViaAPI(
   const { request: requestWithRoute, bananaImageRoute } =
     attachBananaRouteToProviderOptions(request);
   const controller = new AbortController();
-  // GPT-6 后端主备预算 185 秒，额外预留鉴权、扣费与退款时间。
-  const textTimeoutMs = requestWithRoute.model?.trim().toLowerCase().startsWith("gpt-6")
-    ? 240_000
-    : TEXT_CHAT_TIMEOUT_MS;
+  // 文本对话统一最多等待两分钟。
+  const textTimeoutMs = TEXT_CHAT_TIMEOUT_MS;
   const timeoutId =
     typeof window !== "undefined"
       ? window.setTimeout(() => controller.abort(), textTimeoutMs)
