@@ -32,6 +32,8 @@
 - 首页（`/`）与登录页（`/auth/login`）欢迎背景已统一切换为 Three.js Shader 动画，复用组件 `frontend/src/components/background/WelcomeShaderBackground.tsx` + `ShaderPlaneBackground.tsx`，替代原 `OpenVideo.mp4` 视频背景。
 
 ## 我的积分（`/my-credits`）
+- 订阅套餐卡按月付/年付分别说明当月到账与全年分月发放；年付明确开通当月额度、后续每月发放全年套餐积分的 1/12。积分明细 11px、合计 14px，并使用较淡的主题色。
+- 三档套餐补充每日签到及第 7 天额外奖励、全月/全年可生成数量；付费 Seedance 权益文案为 `Seedance 2.0 / 2.5`，每周连签奖励与赠送积分不衰减去重展示。仅调整展示，不修改后端发放与权限规则。
 - 页面与应用入口都不再静默触发 `claimDailyReward()`；签到积分必须由用户手动触发领取，不再自动签到。
 - 积分流水在“项目”列支持显示 AI 渠道与模型（如 `渠道：A · 模型：gemini-2.5-flash-image-preview`），用于定位实际执行链路。
 - 概览卡片右上角提供“立即充值”文字按钮；点击后在当前页弹出 `PaymentPanel` 充值面板。

@@ -11,7 +11,7 @@
 
 ## 2026-04-19 Recharge policy simplification
 - `GET /api/payment/packages` returns fixed recharge tiers for all users (no VIP first-top-up x2 logic).
-- Current base tiers: `25=2500`, `50=5000`, `100=10000`, `200=20000`, `500=50000`, `1000=100000`.
+- Current base tiers: `25=2500`, `50=5000`, `100=10000`, `200=20000`, `500=50000`（2026-09-15 补回 25/50 元档位；自定义充值最低金额仍为 200 元）。
 - Backend enforcement:
   - Recharge order credits are still recalculated server-side in `PaymentService.createOrder` from amount.
   - Client-provided `credits` does not control final recharge grant.
@@ -140,6 +140,7 @@
 - `MembershipService.issueDailyMembershipGiftCredits()` 保留为历史兼容入口，但当前产品策略已停用自动每日赠送；会员套餐中的 `dailyGiftCredits` 现用于“每日签到基础积分”，而不是定时直接入账。
   - `MembershipService.decayDailyGiftCredits()` 会在 `pauseGiftDecay=false` 时，对 `sourceType=gift` + `validityType=permanent` 的 lot 执行每日衰减，并记录 `gift_decay` 流水；衰减值改为读取 `SystemSetting[membership_credit_policy].dailyGiftDecayCredits`。
   - `MembershipService.refreshYearlySubscriptionQuotaLots()` 会为 `periodType=yearly` 的活跃订阅补发按配置窗口计算的月度额度，并记录 `membership_refresh` 流水；窗口天数来自 `membershipRefreshCycleDays`。
+  - `backend/scripts/repair-yearly-membership-credits.ts` 仅为指定已核实订单提供默认 dry-run / `--apply` 差额补发；Serializable 事务内锁定订单、订阅和账户，写入会员有效期绑定 lot、余额和 `membership_yearly_backfill` 流水。该订单单独补发 95700 积分，并用零金额 `membership_refresh` 记录结算剩余 11 个周期，避免同一额度再次发放。此为单用户例外，通用开通、续费、按月发放和前端展示规则不变；订阅快照的 `yearly_upfront` 仅保留为此次处理的历史标记，通用服务不读取该标记。
 - `MembershipSchedulerService` 新增每日 2 点免费用户月度额度发放任务、每日 2 点赠送衰减任务、每日 4 点年费会员月度额度刷新任务；原每日 5 点会员自动赠送任务已停用。签到业务日切点单独按 `3AM` 计算，形成“先衰减、再开放新一天签到”的顺序。
 - 会员读接口：
   - 新增 `GET /api/membership/current`：返回当前活跃订阅、当前套餐摘要和权益快照。

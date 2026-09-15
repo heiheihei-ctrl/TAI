@@ -88,11 +88,16 @@ function splitBenefitText(value: unknown): string[] {
 
 function vipFeatureLines(plan: PaymentMembershipPlan): { main: string[]; accent: string[] } {
   const metadata = getPlanMetadataObject(plan.metadata);
-  const main = [...splitBenefitText(metadata.coreBenefits)];
+  const marketingCopy = getPlanMarketingCopy(plan);
+  const main = marketingCopy
+    ? [plan.billingCycle === "yearly"
+      ? `全年套餐积分 ${marketingCopy.monthlyPackageCredits * 12}，按 12 个月发放`
+      : `立即到账积分 ${marketingCopy.monthlyPackageCredits}`]
+    : [...splitBenefitText(metadata.coreBenefits)];
   const accent: string[] = [];
 
   if (metadata.seedance2Access === "enabled") {
-    accent.push("Seedance 2 权益：支持");
+    accent.push("Seedance 2.0 / 2.5 权益：支持");
   }
 
   if (metadata.happyhorseAccess === "enabled") {
@@ -118,6 +123,10 @@ function vipFeatureLines(plan: PaymentMembershipPlan): { main: string[]; accent:
 
   if (typeof metadata.supportLevel === "string" && metadata.supportLevel.trim()) {
     accent.push(`支持：${metadata.supportLevel.trim()}`);
+  }
+
+  if (marketingCopy) {
+    accent.push(`每周连签7天：额外 ${marketingCopy.weeklyExtraCredits} 积分`);
   }
 
   if (metadata.pauseGiftDecay === true) {
@@ -876,7 +885,7 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                         >
                           <div
                             className={cn(
-                              "text-xs font-medium sm:text-sm",
+                              "text-sm font-medium",
                               isWhite ? "text-indigo-700" : "text-violet-100",
                             )}
                           >
@@ -885,7 +894,10 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                           </div>
                           {marketingCopy ? (
                             <ul
-                              className="mt-2 space-y-1 text-[11px] leading-relaxed text-[#4f46e5cc] sm:text-xs"
+                              className={cn(
+                                "mt-2 space-y-1 text-[11px] leading-relaxed",
+                                isWhite ? "text-indigo-500/80" : "text-violet-300/80",
+                              )}
                             >
                               {marketingCopy.lines.map((line) => (
                                 <li key={line}>{line}</li>
@@ -893,9 +905,16 @@ const MembershipPanel: React.FC<MembershipPanelProps> = ({
                             </ul>
                           ) : creditsBreakdown ? (
                             <ul
-                              className="mt-2 space-y-1 text-[11px] leading-relaxed text-[#4f46e5cc] sm:text-xs"
+                              className={cn(
+                                "mt-2 space-y-1 text-[11px] leading-relaxed",
+                                isWhite ? "text-indigo-500/80" : "text-violet-300/80",
+                              )}
                             >
-                              <li>套餐到账 {creditsBreakdown.packageCredits}积分</li>
+                              <li>
+                                {plan.billingCycle === "yearly"
+                                  ? `全年套餐积分 ${creditsBreakdown.packageCredits}，按 12 个月发放`
+                                  : `套餐到账 ${creditsBreakdown.packageCredits}积分`}
+                              </li>
                               <li>
                                 每日签到 {creditsBreakdown.dailyPerDay} × {creditsBreakdown.dailyMultiplier} ={" "}
                                 {creditsBreakdown.dailyTotal}积分

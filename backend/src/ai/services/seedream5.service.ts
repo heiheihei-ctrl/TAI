@@ -3,8 +3,23 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { getDeploymentBrand } from '../../config/deployment-brand';
 import { TianyiCloudService } from './tianyi-cloud.service';
+import {
+  buildToapisUrl,
+  getToapisApiBaseUrl,
+  getToapisApiKey,
+  toapisRequest,
+  formatToapisHttpError,
+} from '../../utils/toapisHttpClient';
+import {
+  extractUpstreamImageTaskId,
+  extractUpstreamImageTaskStatus,
+  extractUpstreamImageTaskError,
+  extractUpstreamImageUrl,
+  isUpstreamImageTaskCompleted,
+  isUpstreamImageTaskFailed,
+} from '../../utils/upstreamImageTask.util';
 
-export type Seedream5ProviderType = 'doubao' | 'watcha' | 'tianyi';
+export type Seedream5ProviderType = 'doubao' | 'watcha' | 'tianyi' | 'toapis';
 export const SEEDREAM5_PROVIDER_SETTING_KEY = 'seedream5_provider';
 
 interface Seedream5ProviderConfig {
@@ -144,6 +159,7 @@ export class Seedream5Service {
 
   private async resolveProviderConfig(
     overrideModel?: string,
+    imageRoute?: 'normal' | 'stable',
   ): Promise<Seedream5ProviderConfig> {
     if (getDeploymentBrand() === 'linglong') {
       if (!this.tianyiCloudService.isConfigured()) {
@@ -162,7 +178,20 @@ export class Seedream5Service {
       };
     }
 
-    const provider = await this.getConfiguredProvider();
+    const isProModel = overrideModel?.includes('seedream-5-0-pro');
+    if (isProModel && imageRoute === 'normal') {
+      const apiKey = getToapisApiKey();
+      if (!apiKey) throw new Error('Seedream5 Pro 普通线路未配置 TOAPIS_TOKEN');
+      return {
+        provider: 'toapis',
+        endpoint: getToapisApiBaseUrl(),
+        apiKey,
+        model: 'doubao-seedream-5-0-pro',
+        generationPath: '/images/generations',
+        watermark: false,
+      };
+    }
+    const provider = isProModel ? 'doubao' : await this.getConfiguredProvider();
 
     if (provider === 'watcha') {
       if (!this.watchaApiKey) {
@@ -193,12 +222,12 @@ export class Seedream5Service {
     };
   }
 
-  async getProviderExecutionInfo(overrideModel?: string): Promise<{
+  async getProviderExecutionInfo(overrideModel?: string, imageRoute?: 'normal' | 'stable'): Promise<{
     provider: Seedream5ProviderType;
     model: string;
     endpoint: string;
   }> {
-    const config = await this.resolveProviderConfig(overrideModel);
+    const config = await this.resolveProviderConfig(overrideModel, imageRoute);
     return {
       provider: config.provider,
       model: config.model,
@@ -213,8 +242,14 @@ export class Seedream5Service {
     batchMode?: boolean;
     batchCount?: number;
     model?: string;
+    imageRoute?: 'normal' | 'stable';
+    aspectRatio?: string;
   }): Promise<{ imageUrl?: string; imageUrls?: string[] }> {
-    const providerConfig = await this.resolveProviderConfig(params.model);
+    const providerConfig = await this.resolveProviderConfig(params.model, params.imageRoute);
+
+    if (providerConfig.provider === 'toapis') {
+      return this.generateToapisImage(providerConfig, params);
+    }
 
     if (providerConfig.provider === 'tianyi') {
       return this.tianyiCloudService.generateSeedreamImage({
@@ -277,7 +312,7 @@ export class Seedream5Service {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
-      throw new Error(error.error?.message || error.message || `HTTP ${response.status}`);
+      throw new Error(`Seedream5 ${providerConfig.provider}: ${error.error?.message || error.message || `HTTP ${response.status}`}`);
     }
 
     const data = await response.json();
@@ -294,6 +329,51 @@ export class Seedream5Service {
     }
 
     throw new Error('No image URL returned from Seedream5 provider');
+  }
+
+  private async generateToapisImage(
+    config: Seedream5ProviderConfig,
+    params: { prompt?: string; size?: string; aspectRatio?: string; image_urls?: string[] },
+  ): Promise<{ imageUrl: string }> {
+    const signal = AbortSignal.timeout(5 * 60 * 1000);
+    const request = async (url: string, data?: Record<string, unknown>) => {
+      const response = await toapisRequest<any>({
+        url,
+        method: data ? 'POST' : 'GET',
+        headers: { Authorization: `Bearer ${config.apiKey}` },
+        data,
+        timeout: data ? 120000 : 30000,
+        signal,
+      });
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(formatToapisHttpError(response.status, response.statusText, response.data));
+      }
+      return response.data;
+    };
+    let data = await request(buildToapisUrl('/images/generations'), {
+      model: config.model,
+      prompt: params.prompt || '',
+      size: params.aspectRatio || '1:1',
+      resolution: this.normalizeSize(params.size),
+      n: 1,
+      ...(params.image_urls?.length ? { image_urls: params.image_urls.slice(0, 5) } : {}),
+    });
+    const taskId = extractUpstreamImageTaskId(data);
+    for (;;) {
+      const status = extractUpstreamImageTaskStatus(data);
+      const error = extractUpstreamImageTaskError(data);
+      if (isUpstreamImageTaskFailed(status) || error) {
+        throw new Error(`Seedream5 Pro ToAPIs: ${error || status}`);
+      }
+      const imageUrl = extractUpstreamImageUrl(data) || data?.data?.[0]?.url;
+      if (typeof imageUrl === 'string' && imageUrl.trim()) return { imageUrl: imageUrl.trim() };
+      if (isUpstreamImageTaskCompleted(status) || !taskId) {
+        throw new Error('Seedream5 Pro ToAPIs 未返回图片 URL');
+      }
+      signal.throwIfAborted();
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      data = await request(buildToapisUrl(`/images/generations/${encodeURIComponent(taskId)}`));
+    }
   }
 
   async queryTask(taskId: string): Promise<{

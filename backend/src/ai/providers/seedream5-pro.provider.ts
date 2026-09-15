@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { IAIProvider } from './ai-provider.interface';
 import { Seedream5Service } from '../services/seedream5.service';
 import { getDeploymentBrand } from '../../config/deployment-brand';
+import { getToapisApiKey } from '../../utils/toapisHttpClient';
 
 export const SEEDREAM5_PRO_MODEL_ID = 'doubao-seedream-5-0-pro-260628';
 
@@ -28,12 +29,10 @@ export class Seedream5ProProvider implements IAIProvider {
     const doubaoApiKey =
       this.config.get<string>('ARK_API_KEY') ||
       this.config.get<string>('DOUBAO_API_KEY');
-    const watchaApiKey =
-      this.config.get<string>('WATCHA_SEEDREAM_API_KEY') ||
-      this.config.get<string>('WATCHA_API_KEY');
-    this.available = !!doubaoApiKey || !!watchaApiKey;
+    const toapisApiKey = getToapisApiKey();
+    this.available = !!doubaoApiKey || !!toapisApiKey;
     this.logger.log(
-      `Seedream5Pro provider initialized: ${this.available ? 'available' : 'unavailable'} (doubao=${!!doubaoApiKey}, watcha=${!!watchaApiKey})`,
+      `Seedream5Pro provider initialized: ${this.available ? 'available' : 'unavailable'} (doubao=${!!doubaoApiKey}, toapis=${!!toapisApiKey})`,
     );
   }
 
@@ -46,8 +45,16 @@ export class Seedream5ProProvider implements IAIProvider {
   }
 
   async generateImage(request: any): Promise<any> {
+    const routes = [
+      request.providerOptions?.banana?.imageRoute,
+      request.providerOptions?.bananaImageRoute,
+    ];
+    const imageRoute = routes
+      .map((value) => typeof value === 'string' ? value.trim().toLowerCase() : '')
+      .find((value) => value === 'normal' || value === 'stable') as 'normal' | 'stable' | undefined;
     const providerInfo = await this.seedream5Service.getProviderExecutionInfo(
       SEEDREAM5_PRO_MODEL_ID,
+      imageRoute,
     );
     const result = await this.seedream5Service.generateImage({
       prompt: request.prompt,
@@ -56,6 +63,8 @@ export class Seedream5ProProvider implements IAIProvider {
       batchMode: request.batchMode,
       batchCount: request.batchCount,
       model: SEEDREAM5_PRO_MODEL_ID,
+      imageRoute,
+      aspectRatio: request.aspectRatio,
     });
 
     this.logger.log(`Seedream5Pro generation completed`);

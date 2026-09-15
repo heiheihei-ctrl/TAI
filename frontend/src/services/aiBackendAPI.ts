@@ -218,7 +218,10 @@ const attachBananaRouteToProviderOptions = <T extends {
 }>(
   request: T
 ): { request: T; bananaImageRoute: BananaImageRoute | null } => {
-  if (!isBananaRouteCapableProvider(request.aiProvider)) {
+  if (
+    !isBananaRouteCapableProvider(request.aiProvider) &&
+    request.aiProvider !== "seedream5Pro"
+  ) {
     return { request, bananaImageRoute: null };
   }
   const resolvedRoute = resolveRequestBananaImageRoute(request);
