@@ -42,7 +42,7 @@ type NodeData = {
   error?: string;
   aspectRatio?: string;
   resolution?: string;
-  quality?: "auto" | "low" | "medium" | "high";
+  quality?: "auto" | "low" | "medium" | "high" | "xhigh" | "max";
   presetPrompt?: string;
   googleSearch?: boolean;
   googleImageSearch?: boolean;
@@ -149,6 +149,14 @@ const GPT_IMAGE_2_NORMAL_QUALITY_OPTIONS = [
   },
 ];
 
+const GPT_IMAGE_25_QUALITY_OPTIONS = [
+  { value: "low" as const, title: "Low" },
+  { value: "medium" as const, title: "Medium" },
+  { value: "high" as const, title: "High" },
+  { value: "xhigh" as const, title: "Xhigh" },
+  { value: "max" as const, title: "Max" },
+];
+
 const buildImageSrc = (value?: string): string | undefined => {
   if (!value) return undefined;
   const trimmed = value.trim();
@@ -230,7 +238,10 @@ const inferNanoImageNodeType = (
 function Nano2NodeInner({ id, data, selected }: Props) {
   const { lt } = useLocaleText();
   const { status, error } = data;
-  const bananaImageRoute = useAIChatStore((state) => state.bananaImageRoute);
+  const globalBananaImageRoute = useAIChatStore((state) => state.bananaImageRoute);
+  const isGptImage25Node = data.nodeConfigKey === "gptImage25" ||
+    data.model === "gpt-image-2.5-sunburst-vip";
+  const bananaImageRoute = isGptImage25Node ? "normal" : globalBananaImageRoute;
 
   const metadata = React.useMemo<NodeConfigMetadata | undefined>(() => {
     if (!data.nodeConfigMetadata || typeof data.nodeConfigMetadata !== "object") return undefined;
@@ -244,7 +255,7 @@ function Nano2NodeInner({ id, data, selected }: Props) {
   const resolvedNodeType = inferNanoImageNodeType(metadata, data, defaultData);
   const titleEn =
     data.nodeConfigNameEn ||
-    (resolvedNodeType === "gptImage2" ? "GPT-Image-2" : "Nano2");
+    (isGptImage25Node ? "GPT-Image-2.5" : resolvedNodeType === "gptImage2" ? "GPT-Image-2" : "Nano2");
   const resolvedProvider =
     data.modelProvider ||
     metadata?.provider ||
@@ -290,13 +301,13 @@ function Nano2NodeInner({ id, data, selected }: Props) {
   const isGptImage2Node = resolvedNodeType === "gptImage2";
   const showGptImage2QualitySelector = isGptImage2Node;
   const gptImage2QualityOptions =
-    bananaImageRoute === "stable"
+    isGptImage25Node ? GPT_IMAGE_25_QUALITY_OPTIONS : bananaImageRoute === "stable"
       ? GPT_IMAGE_2_STABLE_QUALITY_OPTIONS
       : GPT_IMAGE_2_NORMAL_QUALITY_OPTIONS;
   const normalizedResolutionValue =
     typeof resolutionValue === "string" ? resolutionValue.trim().toUpperCase() : "";
   const isGptImage24K =
-    isGptImage2Node &&
+    isGptImage2Node && !isGptImage25Node &&
     normalizedResolutionValue === "4K";
   const resolvedAspectRatioOptions = React.useMemo(() => {
     if (!isGptImage24K) return aspectRatioOptions;
@@ -415,7 +426,7 @@ function Nano2NodeInner({ id, data, selected }: Props) {
       const patch: Record<string, unknown> = { resolution: value };
       const normalizedResolution =
         typeof value === "string" ? value.trim().toUpperCase() : "";
-      if (resolvedNodeType === "gptImage2" && normalizedResolution === "4K") {
+      if (resolvedNodeType === "gptImage2" && !isGptImage25Node && normalizedResolution === "4K") {
         const currentAspectRatio =
           typeof aspectRatioValue === "string" ? aspectRatioValue.trim() : "";
         if (!currentAspectRatio) {
@@ -430,13 +441,13 @@ function Nano2NodeInner({ id, data, selected }: Props) {
         })
       );
     },
-    [aspectRatioValue, id, resolvedNodeType]
+    [aspectRatioValue, id, resolvedNodeType, isGptImage25Node]
   );
 
   const normalizedQualityValue = React.useMemo<
-    "auto" | "low" | "medium" | "high"
+    "auto" | "low" | "medium" | "high" | "xhigh" | "max"
   >(() => {
-    const fallback = bananaImageRoute === "stable" ? "auto" : "medium";
+    const fallback = isGptImage25Node ? "high" : bananaImageRoute === "stable" ? "auto" : "medium";
     const candidate =
       typeof data.quality === "string"
         ? data.quality
@@ -444,15 +455,16 @@ function Nano2NodeInner({ id, data, selected }: Props) {
         ? defaultData.quality
         : fallback;
     const normalized = candidate.trim().toLowerCase();
+    if (isGptImage25Node && (normalized === "xhigh" || normalized === "max")) return normalized;
     if (normalized === "low") return "low";
     if (normalized === "medium") return "medium";
     if (normalized === "high") return "high";
     if (bananaImageRoute === "stable" && normalized === "auto") return "auto";
     return fallback;
-  }, [bananaImageRoute, data.quality, defaultData?.quality]);
+  }, [bananaImageRoute, data.quality, defaultData?.quality, isGptImage25Node]);
 
   const updateQuality = React.useCallback(
-    (value: "auto" | "low" | "medium" | "high") => {
+    (value: "auto" | "low" | "medium" | "high" | "xhigh" | "max") => {
       window.dispatchEvent(
         new CustomEvent("flow:updateNodeData", {
           detail: { id, patch: { quality: value } },
@@ -463,7 +475,7 @@ function Nano2NodeInner({ id, data, selected }: Props) {
   );
 
   React.useEffect(() => {
-    if (!isGptImage2Node) return;
+    if (!isGptImage2Node || isGptImage25Node) return;
     if (bananaImageRoute === "stable") return;
     if (
       normalizedQualityValue === "low" ||
@@ -477,7 +489,7 @@ function Nano2NodeInner({ id, data, selected }: Props) {
         detail: { id, patch: { quality: "medium" } },
       })
     );
-  }, [bananaImageRoute, id, isGptImage2Node, normalizedQualityValue]);
+  }, [bananaImageRoute, id, isGptImage2Node, isGptImage25Node, normalizedQualityValue]);
 
   React.useEffect(() => {
     if (!isGptImage24K) return;
@@ -554,7 +566,7 @@ function Nano2NodeInner({ id, data, selected }: Props) {
   }, [data, id]);
 
   const { credits: backendCredits } = useImageNodeCreditsPreview({
-    nodeType: resolvedNodeType,
+    nodeType: isGptImage25Node ? "gptImage25" : resolvedNodeType,
     aiProvider: resolvedProvider,
     bananaImageRoute,
     imageSize: resolutionValue || undefined,

@@ -765,7 +765,7 @@ export class CreditsService {
     if (params.serviceType === GPT_IMAGE2_SERVICE_TYPE) {
       const gptImage2RouteCredits = this.resolveTencentBananaResolutionCredits(
         params.serviceType,
-        effectiveRequestParams,
+        { ...effectiveRequestParams, model: params.model || effectiveRequestParams?.model },
       );
       creditsToDeduct =
         typeof gptImage2RouteCredits === 'number'
@@ -1614,6 +1614,7 @@ export class CreditsService {
   private resolveBananaRouteFromRequestParams(
     requestParams: any,
   ): 'normal' | 'stable' | null {
+    if (requestParams?.model === 'gpt-image-2.5-sunburst-vip') return 'normal';
     const explicitRoute =
       this.normalizeBananaImageRoute(requestParams?.bananaImageRoute) ||
       this.normalizeBananaImageRoute(requestParams?.providerOptions?.banana?.imageRoute) ||
@@ -1731,7 +1732,14 @@ export class CreditsService {
       const normalizedSize = this.normalizeResolutionForGptImage2TencentPricing(
         requestParams?.imageSize,
       );
-      const normalizedQuality = this.normalizeGptImage2Quality(requestParams?.quality);
+      const isGptImage25 = requestParams?.model === 'gpt-image-2.5-sunburst-vip';
+      // 2.5 在 2.0 普通路线基础上加价 25%；新增档位以 high 为基准。
+      const extendedQuality = String(requestParams?.quality || '').trim().toLowerCase();
+      const normalizedQuality = this.normalizeGptImage2Quality(
+        extendedQuality === 'xhigh' || extendedQuality === 'max' ||
+          (isGptImage25 && !['low', 'medium', 'high'].includes(extendedQuality))
+          ? 'high' : requestParams?.quality,
+      );
       const billableQuality: Exclude<GptImage2Quality, 'auto'> =
         normalizedQuality === 'auto'
           ? route === 'normal'
@@ -1749,7 +1757,7 @@ export class CreditsService {
       if (!Number.isFinite(configuredCredits) || configuredCredits <= 0) {
         return null;
       }
-      return configuredCredits;
+      return isGptImage25 ? Math.ceil(configuredCredits * 1.25) : configuredCredits;
     }
 
     const tier = BANANA_TENCENT_IMAGE_SERVICE_TIERS[serviceType];

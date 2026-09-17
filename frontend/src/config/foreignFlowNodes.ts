@@ -17,6 +17,7 @@ export const FOREIGN_FLOW_NODE_TYPES = new Set<string>([
   "niji7",
   "nano2",
   "gptImage2",
+  "gptImage25",
   "analysis",
   // 视频 / OpenAI · Omni
   "sora2Video",

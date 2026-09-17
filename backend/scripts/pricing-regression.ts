@@ -85,6 +85,21 @@ const createCreditsServiceHarness = (): any => {
 };
 
 const quoteCases: QuoteCase[] = [
+  ...(['low', 'medium', 'high', 'xhigh', 'max'] as const).flatMap((quality) =>
+    (['1K', '2K', '4K'] as const).map((imageSize, index) => ({
+      name: `gpt-image-2.5 ${quality} ${imageSize} +25%`,
+      serviceType: 'gpt-image-2',
+      model: 'gpt-image-2.5-sunburst-vip',
+      requestParams: { quality, imageSize, bananaImageRoute: 'stable' },
+      expectedCredits: (quality === 'low' ? [5, 10, 12] :
+        quality === 'medium' ? [37, 79, 100] : [143, 314, 398])[index],
+    }))),
+  {
+    name: 'gpt-image-2.5 default high 1K',
+    serviceType: 'gpt-image-2',
+    model: 'gpt-image-2.5-sunburst-vip',
+    expectedCredits: 143,
+  },
   {
     name: 'gemini-text normal fast',
     serviceType: 'gemini-text',

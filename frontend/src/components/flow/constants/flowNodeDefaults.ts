@@ -39,6 +39,7 @@ export const FLOW_NODE_DEFAULT_SIZE = {
   niji7: { w: 300, h: 400 },
   nano2: { w: 260, h: 200 },
   gptImage2: { w: 260, h: 200 },
+  gptImage25: { w: 260, h: 200 },
   seedream5: { w: 260, h: 240 },
   seedream5Pro: { w: 260, h: 240 },
   video: { w: 320, h: 280 },

@@ -10,6 +10,7 @@ type ImageNodeType =
   | "seedream5Pro"
   | "nano2"
   | "gptImage2"
+  | "gptImage25"
   | "midjourney"
   | "midjourneyV7"
   | "niji7";
@@ -20,7 +21,7 @@ type Params = {
   bananaImageRoute?: string | null;
   imageSize?: string | null;
   aspectRatio?: string | null;
-  quality?: "auto" | "low" | "medium" | "high";
+  quality?: "auto" | "low" | "medium" | "high" | "xhigh" | "max";
   outputImageCount?: number;
   referenceImageCount?: number;
   managedModelKey?: string | null;
@@ -214,8 +215,9 @@ export const useImageNodeCreditsPreview = ({
       };
     }
 
-    if (nodeType === "gptImage2") {
+    if (nodeType === "gptImage2" || nodeType === "gptImage25") {
       const resolvedQuality =
+        quality === "xhigh" || quality === "max" ? "high" :
         quality === "low" || quality === "medium" || quality === "high"
           ? quality
           : bananaImageRoute === "stable"
@@ -224,8 +226,10 @@ export const useImageNodeCreditsPreview = ({
       return {
         serviceType: "gpt-image-2",
         model:
+          nodeType === "gptImage25" ? "gpt-image-2.5-sunburst-vip" :
           bananaImageRoute === "stable" ? "gpt-image-2" : "gpt-image-2-official",
         requestParams: {
+          ...(nodeType === "gptImage25" ? { model: "gpt-image-2.5-sunburst-vip" } : {}),
           aiProvider: "nano2",
           imageSize: normalizeBananaImageSize(imageSize) || "1K",
           quality: resolvedQuality,

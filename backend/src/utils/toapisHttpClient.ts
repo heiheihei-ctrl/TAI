@@ -98,6 +98,10 @@ export function formatToapisHttpError(
     typeof body === 'string' ? body : JSON.stringify(body ?? '');
   const normalized = errorData.toLowerCase();
 
+  if (/api key status is not active|api key inactive/.test(normalized)) {
+    return 'ToAPIs API Key 未激活或已停用，请在 ToAPIs 控制台检查密钥状态，并更新后端 TOAPIS_TOKEN 后重启服务';
+  }
+
   if (
     normalized.includes('quota_not_enough') ||
     normalized.includes('user quota is not enough') ||

@@ -142,15 +142,16 @@ export class Nano2Provider implements IAIProvider {
       typeof request.model === 'string' && request.model.trim()
         ? request.model.trim()
         : 'gemini-3.1-flash-image-preview';
-    const isGptImage2Model = this.isGptImage2Model(requestedModel);
-    const userRoute = this.resolveUserRoute(request.providerOptions);
+    const isGptImage25 = requestedModel === 'gpt-image-2.5-sunburst-vip';
+    const isGptImage2Model = !isGptImage25 && this.isGptImage2Model(requestedModel);
+    const userRoute = isGptImage25 ? 'normal' : this.resolveUserRoute(request.providerOptions);
     const useOfficialProfile = isGptImage2Model && userRoute === 'stable';
     const useNormalGptProfile = isGptImage2Model && userRoute === 'normal';
     const upstreamModel = isGptImage2Model
       ? GPT_IMAGE_2_OFFICIAL_MODEL
       : requestedModel;
     const requestedSize = (() => {
-      const raw = request.aspectRatio ?? (isGptImage2Model ? '1:1' : '16:9');
+      const raw = request.aspectRatio ?? (isGptImage2Model || isGptImage25 ? '1:1' : '16:9');
       if (typeof raw !== 'string' || !raw.trim()) {
         const resolution = this.normalizeResolution(
           request.resolution || request.imageSize || '1K',
@@ -159,7 +160,7 @@ export class Nano2Provider implements IAIProvider {
         if (isGptImage2Model && resolution === '4k') {
           return GPT_IMAGE_2_4K_SIZE_SET.values().next().value ?? '16:9';
         }
-        return isGptImage2Model ? '1:1' : '16:9';
+        return isGptImage2Model || isGptImage25 ? '1:1' : '16:9';
       }
       return raw.trim();
     })();
@@ -202,8 +203,24 @@ export class Nano2Provider implements IAIProvider {
       size: requestedSize,
       n: 1,
       image_urls: request.imageUrls || request.image_urls,
-      resolution,
-      ...(isGptImage2Model
+      ...(isGptImage25
+        ? {
+            metadata: {
+              resolution,
+              orientation: (() => {
+                const [width, height] = requestedSize.split(':').map(Number);
+                return width > height ? 'landscape' : width < height ? 'portrait' : 'square';
+              })(),
+            },
+            quality: ((): GptImage2Quality | 'xhigh' | 'max' => {
+              const extendedQuality = String(request.quality || '').trim().toLowerCase();
+              if (extendedQuality === 'xhigh' || extendedQuality === 'max') return extendedQuality;
+              const quality = this.normalizeQuality(request.quality);
+              return quality === 'low' || quality === 'medium' ? quality : 'high';
+            })(),
+          }
+        : { resolution }),
+      ...(isGptImage25 ? {} : isGptImage2Model
         ? useOfficialProfile
           ? {
               quality: this.normalizeQuality(request.quality) ?? 'auto',
@@ -265,6 +282,16 @@ export class Nano2Provider implements IAIProvider {
       result = await this.nano2Service.generateImage(buildSubmitRequest(finalResolution));
     }
 
+    if (result.imageUrl) {
+      return {
+        success: true,
+        data: {
+          imageData: null,
+          imageUrl: result.imageUrl,
+          metadata: { provider: 'nano2', model: upstreamModel, route: userRoute, resolution: finalResolution },
+        },
+      };
+    }
     this.logger.log(`Nano2 task submitted: ${result.taskId}`);
 
     // 从配置读取轮询参数，支持环境变量覆盖

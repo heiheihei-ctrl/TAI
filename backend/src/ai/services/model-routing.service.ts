@@ -852,6 +852,16 @@ const DEFAULT_MODEL_PROVIDER_MAPPING_V2: ModelProviderMappingV2 = {
           modelVersion: '2.0',
           metadata: DEFAULT_SEEDANCE20_V2_VENDOR_METADATA,
         },
+        {
+          vendorKey: 'toapis',
+          platformKey: 'toapis',
+          label: 'ToAPIs（普通）',
+          enabled: true,
+          route: 'legacy',
+          provider: 'doubao',
+          modelName: 'Seedance',
+          modelVersion: '2.0',
+        },
       ],
     },
     {
@@ -1286,7 +1296,7 @@ export class ModelRoutingService {
 
       const vendors: ManagedModelVendorConfig[] = [normalizedVendor];
 
-      if (model.modelKey === 'seedance-2.5') {
+      if (model.modelKey === 'seedance-2.5' || model.modelKey === 'seedance-2.0') {
         const toapisVendor =
           existingVendors.find((vendor) => vendor.vendorKey === 'toapis') ||
           existingVendors.find((vendor) => vendor.vendorKey === 'apimart') || {
@@ -1297,7 +1307,7 @@ export class ModelRoutingService {
             route: 'legacy' as const,
             provider: 'doubao',
             modelName: 'Seedance',
-            modelVersion: '2.5',
+            modelVersion: seedanceApiModelVersion,
           };
         vendors.push({
           ...toapisVendor,
@@ -1308,13 +1318,13 @@ export class ModelRoutingService {
           route: 'legacy',
           provider: 'doubao',
           modelName: toapisVendor.modelName || 'Seedance',
-          modelVersion: '2.5',
+          modelVersion: seedanceApiModelVersion,
         });
       }
 
       return this.ensureModelDefaultVendor({
         ...model,
-        defaultVendor: 'seedance_api',
+        defaultVendor: model.defaultVendor === 'apimart' ? 'toapis' : (model.defaultVendor || 'seedance_api'),
         vendors,
       });
     });

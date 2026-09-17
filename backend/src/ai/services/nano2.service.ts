@@ -15,12 +15,13 @@ interface Nano2GenerateRequest {
   model?: string;
   size?: string;
   resolution?: string;
+  metadata?: { resolution: string; orientation: string };
   n?: number;
   image_urls?: string[];
   google_search?: boolean;
   google_image_search?: boolean;
   official_fallback?: boolean;
-  quality?: 'auto' | 'low' | 'medium' | 'high';
+  quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   background?: 'auto' | 'opaque' | 'transparent';
   moderation?: 'auto' | 'low';
   output_format?: 'png' | 'jpeg' | 'webp';
@@ -177,7 +178,7 @@ export class Nano2Service {
     };
   }
 
-  async generateImage(request: Nano2GenerateRequest): Promise<{ taskId: string; status: string }> {
+  async generateImage(request: Nano2GenerateRequest): Promise<{ taskId: string; status: string; imageUrl?: string }> {
     if (!this.apiKey) {
       throw new ServiceUnavailableException('Nano2 API key not configured');
     }
@@ -196,6 +197,9 @@ export class Nano2Service {
     }
     if (typeof request.resolution === 'string' && request.resolution.trim()) {
       payload.resolution = request.resolution.trim();
+    }
+    if (request.metadata) {
+      payload.metadata = request.metadata;
     }
     if (typeof request.google_search === 'boolean') {
       payload.google_search = request.google_search;
@@ -272,6 +276,12 @@ export class Nano2Service {
         const data: Nano2TaskResponse | Record<string, unknown> =
           typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
         const taskId = extractUpstreamImageTaskId(data);
+        const directUrl = Array.isArray(data?.data) ? (data.data[0] as any)?.url : undefined;
+        const imageUrl = extractUpstreamImageUrl(data) ||
+          (typeof directUrl === 'string' && /^https?:\/\//i.test(directUrl) ? directUrl : undefined);
+        if (imageUrl && request.model === 'gpt-image-2.5-sunburst-vip') {
+          return { taskId: taskId || '', status: 'completed', imageUrl };
+        }
         if (!taskId) {
           throw new Error(`Nano2 submit succeeded but task id missing. payload=${JSON.stringify(data)}`);
         }

@@ -6,6 +6,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 ### Fixed
+- FlowOverlay 补齐 `isLinglongRestrictedPalette` 导入，修复 Seedance 路线判断触发的运行时 ReferenceError（该文件的 `@ts-nocheck` 会跳过此类类型诊断）。
+- Seedance 修复 TAI 画布沿用玲珑节点天翼渠道：2.x 普通/尊享提交与预览分别固定 ToAPIs/火山官方，显式路线优先于部署默认品牌并禁止跨渠道兜底；保留历史任务查询。
+- GPT-Image-2.5 暂定价格调整为 2.0 普通路线对应档位积分的 125%（向上取整），同步预览、扣费与默认节点配置；默认 High/1K 为 143 积分。
+- GPT-Image-2.5 补齐 Low/Medium/High/Xhigh/Max 五档质量，修复前端归一化与后端校验、透传对新增档位的拦截，新增五档请求回归。
+- Seedance 2.0 补齐 ToAPIs 提交/查询路由，使用 seedance-2 并保留 6 秒时长；保留配置的默认供应商，明确提示未激活的 TOAPIS_TOKEN。
 - Seedream 5.0 Pro 普通线路透传全局选择并走 ToAPIs 异步生图，尊享固定豆包官方；补充线路、异步结果与错误处理回归验证。
 - 积分充值补回 25 元/2500 积分、50 元/5000 积分固定套餐。
 - 订阅弹窗按设计稿更新月付/年付积分文案、签到奖励与 Seedance 权益名称；年付明确按 12 个月发放，积分明细比合计小 3px 且颜色减淡，仅调整前端展示。
@@ -15,6 +20,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Banana 文本主备超时预算冲突：ToAPIs 单次请求调整为 20 秒，通道总预算维持 45 秒；总超时取消在途请求并阻止取消后的备用请求，清理超时定时器，补充主备切换/取消回归测试。
 
 ### Added
+- GPT-Image-2.5 独立节点接入 ToAPIs，保留 gpt-image-2.5-sunburst-vip 模型与 metadata 分辨率/方向参数，默认 1:1、1K、high、单张。
 - PPT 结果页新增将全部已生成页面按 16:9 合并导出为 PDF 的功能。
 - PPT 结果页接入 gpt-image-2-official 逐页串行生图，增加进度、缩略图、下载和单页重试；保存远程 URL 会话快照，避免刷新自动重提在途任务，明确积分为预估报价。
 - Workflow Agent：AI 对话框 `Workflow` 模式 → NestJS `POST /api/ai/workflow-chat`（DeepSeek 写 prompt + 规划 textPrompt→generate）→ 前端 `flow:agent-apply` 建节点/连线/`runNode`；结果留在画布节点。配置 `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL`。文档 `frontend/docs/22-工作流Agent.md`。

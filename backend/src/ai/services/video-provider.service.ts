@@ -34,7 +34,7 @@ import {
   getToapisApiKey,
 } from "../../utils/apimartHttpClient";
 import { extractUpstreamImageTaskId } from "../../utils/upstreamImageTask.util";
-import { getToapisApiBaseUrl } from "../../utils/toapisHttpClient";
+import { formatToapisHttpError, getToapisApiBaseUrl } from "../../utils/toapisHttpClient";
 import { getDeploymentBrand } from "../../config/deployment-brand";
 import {
   TianyiCloudService,
@@ -50,6 +50,7 @@ const MANAGED_KLING26_TENCENT_TASK_PREFIX = "tencentvod-kling26-";
 const MANAGED_KLING30_TENCENT_TASK_PREFIX = "tencentvod-kling30-";
 const MANAGED_VIDU_TENCENT_PREFIX = "tencentvod-vidu-";
 const SEEDANCE25_TOAPIS_TASK_PREFIX = "seedance25-toapis:";
+const SEEDANCE20_TOAPIS_TASK_PREFIX = "seedance20-toapis:";
 
 type ManagedTencentVideoModelKey =
   | "kling-2.6"
@@ -467,11 +468,15 @@ export class VideoProviderService {
     modelKey: string,
     preferredVendorKey: string | undefined,
     executor: (route: ResolvedManagedModelRoute) => Promise<VideoGenerationResult>,
+    strictVendor = false,
   ): Promise<VideoGenerationResult | null> {
-    const candidates = await this.modelRoutingService.resolveVideoModelCandidates(
+    const resolvedCandidates = await this.modelRoutingService.resolveVideoModelCandidates(
       modelKey,
       preferredVendorKey,
     );
+    const candidates = strictVendor
+      ? resolvedCandidates.filter((route) => route.vendor.vendorKey === preferredVendorKey)
+      : resolvedCandidates;
     if (!candidates.length) return null;
 
     let lastError: unknown = null;
@@ -1022,7 +1027,8 @@ export class VideoProviderService {
 
     if (
       provider === "doubao" &&
-      taskId.startsWith(SEEDANCE25_TOAPIS_TASK_PREFIX)
+      (taskId.startsWith(SEEDANCE25_TOAPIS_TASK_PREFIX) ||
+        taskId.startsWith(SEEDANCE20_TOAPIS_TASK_PREFIX))
     ) {
       return this.querySeedance25ToapisTask(taskId);
     }
@@ -1317,6 +1323,7 @@ export class VideoProviderService {
   }
 
   private buildSeedance25ToapisPayload(options: VideoProviderRequestDto): Record<string, any> {
+    const isSeedance20 = this.resolveManagedSeedanceModel(options).modelKey === "seedance-2.0";
     const prompt = typeof options.prompt === "string" ? options.prompt.trim() : "";
     if (!prompt) {
       throw new BadRequestException("prompt 不能为空");
@@ -1325,12 +1332,14 @@ export class VideoProviderService {
     const durationRaw = Number(options.duration);
     const duration =
       Number.isFinite(durationRaw) && durationRaw > 0
-        ? Math.max(5, Math.min(30, Math.round(Math.round(durationRaw) / 5) * 5))
+        ? isSeedance20
+          ? Math.max(4, Math.min(15, Math.round(durationRaw)))
+          : Math.max(5, Math.min(30, Math.round(Math.round(durationRaw) / 5) * 5))
         : 5;
     const aspectRatio = this.normalizeSeedance25ToapisAspectRatio(options.aspectRatio);
 
     const payload: Record<string, any> = {
-      model: "seedance-2-5",
+      model: isSeedance20 ? "seedance-2" : "seedance-2-5",
       prompt,
       duration,
       size: aspectRatio,
@@ -1339,8 +1348,7 @@ export class VideoProviderService {
       metadata: {},
       generate_audio:
         typeof options.generateAudio === "boolean" ? options.generateAudio : true,
-      video_operation: "generate",
-      output_format: "mp4",
+      ...(!isSeedance20 ? { video_operation: "generate", output_format: "mp4" } : {}),
     };
 
     const referenceImages = Array.isArray(options.referenceImages)
@@ -1370,8 +1378,14 @@ export class VideoProviderService {
       throw new ServiceUnavailableException("ToAPIs token 未配置 (TOAPIS_TOKEN)");
     }
 
+    const resolved = this.resolveManagedSeedanceModel(options);
+    if (resolved.modelVersion === "2.0-fast") {
+      throw new BadRequestException("ToAPIs 当前接入仅支持 Seedance 2.0 标准版，请切换模型或供应商");
+    }
+    const taskPrefix = resolved.modelKey === "seedance-2.0"
+      ? SEEDANCE20_TOAPIS_TASK_PREFIX : SEEDANCE25_TOAPIS_TASK_PREFIX;
     const payload = this.buildSeedance25ToapisPayload(options);
-    this.logProviderPayload("seedance-2.5/toapis", payload);
+    this.logProviderPayload(`${resolved.modelKey}/toapis`, payload);
 
     let response: { status: number; data: any };
     try {
@@ -1386,9 +1400,9 @@ export class VideoProviderService {
         data: payload,
       });
     } catch (error) {
-      const wrapped = this.wrapApimartNetworkError(error, "Seedance 2.5 提交任务失败");
+      const wrapped = this.wrapApimartNetworkError(error, `${resolved.label} 提交任务失败`);
       this.logger.error(
-        `ToAPIs Seedance 2.5 请求失败: vendor=${route.vendor.vendorKey}, proxy=${getApimartProxySummary()}, message=${this.summarizeError(wrapped)}`,
+        `ToAPIs ${resolved.label} 请求失败: vendor=${route.vendor.vendorKey}, proxy=${getApimartProxySummary()}, message=${this.summarizeError(wrapped)}`,
       );
       throw wrapped;
     }
@@ -1412,7 +1426,7 @@ export class VideoProviderService {
         data?.message ||
         textBody ||
         `HTTP ${response.status}`;
-      throw new BadRequestException(`ToAPIs Seedance 2.5 创建任务失败: ${message}`);
+      throw new BadRequestException(`${resolved.label} 创建任务失败: ${formatToapisHttpError(response.status, "", message)}`);
     }
 
     const rawTaskId = extractUpstreamImageTaskId(data);
@@ -1425,17 +1439,17 @@ export class VideoProviderService {
       data?.data?.url;
 
     if (!rawTaskId && !videoUrl) {
-      throw new ServiceUnavailableException("ToAPIs Seedance 2.5 未返回 taskId 或视频地址");
+      throw new ServiceUnavailableException(`ToAPIs ${resolved.label} 未返回 taskId 或视频地址`);
     }
 
     return {
       taskId: rawTaskId
-        ? `${SEEDANCE25_TOAPIS_TASK_PREFIX}${String(rawTaskId)}`
-        : `${SEEDANCE25_TOAPIS_TASK_PREFIX}${Date.now()}`,
+        ? `${taskPrefix}${String(rawTaskId)}`
+        : `${taskPrefix}${Date.now()}`,
       status: videoUrl ? "succeeded" : "queued",
       ...(videoUrl ? { videoUrl } : {}),
       execution: {
-        modelKey: "seedance-2.5",
+        modelKey: resolved.modelKey,
         vendorKey: route.vendor.vendorKey,
         platformKey: route.vendor.platformKey || route.vendor.vendorKey,
         route: "legacy",
@@ -1449,8 +1463,10 @@ export class VideoProviderService {
   private async querySeedance25ToapisTask(
     taskId: string,
   ): Promise<{ status: string; videoUrl?: string; thumbnailUrl?: string }> {
-    const rawTaskId = taskId.startsWith(SEEDANCE25_TOAPIS_TASK_PREFIX)
-      ? taskId.slice(SEEDANCE25_TOAPIS_TASK_PREFIX.length)
+    const taskPrefix = taskId.startsWith(SEEDANCE20_TOAPIS_TASK_PREFIX)
+      ? SEEDANCE20_TOAPIS_TASK_PREFIX : SEEDANCE25_TOAPIS_TASK_PREFIX;
+    const rawTaskId = taskId.startsWith(taskPrefix)
+      ? taskId.slice(taskPrefix.length)
       : taskId;
     if (!rawTaskId) return { status: "processing" };
 
@@ -1740,11 +1756,11 @@ export class VideoProviderService {
   ): Promise<VideoGenerationResult> {
     const resolved = this.resolveManagedSeedanceModel(options);
 
-    // linglong / 显式 tianyi：统一走星辰 TokenHub（ai.ctaigw.cn），仅 Seedance 1.5 Pro
+    // 显式官方/ToAPIs 路线不能被部署默认品牌覆盖。
     const vendorKey = String(options.vendorKey || options.platformKey || '')
       .trim()
       .toLowerCase();
-    if (getDeploymentBrand() === "linglong" || vendorKey === "tianyi") {
+    if (vendorKey === "tianyi" || (!vendorKey && getDeploymentBrand() === "linglong")) {
       try {
         const linglongResolved = {
           modelKey: "seedance-1.5" as const,
@@ -1763,7 +1779,7 @@ export class VideoProviderService {
       async (route) => {
         try {
           if (
-            resolved.modelKey === "seedance-2.5" &&
+            (resolved.modelKey === "seedance-2.5" || resolved.modelKey === "seedance-2.0") &&
             (route.vendor.vendorKey === "toapis" ||
               route.vendor.vendorKey === "apimart")
           ) {
@@ -1792,6 +1808,7 @@ export class VideoProviderService {
           throw this.wrapSeedanceException(error, options);
         }
       },
+      vendorKey === "toapis" || vendorKey === "seedance_api",
     );
     if (managedResult) return managedResult;
 

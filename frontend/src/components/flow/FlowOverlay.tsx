@@ -62,7 +62,7 @@ import {
 } from "@/config/featureFlags";
 import { shouldHideForeignFlowNode } from "@/config/foreignFlowNodes";
 import { getSeedream5ProCredits, getSeedream5Credits, getSeedanceFallbackCredits } from "@/config/brandCreditPricing";
-import { shouldHideNodeForDeploymentPalette } from "@/config/linglongPalette";
+import { isLinglongRestrictedPalette, shouldHideNodeForDeploymentPalette } from "@/config/linglongPalette";
 import { getDeploymentBrand } from "@/config/deploymentBrand";
 import {
   isAllowedForInternationalEdition,
@@ -967,6 +967,7 @@ const rawNodeTypes = {
   niji7: MidjourneyNode,
   nano2: Nano2Node,
   gptImage2: Nano2Node,
+  gptImage25: Nano2Node,
   seedream5: Seedream5Node,
   seedream5Pro: Seedream5ProNode,
   video: VideoNode,
@@ -1105,6 +1106,7 @@ const FLOW_GROUP_RUNNABLE_TYPES = new Set([
   "niji7",
   "nano2",
   "gptImage2",
+  "gptImage25",
   "seedream5",
   "seedream5Pro",
   "image",
@@ -1240,7 +1242,7 @@ const isSeedance20ModelValue = (value?: unknown): boolean => {
 const isSeedance2FamilyModelValue = (value?: unknown): boolean =>
   isSeedance20ModelValue(value) || isSeedance25ModelValue(value);
 
-const resolveSeedance25VendorKey = (
+const resolveSeedanceVendorKey = (
   bananaImageRoute?: "normal" | "stable"
 ): "seedance_api" | "toapis" =>
   bananaImageRoute === "stable" ? "seedance_api" : "toapis";
@@ -1356,6 +1358,7 @@ const QUICK_CONNECT_NODE_LABELS: Partial<
   promptOptimize: { zh: "提示词优化", en: "提示词优化" },
   seedream5Pro: { zh: "seedream5.0 pro", en: "seedream5.0 pro" },
   doubaoVideo: { zh: "seedance", en: "seedance" },
+  gptImage25: { zh: "GPT-Image-2.5", en: "GPT-Image-2.5" },
   gptImage2: { zh: "GPT-Image-2", en: "GPT-Image-2" },
   generate: { zh: "生成节点(Nano banana)", en: "生成节点(Nano banana)" },
 };
@@ -1478,6 +1481,7 @@ const NODE_CREDITS_MAP: Record<string, number | string> = {
   midjourneyV7: 50, // Midjourney V7 生成
   niji7: 50, // Niji 7 生成
   nano2: 30, // Nano Banana 2 生图
+  gptImage25: 143,
   gptImage2: 29, // Gpt-Image-2 生图（默认按普通 1K + medium 兜底）
   seedream5: getSeedream5Credits("2K"),
   seedream5Pro: getSeedream5ProCredits("2K"),
@@ -1530,6 +1534,7 @@ const NODE_PALETTE_ITEMS = [
   { key: "generate4", zh: "生成多张图片节点", en: "Nano banana (4 images)", category: "image" },
   { key: "generatePro", zh: "自定义节点", en: "Agent", category: "image" },
   { key: "midjourney", zh: "Midjourney生成", en: "Midjourney", category: "image" },
+  { key: "gptImage25", zh: "GPT-Image-2.5", en: "GPT-Image-2.5", category: "image" },
   { key: "gptImage2", zh: "GPT-Image-2", en: "GPT-Image-2", category: "image" },
   { key: "analysis", zh: "图像分析节点", en: "Analysis Node", category: "image" },
   { key: "imageGrid", zh: "图片拼合节点", en: "Image Grid", category: "image" },
@@ -1684,6 +1689,7 @@ const NODE_PANEL_GROUP_BY_TYPE: Record<string, NodePanelGroupKey> = {
   niji7: "image",
   nano2: "image",
   gptImage2: "image",
+  gptImage25: "image",
   analysis: "image",
   imageGrid: "image",
   imageSplit: "image",
@@ -1796,6 +1802,8 @@ const FLOW_NODE_KEY_ALIASES: Record<string, FlowNodeType> = {
   "audio-node": "audioUpload",
   minimaxmusic: "minimaxMusic",
   "minimax-music": "minimaxMusic",
+  gptimage25: "gptImage25",
+  "gpt-image-2.5": "gptImage25",
   gptimage2: "gptImage2",
   "gpt-image-2": "gptImage2",
   gpt2image: "gptImage2",
@@ -1938,6 +1946,7 @@ const IMAGE_DYNAMIC_CREDIT_NODE_TYPES = new Set<FlowNodeType>([
   "niji7",
   "nano2",
   "gptImage2",
+  "gptImage25",
   "seedream5",
   "seedream5Pro",
 ]);
@@ -2177,7 +2186,7 @@ const normalizeGptImage2Quality = (
 ): "low" | "medium" | "high" => {
   const normalized = typeof rawQuality === "string" ? rawQuality.trim().toLowerCase() : "";
   if (normalized === "low") return "low";
-  if (normalized === "high") return "high";
+  if (normalized === "high" || normalized === "xhigh" || normalized === "max") return "high";
   return "medium";
 };
 
@@ -2564,7 +2573,7 @@ const resolveStableRouteCredits = (params: {
     ][pricingTier];
   }
 
-  if (normalizedType === "gptImage2") {
+  if (normalizedType === "gptImage2" || normalizedType === "gptImage25") {
     const preferredSize =
       typeof nodeData?.resolution === "string" && nodeData.resolution.trim().length > 0
         ? nodeData.resolution
@@ -2572,14 +2581,14 @@ const resolveStableRouteCredits = (params: {
         ? nodeData.imageSize
         : globalImageSize;
     const normalizedSize = normalizeGptImage2StableImageSize(preferredSize);
-    const normalizedQuality = normalizeGptImage2Quality(nodeData?.quality);
+    const normalizedQuality = normalizeGptImage2Quality(nodeData?.quality ?? (normalizedType === "gptImage25" ? "high" : undefined));
     const pricingTable =
-      bananaImageRoute === "stable"
+      normalizedType !== "gptImage25" && bananaImageRoute === "stable"
         ? GPT_IMAGE_2_STABLE_ROUTE_PRICING
         : GPT_IMAGE_2_NORMAL_ROUTE_PRICING;
     const unitCredits = Number(pricingTable[normalizedQuality][normalizedSize]);
     if (Number.isFinite(unitCredits) && unitCredits > 0) {
-      resolvedCredits = unitCredits;
+      resolvedCredits = normalizedType === "gptImage25" ? Math.ceil(unitCredits * 1.25) : unitCredits;
     }
   }
 
@@ -2637,7 +2646,7 @@ const resolveStableRouteCredits = (params: {
   if (
     normalizedType &&
     IMAGE_DYNAMIC_CREDIT_NODE_TYPES.has(normalizedType) &&
-    normalizedType !== "gptImage2"
+    normalizedType !== "gptImage2" && normalizedType !== "gptImage25"
   ) {
     const metadata =
       nodeData?.nodeConfigMetadata && typeof nodeData.nodeConfigMetadata === "object"
@@ -10175,6 +10184,7 @@ function FlowInner() {
           "niji7",
           "nano2",
           "gptImage2",
+          "gptImage25",
           "seedream5",
           "seedream5Pro",
         ];
@@ -10514,7 +10524,7 @@ function FlowInner() {
       }
 
       // Nano2 节点连接验证 - 支持文本和图片输入
-      if (targetNode.type === "nano2" || targetNode.type === "gptImage2") {
+      if (targetNode.type === "nano2" || (targetNode.type === "gptImage2" || targetNode.type === "gptImage25")) {
         if (targetHandle === "text") {
           return canSourceProvideText(sourceNode, sourceHandle);
         }
@@ -10958,7 +10968,7 @@ function FlowInner() {
         )
           return true;
       }
-      if (targetNode?.type === "nano2" || targetNode?.type === "gptImage2") {
+      if (targetNode?.type === "nano2" || (targetNode?.type === "gptImage2" || targetNode?.type === "gptImage25")) {
         if (params.targetHandle === "text") return true; // 新线会替换旧线
         if (params.targetHandle === "img") return true; // 图片输入
       }
@@ -17262,13 +17272,14 @@ function FlowInner() {
               seedanceModelForRequest
             );
           }
-          if (isSeedanceNode && isSeedance25Request) {
+          if (isSeedanceNode && !isLinglongRestrictedPalette()) {
             const activeRoute =
               useAIChatStore.getState().bananaImageRoute || bananaImageRoute;
-            const seedance25Vendor = resolveSeedance25VendorKey(activeRoute);
-            managedRoutePayload.managedModelKey = "seedance-2.5";
-            managedRoutePayload.vendorKey = seedance25Vendor;
-            managedRoutePayload.platformKey = seedance25Vendor;
+            const seedanceVendor = isSeedance2FamilyModelValue(seedanceModelForRequest)
+              ? resolveSeedanceVendorKey(activeRoute)
+              : "seedance_api";
+            managedRoutePayload.vendorKey = seedanceVendor;
+            managedRoutePayload.platformKey = seedanceVendor;
           }
           const normalizedVendorKey = (managedRoutePayload.vendorKey || "").toLowerCase();
           const normalizedPlatformKey = (managedRoutePayload.platformKey || "").toLowerCase();
@@ -19098,7 +19109,7 @@ function FlowInner() {
         return;
       }
 
-      if (node.type === "nano2" || node.type === "gptImage2") {
+      if (node.type === "nano2" || (node.type === "gptImage2" || node.type === "gptImage25")) {
         const nodeData =
           node.data && typeof node.data === "object"
             ? (node.data as Record<string, any>)
@@ -19124,7 +19135,7 @@ function FlowInner() {
           (typeof nodeData.model === "string" && nodeData.model.trim()) ||
           (typeof metadata?.model === "string" && metadata.model.trim()) ||
           (typeof defaultData?.model === "string" && defaultData.model.trim()) ||
-          "gemini-3.1-flash-image-preview";
+          (node.type === "gptImage25" ? "gpt-image-2.5-sunburst-vip" : "gemini-3.1-flash-image-preview");
         const {
           text: promptText,
           hasEdge: hasText,
@@ -19185,7 +19196,7 @@ function FlowInner() {
 
         try {
           const latestBananaImageRoute =
-            useAIChatStore.getState().bananaImageRoute || bananaImageRoute;
+            node.type === "gptImage25" ? "normal" : useAIChatStore.getState().bananaImageRoute || bananaImageRoute;
           const nano2AspectRatio = (() => {
             const raw = nodeData?.aspectRatio ?? defaultData?.aspectRatio;
             return typeof raw === "string" && raw.trim().length ? raw.trim() : undefined;
@@ -19213,8 +19224,9 @@ function FlowInner() {
           };
           const gptImage2Quality = (() => {
             const value = pickStringValue(
-              nodeData?.quality ?? defaultData?.quality
+              nodeData?.quality ?? defaultData?.quality ?? (node.type === "gptImage25" ? "high" : undefined)
             )?.toLowerCase();
+            if (node.type === "gptImage25" && (value === "xhigh" || value === "max")) return value;
             if (
               value === "low" ||
               value === "medium" ||
@@ -19268,7 +19280,7 @@ function FlowInner() {
             aspectRatio: nano2AspectRatio,
             imageUrls: imageDatas.length > 0 ? imageDatas : undefined,
             imageSize: nano2Resolution,
-            ...(node.type === "gptImage2"
+            ...((node.type === "gptImage2" || node.type === "gptImage25")
               ? {
                   officialFallback: gptImage2OfficialFallback,
                   ...(gptImage2Quality ? { quality: gptImage2Quality } : {}),
@@ -19287,7 +19299,7 @@ function FlowInner() {
                   ...(gptImage2MaskUrl ? { maskUrl: gptImage2MaskUrl } : {}),
                 }
               : {}),
-            ...(node.type !== "gptImage2"
+            ...((node.type !== "gptImage2" && node.type !== "gptImage25")
               ? {
                   googleSearch:
                     typeof nodeData?.googleSearch === "boolean"
@@ -19304,7 +19316,7 @@ function FlowInner() {
           if (!result.success || !result.data) {
             const msg =
               result.error?.message ||
-              (node.type === "gptImage2" ? "Gpt-Imgae-2 生成失败" : "Nano2 生成失败");
+              ((node.type === "gptImage2" || node.type === "gptImage25") ? "Gpt-Imgae-2 生成失败" : "Nano2 生成失败");
             setNodes((ns) =>
               ns.map((n) =>
                 n.id === nodeId
@@ -19330,7 +19342,7 @@ function FlowInner() {
             if (rawPreview) {
               stableImageRef = await uploadImageToStableUrl(
                 rawPreview,
-                `flow_${node.type === "gptImage2" ? "gpt_image_2" : "nano2"}_${nodeId}_${Date.now()}.png`,
+                `flow_${(node.type === "gptImage2" || node.type === "gptImage25") ? "gpt_image_2" : "nano2"}_${nodeId}_${Date.now()}.png`,
                 { reuploadUnstableRemote: true }
               );
             }
@@ -19377,7 +19389,7 @@ function FlowInner() {
               const historyId = `${nodeId}-${Date.now()}`;
               const historyRemote =
                 !isDataImageUrl(stableImageRef) && !isBlobUrl(stableImageRef);
-              const historyPrefix = node.type === "gptImage2" ? "Gpt-Imgae-2" : "Nano2";
+              const historyPrefix = node.type === "gptImage25" ? "GPT-Image-2.5" : node.type === "gptImage2" ? "Gpt-Imgae-2" : "Nano2";
               void recordImageHistoryEntry({
                 id: historyId,
                 base64: historyRemote ? undefined : stableImageRef,
@@ -19385,7 +19397,7 @@ function FlowInner() {
                 title: `${historyPrefix} ${new Date().toLocaleTimeString()}`,
                 nodeId,
                 nodeType: "generate",
-                fileName: `flow_${node.type === "gptImage2" ? "gpt_image_2" : "nano2"}_${historyId}.png`,
+                fileName: `flow_${(node.type === "gptImage2" || node.type === "gptImage25") ? "gpt_image_2" : "nano2"}_${historyId}.png`,
                 projectId,
                 keepThumbnail: false,
                 metadata: {
@@ -19401,7 +19413,7 @@ function FlowInner() {
           const msg =
             error instanceof Error
               ? error.message
-              : node.type === "gptImage2"
+              : (node.type === "gptImage2" || node.type === "gptImage25")
               ? "Gpt-Imgae-2 生成失败"
               : "Nano2 生成失败";
           setNodes((ns) =>
@@ -21229,7 +21241,7 @@ function FlowInner() {
       }
 
       // nano2 单图节点：与 generate4 相同的上传优先策略，确保远程 URL 先上传到 OSS 再派发画板事件
-      if (node.type === "nano2" || node.type === "gptImage2") {
+      if (node.type === "nano2" || (node.type === "gptImage2" || node.type === "gptImage25")) {
         const rawImageUrl =
           ((node.data as any)?.imageUrl as string | undefined) ||
           ((node.data as any)?.imageData as string | undefined);
@@ -21247,7 +21259,7 @@ function FlowInner() {
           return;
         }
 
-        const fileName = `flow_${node.type === "gptImage2" ? "gpt_image_2" : "nano2"}_${id}_${Date.now()}.png`;
+        const fileName = `flow_${(node.type === "gptImage2" || node.type === "gptImage25") ? "gpt_image_2" : "nano2"}_${id}_${Date.now()}.png`;
         const pid = useProjectContentStore.getState().projectId;
 
         try {
@@ -22260,10 +22272,12 @@ function FlowInner() {
           );
           runtimeNodeData.managedModelKey =
             resolveSeedanceManagedModelKey(normalizedSeedanceModel);
-          if (isSeedance25ModelValue(normalizedSeedanceModel)) {
-            const seedance25Vendor = resolveSeedance25VendorKey(bananaImageRoute);
-            runtimeNodeData.vendorKey = seedance25Vendor;
-            runtimeNodeData.platformKey = seedance25Vendor;
+          if (!isLinglongRestrictedPalette()) {
+            const seedanceVendor = isSeedance2FamilyModelValue(normalizedSeedanceModel)
+              ? resolveSeedanceVendorKey(bananaImageRoute)
+              : "seedance_api";
+            runtimeNodeData.vendorKey = seedanceVendor;
+            runtimeNodeData.platformKey = seedanceVendor;
           }
         }
         const defaultCreditsPerCall =

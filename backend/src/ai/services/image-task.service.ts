@@ -268,6 +268,7 @@ export class ImageTaskService {
     const providerName = String(task.aiProvider || 'gemini').trim();
     const normalizedProvider = providerName.toLowerCase();
     const normalizedModel = String(requestData?.model || '').trim().toLowerCase();
+    if (normalizedModel === 'gpt-image-2.5-sunburst-vip') return 'nano2';
     const isGptImage2Model = normalizedModel.includes('gpt-image-2');
 
     if (!isGptImage2Model) return providerName;

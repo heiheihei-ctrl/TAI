@@ -28,6 +28,8 @@ enum OutputFormat {
 
 enum ThinkingLevel {
   HIGH = 'high',
+  XHIGH = 'xhigh',
+  MAX = 'max',
   LOW = 'low',
 }
 
@@ -146,7 +148,7 @@ export class GenerateImageDto {
 
   @IsOptional()
   @IsEnum(GptImage2Quality)
-  quality?: 'auto' | 'low' | 'medium' | 'high';
+  quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
   @IsOptional()
   @IsEnum(GptImage2Background)

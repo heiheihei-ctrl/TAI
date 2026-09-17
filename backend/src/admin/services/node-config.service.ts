@@ -1023,6 +1023,39 @@ export class NodeConfigService {
         },
       },
       {
+        nodeKey: 'gptImage25',
+        nameZh: 'GPT-Image-2.5',
+        nameEn: 'GPT-Image-2.5',
+        category: 'image',
+        sortOrder: 16,
+        creditsPerCall: 143,
+        serviceType: 'gpt-image-2',
+        description: 'GPT-Image-2.5，ToAPIs 生图',
+        metadata: {
+          type: 'gptImage25',
+          flowNodeType: 'gptImage25',
+          provider: 'nano2',
+          model: 'gpt-image-2.5-sunburst-vip',
+          aspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '5:4', '4:5', '2:1', '1:2', '21:9', '9:21'],
+          resolutions: ['1K', '2K', '4K'],
+          showResolutionSelector: true,
+          showGoogleSearch: false,
+          showGoogleImageSearch: false,
+          maxReferenceImages: 16,
+          defaultData: {
+            modelProvider: 'nano2',
+            model: 'gpt-image-2.5-sunburst-vip',
+            aspectRatio: '1:1',
+            resolution: '1K',
+            quality: 'high',
+            officialFallback: false,
+            maxReferenceImages: 16,
+            googleSearch: false,
+            googleImageSearch: false,
+          },
+        },
+      },
+      {
         nodeKey: 'seedream5Pro',
         nameZh: 'Seedream 5.0 Pro',
         nameEn: 'Seedream 5.0 Pro',
@@ -1609,6 +1642,12 @@ export class NodeConfigService {
         await this.createNodeConfig(config);
         created++;
       } else {
+        if (config.nodeKey === 'gptImage25' && existing.creditsPerCall === 114) {
+          await this.prisma.nodeConfig.update({
+            where: { nodeKey: config.nodeKey },
+            data: { creditsPerCall: config.creditsPerCall },
+          });
+        }
         skipped++;
       }
     }
@@ -1708,6 +1747,39 @@ export class NodeConfigService {
             aspectRatio: '1:1',
             resolution: '1K',
             quality: 'medium',
+            officialFallback: false,
+            maxReferenceImages: 16,
+            googleSearch: false,
+            googleImageSearch: false,
+          },
+        },
+      },
+      {
+        nodeKey: 'gptImage25',
+        nameZh: 'GPT-Image-2.5',
+        nameEn: 'GPT-Image-2.5',
+        category: 'image',
+        sortOrder: 16,
+        creditsPerCall: 143,
+        serviceType: 'gpt-image-2',
+        description: 'GPT-Image-2.5，ToAPIs 生图',
+        metadata: {
+          type: 'gptImage25',
+          flowNodeType: 'gptImage25',
+          provider: 'nano2',
+          model: 'gpt-image-2.5-sunburst-vip',
+          aspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '5:4', '4:5', '2:1', '1:2', '21:9', '9:21'],
+          resolutions: ['1K', '2K', '4K'],
+          showResolutionSelector: true,
+          showGoogleSearch: false,
+          showGoogleImageSearch: false,
+          maxReferenceImages: 16,
+          defaultData: {
+            modelProvider: 'nano2',
+            model: 'gpt-image-2.5-sunburst-vip',
+            aspectRatio: '1:1',
+            resolution: '1K',
+            quality: 'high',
             officialFallback: false,
             maxReferenceImages: 16,
             googleSearch: false,
