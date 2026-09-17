@@ -6,6 +6,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 ### Fixed
+- GPT-Image-2.5 补齐节点运行与发送回调绑定，修复点击运行无响应（缺失 onRun 导致可选调用静默跳过）。
 - FlowOverlay 补齐 `isLinglongRestrictedPalette` 导入，修复 Seedance 路线判断触发的运行时 ReferenceError（该文件的 `@ts-nocheck` 会跳过此类类型诊断）。
 - Seedance 修复 TAI 画布沿用玲珑节点天翼渠道：2.x 普通/尊享提交与预览分别固定 ToAPIs/火山官方，显式路线优先于部署默认品牌并禁止跨渠道兜底；保留历史任务查询。
 - GPT-Image-2.5 暂定价格调整为 2.0 普通路线对应档位积分的 125%（向上取整），同步预览、扣费与默认节点配置；默认 High/1K 为 143 积分。

@@ -22327,6 +22327,7 @@ function FlowInner() {
           n.type === "niji7" ||
           n.type === "nano2" ||
           n.type === "gptImage2" ||
+          n.type === "gptImage25" ||
           n.type === "textChat" ||
           n.type === "promptOptimize" ||
           n.type === "seedream5" ||
