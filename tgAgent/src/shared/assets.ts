@@ -2,7 +2,7 @@
  * 资产与生成任务类型 —— 对应 DESIGN.md §9 数据模型（内存版子集）
  */
 
-export type AssetKind = "image" | "video" | "mask" | "presentation";
+export type AssetKind = "image" | "video" | "mask";
 
 /** 生成操作类型，用于画布血缘连线与方案历史呈现 */
 export type AssetOperation =
@@ -11,8 +11,7 @@ export type AssetOperation =
   | "inpaint" // 局部重绘
   | "upscale" // 高清放大（v2）
   | "outpaint" // 图片扩展（v2）
-  | "video" // 图转视频
-  | "presentation"; // 汇报 PPT 生成
+  | "video"; // 图转视频
 
 export interface Asset {
   id: string;
@@ -36,7 +35,7 @@ export interface Asset {
   createdAt: string;
 }
 
-export type GenJobKind = "image" | "video" | "presentation";
+export type GenJobKind = "image" | "video";
 
 export type GenJobStatus = "queued" | "processing" | "done" | "failed" | "cancelled";
 

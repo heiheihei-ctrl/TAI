@@ -36,14 +36,6 @@ import ClassroomListPage from '@/pages/classroom/ClassroomListPage';
 import ClassroomDetailPage from '@/pages/classroom/ClassroomDetailPage';
 import ClassroomLearnPage from '@/pages/classroom/ClassroomLearnPage';
 import ClassroomPurchasesPage from '@/pages/classroom/ClassroomPurchasesPage';
-import PptModePage from '@/pages/ppt/PptModePage';
-import PptPlaceholderPage from '@/pages/ppt/PptPlaceholderPage';
-import PptOutlineMethodPage from '@/pages/ppt/PptOutlineMethodPage';
-import PptCreatePage from "./pages/ppt/PptCreatePage";
-import PptSchemeUploadPage from '@/pages/ppt/PptSchemeUploadPage';
-import PptOneShotPage from '@/pages/ppt/PptOneShotPage';
-import PptCustomOutlinePage from '@/pages/ppt/PptCustomOutlinePage';
-import PptEditOutlinePage from '@/pages/ppt/PptEditOutlinePage';
 
 function RootRoutes() {
   const user = useAuthStore((s) => s.user);
@@ -81,27 +73,6 @@ function RootRoutes() {
         <Route path="/admin" element={<Admin />} />
         <Route path="/my-credits" element={<MyCredits />} />
         <Route path="/membership" element={<MembershipSubscribePage />} />
-        <Route path="/ppt" element={<PptModePage />} />
-        <Route path="/ppt/scheme" element={<PptSchemeUploadPage />} />
-        <Route path="/ppt/outline" element={<PptOutlineMethodPage />} />
-        <Route path="/ppt/outline/oneshot" element={<PptOneShotPage />} />
-        <Route path="/ppt/outline/custom" element={<PptCustomOutlinePage />} />
-        <Route path="/ppt/outline/edit" element={<PptEditOutlinePage />} />
-        <Route
-          path="/ppt/create"
-          element={
-            <PptCreatePage />
-          }
-        />
-        <Route
-          path="/ppt/history"
-          element={
-            <PptPlaceholderPage
-              title="创作记录"
-              description="这里将展示你的 PPT 创作历史记录。"
-            />
-          }
-        />
         {SHOW_ENTERPRISE_CONSOLE ? (
           <Route path="/enterprise/:teamId" element={<EnterpriseLayout />}>
             <Route index element={<Navigate to="projects" replace />} />

@@ -9,10 +9,10 @@
 
 ## 当前状态（2026-09-01）
 
-**已完成**：W1–2 技术验证、W3 MVP 前端增强、W4 后端（模板词库 / 运镜预设 / PPT 编排）、P0 契约对齐、代码审查全部 P0/P1 项、**平台接入批次（2026-09-01，含前端/后端/tgagent 三侧）**。
+**已完成**：W1–2 技术验证、W3 MVP 前端增强、W4 后端（模板词库 / 运镜预设）、P0 契约对齐、代码审查全部 P0/P1 项、**平台接入批次（2026-09-01，含前端/后端/tgagent 三侧）**。
 
 - ✅ ws 协议契约（`src/shared/protocol.ts`，前后端对接基准）
-- ✅ 五个 LLM 工具（brief / 生图 / 视频 / 参考分析 / PPT）+ 铁律服务端兜底
+- ✅ 四个 LLM 工具（brief / 生图 / 视频 / 参考分析）+ 铁律服务端兜底
 - ✅ pi 大脑适配层（验证点集中隔离在 `src/agent/piBrain.ts`）
 - ✅ ScriptedBrain 无 LLM 联调模式（未配 key 自动启用）
 - ✅ 视频异步任务轮询与 `video_completed` 推送、断线 seq 补发
@@ -28,7 +28,7 @@
 - ✅ **平台接入批次（2026-09-01）**，四层改动一次到位：
   - **前端**：`ManualAIMode` 增 `architecture` 列；`architectureChat` 流式对话
     （修正 `state.projectId` 编译错误 → `useProjectContentStore`）；**消费 `canvas.place`
-    落画布**（此前只打日志，图永远不出现）；`asset.video_completed` / `presentation.ready`
+    落画布**（此前只打日志，图永远不出现）；`asset.video_completed`
     回写消息；`lastSeq` 游标跨轮补发；`AbortController` 真中断 + 生成中发送键变停止键
   - **TAI 后端**：`architecture.controller.ts` 转发 `x-bff-token`（TGAGENT_BFF_SECRET）、
     `X-User-Id`（JWT sub，会话跟随用户而非 900s 过期的 token）、`lastSeq`；DTO 同步

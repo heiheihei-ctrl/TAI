@@ -132,14 +132,6 @@
     }
   },
 
-  "presentation_ready": {
-    "type": "presentation.ready",
-    "sessionId": "sess_abc123",
-    "presentationId": "pres_xxx",
-    "url": "/mock-assets/pres_xxx.pptx",
-    "totalPages": 12
-  },
-
   "error_rate_limited": {
     "type": "error",
     "sessionId": "sess_abc123",

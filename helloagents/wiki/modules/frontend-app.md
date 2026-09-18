@@ -3,11 +3,10 @@
 ## 作用
 - 负责应用入口渲染、路由定义与受保护路由的初始化策略。
 
-## PPT 逐页图片生成
-- 结果页复用 `generateImageViaAPI`，串行调用 nano2 / gpt-image-2-official，固定 stable、2K、medium、16:9；统一配色、布局要求和目录上下文。
-- 支持页面进度、缩略图切换、下载当前页及单页手动重试。运行中任务独立于组件，避免 StrictMode 重复提交；sessionStorage 仅保存远程 URL 和状态，刷新前在途页面标记待核对，不自动重提。
-- 全部页面生成成功后，结果页可将远程图片按 16:9 顺序合并导出为 PDF（`utils/pptPdf.ts`）。
-- 每页 200 仅为预估，真实扣费沿用现有后端模型规则，未新增固定 200 的 PPT 计费项。尚未实现 PPT 项目云端保存或刷新后按 taskId 恢复轮询。
+## 已移除功能
+- PPT 工具栏入口、全部 `/ppt` 页面、大纲生成接口、逐页生图和 PDF 导出已移除；旧页面地址按通用未知路由跳回首页。
+- tgAgent 的 PPT 编排工具、模板和事件协议同步移除。
+
 ## 关键文件
 - `frontend/src/main.tsx`：路由表（Home/Login/Register/Workspace/App/Admin/MyCredits 等）
 - `frontend/src/routes/ProtectedRoute.tsx`：延迟初始化认证状态，避免首页加载即请求 `/api/auth/me`

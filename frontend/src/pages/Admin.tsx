@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { getRecordChannelLabel } from "@/utils/apiUsageChannel";
 import { formatBirthdayLabel } from "@/components/profile/BirthdayPicker";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/authStore";
@@ -6254,34 +6255,6 @@ function ApiRecordsTab() {
     success: "bg-green-100 text-green-700",
     failed: "bg-red-100 text-red-700",
     pending: "bg-yellow-100 text-yellow-700",
-  };
-
-  const formatExecutionChannelLabel = (
-    channel: string | null | undefined,
-  ): string => {
-    const normalized = typeof channel === "string" ? channel.trim().toLowerCase() : "";
-    if (!normalized) return "-";
-    if (normalized === "legacy" || normalized.includes("147")) return "147";
-    if (normalized.includes("apimart")) return "Apimart";
-    if (normalized === "tencent") return "Tencent";
-    if (normalized === "tencent_vod") return "Tencent VOD";
-    return channel!.trim();
-  };
-
-  const getRecordChannelLabel = (record: ApiUsageRecord) => {
-    const actualChannel =
-      record.requestParams?.channel ||
-      record.requestParams?.executionChannel ||
-      record.requestParams?.providerChannel ||
-      record.requestParams?.platformKey ||
-      record.requestParams?.vendorKey ||
-      record.requestParams?.channelHint;
-
-    if (typeof actualChannel === "string" && actualChannel.trim()) {
-      return formatExecutionChannelLabel(actualChannel);
-    }
-
-    return formatExecutionChannelLabel(record.provider);
   };
 
   const isRecordObject = (value: unknown): value is Record<string, unknown> =>

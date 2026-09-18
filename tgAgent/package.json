@@ -16,7 +16,6 @@
   "dependencies": {
     "@earendil-works/pi-coding-agent": "0.84.3",
     "@sinclair/typebox": "0.34.52",
-    "pptxgenjs": "^3.12.0",
     "ws": "8.18.0"
   },
   "devDependencies": {

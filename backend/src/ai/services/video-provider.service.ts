@@ -240,6 +240,7 @@ export class VideoProviderService {
         route: route.route,
         providerChannel: route.vendor.platformKey || route.vendor.vendorKey,
         routedProvider: route.vendor.provider || undefined,
+        ...result.execution,
         fallbackUsed,
       },
     };

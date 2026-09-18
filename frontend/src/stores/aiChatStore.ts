@@ -7522,16 +7522,6 @@ export const useAIChatStore = create<AIChatState>()(
                           }));
                           hasReceivedDelta = true;
                         }
-                      } else if (body?.type === "presentation.ready") {
-                        const pptUrl = body?.url;
-                        if (pptUrl) {
-                          fullText = `${fullText ? `${fullText}\n\n` : ""}汇报 PPT 已生成（${body.totalPages ?? "?"} 页）：${pptUrl}`;
-                          get().updateMessage(aiMessageId, (msg) => ({
-                            ...msg,
-                            content: fullText,
-                          }));
-                          hasReceivedDelta = true;
-                        }
                       }
                     } catch {
                       // 非 JSON data 行跳过

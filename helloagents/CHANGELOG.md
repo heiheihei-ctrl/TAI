@@ -6,6 +6,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 ### Fixed
+- API 记录渠道商按产品线路分组为 ToAPIs / Tencent（尊享包含火山直连）；执行元数据优先于请求提示，保留供应商原始字段与历史记录兼容。
 - GPT-Image-2.5 补齐节点运行与发送回调绑定，修复点击运行无响应（缺失 onRun 导致可选调用静默跳过）。
 - FlowOverlay 补齐 `isLinglongRestrictedPalette` 导入，修复 Seedance 路线判断触发的运行时 ReferenceError（该文件的 `@ts-nocheck` 会跳过此类类型诊断）。
 - Seedance 修复 TAI 画布沿用玲珑节点天翼渠道：2.x 普通/尊享提交与预览分别固定 ToAPIs/火山官方，显式路线优先于部署默认品牌并禁止跨渠道兜底；保留历史任务查询。
@@ -22,13 +23,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ### Added
 - GPT-Image-2.5 独立节点接入 ToAPIs，保留 gpt-image-2.5-sunburst-vip 模型与 metadata 分辨率/方向参数，默认 1:1、1K、high、单张。
-- PPT 结果页新增将全部已生成页面按 16:9 合并导出为 PDF 的功能。
-- PPT 结果页接入 gpt-image-2-official 逐页串行生图，增加进度、缩略图、下载和单页重试；保存远程 URL 会话快照，避免刷新自动重提在途任务，明确积分为预估报价。
 - Workflow Agent：AI 对话框 `Workflow` 模式 → NestJS `POST /api/ai/workflow-chat`（DeepSeek 写 prompt + 规划 textPrompt→generate）→ 前端 `flow:agent-apply` 建节点/连线/`runNode`；结果留在画布节点。配置 `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL`。文档 `frontend/docs/22-工作流Agent.md`。
 - Deployment brand: `DEPLOYMENT_BRAND=tai|linglong` (backend) / `VITE_DEPLOYMENT_BRAND` (frontend) — distinguishes credit pricing per product line; Seedream 5.0 Pro resolution pricing: tai `1K/1.5K/2K = 65/90/140`, linglong `100/130/180`.
 - Upload storage mode: `UPLOAD_MODE=tos|local` — local writes to `LOCAL_UPLOAD_ROOT` (nginx html) and serves via `LOCAL_UPLOAD_PUBLIC_BASE_URL`; TOS mode unchanged. Frontend follows `presign.mode` / `VITE_UPLOAD_MODE` and uses `/api/uploads/file` for local multipart. Old TOS URLs remap by key when `VITE_ASSET_PUBLIC_BASE_URL` points at nginx.
 
 ### Removed
+- 删除全部 PPT 功能：画布入口、页面路由、大纲接口、逐页图片生成和 PDF 导出，以及 tgAgent 编排工具、模板、提示词和事件协议；清理专用依赖。
 - 画布图片工具栏「高清放大」功能及后端 `POST /api/ai/upscale-image` 接口（`hdUpscaleService`、`ExpandImageService.upscaleImage`）。
 
 ### Changed

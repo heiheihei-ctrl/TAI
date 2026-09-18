@@ -24,8 +24,8 @@
 
 ### tgagent 可复用的资产（移植价值高）
 - `src/agent/` — pi SDK 大脑装配、三层降级（PiBrain → ScriptedBrain）
-- `src/agent/tools/` — 5 个领域工具（brief / 生图 / 视频 / 参考分析 / PPT）
-- `src/agent/templates/` — 渲染词库 + PPT 模板（360 行，70 个断言守卫）
+- `src/agent/tools/` — 4 个领域工具（brief / 生图 / 视频 / 参考分析）
+- `src/agent/templates/` — 渲染词库（360 行，70 个断言守卫）
 - `src/shared/brief.ts` — DesignBrief 结构（需求档案，产品差异化核心）
 - `src/canvas/layout.ts` — 落位避让算法
 
@@ -191,8 +191,8 @@ historyService.resetToCurrent(label)            // 重置基线
 | **P0 契约对齐** | 修 `baseImageUrl` 发送；坐标归一化；provider 按意图分流（首轮**并发** / 迭代走 `edit-image-async`+banana-3.1）；双凭证模式；并发门控改真信号量 | — | ✅ **完成**（测试验证） |
 | **P1 联调环境** | 起 TAI 后端：补 `backend/.env`、接 PostgreSQL、跑 50 个 migration、配 `AI_API_KEYS` | **可本地建库绕过，不必等外部 `DATABASE_URL`** | 🟡 **部分**（`backend/.env` 已就位含 `TGAGENT_BASE_URL`/`TGAGENT_BFF_SECRET`；数据库/migration 未起，见 [P1-ENV-SETUP.md](P1-ENV-SETUP.md)） |
 | **P2 BFF 打通** | TAI 新增 `architecture-chat` 端点，转发 tgagent 并透传流 | P1 才能联调 | 🟡 **代码完成并加固**（透传 `x-bff-token`/`X-User-Id`/`lastSeq`；tgagent 侧 `/chat` 10 项端到端测试全绿；真实 TAI 环境待 P1 解锁） |
-| **P3 前端模式** | `ManualAIMode` 增列、分流分支、消息回写、落图 | P2 | ✅ **完成**（2026-09-01：`architecture` 模式、SSE 流式回写、`canvas.place` 落画布、视频/PPT 事件回写、`lastSeq` 补发游标、生成中可停止） |
-| **P4 能力迁移** | Brief 面板、血缘连线、候选择优、视频进度卡迁入 TAI 前端 | P3 | ⬜ 未开始（当前视频/PPT 以文本链接形式回写消息，进度卡未做） |
+| **P3 前端模式** | `ManualAIMode` 增列、分流分支、消息回写、落图 | P2 | ✅ **完成**（2026-09-01：`architecture` 模式、SSE 流式回写、`canvas.place` 落画布、视频 事件回写、`lastSeq` 补发游标、生成中可停止） |
+| **P4 能力迁移** | Brief 面板、血缘连线、候选择优、视频进度卡迁入 TAI 前端 | P3 | ⬜ 未开始（当前视频 以文本链接形式回写消息，进度卡未做） |
 | **P5 退役** | 原型前端归档退役 | P4 | ✅ 已清理（2026-08） |
 
 ### 完成度

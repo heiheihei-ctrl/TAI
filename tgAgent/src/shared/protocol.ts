@@ -216,14 +216,6 @@ export interface VideoCompleted {
   asset: Asset;
 }
 
-export interface PresentationReady {
-  type: "presentation.ready";
-  sessionId: string;
-  presentationId: string;
-  url: string;
-  totalPages: number;
-}
-
 export interface BriefUpdated {
   type: "brief.updated";
   sessionId: string;
@@ -281,7 +273,6 @@ export type DownstreamBody =
   | CanvasPlace
   | CanvasUpdate
   | VideoCompleted
-  | PresentationReady
   | BriefUpdated
   | ModeChanged
   | JobAccepted

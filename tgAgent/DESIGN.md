@@ -36,7 +36,6 @@
 - 渲染效果图：文生图 / 图生图 / 参考图约束 / 局部重绘（视 TAI 模型支持度）
 - 效果图转视频（首帧确认 → 异步生成）
 - 设计咨询建议（风格、材质、流线、案例参考；不含合规审查）
-- 汇报演示文稿编排（PPT 自动生成，含封面/目录/方案页/效果图页/尾页）
 
 **明确不做（边界声明进系统提示词与产品文案）**
 - 不替代结构与消防等合规审查；涉及安全性问题给出免责提示
@@ -175,20 +174,6 @@ params: {
 ```
 即发即忘的理由：视频分钟级耗时，阻塞会拖死会话循环；前端"我的生成中"卡片列表承接体验。
 
-### 4.5 create_presentation —— 汇报 PPT 编排（两段式异步工具）
-```
-params: {
-  title: string                    // 汇报标题
-  outline?: string[]               // 自定大纲；留空则按模板自动编排
-  assetIds?: string[]              // 要插入效果图的资产 ID（按页面顺序）
-  style?: "简洁白" | "深色专业" | "建筑工作室"  // 默认"简洁白"
-  pageCount?: number               // 期望页数，默认按大纲自动
-}
-行为：校验 title 非空 → 若未传 outline 则基于当前 brief 自动生成 → 模板引擎拼装封面/目录/方案页/效果图页/尾页 → 立即返回 { presentationId, status:"generating" } → 后台落盘完成后推送 presentation.ready 事件 `{presentationId, url, totalPages}`
-```
-
-触发时机：用户明确要求"生成汇报 PPT/方案文本/汇报材料"时调用；brief 较完整且用户转向"汇报/评审/方案交底"时，agent 可主动建议生成。
-
 ### 4.6 画布交付不做成 LLM 工具
 生成的落图动作（位置、连线到父节点、多候选横排布局）在 generate_rendering 的工具实现内完成，以 `canvas.place` 指令下发前端执行器——不让模型输出自由格式的画布命令，规避非法坐标/破坏布局的风险。个别重排版需求 v2 再加 `arrange_assets` 白名单工具。
 
@@ -205,7 +190,6 @@ params: {
 | `canvas.update` | 属性更新指令（如替换某卡片图片、标注淘汰态） |
 | `asset.video_completed` | 异步视频就绪 `{jobId,assetId,url}` |
 | `brief.updated` | 全量 brief（前端刷属性面板） |
-| `presentation.ready` | PPT 就绪 `{presentationId, url, totalPages}` |
 | `error` | 错误码 + 用户可读文案 |
 
 ### 5.2 client → server
@@ -253,13 +237,6 @@ params: {
 - v1：依赖对话模型通识 + 免责声明；
 - v2：RAG 接入常用规范条文（通用性条款）、经典案例图文库；检索结果强制附出处。
 
-### 7.4 PPT 模板库（数据文件，非硬编码）
-- 结构：`汇报场景 × 风格` 参数化拼装（brief 字段自动注入占位）；
-- 三种出厂风格：简洁白 / 深色专业 / 建筑工作室；
-- 每个模板定义：封面布局、目录样式、单页版式、图片占位比例、尾页样式；
-- 维护为版本化 JSON，存 `src/agent/templates/ppt/`；
-- 与渲染 prompt 模板库同源，共用 brief 结构化数据作为输入。
-
 ---
 
 ## 8. 安全、成本与运维要点
@@ -286,10 +263,9 @@ user(id, orgId, quota…)
 project(id, ownerId, name)
 agent_session(id, projectId, piSessionPath, treeRootMsgId)
 message(seq, sessionId, role, content, attachmentIds, seqNo)
-asset(id, projectId, kind(image|video|mask|presentation), url, meta, parentId, operation, createdByJob)
+asset(id, projectId, kind(image|video|mask), url, meta, parentId, operation, createdByJob)
 gen_job(id, projectId, userId, kind, params, status, costUnits, resultAssetIds)
 design_brief(projectId PK, json, updatedAt)
-presentation(id, projectId, title, url, totalPages, assetIds[], style, createdAt)
 ```
 
 ---
@@ -299,7 +275,7 @@ presentation(id, projectId, title, url, totalPages, assetIds[], style, createdAt
 | 阶段 | 内容 | 验收标准 |
 |---|---|---|
 | **W1–2 技术验证** ✅（2026-08-28） | ① pi 接入 DeepSeek（OpenAI 兼容端点走 models.json 自定义 provider），验证流式/tool calling/vision 图像注入三项【仅测试用，生产计费路径另行评估】② TAI 异步任务封装层：提交+轮询+超时降级+取消【依赖⑤，可先用 mock 任务源开发】③ ws 协议 demo：文本流式+假图回贴画布（React Flow 已证实，对接成本下调） | ✅ 三条链路各自端到端可用：① pi-verify 三场景 9 轮回归 + verify:vision 带图对话 4/4 视觉事实命中；② test:tai 契约测试通过（真图联调待 x-api-key）；③ smoke 冒烟通过 |
-| **W3–6 MVP（A模式）** | brief 工具+生图工具+canvas.place+多候选择优+版本迭代链+选区感知+前端 Brief 编辑+视频按钮+卡片右键菜单+PPT 编排工具（create_presentation） | brief 面板可手改、视频一键触发、多候选择优、汇报 PPT 一键生成全链路可用 |
+| **W3–6 MVP（A模式）** | brief 工具+生图工具+canvas.place+多候选择优+版本迭代链+选区感知+前端 Brief 编辑+视频按钮+卡片右键菜单 | brief 面板可手改、视频一键触发、多候选择优 |
 | **W7–8 视频线** | 首帧确认交互、generate_video 异步任务、进度卡、motionPreset 库 | 效果图→20s 环绕视频成功率与时长达标 |
 | **W9–12 建议线+打磨** | 咨询问答（含免责）、analyze_reference 上线、模板词库第二轮调优、undo/重连健壮性 | 咨询类对话占比与满意度指标建立基线 |
 | **v2 预研** | 节点工作流编排（B/C 模式）、规范 RAG、方案分支树 UI | 工作流模板 DSL 草案评审通过 |
@@ -370,7 +346,6 @@ P0 生产加固项（会话键/入口防护/错误码消费）不属于"待决"�
 |---|---|---|---|
 | ⑦ | `canvas.place` React Flow 执行器 | 后端 `emit({ type: "canvas.place" })` 已通 | ⛔ **作废（2026-08-30）**。原「装 `@xyflow/react` 替换卡片」写于"做独立应用"的定位下，与终态冲突。TAI 前端本身已是 React Flow 11（`frontend/package.json` 有 `reactflow ^11.11.4`）。落位算法可复用，节点结构按平台现有节点重写即可，无需再引入 xyflow |
 | ⑧ | DesignBrief 属性面板 | 原型前端已验证 Brief 面板交互（字段编辑 + `brief.patch` 回写） | ✅ 概念已验证（2026-08-30 核实）。P4 阶段在 TAI 前端重做，而非从零实现 |
-| ⑨ | PPT/汇报模板引擎（create_presentation） | 工具定义在 §4.5，后端实现待做 | v2 阶段，先出 DSL 原型 |
 | ⑩ | 方案分支树 UI | 会话树分支/切换的前端 | v2 阶段，后端 `session.fork/switch` 已路由（报错占位） |
 
 > ⚠️ **P3 提醒**：`aiChatStore.ts` 的 `manualToolMap` 在 **`:7249` 与 `:7680` 两处**重复定义

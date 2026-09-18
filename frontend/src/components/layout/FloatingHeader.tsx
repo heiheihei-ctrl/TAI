@@ -82,6 +82,7 @@ import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useGlobalPaymentPoll } from "@/hooks/useGlobalPaymentPoll";
 import MembershipPanel from "@/components/payment/MembershipPanel";
 import { SHOW_TEAM_COLLABORATION, SHOW_ENTERPRISE_CONSOLE, SHOW_WORKSPACE_SWITCHER } from "@/config/featureFlags";
+import { getDeploymentBrand } from "@/config/deploymentBrand";
 import { isLinglongRestrictedPalette } from "@/config/linglongPalette";
 import { TeamSwitcher } from "@/components/team/TeamSwitcher";
 import { EnterpriseLedgerModal } from "@/components/team/EnterpriseLedgerModal";
@@ -487,6 +488,11 @@ const FloatingHeader: React.FC = () => {
 
   // 等认证 init 稳定后再判定，避免登录进画布时 AuthWrapper 闪屏误 mark 导致重挂不弹
   useEffect(() => {
+    // linglong 身份下隐藏「联系我们」弹窗
+    if (getDeploymentBrand() === "linglong") {
+      closeWechatQrPanel();
+      return;
+    }
     if (!contactPopupUserId) {
       closeWechatQrPanel();
       return;
@@ -2961,6 +2967,7 @@ const FloatingHeader: React.FC = () => {
               </Button>
             </div>
 
+            {getDeploymentBrand() !== "linglong" ? (
             <div className='relative'>
               {isWechatQrOpen && (
                 <div
@@ -3033,6 +3040,7 @@ const FloatingHeader: React.FC = () => {
                 <MessageCircle className='w-4 h-4' />
               </Button>
             </div>
+            ) : null}
 
             {/* 闂傚倸鍊峰ù鍥х暦閸?*/}
             <Button

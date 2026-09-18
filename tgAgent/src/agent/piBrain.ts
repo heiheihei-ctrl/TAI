@@ -68,7 +68,7 @@ export class PiBrain implements Brain {
     await loader.reload();
 
     // ── 阶段3：创建会话（显式工具白名单：只有我们的领域工具）──
-    const toolNames = ["update_design_brief", "generate_rendering", "generate_video", "analyze_reference", "create_presentation"];
+    const toolNames = ["update_design_brief", "generate_rendering", "generate_video", "analyze_reference"];
     const { session } = await createAgentSession({
       model,
       thinkingLevel: "medium",
