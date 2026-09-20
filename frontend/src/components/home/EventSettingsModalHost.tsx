@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import EventSettingsModal from '@/components/home/EventSettingsModal';
+import { getDeploymentBrand } from '@/config/deploymentBrand';
 import {
   EVENT_SETTINGS_DISMISS_KEY,
   fetchPublicEventSettings,
@@ -13,6 +14,7 @@ export default function EventSettingsModalHost() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
+    if (getDeploymentBrand() === 'linglong') return;
     void fetchPublicEventSettings().then((data) => {
       if (!isEventSettingsActive(data)) return;
 
@@ -23,6 +25,8 @@ export default function EventSettingsModalHost() {
       setOpen(true);
     });
   }, []);
+
+  if (getDeploymentBrand() === 'linglong') return null;
 
   return (
     <EventSettingsModal

@@ -6,6 +6,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 ### Fixed
+- 玲珑身份隐藏每日签到赠送入口、顶部资料/签到赠送提醒及公告弹窗，登录跳过完善资料送积分提示；保留其他身份展示与后端发放规则。
 - API 记录渠道商按产品线路分组为 ToAPIs / Tencent（尊享包含火山直连）；执行元数据优先于请求提示，保留供应商原始字段与历史记录兼容。
 - GPT-Image-2.5 补齐节点运行与发送回调绑定，修复点击运行无响应（缺失 onRun 导致可选调用静默跳过）。
 - FlowOverlay 补齐 `isLinglongRestrictedPalette` 导入，修复 Seedance 路线判断触发的运行时 ReferenceError（该文件的 `@ts-nocheck` 会跳过此类类型诊断）。

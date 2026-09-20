@@ -1078,7 +1078,7 @@ const FloatingHeader: React.FC = () => {
       isProfileCheckInBannerPermanentlyDismissed(user?.id));
 
   const showProfileBannerSection = Boolean(
-    user &&
+    getDeploymentBrand() !== "linglong" && user &&
       extendedProfileLoaded &&
       extendedProfile &&
       !extendedProfile.isComplete &&
@@ -1087,7 +1087,7 @@ const FloatingHeader: React.FC = () => {
   );
 
   const showCheckInBannerSection = Boolean(
-    user &&
+    getDeploymentBrand() !== "linglong" && user &&
       checkInStatusLoaded &&
       checkInStatus &&
       !shouldHideCheckInReminder(checkInStatus) &&
@@ -2882,6 +2882,7 @@ const FloatingHeader: React.FC = () => {
             </DropdownMenu>
             ) : null}
 
+            {getDeploymentBrand() !== "linglong" && (
             <Button
               variant='ghost'
               size='sm'
@@ -2898,6 +2899,8 @@ const FloatingHeader: React.FC = () => {
                 <span className='absolute top-0.5 right-0.5 w-2 h-2 bg-red-500 rounded-full border border-white' />
               )}
             </Button>
+
+            )}
 
             <WorkflowHistoryButton projectId={currentProject?.id ?? null} />
 
@@ -3090,7 +3093,7 @@ const FloatingHeader: React.FC = () => {
 
                     {/* 闂傚倸鍊峰ù鍥敋瑜忛懞閬嶆嚃閳轰胶绛忕紓鍌欑劍椤洭鎮甸崼鏇熺厱妞ゆ劗濮撮崝姘舵煛閸曗晛鍔﹂柡灞剧☉閳藉螣閸忓吋鍠栭梻浣规偠閸婃牕煤濡吋宕叉繝闈涙川缁♀偓闂佺鏈喊宥呪枔椤撶姷纾藉ù锝嗗絻娴?*/}
                     <div className='flex-1 px-4 space-y-2'>
-                      {SETTINGS_SECTIONS.map((section) => {
+                      {SETTINGS_SECTIONS.filter((section) => getDeploymentBrand() !== "linglong" || section.id !== "referral").map((section) => {
                         const Icon = section.icon;
                         const isActive = activeSettingsSection === section.id;
                         const hasNotification =
@@ -3161,7 +3164,7 @@ const FloatingHeader: React.FC = () => {
                     className='tanva-settings-content flex-1 px-4 py-6 overflow-y-auto sm:px-6'
                   >
                     <div className='flex flex-wrap gap-2 mb-4 sm:hidden'>
-                      {SETTINGS_SECTIONS.map((section) => {
+                      {SETTINGS_SECTIONS.filter((section) => getDeploymentBrand() !== "linglong" || section.id !== "referral").map((section) => {
                         const Icon = section.icon;
                         const isActive = activeSettingsSection === section.id;
                         return (

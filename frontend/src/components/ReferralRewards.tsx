@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import { getDeploymentBrand } from "@/config/deploymentBrand";
 import {
   getReferralStats,
   getCheckInStatus,
@@ -23,6 +24,7 @@ const normalizeInviteCodeForDisplay = (inviteCode?: string | null) => {
 
 export default function ReferralRewards() {
   const { t } = useTranslation();
+  const rewardsVisible = getDeploymentBrand() !== "linglong";
   const [stats, setStats] = useState<ReferralStats | null>(null);
   const [checkInStatus, setCheckInStatus] = useState<CheckInStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -30,6 +32,7 @@ export default function ReferralRewards() {
   const [copied, setCopied] = useState(false);
 
   const loadData = async () => {
+    if (!rewardsVisible) return;
     setLoading(true);
     try {
       const [statsData, checkInData] = await Promise.all([
@@ -50,7 +53,7 @@ export default function ReferralRewards() {
   }, []);
 
   const handleCheckIn = async () => {
-    if (!checkInStatus?.canCheckIn || checkingIn) return;
+    if (!rewardsVisible || !checkInStatus?.canCheckIn || checkingIn) return;
     setCheckingIn(true);
     try {
       const result = await checkIn();
@@ -95,6 +98,8 @@ export default function ReferralRewards() {
       setTimeout(() => setCopied(false), 2000);
     }
   };
+
+  if (!rewardsVisible) return null;
 
   const formatTimeAgo = (dateStr: string) => {
     const date = new Date(dateStr);

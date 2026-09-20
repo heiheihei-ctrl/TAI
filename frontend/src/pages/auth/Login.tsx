@@ -198,6 +198,11 @@ export default function LoginPage() {
   };
 
   const finishLoginFlow = async (destination: string) => {
+    if (getDeploymentBrand() === "linglong") {
+      releaseProfileGate();
+      navigate(destination, { replace: true });
+      return;
+    }
     let profile = DEFAULT_INCOMPLETE_PROFILE;
     try {
       profile = await fetchProfileAfterLogin();
