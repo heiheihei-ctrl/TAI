@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 ### Fixed
+- Seedream 5.0（非 Pro）普通路线改为 ToAPIs（`doubao-seedream-5-0`），尊享仍走火山方舟；Provider 透传全局 `imageRoute`，避免普通路线误打 ARK。
+- Vite 开发代理将浏览器侧 WebSocket 的 ECONNABORTED/ECONNRESET/EPIPE 改为简短断连警告，保留上游连接、HTTP 代理及未知错误的原始日志；不改变连接与重连行为。
 - 玲珑身份隐藏每日签到赠送入口、顶部资料/签到赠送提醒及公告弹窗，登录跳过完善资料送积分提示；保留其他身份展示与后端发放规则。
 - API 记录渠道商按产品线路分组为 ToAPIs / Tencent（尊享包含火山直连）；执行元数据优先于请求提示，保留供应商原始字段与历史记录兼容。
 - GPT-Image-2.5 补齐节点运行与发送回调绑定，修复点击运行无响应（缺失 onRun 导致可选调用静默跳过）。
@@ -33,6 +35,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - 画布图片工具栏「高清放大」功能及后端 `POST /api/ai/upscale-image` 接口（`hdUpscaleService`、`ExpandImageService.upscaleImage`）。
 
 ### Changed
+- AI/Linglong: 天翼云新建任务严格限定 `DEPLOYMENT_BRAND=linglong`；TAI 下忽略残留 `vendorKey=tianyi`，前端同步清掉 Seedance 节点粘性天翼渠道。
 - AI 对话框请求超时统一调整为 120 秒；GPT-6 文本模型固定按 10 积分/次扣费。
 - AI 对话框请求超时调整为 120 秒；GPT-6 文本模型固定按 10 积分扣费，其他文本模型价格不变。
 - Credits/Quota: 已加入企业工作区（`Team.enterpriseEnabled=true`）的成员豁免免费日/月生图与生视频配额限制。

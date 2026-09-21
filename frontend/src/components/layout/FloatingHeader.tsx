@@ -364,7 +364,7 @@ const FloatingHeader: React.FC = () => {
   const [enterpriseEntryBusy, setEnterpriseEntryBusy] = useState(false);
   const [joinCodeModalOpen, setJoinCodeModalOpen] = useState(false);
   const isLinglongBrand = isLinglongRestrictedPalette();
-  const showEnterpriseEntry = SHOW_ENTERPRISE_CONSOLE && !isLinglongBrand;
+  const showEnterpriseEntry = SHOW_ENTERPRISE_CONSOLE;
   const showBananaRouteSelector = !isLinglongBrand;
   const [teamMyQuota, setTeamMyQuota] = useState<MyTeamQuota | null>(null);
   const [teamMyQuotaLoading, setTeamMyQuotaLoading] = useState(false);

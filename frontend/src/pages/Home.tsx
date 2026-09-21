@@ -1259,7 +1259,7 @@ export default function Home() {
           }}
         />
       ) : null}
-      {SHOW_ENTERPRISE_CONSOLE && getDeploymentBrand() !== "linglong" ? (
+      {SHOW_ENTERPRISE_CONSOLE ? (
         <aside
           className="fixed right-4 top-1/2 z-40 hidden w-[148px] -translate-y-1/2 flex-col items-center rounded-2xl bg-[#1e2128] px-3 pb-3 pt-4 shadow-[0_12px_40px_rgba(0,0,0,0.45)] sm:flex md:right-6"
           aria-label={t("enterprise.homeActions.enterpriseContactLabel")}

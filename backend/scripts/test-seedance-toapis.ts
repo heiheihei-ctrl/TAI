@@ -64,6 +64,10 @@ async function main() {
       assert.equal((await service.generateManagedSeedance({ ...options, seedanceModel, vendorKey: 'seedance_api' })).taskId, 'official:test');
     }
     assert.equal((await service.generateManagedSeedance({ ...options, vendorKey: 'tianyi' })).taskId, 'tianyi:test');
+    // TAI 部署下即使残留 vendorKey=tianyi 也不得走天翼
+    process.env.DEPLOYMENT_BRAND = 'tai';
+    assert.equal((await service.generateManagedSeedance({ ...options, vendorKey: 'tianyi' })).taskId, 'official:test');
+    process.env.DEPLOYMENT_BRAND = 'linglong';
     service.modelRoutingService.resolveVideoModelCandidates = async () => [
       { vendor: { vendorKey: 'seedance_api' }, route: 'legacy' },
     ];

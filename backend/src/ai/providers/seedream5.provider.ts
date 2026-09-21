@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { IAIProvider } from './ai-provider.interface';
 import { Seedream5Service } from '../services/seedream5.service';
 import { getDeploymentBrand } from '../../config/deployment-brand';
+import { getToapisApiKey } from '../../utils/toapisHttpClient';
 
 @Injectable()
 export class Seedream5Provider implements IAIProvider {
@@ -29,9 +30,10 @@ export class Seedream5Provider implements IAIProvider {
     const watchaApiKey =
       this.config.get<string>('WATCHA_SEEDREAM_API_KEY') ||
       this.config.get<string>('WATCHA_API_KEY');
-    this.available = !!doubaoApiKey || !!watchaApiKey;
+    const toapisApiKey = getToapisApiKey();
+    this.available = !!doubaoApiKey || !!watchaApiKey || !!toapisApiKey;
     this.logger.log(
-      `Seedream5 provider initialized: ${this.available ? 'available' : 'unavailable'} (doubao=${!!doubaoApiKey}, watcha=${!!watchaApiKey})`,
+      `Seedream5 provider initialized: ${this.available ? 'available' : 'unavailable'} (doubao=${!!doubaoApiKey}, watcha=${!!watchaApiKey}, toapis=${!!toapisApiKey})`,
     );
   }
 
@@ -43,14 +45,39 @@ export class Seedream5Provider implements IAIProvider {
     return { name: 'seedream5', model: 'doubao-seedream-5-0-260128' };
   }
 
+  private resolveImageRoute(request: any): 'normal' | 'stable' | undefined {
+    const routes = [
+      request?.providerOptions?.banana?.imageRoute,
+      request?.providerOptions?.bananaImageRoute,
+      request?.bananaImageRoute,
+      request?.imageRoute,
+    ];
+    return routes
+      .map((value) =>
+        typeof value === 'string' ? value.trim().toLowerCase() : '',
+      )
+      .find((value) => value === 'normal' || value === 'stable') as
+      | 'normal'
+      | 'stable'
+      | undefined;
+  }
+
   async generateImage(request: any): Promise<any> {
-    const providerInfo = await this.seedream5Service.getProviderExecutionInfo();
+    const imageRoute = this.resolveImageRoute(request);
+    const model = request?.model || 'doubao-seedream-5-0-260128';
+    const providerInfo = await this.seedream5Service.getProviderExecutionInfo(
+      model,
+      imageRoute,
+    );
     const result = await this.seedream5Service.generateImage({
       prompt: request.prompt,
       size: request.imageSize || '2K',
       image_urls: request.imageUrls,
       batchMode: request.batchMode,
       batchCount: request.batchCount,
+      model,
+      imageRoute,
+      aspectRatio: request.aspectRatio,
     });
 
     this.logger.log(`Seedream5 generation completed`);
@@ -113,7 +140,8 @@ export class Seedream5Provider implements IAIProvider {
       success: false,
       error: {
         code: 'NOT_SUPPORTED',
-        message: 'Seedream5 provider does not support text generation. Please use Banana or Gemini provider for text chat.',
+        message:
+          'Seedream5 provider does not support text generation. Please use Banana or Gemini provider for text chat.',
       },
     };
   }

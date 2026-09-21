@@ -1414,6 +1414,51 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       return;
     }
 
+    // TAI：清掉玲珑会话残留的 tianyi，避免提交时误打天翼云
+    if (
+      !isLinglongRestrictedPalette() &&
+      provider === "doubao" &&
+      typeof data.vendorKey === "string" &&
+      data.vendorKey.trim().toLowerCase() === "tianyi"
+    ) {
+      if (!managedRoutesMetadata || managedRoutesMetadata.vendors.length === 0) {
+        window.dispatchEvent(
+          new CustomEvent("flow:updateNodeData", {
+            detail: {
+              id,
+              patch: {
+                vendorKey: undefined,
+                platformKey: undefined,
+              },
+            },
+          })
+        );
+        return;
+      }
+      const fallbackVendor =
+        managedRoutesMetadata.vendors.find(
+          (item) => item.vendorKey === managedRoutesMetadata.defaultVendor
+        ) || managedRoutesMetadata.vendors[0];
+      if (!fallbackVendor) return;
+      window.dispatchEvent(
+        new CustomEvent("flow:updateNodeData", {
+          detail: {
+            id,
+            patch: {
+              managedModelKey: managedRoutesMetadata.modelKey,
+              vendorKey: fallbackVendor.vendorKey,
+              platformKey: fallbackVendor.platformKey || fallbackVendor.vendorKey,
+              creditsPerCall:
+                typeof fallbackVendor.creditsPerCall === "number"
+                  ? fallbackVendor.creditsPerCall
+                  : undefined,
+            },
+          },
+        })
+      );
+      return;
+    }
+
     if (!managedRoutesMetadata || managedRoutesMetadata.vendors.length === 0) return;
     if (selectedManagedRoute) return;
     const fallbackVendor =

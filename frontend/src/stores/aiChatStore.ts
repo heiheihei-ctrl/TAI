@@ -629,7 +629,9 @@ type SetAIProviderOptions = {
 const isBananaImageProvider = (provider: AIProviderType): boolean =>
   isBananaRouteProvider(provider) ||
   provider === "gemini-pro" ||
-  provider === "nano2";
+  provider === "nano2" ||
+  provider === "seedream5" ||
+  provider === "seedream5Pro";
 
 const isAnalyzeDisabledOnCurrentBananaRoute = (
   provider: AIProviderType,

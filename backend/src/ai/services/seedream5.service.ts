@@ -178,19 +178,24 @@ export class Seedream5Service {
       };
     }
 
-    const isProModel = overrideModel?.includes('seedream-5-0-pro');
-    if (isProModel && imageRoute === 'normal') {
+    const isProModel = Boolean(overrideModel?.includes('seedream-5-0-pro'));
+
+    // 普通路线：统一走 ToAPIs；尊享（stable / 未指定）走火山方舟
+    if (imageRoute === 'normal') {
       const apiKey = getToapisApiKey();
-      if (!apiKey) throw new Error('Seedream5 Pro 普通线路未配置 TOAPIS_TOKEN');
+      if (!apiKey) {
+        throw new Error('Seedream5 普通线路未配置 TOAPIS_TOKEN');
+      }
       return {
         provider: 'toapis',
         endpoint: getToapisApiBaseUrl(),
         apiKey,
-        model: 'doubao-seedream-5-0-pro',
+        model: isProModel ? 'doubao-seedream-5-0-pro' : 'doubao-seedream-5-0',
         generationPath: '/images/generations',
         watermark: false,
       };
     }
+
     const provider = isProModel ? 'doubao' : await this.getConfiguredProvider();
 
     if (provider === 'watcha') {
@@ -216,7 +221,11 @@ export class Seedream5Service {
       provider: 'doubao',
       endpoint: this.doubaoEndpoint,
       apiKey: this.doubaoApiKey,
-      model: overrideModel || 'doubao-seedream-5-0-260128',
+      model:
+        overrideModel ||
+        (isProModel
+          ? 'doubao-seedream-5-0-pro-260628'
+          : 'doubao-seedream-5-0-260128'),
       generationPath: '/api/v3/images/generations',
       watermark: false,
     };
@@ -363,12 +372,12 @@ export class Seedream5Service {
       const status = extractUpstreamImageTaskStatus(data);
       const error = extractUpstreamImageTaskError(data);
       if (isUpstreamImageTaskFailed(status) || error) {
-        throw new Error(`Seedream5 Pro ToAPIs: ${error || status}`);
+        throw new Error(`Seedream5 ToAPIs: ${error || status}`);
       }
       const imageUrl = extractUpstreamImageUrl(data) || data?.data?.[0]?.url;
       if (typeof imageUrl === 'string' && imageUrl.trim()) return { imageUrl: imageUrl.trim() };
       if (isUpstreamImageTaskCompleted(status) || !taskId) {
-        throw new Error('Seedream5 Pro ToAPIs 未返回图片 URL');
+        throw new Error('Seedream5 ToAPIs 未返回图片 URL');
       }
       signal.throwIfAborted();
       await new Promise((resolve) => setTimeout(resolve, 2000));

@@ -120,6 +120,15 @@ export class TianyiCloudService {
     }
   }
 
+  /** 新建天翼任务仅允许 linglong；历史任务查询不受此限。 */
+  private assertLinglongCreateAllowed(): void {
+    if (getDeploymentBrand() !== 'linglong') {
+      throw new BadRequestException(
+        '天翼云接口仅在 DEPLOYMENT_BRAND=linglong 下可用',
+      );
+    }
+  }
+
   private normalizeApiKey(value?: string): string {
     if (!value) return '';
     let key = value.trim();
@@ -158,6 +167,7 @@ export class TianyiCloudService {
     imageUrls?: string[];
     model?: string;
   }): Promise<{ imageUrl?: string; imageUrls?: string[] }> {
+    this.assertLinglongCreateAllowed();
     this.assertConfigured();
 
     const size = (params.size || '2K').trim() || '2K';
@@ -235,6 +245,7 @@ export class TianyiCloudService {
     videoMode?: string;
     cameraFixed?: boolean;
   }): Promise<{ taskId: string; status: 'queued' }> {
+    this.assertLinglongCreateAllowed();
     this.assertConfigured();
 
     if (!Array.isArray(params.content) || params.content.length === 0) {

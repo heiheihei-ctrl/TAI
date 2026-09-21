@@ -2495,9 +2495,22 @@ export class AdminService {
     }
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.teamCreditAccount.deleteMany({ where: { teamId } });
-      await tx.teamCreditLedger.deleteMany({ where: { teamAccId: { in: [] } } });
-      await tx.teamCreditLot.deleteMany({ where: { teamCreditAccId: { in: [] } } });
+      // Project.teamId 为 SetNull，先显式解绑，避免残留引用
+      await tx.project.updateMany({
+        where: { teamId },
+        data: { teamId: null },
+      });
+
+      const creditAcc = await tx.teamCreditAccount.findUnique({
+        where: { teamId },
+        select: { id: true },
+      });
+      if (creditAcc) {
+        await tx.teamCreditLedger.deleteMany({ where: { teamAccId: creditAcc.id } });
+        await tx.teamCreditLot.deleteMany({ where: { teamCreditAccId: creditAcc.id } });
+        await tx.teamCreditAccount.delete({ where: { id: creditAcc.id } });
+      }
+
       await tx.teamSubscription.updateMany({
         where: { teamId, status: 'active' },
         data: { status: 'cancelled', cancelledAt: new Date() },
@@ -2505,7 +2518,13 @@ export class AdminService {
       await tx.teamSeatPackage.deleteMany({ where: { teamId } });
       await tx.teamProjectShare.deleteMany({ where: { teamId } });
       await tx.teamInvite.deleteMany({ where: { teamId } });
+      await tx.teamJoinRequest.deleteMany({ where: { teamId } });
       await tx.teamMembership.deleteMany({ where: { teamId } });
+      await tx.teamAsset.deleteMany({ where: { teamId } });
+      await tx.teamAssetFolder.deleteMany({ where: { teamId } });
+      // Enterprise.workspaceTeamId 为 Cascade，但显式删除更清晰
+      await tx.enterprise.deleteMany({ where: { workspaceTeamId: teamId } });
+
       await tx.team.delete({ where: { id: teamId } });
     });
 

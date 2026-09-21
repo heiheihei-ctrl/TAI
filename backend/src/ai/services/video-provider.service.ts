@@ -1757,11 +1757,13 @@ export class VideoProviderService {
   ): Promise<VideoGenerationResult> {
     const resolved = this.resolveManagedSeedanceModel(options);
 
+    // 天翼云仅 linglong 部署可用；TAI 下即使请求残留 vendorKey=tianyi 也忽略，走受管路线。
     // 显式官方/ToAPIs 路线不能被部署默认品牌覆盖。
     const vendorKey = String(options.vendorKey || options.platformKey || '')
       .trim()
       .toLowerCase();
-    if (vendorKey === "tianyi" || (!vendorKey && getDeploymentBrand() === "linglong")) {
+    const isLinglongBrand = getDeploymentBrand() === "linglong";
+    if (isLinglongBrand && (vendorKey === "tianyi" || !vendorKey)) {
       try {
         const linglongResolved = {
           modelKey: "seedance-1.5" as const,

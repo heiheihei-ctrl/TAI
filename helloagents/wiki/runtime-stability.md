@@ -6,6 +6,7 @@
 - Deployment: Docker build consistency and nginx cache policy alignment.
 
 ## Frontend changes
+- Vite 开发代理使用定向日志处理：仅 `ws proxy socket error` 的 `ECONNABORTED` / `ECONNRESET` / `EPIPE` 降为简短警告，不吞掉断连事件，也不移除 socket 错误监听。其他错误保持原样。该处理改善断连日志，不修复网络故障；持续断连需检查后端 4000 端口、浏览器 WS 握手状态及网络/隧道。回归：在前端目录运行 `node --experimental-strip-types --test scripts/viteProxyLogger.test.mjs`（Node 22.6+）。
 - Added startup runtime bootstrap in `frontend/src/bootstrap/runtimeStability.ts`.
 - Added storage schema guard keyed by `VITE_STORAGE_SCHEMA_VERSION` to clear stale persisted client state during breaking releases.
 - Added production version polling against `/version.json`, with reload flow on mismatch.

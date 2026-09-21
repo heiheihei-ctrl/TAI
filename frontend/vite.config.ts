@@ -2,6 +2,7 @@ import { defineConfig, type PluginOption } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath, URL } from 'node:url';
 import { readFileSync } from 'node:fs';
+import { createProxyLogger } from './scripts/viteProxyLogger';
 
 type PackageJson = {
   version?: string;
@@ -45,6 +46,7 @@ function emitVersionManifest(): PluginOption {
 
 // https://vite.dev/config/
 export default defineConfig({
+  customLogger: createProxyLogger(),
   plugins: [react(), emitVersionManifest()],
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),

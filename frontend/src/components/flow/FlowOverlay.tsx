@@ -17278,8 +17278,17 @@ function FlowInner() {
             const seedanceVendor = isSeedance2FamilyModelValue(seedanceModelForRequest)
               ? resolveSeedanceVendorKey(activeRoute)
               : "seedance_api";
+            // TAI 身份强制覆盖，避免节点残留 vendorKey=tianyi 打到天翼云
             managedRoutePayload.vendorKey = seedanceVendor;
             managedRoutePayload.platformKey = seedanceVendor;
+          } else if (
+            isSeedanceNode &&
+            isLinglongRestrictedPalette() &&
+            (!managedRoutePayload.vendorKey ||
+              managedRoutePayload.vendorKey.toLowerCase() !== "tianyi")
+          ) {
+            managedRoutePayload.vendorKey = "tianyi";
+            managedRoutePayload.platformKey = "tianyi";
           }
           const normalizedVendorKey = (managedRoutePayload.vendorKey || "").toLowerCase();
           const normalizedPlatformKey = (managedRoutePayload.platformKey || "").toLowerCase();
@@ -19533,6 +19542,8 @@ function FlowInner() {
             (node.data as any)?.size
           );
 
+          const latestBananaImageRoute =
+            useAIChatStore.getState().bananaImageRoute || bananaImageRoute;
           const result = await generateImageViaAPI({
             prompt: promptText || "",
             aiProvider: "seedream5",
@@ -19540,6 +19551,11 @@ function FlowInner() {
             imageUrls: imageDatas.length > 0 ? imageDatas : undefined,
             batchMode: false,
             batchCount: 4,
+            providerOptions: {
+              banana: {
+                imageRoute: latestBananaImageRoute === "stable" ? "stable" : "normal",
+              },
+            },
           });
 
           if (!result.success || !result.data) {
@@ -19740,6 +19756,8 @@ function FlowInner() {
             (node.data as any)?.size
           );
 
+          const latestBananaImageRoute =
+            useAIChatStore.getState().bananaImageRoute || bananaImageRoute;
           const result = await generateImageViaAPI({
             prompt: promptText || "",
             aiProvider: "seedream5Pro",
@@ -19747,6 +19765,11 @@ function FlowInner() {
             imageUrls: imageDatas.length > 0 ? imageDatas : undefined,
             batchMode: false,
             batchCount: 1,
+            providerOptions: {
+              banana: {
+                imageRoute: latestBananaImageRoute === "stable" ? "stable" : "normal",
+              },
+            },
           });
 
           if (!result.success || !result.data) {
@@ -20114,7 +20137,9 @@ function FlowInner() {
           normalized === "banana" ||
           normalized.startsWith("banana-") ||
           normalized === "gemini-pro" ||
-          normalized === "nano2"
+          normalized === "nano2" ||
+          normalized === "seedream5" ||
+          normalized === "seedream5pro"
         ) {
           return {
             banana: {
