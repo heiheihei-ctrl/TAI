@@ -13,6 +13,7 @@ import RunCreditBadge from "./RunCreditBadge";
 import { useImageNodeCreditsPreview } from "../hooks/useImageNodeCreditsPreview";
 import FlowResizableNodeShell from "./FlowResizableNodeShell";
 import { useFlowNodeConfigTitle } from "../utils/nodeConfigTitle";
+import { isLinglongRestrictedPalette } from "@/config/linglongPalette";
 
 type Props = {
   id: string;
@@ -25,6 +26,8 @@ type Props = {
     batchCount?: number;
     size?: string;
     watermark?: boolean;
+    /** generate | layerDecomposition（仅 linglong） */
+    seedreamMode?: "generate" | "layerDecomposition";
     creditsPerCall?: number;
     managedModelKey?: string;
     vendorKey?: string;
@@ -80,6 +83,12 @@ function Seedream5ProNode({ id, data, selected }: Props) {
       ? data.size.trim()
       : "2K";
   const sizePresetValue = normalizeSeedreamProSize(rawSizeValue);
+
+  const isLinglong = isLinglongRestrictedPalette();
+  const seedreamMode =
+    data.seedreamMode === "layerDecomposition" && isLinglong
+      ? "layerDecomposition"
+      : "generate";
 
   const [hover, setHover] = React.useState<string | null>(null);
   const [showHelp, setShowHelp] = React.useState(false);
@@ -286,6 +295,15 @@ function Seedream5ProNode({ id, data, selected }: Props) {
             <strong>{lt("区域编辑", "Local Editing")}:</strong>{" "}
             {lt("支持圈选、标注等局部编辑", "Local edit with boxes/annotations")}
           </div>
+          {isLinglong && (
+            <div style={{ marginBottom: 3 }}>
+              <strong>{lt("图层拆分", "Layer Decomposition")}:</strong>{" "}
+              {lt(
+                "基于参考图自动拆分图层（天翼云，可不填提示词）",
+                "Split reference image into layers via Tianyi (prompt optional)"
+              )}
+            </div>
+          )}
           <div style={{ color: "#6b7280", fontSize: 10, marginTop: 4 }}>
             {lt("提示：多图输入可组合不同元素", "Tip: Multiple images can combine different elements")}
           </div>
@@ -306,6 +324,39 @@ function Seedream5ProNode({ id, data, selected }: Props) {
             `已连接 ${imageInputCount} 张图片，最多支持 5 张，只会使用前 5 张`,
             `Connected ${imageInputCount} images, max 5 supported, only first 5 will be used`
           )}
+        </div>
+      )}
+
+      {isLinglong && (
+        <div style={{ marginBottom: 8 }}>
+          <label style={{ display: "block", fontSize: 12, color: "#6b7280", marginBottom: 2 }}>
+            {lt("生成模式", "Mode")}
+          </label>
+          <select
+            value={seedreamMode}
+            onChange={(e) =>
+              updateData({
+                seedreamMode:
+                  e.target.value === "layerDecomposition"
+                    ? "layerDecomposition"
+                    : "generate",
+              })
+            }
+            style={{
+              width: "100%",
+              fontSize: 12,
+              padding: "4px 6px",
+              borderRadius: 6,
+              border: "1px solid #e5e7eb",
+              outline: "none",
+              background: "#fff",
+            }}
+            onPointerDownCapture={stopNodeDrag}
+            onMouseDownCapture={stopNodeDrag}
+          >
+            <option value="generate">{lt("文生图 / 图生图", "Text / Image to Image")}</option>
+            <option value="layerDecomposition">{lt("图层拆分", "Layer Decomposition")}</option>
+          </select>
         </div>
       )}
 

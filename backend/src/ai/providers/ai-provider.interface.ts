@@ -103,6 +103,8 @@ export interface ImageGenerationRequest {
   googleImageSearch?: boolean;
   batchMode?: boolean;
   batchCount?: number;
+  /** linglong 天翼 Seedream 5.0 Pro：图层拆分 */
+  layerDecomposition?: boolean;
   officialFallback?: boolean;
 }
 

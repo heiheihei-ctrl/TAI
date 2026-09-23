@@ -87,6 +87,26 @@ export class WsCollabGateway implements OnModuleDestroy {
     this.originAllowed = fn;
   }
 
+  /**
+   * WS 浏览器总会带 Origin。若 CORS_ORIGIN 未写入当前站点（如 linglong/wedotai），
+   * 仍允许「Origin host === 请求 Host」的同源升级，避免协同全面失败。
+   */
+  private isUpgradeOriginAllowed(origin: string, hostHeader: string): boolean {
+    if (!this.originAllowed) return true;
+    if (this.originAllowed(origin)) return true;
+    try {
+      const originHost = new URL(origin).hostname.toLowerCase();
+      const reqHost = String(hostHeader || '')
+        .split(':')[0]
+        .trim()
+        .toLowerCase();
+      if (originHost && reqHost && originHost === reqHost) return true;
+    } catch {
+      // ignore
+    }
+    return false;
+  }
+
   attach(server: HttpServer): void {
     server.on('upgrade', (req, socket, head) => {
       void this.handleUpgrade(req, socket as Duplex, head as Buffer).catch((err) => {
@@ -140,8 +160,9 @@ export class WsCollabGateway implements OnModuleDestroy {
     }
     if (url.pathname !== WS_PATH) return;
 
-    const origin = req.headers.origin ?? '';
-    if (this.originAllowed && origin && !this.originAllowed(origin)) {
+    const origin = typeof req.headers.origin === 'string' ? req.headers.origin : '';
+    const hostHeader = typeof req.headers.host === 'string' ? req.headers.host : '';
+    if (origin && !this.isUpgradeOriginAllowed(origin, hostHeader)) {
       return this.reject(socket, 403, 'Forbidden Origin');
     }
 

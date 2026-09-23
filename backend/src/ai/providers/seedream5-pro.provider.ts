@@ -52,6 +52,15 @@ export class Seedream5ProProvider implements IAIProvider {
     const imageRoute = routes
       .map((value) => typeof value === 'string' ? value.trim().toLowerCase() : '')
       .find((value) => value === 'normal' || value === 'stable') as 'normal' | 'stable' | undefined;
+    const layerDecomposition =
+      request.layerDecomposition === true ||
+      request.providerOptions?.seedream?.layerDecomposition === true;
+    if (layerDecomposition && getDeploymentBrand() !== 'linglong') {
+      return {
+        success: false,
+        error: { message: '图层拆分仅在 linglong 天翼云下可用' },
+      };
+    }
     const providerInfo = await this.seedream5Service.getProviderExecutionInfo(
       SEEDREAM5_PRO_MODEL_ID,
       imageRoute,
@@ -65,9 +74,13 @@ export class Seedream5ProProvider implements IAIProvider {
       model: SEEDREAM5_PRO_MODEL_ID,
       imageRoute,
       aspectRatio: request.aspectRatio,
+      layerDecomposition,
+      watermark: layerDecomposition ? false : undefined,
     });
 
-    this.logger.log(`Seedream5Pro generation completed`);
+    this.logger.log(
+      `Seedream5Pro generation completed layerDecomposition=${layerDecomposition}`,
+    );
 
     if (result.imageUrl) {
       return {

@@ -674,7 +674,9 @@ export class VideoProviderService {
     const provider = taskId.startsWith("vidu-") ? "vidu"
       : taskId.startsWith("kling-") ? "kling"
       : "doubao";
-    const key = `ai/videos/${provider}/${taskId}-${Date.now()}.${extension}`;
+    // 天翼任务 ID 含冒号（tianyi-seedance:），Windows 本地落盘无法作为文件名。
+    const safeTaskId = taskId.replace(/[\\/:*?"<>|]/g, "-");
+    const key = `ai/videos/${provider}/${safeTaskId}-${Date.now()}.${extension}`;
 
     const fromWeb = (Readable as unknown as { fromWeb?: (stream: unknown) => Readable })
       .fromWeb;

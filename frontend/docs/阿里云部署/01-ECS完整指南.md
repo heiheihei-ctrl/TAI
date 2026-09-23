@@ -415,6 +415,20 @@ server {
         proxy_read_timeout 180s;
     }
 
+    # 协同原生 WebSocket（必须独立 location；勿落入 SPA try_files）
+    location /ws/ {
+        proxy_pass http://backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+
     # 健康检查
     location /api/health {
         proxy_pass http://backend;

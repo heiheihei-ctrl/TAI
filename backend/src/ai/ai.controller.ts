@@ -3530,6 +3530,7 @@ export class AiController {
                 googleImageSearch: dto.googleImageSearch ?? dto.enableWebSearch,
                 batchMode: dto.batchMode,
                 batchCount: dto.batchCount,
+                layerDecomposition: dto.layerDecomposition === true,
               });
 
               if (result.success && result.data) {

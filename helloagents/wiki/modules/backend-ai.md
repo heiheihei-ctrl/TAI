@@ -2,6 +2,7 @@
 
 ## 当前状态
 - TAI Seedream 5.0 Pro 按 `providerOptions.banana.imageRoute`（兼容 `bananaImageRoute`）分流：normal 使用 ToAPIs `doubao-seedream-5-0-pro` 异步提交/轮询，stable（含未传线路）使用豆包官方 `doubao-seedream-5-0-pro-260628`。分别读取 `TOAPIS_TOKEN` 与 `ARK_API_KEY`/`DOUBAO_API_KEY`，不再受 Watcha 全局配置影响；Linglong 仍走天翼云。
+- **Linglong Seedream 5.0 Pro（天翼）**：`DEPLOYMENT_BRAND=linglong` 时统一 `POST https://ai.ctaigw.cn/v1/images/generations`，模型默认 `doubao-seedream-5.0-pro`（`TIANYI_SEEDREAM_MODEL`）。支持文生图、图生图（`image`），以及 `layerDecomposition=true` → `layer_decomposition` 图层拆分（可不填 prompt，需参考图；默认 `watermark=false`）。TAI 品牌忽略该参数。
 - 业务后端不再通过独立 `new-api` 网关转发图像、文本或视频请求。
 - `Omni Flash Ext` 保留为独立受管视频模型，但默认 vendor 已切回 `APIMart` 直连。
 - `generate-image`、`edit-image`、`text-chat` 统一走现有 provider 直连链路；不再存在 `NEW_API_IMAGE_MODELS` / `NEW_API_CHAT_MODELS` 白名单分流。

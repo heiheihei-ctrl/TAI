@@ -19722,8 +19722,30 @@ function FlowInner() {
           );
         }
 
+        const isLayerDecomposition =
+          isLinglongRestrictedPalette() &&
+          (node.data as any)?.seedreamMode === "layerDecomposition";
+
         const hasValidPrompt = promptText && promptText.trim().length > 0;
-        if (!hasValidPrompt && imageDatas.length === 0) {
+        if (isLayerDecomposition) {
+          if (imageDatas.length === 0) {
+            setNodes((ns) =>
+              ns.map((n) =>
+                n.id === nodeId
+                  ? {
+                      ...n,
+                      data: {
+                        ...n.data,
+                        status: "failed",
+                        error: "图层拆分需要至少一张参考图",
+                      },
+                    }
+                  : n
+              )
+            );
+            return;
+          }
+        } else if (!hasValidPrompt && imageDatas.length === 0) {
           setNodes((ns) =>
             ns.map((n) =>
               n.id === nodeId
@@ -19765,10 +19787,14 @@ function FlowInner() {
             imageUrls: imageDatas.length > 0 ? imageDatas : undefined,
             batchMode: false,
             batchCount: 1,
+            layerDecomposition: isLayerDecomposition || undefined,
             providerOptions: {
               banana: {
                 imageRoute: latestBananaImageRoute === "stable" ? "stable" : "normal",
               },
+              ...(isLayerDecomposition
+                ? { seedream: { layerDecomposition: true } }
+                : {}),
             },
           });
 

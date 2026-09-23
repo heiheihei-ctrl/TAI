@@ -86,6 +86,7 @@
   - compares previous persisted content vs current content
   - verifies only newly added managed keys
   - blocks save with `400` when referenced new assets are missing in OSS
+  - local upload mode (linglong) only checks bare keys and local-host URLs; remote TOS/Tianyi absolute URLs are kept as references and do not fail the save
 
 ### Effect
 - Prevents "DB references a key but OSS object is missing" from being persisted again.

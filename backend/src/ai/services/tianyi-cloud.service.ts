@@ -161,32 +161,84 @@ export class TianyiCloudService {
     return `${this.baseUrl}${normalizedPath}`;
   }
 
+  /** Node fetch 网络失败时常只有 "fetch failed"，把 cause code 带上便于排查 */
+  private formatFetchNetworkError(error: unknown, requestUrl: string): string {
+    const err = error instanceof Error ? error : new Error(String(error));
+    const cause = (err as Error & { cause?: { code?: string; message?: string; errno?: string } })
+      .cause;
+    const causeDetail =
+      (typeof cause?.code === 'string' && cause.code) ||
+      (typeof cause?.errno === 'string' && cause.errno) ||
+      (typeof cause?.message === 'string' && cause.message) ||
+      '';
+    const base = err.message || 'fetch failed';
+    const detail = causeDetail && causeDetail !== base ? `${base} (${causeDetail})` : base;
+    return `天翼云请求失败: ${detail}; url=${requestUrl}`;
+  }
+
+  private async fetchTianyi(
+    requestUrl: string,
+    init: RequestInit,
+  ): Promise<Response> {
+    try {
+      return await fetch(requestUrl, init);
+    } catch (error) {
+      const message = this.formatFetchNetworkError(error, requestUrl);
+      this.logger.error(message);
+      throw new BadGatewayException(message);
+    }
+  }
+
   async generateSeedreamImage(params: {
     prompt?: string;
     size?: string;
     imageUrls?: string[];
     model?: string;
+    layerDecomposition?: boolean;
+    watermark?: boolean;
   }): Promise<{ imageUrl?: string; imageUrls?: string[] }> {
     this.assertLinglongCreateAllowed();
     this.assertConfigured();
 
     const size = (params.size || '2K').trim() || '2K';
     const model = (params.model || this.seedreamModel).trim() || this.seedreamModel;
+    const layerDecomposition = params.layerDecomposition === true;
+    const images = (params.imageUrls || [])
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter(Boolean);
+
+    if (layerDecomposition && images.length === 0) {
+      throw new BadRequestException('图层拆分需要提供至少一张参考图');
+    }
+    if (!layerDecomposition && !params.prompt?.trim() && images.length === 0) {
+      throw new BadRequestException('Seedream 需要提示词或至少一张参考图');
+    }
+
     const payload: Record<string, unknown> = {
       model,
-      response_format: 'url',
       size,
-      stream: false,
-      watermark: this.seedreamWatermark,
+      watermark:
+        typeof params.watermark === 'boolean'
+          ? params.watermark
+          : layerDecomposition
+            ? false
+            : this.seedreamWatermark,
     };
+
+    if (!layerDecomposition) {
+      payload.response_format = 'url';
+      payload.stream = false;
+    } else {
+      payload.layer_decomposition = true;
+      // 与天翼官方图层拆分示例对齐：默认仍返回 url，便于前端落库
+      payload.response_format = 'url';
+      payload.stream = false;
+    }
 
     if (params.prompt?.trim()) {
       payload.prompt = params.prompt.trim();
     }
 
-    const images = (params.imageUrls || [])
-      .map((item) => (typeof item === 'string' ? item.trim() : ''))
-      .filter(Boolean);
     if (images.length === 1) {
       payload.image = images[0];
     } else if (images.length > 1) {
@@ -195,10 +247,10 @@ export class TianyiCloudService {
 
     const requestUrl = this.buildUrl('/v1/images/generations');
     this.logger.log(
-      `Tianyi Seedream request model=${model}, size=${size}, imageCount=${images.length}, url=${requestUrl}`,
+      `Tianyi Seedream request model=${model}, size=${size}, imageCount=${images.length}, layerDecomposition=${layerDecomposition}, url=${requestUrl}`,
     );
 
-    const response = await fetch(requestUrl, {
+    const response = await this.fetchTianyi(requestUrl, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
@@ -303,7 +355,7 @@ export class TianyiCloudService {
       `Tianyi Seedance create model=${model}, version=${params.modelVersion}, url=${requestUrl}`,
     );
 
-    const response = await fetch(requestUrl, {
+    const response = await this.fetchTianyi(requestUrl, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
@@ -357,7 +409,7 @@ export class TianyiCloudService {
     const requestUrl = this.buildUrl(
       `/v1/contents/generations/tasks/${encodeURIComponent(rawTaskId)}`,
     );
-    const response = await fetch(requestUrl, {
+    const response = await this.fetchTianyi(requestUrl, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${this.apiKey}`,

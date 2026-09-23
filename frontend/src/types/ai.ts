@@ -136,8 +136,10 @@ export interface AIImageGenerateRequest {
   imageUrls?: string[]; // Nano2 鍙傝€冨浘鐗?URL 鍒楄〃
   googleSearch?: boolean; // Nano2 Google 鏂囨湰鎼滅储澧炲己
   googleImageSearch?: boolean; // Nano2 Google 鍥剧墖鎼滅储澧炲己
-  batchMode?: boolean; // Seedream5 鎵归噺妯″紡
-  batchCount?: number; // Seedream5 鎵归噺鏁伴噺
+  batchMode?: boolean; // Seedream5 批量模式
+  batchCount?: number; // Seedream5 批量数量
+  /** linglong 天翼 Seedream 5.0 Pro：图层拆分 */
+  layerDecomposition?: boolean;
   parallelGroupId?: string; // 对话框并行生图批次ID（仅用于积分流水聚合）
   parallelGroupIndex?: number; // 对话框并行生图序号（0-based）
   parallelGroupTotal?: number; // 对话框并行生图总数

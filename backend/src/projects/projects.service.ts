@@ -696,7 +696,10 @@ export class ProjectsService {
   private collectManagedAssetKeys(input: unknown, out: Set<string>) {
     if (typeof input === 'string') {
       const key = this.extractManagedAssetKey(input);
-      if (key) out.add(key);
+      if (!key) return;
+      // 玲珑本地落盘：远程 TOS/天翼 URL 只是历史引用，文件不在本机，不能当成缺失对象拦截保存。
+      if (this.oss.isLocalMode() && !this.oss.shouldValidateManagedAssetLocally(input)) return;
+      out.add(key);
       return;
     }
     if (Array.isArray(input)) {

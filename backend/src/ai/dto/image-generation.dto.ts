@@ -52,6 +52,8 @@ enum GptImage2Moderation {
 }
 
 export class GenerateImageDto {
+  // 图层拆分允许空 prompt；其它场景仍必填
+  @ValidateIf((o) => !o.layerDecomposition)
   @IsString()
   @IsNotEmpty()
   prompt!: string;
@@ -124,11 +126,16 @@ export class GenerateImageDto {
 
   @IsOptional()
   @IsBoolean()
-  batchMode?: boolean; // Seedream5 鎵归噺鐢熸垚妯″紡
+  batchMode?: boolean; // Seedream5 批量生成模式
 
   @IsOptional()
   @IsNumber()
-  batchCount?: number; // Seedream5 鎵归噺鐢熸垚鏁伴噺 (2-10)
+  batchCount?: number; // Seedream5 批量生成数量 (2-10)
+
+  /** linglong 天翼 Seedream 5.0 Pro：图层拆分 */
+  @IsOptional()
+  @IsBoolean()
+  layerDecomposition?: boolean;
 
   @IsOptional()
   @IsString()

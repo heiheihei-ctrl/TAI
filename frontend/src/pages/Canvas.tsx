@@ -5,9 +5,11 @@ import InteractionController from '@/components/canvas/InteractionController';
 import PaperCanvasManager from '@/components/canvas/PaperCanvasManager';
 import ToolBar from '@/components/toolbar/ToolBar';
 import FocusModeButton from '@/components/canvas/FocusModeButton';
+import SupplyChainLibraryButton from '@/components/canvas/SupplyChainLibraryButton';
 import DrawingController from '@/components/canvas/DrawingController';
 import LayerPanel from '@/components/panels/LayerPanel';
 import LibraryPanel from '@/components/panels/LibraryPanel';
+import SupplyChainLibraryModal from '@/components/panels/SupplyChainLibraryModal';
 import AIChatDialog from '@/components/chat/AIChatDialog';
 import FloatingHeader from '@/components/layout/FloatingHeader';
 import ActivitySettingsModalHost from '@/components/home/ActivitySettingsModalHost';
@@ -118,10 +120,12 @@ const Canvas: React.FC = () => {
           <FlowOverlay />
           <SelectionBoxOverlay />
           <ToolBar />
+          <SupplyChainLibraryButton />
           <FocusModeButton />
           <ZoomIndicator />
           <LayerPanel />
           <LibraryPanel />
+          <SupplyChainLibraryModal />
           <AIChatDialog />
           <CommentDrawer />
           <CodeSandboxPanel />

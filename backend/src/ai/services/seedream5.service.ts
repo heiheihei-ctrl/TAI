@@ -253,10 +253,15 @@ export class Seedream5Service {
     model?: string;
     imageRoute?: 'normal' | 'stable';
     aspectRatio?: string;
+    layerDecomposition?: boolean;
+    watermark?: boolean;
   }): Promise<{ imageUrl?: string; imageUrls?: string[] }> {
     const providerConfig = await this.resolveProviderConfig(params.model, params.imageRoute);
 
     if (providerConfig.provider === 'toapis') {
+      if (params.layerDecomposition) {
+        throw new Error('图层拆分仅支持 linglong 天翼云 Seedream');
+      }
       return this.generateToapisImage(providerConfig, params);
     }
 
@@ -266,7 +271,18 @@ export class Seedream5Service {
         size: this.normalizeSize(params.size),
         imageUrls: params.image_urls,
         model: providerConfig.model,
+        layerDecomposition: params.layerDecomposition === true,
+        watermark:
+          typeof params.watermark === 'boolean'
+            ? params.watermark
+            : params.layerDecomposition
+              ? false
+              : undefined,
       });
+    }
+
+    if (params.layerDecomposition) {
+      throw new Error('图层拆分仅支持 linglong 天翼云 Seedream');
     }
 
     const normalizedSize = this.normalizeSizeForProvider(

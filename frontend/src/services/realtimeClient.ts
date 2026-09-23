@@ -3,15 +3,53 @@ import { tokenRefreshManager } from './tokenRefreshManager';
 
 type Listener = (env: any) => void;
 
+function sameOriginWsBase(): string {
+  if (typeof window === 'undefined') return 'ws://localhost:4000';
+  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${proto}://${window.location.host}`;
+}
+
+/**
+ * 把 http(s)/ws(s)/相对路径转成 WebSocket 基址。
+ * - `/` 或空：走当前页同源（https → wss）
+ * - 绝对地址：http→ws、https→wss；若页面是 https 且目标同 host，强制 wss（避免混合内容）
+ */
 function toWsBase(httpOrWsUrl: string): string {
-  return httpOrWsUrl.replace(/\/+$/, '').replace(/^http/i, 'ws');
+  const trimmed = String(httpOrWsUrl || '').trim();
+  if (!trimmed || trimmed === '/' || trimmed.startsWith('/') && !trimmed.startsWith('//')) {
+    return sameOriginWsBase();
+  }
+
+  let candidate = trimmed.replace(/\/+$/, '');
+  if (/^https:/i.test(candidate)) {
+    candidate = candidate.replace(/^https:/i, 'wss:');
+  } else if (/^http:/i.test(candidate)) {
+    candidate = candidate.replace(/^http:/i, 'ws:');
+  } else if (!/^wss?:/i.test(candidate)) {
+    // 裸域名等：按当前页协议补齐
+    const proto = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss' : 'ws';
+    candidate = `${proto}://${candidate.replace(/^\/+/, '')}`;
+  }
+
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
+    try {
+      const parsed = new URL(candidate.replace(/^ws/i, 'http'));
+      if (parsed.hostname === window.location.hostname && /^ws:/i.test(candidate)) {
+        candidate = candidate.replace(/^ws:/i, 'wss:');
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return candidate;
 }
 
 /**
  * 协同 WS 基址解析：
  * 1) VITE_WS_BASE_URL（显式覆盖，优先）
  * 2) 测试机写死：前端 8080 → 后端 4002（Nginx /ws 反代未通时直连）
- * 3) VITE_API_BASE_URL
+ * 3) VITE_API_BASE_URL（`/` 视为同源）
  * 4) 当前页同源
  */
 function resolveWsBase(): string {
@@ -22,7 +60,7 @@ function resolveWsBase(): string {
   if (wsOverride) return toWsBase(wsOverride);
 
   if (typeof window !== 'undefined') {
-    const { hostname, port, protocol } = window.location;
+    const { hostname, port } = window.location;
     // 线上测试：静态站 8080，API/WS 在 4002
     if (hostname === '101.96.217.132' && (port === '8080' || port === '')) {
       return 'ws://101.96.217.132:4002';
@@ -32,8 +70,7 @@ function resolveWsBase(): string {
         ? import.meta.env.VITE_API_BASE_URL.trim()
         : '';
     if (apiConfigured) return toWsBase(apiConfigured);
-    const proto = protocol === 'https:' ? 'wss' : 'ws';
-    return `${proto}://${window.location.host}`;
+    return sameOriginWsBase();
   }
 
   const apiConfigured =

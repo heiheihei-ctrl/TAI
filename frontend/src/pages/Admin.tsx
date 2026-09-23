@@ -7558,6 +7558,38 @@ function TemplatesTab() {
 }
 
 // 企业管理 Tab
+const TEAM_CREDIT_NEGATIVE_TYPES = new Set([
+  "reserve",
+  "deduct",
+  "admin_deduct",
+  "usage",
+]);
+
+function formatTeamCreditEntryLabel(entryType: string) {
+  switch (entryType) {
+    case "admin_add":
+      return <span className='text-green-600'>管理员添加</span>;
+    case "admin_deduct":
+      return <span className='text-red-600'>管理员扣除</span>;
+    case "topup":
+      return <span className='text-blue-600'>充值</span>;
+    case "usage":
+      return <span className='text-orange-600'>消费</span>;
+    case "deduct":
+      return <span className='text-red-600'>扣款</span>;
+    case "reserve":
+      return <span className='text-orange-600'>冻结</span>;
+    case "release":
+      return <span className='text-blue-600'>解冻</span>;
+    case "refund":
+      return <span className='text-green-600'>退款</span>;
+    case "seat_package":
+      return <span className='text-blue-600'>席位购买</span>;
+    default:
+      return entryType;
+  }
+}
+
 function TeamsTab() {
   const [teams, setTeams] = useState<AdminTeam[]>([]);
   const [loading, setLoading] = useState(false);
@@ -8149,23 +8181,28 @@ function TeamsTab() {
                   </tr>
                 </thead>
                 <tbody>
-                  {creditHistory.map((record) => (
+                  {creditHistory.map((record) => {
+                    // 企业流水 amount 多为绝对值，正负由 entryType 决定（与 EnterpriseLedgerModal 一致）
+                    const isNegative = TEAM_CREDIT_NEGATIVE_TYPES.has(record.entryType);
+                    const absAmount = Math.abs(record.amount);
+                    return (
                     <tr key={record.id} className='border-b hover:bg-gray-50'>
                       <td className='px-4 py-3'>
-                        {record.entryType === "admin_add" && <span className='text-green-600'>管理员添加</span>}
-                        {record.entryType === "admin_deduct" && <span className='text-red-600'>管理员扣除</span>}
-                        {record.entryType === "topup" && <span className='text-blue-600'>充值</span>}
-                        {record.entryType === "usage" && <span className='text-orange-600'>消费</span>}
-                        {!["admin_add", "admin_deduct", "topup", "usage"].includes(record.entryType) && record.entryType}
+                        {formatTeamCreditEntryLabel(record.entryType)}
                       </td>
                       <td className='px-4 py-3 font-medium'>
-                        {record.amount > 0 ? <span className='text-green-600'>+{record.amount}</span> : <span className='text-red-600'>{record.amount}</span>}
+                        {isNegative ? (
+                          <span className='text-red-600'>-{absAmount}</span>
+                        ) : (
+                          <span className='text-green-600'>+{absAmount}</span>
+                        )}
                       </td>
                       <td className='px-4 py-3'>{record.actorName || record.actorPhone || "-"}</td>
                       <td className='px-4 py-3'>{record.note || "-"}</td>
                       <td className='px-4 py-3 text-sm'>{new Date(record.createdAt).toLocaleString()}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
               {creditHistory.length === 0 && (

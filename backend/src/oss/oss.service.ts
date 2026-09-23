@@ -59,6 +59,52 @@ export class OssService {
   }
 
   /**
+   * 本地落盘模式下，只有本机引用才要求文件已落盘。
+   * 火山 TOS / 天翼等远程绝对地址里的 `ai/videos/...` 路径不是本地对象，不能拿来拦截保存。
+   */
+  shouldValidateManagedAssetLocally(raw: string): boolean {
+    const absolute = this.firstAbsoluteHttpUrl(raw);
+    if (!absolute) return true;
+    try {
+      return this.isLocalUploadHost(new URL(absolute).hostname);
+    } catch {
+      return true;
+    }
+  }
+
+  private firstAbsoluteHttpUrl(raw: string): string | null {
+    const trimmed = typeof raw === 'string' ? raw.trim() : '';
+    if (!trimmed) return null;
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    try {
+      const parsed = new URL(trimmed, 'https://local.invalid');
+      const nested = parsed.searchParams.get('url');
+      if (nested && /^https?:\/\//i.test(nested)) return nested;
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+
+  private isLocalUploadHost(hostname: string): boolean {
+    const host = String(hostname || '').trim().toLowerCase();
+    if (!host || host === 'local.invalid') return false;
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return true;
+    const raw =
+      this.config.get<string>('LOCAL_UPLOAD_PUBLIC_BASE_URL') ||
+      this.config.get<string>('UPLOAD_PUBLIC_BASE_URL') ||
+      '';
+    const trimmed = String(raw || '').trim();
+    if (!trimmed) return false;
+    try {
+      const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+      return new URL(withProtocol).hostname.toLowerCase() === host;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * 本地落盘根目录。典型：nginx html 目录，例如 `/usr/share/nginx/html`
    * 对象 key（如 `uploads/a.png`）会写成 `{root}/uploads/a.png`
    */

@@ -23,6 +23,7 @@ interface UIState {
   focusMode: boolean; // 专注模式 - 仅隐藏顶部导航栏和 AI 对话框
   showSandboxPanel: boolean; // Paper.js 沙盒面板
   showTemplatePanel: boolean; // 模板库面板
+  showSupplyChainLibrary: boolean; // 玲珑供应链图库
   showDebugPanel: boolean; // 调试面板
   snapAlignmentEnabled: boolean; // 自动对齐开关
 
@@ -45,6 +46,7 @@ interface UIState {
   toggleFocusMode: () => void;
   toggleSandboxPanel: () => void;
   toggleTemplatePanel: () => void;
+  toggleSupplyChainLibrary: () => void;
   toggleDebugPanel: () => void;
   toggleSnapAlignment: () => void;
 
@@ -59,6 +61,7 @@ interface UIState {
   setSmartPlacementOffsetVertical: (offset: number) => void;
   setShowSandboxPanel: (show: boolean) => void;
   setShowTemplatePanel: (show: boolean) => void;
+  setShowSupplyChainLibrary: (show: boolean) => void;
   setShowDebugPanel: (show: boolean) => void;
 }
 
@@ -122,6 +125,7 @@ export const useUIStore = create<UIState>()(
       focusMode: persistedUIPreferences?.focusMode ?? false,
       showSandboxPanel: persistedUIPreferences?.showSandboxPanel ?? false,
       showTemplatePanel: false, // 模板面板默认关闭，不持久化
+      showSupplyChainLibrary: false, // 供应链图库默认关闭，不持久化
       showDebugPanel: persistedUIPreferences?.showDebugPanel ?? false, // 调试面板默认关闭
       snapAlignmentEnabled: persistedUIPreferences?.snapAlignmentEnabled ?? true, // 自动对齐默认开启
       smartPlacementOffsetHorizontal: SMART_PLACEMENT_OFFSET_HORIZONTAL,
@@ -142,6 +146,8 @@ export const useUIStore = create<UIState>()(
       toggleFocusMode: () => set((state) => ({ focusMode: !state.focusMode })),
       toggleSandboxPanel: () => set((state) => ({ showSandboxPanel: !state.showSandboxPanel })),
       toggleTemplatePanel: () => set((state) => ({ showTemplatePanel: !state.showTemplatePanel })),
+      toggleSupplyChainLibrary: () =>
+        set((state) => ({ showSupplyChainLibrary: !state.showSupplyChainLibrary })),
       toggleDebugPanel: () => set((state) => ({ showDebugPanel: !state.showDebugPanel })),
       toggleSnapAlignment: () => set((state) => ({ snapAlignmentEnabled: !state.snapAlignmentEnabled })),
 
@@ -156,6 +162,10 @@ export const useUIStore = create<UIState>()(
       setShowTemplatePanel: (show) => set((state) => (
         state.showTemplatePanel === show ? state : { showTemplatePanel: show }
       )),
+      setShowSupplyChainLibrary: (show) =>
+        set((state) =>
+          state.showSupplyChainLibrary === show ? state : { showSupplyChainLibrary: show }
+        ),
       setShowDebugPanel: (show) => set({ showDebugPanel: show }),
       setSmartPlacementOffsetHorizontal: () => set(() => ({ smartPlacementOffsetHorizontal: SMART_PLACEMENT_OFFSET_HORIZONTAL })),
       setSmartPlacementOffsetVertical: () => set(() => ({ smartPlacementOffsetVertical: SMART_PLACEMENT_OFFSET_VERTICAL })),

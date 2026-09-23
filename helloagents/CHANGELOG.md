@@ -6,6 +6,9 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 ### Fixed
+- Collab WS: 浏览器升级带 `Origin` 时，若 `CORS_ORIGIN` 未包含当前站点（如 `http://wedotai.com`）会 403；现允许 Origin host 与请求 Host 相同的同源升级。部署仍建议把站点写入 `CORS_ORIGIN`。
+- Collab WS: `VITE_API_BASE_URL=/` 时按当前页同源解析（https→wss），避免错误拼出 `ws://`；部署文档补齐 Nginx `location /ws/` 反代（wedotai 等 linglong 站缺此段会导致协同连不上）。
+- 玲珑本地落盘保存不再把火山 TOS / 天翼上的 `ai/videos/...` 远程地址当成缺失的本地文件而返回 400；新视频文件名会去掉任务 ID 里的冒号，避免 Windows 落盘失败。
 - Seedream 5.0（非 Pro）普通路线改为 ToAPIs（`doubao-seedream-5-0`），尊享仍走火山方舟；Provider 透传全局 `imageRoute`，避免普通路线误打 ARK。
 - Vite 开发代理将浏览器侧 WebSocket 的 ECONNABORTED/ECONNRESET/EPIPE 改为简短断连警告，保留上游连接、HTTP 代理及未知错误的原始日志；不改变连接与重连行为。
 - 玲珑身份隐藏每日签到赠送入口、顶部资料/签到赠送提醒及公告弹窗，登录跳过完善资料送积分提示；保留其他身份展示与后端发放规则。
@@ -25,6 +28,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Banana 文本主备超时预算冲突：ToAPIs 单次请求调整为 20 秒，通道总预算维持 45 秒；总超时取消在途请求并阻止取消后的备用请求，清理超时定时器，补充主备切换/取消回归测试。
 
 ### Added
+- Linglong Seedream 5.0 Pro：天翼云对齐文生图/图生图，并新增图层拆分（`layerDecomposition` → `layer_decomposition`）；前端节点在 linglong 下可选「图层拆分」模式，多图结果回写节点。
+- Linglong: 画布左侧主工具栏下方单独显示供应链图库入口（不并入工具栏主壳），点击打开右侧弹窗；支持公共/个人 Tab、场景筛选、搜索与分页选择（当前为前端 mock 数据）。
 - GPT-Image-2.5 独立节点接入 ToAPIs，保留 gpt-image-2.5-sunburst-vip 模型与 metadata 分辨率/方向参数，默认 1:1、1K、high、单张。
 - Workflow Agent：AI 对话框 `Workflow` 模式 → NestJS `POST /api/ai/workflow-chat`（DeepSeek 写 prompt + 规划 textPrompt→generate）→ 前端 `flow:agent-apply` 建节点/连线/`runNode`；结果留在画布节点。配置 `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL`。文档 `frontend/docs/22-工作流Agent.md`。
 - Deployment brand: `DEPLOYMENT_BRAND=tai|linglong` (backend) / `VITE_DEPLOYMENT_BRAND` (frontend) — distinguishes credit pricing per product line; Seedream 5.0 Pro resolution pricing: tai `1K/1.5K/2K = 65/90/140`, linglong `100/130/180`.
