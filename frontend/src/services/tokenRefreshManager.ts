@@ -11,9 +11,10 @@ import { triggerAuthExpired } from "./authEvents";
 import { fetchWithAuth } from "./authFetch";
 import { getRefreshAuthHeader, setTokens } from "./authTokenStorage";
 import { ACCESS_TOKEN_TTL_MS } from "./authTokenConfig";
+import { markAuthSessionFresh } from "./authSessionStorage";
 
-// Token 配置（与后端 JWT_ACCESS_TTL=3d 对应）
-const REFRESH_BEFORE_EXPIRE_MS = 6 * 60 * 60 * 1000; // 提前 6 小时刷新
+// Token 配置（与后端 JWT_ACCESS_TTL=7d 对应）
+const REFRESH_BEFORE_EXPIRE_MS = 12 * 60 * 60 * 1000; // 提前 12 小时刷新
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 每 1 小时检查一次
 
 // 后端基础地址
@@ -189,6 +190,7 @@ class TokenRefreshManager {
           setTokens(data.tokens);
         }
         this.lastRefreshTime = Date.now();
+        markAuthSessionFresh();
         console.log("[TokenRefreshManager] Token 刷新成功");
         this.emit("token-refreshed");
         return true;
@@ -217,6 +219,7 @@ class TokenRefreshManager {
    */
   onLoginSuccess() {
     this.lastRefreshTime = Date.now();
+    markAuthSessionFresh();
     console.log("[TokenRefreshManager] 登录成功，重置刷新时间");
   }
 

@@ -66,6 +66,7 @@ import { isLinglongRestrictedPalette, shouldHideNodeForDeploymentPalette } from 
 import { getDeploymentBrand } from "@/config/deploymentBrand";
 import {
   isAllowedForInternationalEdition,
+  isAllowedForLinglongPalette,
   isAllowedForSeedreamSeedancePalette,
   isInternationalLanguage,
 } from "@/config/internationalEditionNodes";
@@ -1556,8 +1557,8 @@ const NODE_PALETTE_ITEMS = [
   { key: "omniFlashExtVideo", zh: "Omni Flash Ext", en: "Omni Flash Ext", category: "video" },
   {
     key: "doubaoVideo",
-    zh: "Seedance 1.5 Pro",
-    en: "Seedance 1.5 Pro",
+    zh: "Seedance",
+    en: "Seedance",
     category: "video",
   },
   // 其他节点
@@ -2397,13 +2398,18 @@ const buildVideoPricingContext = (
   } else if (nodeType === "seedance20Video") {
     context.seedanceModel = "seedance-2.0";
   } else if (nodeType === "doubaoVideo") {
-    context.seedanceModel = "seedance-1.5-pro";
+    context.seedanceModel = isLinglongRestrictedPalette()
+      ? "seedance-2.0"
+      : "seedance-1.5-pro";
   }
 
   if (typeof nodeData?.seedanceMode === "string" && nodeData.seedanceMode.trim()) {
     context.seedanceMode = nodeData.seedanceMode.trim().toLowerCase();
     context.videoMode = nodeData.seedanceMode.trim().toLowerCase();
-  } else if (nodeType === "seedance20Video") {
+  } else if (
+    nodeType === "seedance20Video" ||
+    (nodeType === "doubaoVideo" && isLinglongRestrictedPalette())
+  ) {
     context.seedanceMode = "reference_images";
     context.videoMode = "reference_images";
   } else if (nodeType === "doubaoVideo") {
@@ -4167,6 +4173,14 @@ function FlowInner() {
             nameEn: "Note Node",
           };
         }
+        // 玲珑：唯一 Seedance 入口统一展示名
+        if (getDeploymentBrand() === "linglong" && config.nodeKey === "doubaoVideo") {
+          return {
+            ...config,
+            nameZh: "Seedance",
+            nameEn: "Seedance",
+          };
+        }
         return config;
       })
       .filter((config) => !BETA_NODE_KEYS.has(config.nodeKey))
@@ -4175,16 +4189,31 @@ function FlowInner() {
         const resolvedType = resolveFlowNodeTypeFromConfig(config);
         if (isHiddenFlowNodeType(resolvedType)) return false;
         if (shouldHideForeignFlowNode(config.nodeKey)) return false;
-        // 国际版 / 玲珑生态：面板仅保留 Seedream / Seedance / 免费节点
-        if (
-          isInternationalLanguage(language) ||
-          getDeploymentBrand() === "linglong"
-        ) {
+        // 国际版：Seedream / Seedance / 免费；玲珑：Seedance + 免费
+        if (getDeploymentBrand() === "linglong") {
+          if (!isAllowedForLinglongPalette(config)) return false;
+        } else if (isInternationalLanguage(language)) {
           if (!isAllowedForSeedreamSeedancePalette(config)) return false;
         }
         return true;
       })
       .filter((config) => config.status !== "disabled");
+
+    // 玲珑兜底：确保有且仅有一个 Seedance 入口
+    if (getDeploymentBrand() === "linglong") {
+      const hasSeedance = prepared.some((config) => config.nodeKey === "doubaoVideo");
+      if (!hasSeedance) {
+        prepared.push({
+          nodeKey: "doubaoVideo",
+          nameZh: "Seedance",
+          nameEn: "Seedance",
+          category: "video",
+          status: "normal",
+          creditsPerCall: NODE_CREDITS_MAP.doubaoVideo || 0,
+          sortOrder: 0,
+        });
+      }
+    }
 
     const dedupedByType = new Map<string, NodeConfig>();
     prepared.forEach((config, index) => {
@@ -4321,7 +4350,11 @@ function FlowInner() {
       });
       grouped[groupKey] = grouped[groupKey].map((item, index) => ({
         ...item,
-        _isHot: index < NODE_PALETTE_HOT_BADGE_COUNT,
+        // 玲珑不展示 HOT 角标
+        _isHot:
+          isLinglongRestrictedPalette()
+            ? false
+            : index < NODE_PALETTE_HOT_BADGE_COUNT,
       }));
     });
 
@@ -5769,12 +5802,29 @@ function FlowInner() {
         const currentSeedanceModel = String(data.seedanceModel || "").trim();
         const normalizedSeedanceModel = normalizeSeedanceModelValue(
           currentSeedanceModel ||
-            (rawType === "seedance20Video" ? "seedance-2.0" : "seedance-1.5-pro")
+            (rawType === "seedance20Video" || isLinglongRestrictedPalette()
+              ? "seedance-2.0"
+              : "seedance-1.5-pro")
         );
-        data.seedanceModel =
+        let nextSeedanceModel =
           rawType === "seedance20Video" && normalizedSeedanceModel === "seedance-1.5-pro"
             ? "seedance-2.0"
             : normalizedSeedanceModel;
+        // 玲珑仅 2.0 / 2.5，历史节点上的 1.5 / Fast 统一迁到 2.0
+        if (
+          isLinglongRestrictedPalette() &&
+          (nextSeedanceModel === "seedance-1.5-pro" ||
+            nextSeedanceModel === "seedance-2.0-fast")
+        ) {
+          nextSeedanceModel = "seedance-2.0";
+        }
+        data.seedanceModel = nextSeedanceModel;
+        if (
+          isLinglongRestrictedPalette() &&
+          (data.seedanceMode === "text" || data.seedanceMode === "image")
+        ) {
+          data.seedanceMode = "reference_images";
+        }
         data.provider = "doubao";
       }
 
@@ -9347,18 +9397,24 @@ function FlowInner() {
                   : undefined,
               seedanceModel:
                 type === "doubaoVideo"
-                  ? ("seedance-1.5-pro" as const)
+                  ? isLinglongRestrictedPalette()
+                    ? ("seedance-2.0" as const)
+                    : ("seedance-1.5-pro" as const)
                   : type === "seedance20Video"
                   ? ("seedance-2.0" as const)
                   : undefined,
               seedanceMode:
-                type === "seedance20Video" 
+                type === "seedance20Video" ||
+                (type === "doubaoVideo" && isLinglongRestrictedPalette())
                   ? ("reference_images" as const)
                   : type === "doubaoVideo"
                   ? ("text" as const)
                   : undefined,
               generateAudio:
-                type === "seedance20Video"  ? true : undefined,
+                type === "seedance20Video" ||
+                (type === "doubaoVideo" && isLinglongRestrictedPalette())
+                  ? true
+                  : undefined,
               style: type === "viduVideo" || type === "viduQ3" ? ("general" as const) : undefined,
               offPeak: type === "viduVideo" || type === "viduQ3" ? false : undefined,
               // Seedance 1.5 Pro专用参数
@@ -16076,18 +16132,54 @@ function FlowInner() {
         }
         const isSeedanceNode = provider === "doubao";
         const isOmniFlashExtNode = normalizedVideoNodeType === "omniFlashExtVideo";
-        const seedanceModelForRequest = normalizeSeedanceModelValue(
+        let seedanceModelForRequest = normalizeSeedanceModelValue(
           rawNodeData.seedanceModel ||
             (normalizedVideoNodeType === "seedance20Video"
               ? "seedance-2.0"
               : "seedance-1.5-pro")
         );
+        // 玲珑仅 2.0 / 2.5；避免 doubaoVideo 默认落到 1.5「图生视频」必填图
+        if (isLinglongRestrictedPalette()) {
+          if (
+            seedanceModelForRequest === "seedance-1.5-pro" ||
+            seedanceModelForRequest === "seedance-2.0-fast"
+          ) {
+            seedanceModelForRequest = "seedance-2.0";
+          }
+        }
         const isSeedance25Request = isSeedance25ModelValue(seedanceModelForRequest);
         const isSeedance20Request = isSeedance20ModelValue(seedanceModelForRequest);
         const isSeedance2FamilyRequest = isSeedance20Request || isSeedance25Request;
         const seedanceFamilyLabel = isSeedance25Request ? "Seedance 2.5" : "Seedance 2.0";
-        const seedanceMode = isSeedanceNode ? inferSeedanceMode(node) : undefined;
-        const seedanceModeSpec = isSeedanceNode ? getSeedanceModeSpec(node) : undefined;
+        let seedanceMode = isSeedanceNode ? inferSeedanceMode(node) : undefined;
+        // 玲珑：有图走参考/图生，无图走文生（2.x 用全能参考；勿卡在 1.5 的 image 模式）
+        if (isLinglongRestrictedPalette() && isSeedanceNode) {
+          const connectedImageCount = currentEdges.filter(
+            (e) =>
+              e.target === nodeId &&
+              (e.targetHandle === "image" || e.targetHandle === "image-2")
+          ).length;
+          if (isSeedance2FamilyRequest) {
+            seedanceMode =
+              connectedImageCount > 0
+                ? seedanceMode === "start_end"
+                  ? "start_end"
+                  : "reference_images"
+                : "reference_images";
+          } else {
+            seedanceMode = connectedImageCount > 0 ? "image" : "text";
+          }
+        }
+        const seedanceModeSpec = isSeedanceNode
+          ? getSeedanceModeSpec({
+              ...node,
+              data: {
+                ...(node.data || {}),
+                seedanceModel: seedanceModelForRequest,
+                seedanceMode,
+              },
+            })
+          : undefined;
 
         // 先获取图片数量，判断是否需要 prompt
         const maxImages =
@@ -16250,8 +16342,12 @@ function FlowInner() {
               }
             } else if (seedanceMode === "image") {
               if (seedanceImageCount < 1) {
-                failCurrentVideoNode("图生视频模式至少需要连接 1 张图片");
-                return;
+                // 无图时自动按文生：有提示词即可继续，并改写 mode 避免 API 仍走 img2video
+                if (!hasText || !promptText) {
+                  failCurrentVideoNode("文生视频需要提示词；图生视频需连接至少 1 张图片");
+                  return;
+                }
+                seedanceMode = "text";
               }
             } else if (seedanceMode === "start_end") {
               if (seedanceTotalImageCount < 1 || seedanceTotalImageCount > 2) {
@@ -24703,11 +24799,14 @@ function FlowInner() {
                             text: string;
                             tone?: "hot" | "new" | "status";
                           }> = [];
-                          if ((config as { _isHot?: boolean })._isHot) {
-                            paletteBadges.push({ text: "HOT", tone: "hot" });
-                          }
-                          if (config.isNew) {
-                            paletteBadges.push({ text: "NEW", tone: "new" });
+                          // 玲珑：不展示 HOT / NEW
+                          if (!isLinglongRestrictedPalette()) {
+                            if ((config as { _isHot?: boolean })._isHot) {
+                              paletteBadges.push({ text: "HOT", tone: "hot" });
+                            }
+                            if (config.isNew) {
+                              paletteBadges.push({ text: "NEW", tone: "new" });
+                            }
                           }
                           if (statusBadge) {
                             paletteBadges.push({ text: statusBadge, tone: "status" });

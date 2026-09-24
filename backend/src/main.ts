@@ -163,7 +163,14 @@ async function bootstrap() {
     { contentSecurityPolicy: false } as any
   );
   await app.register(fastifyCookie as any, { secret: cookieSecret } as any);
-  await app.register(fastifyMultipart as any);
+  await app.register(fastifyMultipart as any, {
+    limits: {
+      // 视频/通用文件上限 500MB；图片接口内部还会再按 32MB 拦截
+      fileSize: 500 * 1024 * 1024,
+      files: 1,
+      fields: 16,
+    },
+  });
 
   const fastifyInstance = app.getHttpAdapter().getInstance();
   fastifyInstance.addContentTypeParser(

@@ -2,7 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { getDeploymentBrand } from '../../config/deployment-brand';
-import { TianyiCloudService } from './tianyi-cloud.service';
 import {
   buildToapisUrl,
   getToapisApiBaseUrl,
@@ -19,7 +18,7 @@ import {
   isUpstreamImageTaskFailed,
 } from '../../utils/upstreamImageTask.util';
 
-export type Seedream5ProviderType = 'doubao' | 'watcha' | 'tianyi' | 'toapis';
+export type Seedream5ProviderType = 'doubao' | 'watcha' | 'toapis';
 export const SEEDREAM5_PROVIDER_SETTING_KEY = 'seedream5_provider';
 
 interface Seedream5ProviderConfig {
@@ -46,7 +45,6 @@ export class Seedream5Service {
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
-    private readonly tianyiCloudService: TianyiCloudService,
   ) {
     this.doubaoApiKey = this.normalizeApiKey(
       this.config.get<string>('ARK_API_KEY') ||
@@ -162,20 +160,9 @@ export class Seedream5Service {
     imageRoute?: 'normal' | 'stable',
   ): Promise<Seedream5ProviderConfig> {
     if (getDeploymentBrand() === 'linglong') {
-      if (!this.tianyiCloudService.isConfigured()) {
-        throw new Error(
-          'DEPLOYMENT_BRAND=linglong requires TIANYI_CLOUD_API_KEY for Seedream',
-        );
-      }
-      return {
-        provider: 'tianyi',
-        endpoint: this.tianyiCloudService.getBaseUrl(),
-        apiKey: this.tianyiCloudService.getApiKey(),
-        // linglong 统一使用天翼云配置的模型名，忽略 Pro/Lite 内部型号覆盖
-        model: this.tianyiCloudService.getSeedreamModel(),
-        generationPath: '/v1/images/generations',
-        watermark: this.tianyiCloudService.getSeedreamWatermark(),
-      };
+      throw new Error(
+        '玲珑部署已下线 Seedream，请改用其他图像模型',
+      );
     }
 
     const isProModel = Boolean(overrideModel?.includes('seedream-5-0-pro'));
@@ -260,29 +247,13 @@ export class Seedream5Service {
 
     if (providerConfig.provider === 'toapis') {
       if (params.layerDecomposition) {
-        throw new Error('图层拆分仅支持 linglong 天翼云 Seedream');
+        throw new Error('图层拆分已不可用');
       }
       return this.generateToapisImage(providerConfig, params);
     }
 
-    if (providerConfig.provider === 'tianyi') {
-      return this.tianyiCloudService.generateSeedreamImage({
-        prompt: params.prompt,
-        size: this.normalizeSize(params.size),
-        imageUrls: params.image_urls,
-        model: providerConfig.model,
-        layerDecomposition: params.layerDecomposition === true,
-        watermark:
-          typeof params.watermark === 'boolean'
-            ? params.watermark
-            : params.layerDecomposition
-              ? false
-              : undefined,
-      });
-    }
-
     if (params.layerDecomposition) {
-      throw new Error('图层拆分仅支持 linglong 天翼云 Seedream');
+      throw new Error('图层拆分已不可用');
     }
 
     const normalizedSize = this.normalizeSizeForProvider(

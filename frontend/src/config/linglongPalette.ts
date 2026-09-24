@@ -1,7 +1,7 @@
 import { getDeploymentBrand } from './deploymentBrand';
 import {
-  isAllowedForSeedreamSeedancePalette,
-  isAllowedNodeKeyForSeedreamSeedancePalette,
+  isAllowedForLinglongPalette,
+  isAllowedNodeKeyForLinglongPalette,
 } from './internationalEditionNodes';
 import type { NodeConfig } from '@/services/nodeConfigService';
 
@@ -9,8 +9,16 @@ export function isLinglongRestrictedPalette(): boolean {
   return getDeploymentBrand() === 'linglong';
 }
 
-/** 玲珑面板额外隐藏的节点（仅 1.5 Pro，不含 Seedance 2.x 入口） */
-const LINGLONG_HIDDEN_NODE_KEYS = new Set(['seedance20Video']);
+/**
+ * 玲珑隐藏：
+ * - Seedream 全系
+ * - seedance20Video（与 doubaoVideo 重复，面板只保留一个 Seedance）
+ */
+const LINGLONG_HIDDEN_NODE_KEYS = new Set([
+  'seedream5',
+  'seedream5Pro',
+  'seedance20Video',
+]);
 
 export function shouldHideNodeForDeploymentPalette(
   nodeKey?: string | null,
@@ -21,7 +29,9 @@ export function shouldHideNodeForDeploymentPalette(
   const key = String(nodeKey || config?.nodeKey || '').trim();
   if (key && LINGLONG_HIDDEN_NODE_KEYS.has(key)) return true;
   if (config) {
-    return !isAllowedForSeedreamSeedancePalette(config);
+    // seedance20Video 即使被识别为 Seedance 也隐藏，避免双入口
+    if (key === 'seedance20Video') return true;
+    return !isAllowedForLinglongPalette(config);
   }
-  return !isAllowedNodeKeyForSeedreamSeedancePalette(nodeKey, creditsPerCall);
+  return !isAllowedNodeKeyForLinglongPalette(nodeKey, creditsPerCall);
 }

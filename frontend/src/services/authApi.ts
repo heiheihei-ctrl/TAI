@@ -5,7 +5,21 @@ import {
   setTokens,
 } from "./authTokenStorage";
 import { fetchWithAuth } from "./authFetch";
-import { ACCESS_TOKEN_TTL_MS } from "./authTokenConfig";
+import {
+  clearStoredLastAuthAt,
+  clearStoredTokenExpiry,
+  getStoredTokenExpiry,
+  markAuthSessionFresh,
+  setStoredLastAuthAt,
+} from "./authSessionStorage";
+
+export {
+  getStoredTokenExpiry,
+  getStoredLastAuthAt,
+  setStoredLastAuthAt,
+  clearStoredLastAuthAt,
+  markAuthSessionFresh,
+} from "./authSessionStorage";
 
 export type UserInfo = {
   id: string;
@@ -60,70 +74,7 @@ const base =
 // Simple localStorage-based mock helpers
 const LS_USER_KEY = "mock_user";
 const LS_USERS_KEY = "mock_users";
-const LS_TOKEN_EXPIRY = "token_expiry";
-const LS_LAST_AUTH_AT = "last_auth_at";
 const FIXED_SMS_CODE = "336699";
-
-// Token过期时间管理（旧本地缓存也会按 3 天新规截断）
-export function getStoredTokenExpiry(): number | null {
-  try {
-    const expiryRaw = localStorage.getItem(LS_TOKEN_EXPIRY);
-    if (!expiryRaw) return null;
-    let expiry = parseInt(expiryRaw, 10);
-    if (!Number.isFinite(expiry)) return null;
-
-    const lastAuth = getStoredLastAuthAt();
-    if (lastAuth && Number.isFinite(lastAuth) && Date.now() - lastAuth > ACCESS_TOKEN_TTL_MS) {
-      clearStoredTokenExpiry();
-      return null;
-    }
-
-    const maxByAuth =
-      lastAuth && Number.isFinite(lastAuth)
-        ? lastAuth + ACCESS_TOKEN_TTL_MS
-        : Date.now() + ACCESS_TOKEN_TTL_MS;
-    if (expiry > maxByAuth) {
-      expiry = maxByAuth;
-      setStoredTokenExpiry(expiry);
-    }
-    return expiry;
-  } catch {
-    return null;
-  }
-}
-
-function setStoredTokenExpiry(expiry: number) {
-  try {
-    localStorage.setItem(LS_TOKEN_EXPIRY, expiry.toString());
-  } catch {}
-}
-
-function clearStoredTokenExpiry() {
-  try {
-    localStorage.removeItem(LS_TOKEN_EXPIRY);
-  } catch {}
-}
-
-export function getStoredLastAuthAt(): number | null {
-  try {
-    const raw = localStorage.getItem(LS_LAST_AUTH_AT);
-    return raw ? parseInt(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-export function setStoredLastAuthAt(ts: number) {
-  try {
-    localStorage.setItem(LS_LAST_AUTH_AT, ts.toString());
-  } catch {}
-}
-
-export function clearStoredLastAuthAt() {
-  try {
-    localStorage.removeItem(LS_LAST_AUTH_AT);
-  } catch {}
-}
 
 function delay(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -177,8 +128,7 @@ function completeAuthSession<T extends { user: UserInfo; tokens?: { accessToken?
     setTokens(out.tokens);
   }
   saveSession(out.user);
-  setStoredTokenExpiry(Date.now() + ACCESS_TOKEN_TTL_MS);
-  setStoredLastAuthAt(Date.now());
+  markAuthSessionFresh();
   return out;
 }
 
@@ -347,10 +297,9 @@ export const authApi = {
             ? (data.user as UserInfo)
             : (data as UserInfo);
 
-        // 更新本地token过期时间（与 JWT_ACCESS_TTL=3d 对齐）
+        // 更新本地token过期时间（与 JWT_ACCESS_TTL=7d 对齐）
         if (user) {
-          setStoredTokenExpiry(Date.now() + ACCESS_TOKEN_TTL_MS);
-          setStoredLastAuthAt(Date.now());
+          markAuthSessionFresh();
         }
 
         return { user, source: "server" };
@@ -382,10 +331,9 @@ export const authApi = {
                   ? (data.user as UserInfo)
                   : (data as UserInfo);
 
-              // 更新本地token过期时间（与 JWT_ACCESS_TTL=3d 对齐）
+              // 更新本地token过期时间（与 JWT_ACCESS_TTL=7d 对齐）
               if (user) {
-                setStoredTokenExpiry(Date.now() + ACCESS_TOKEN_TTL_MS);
-                setStoredLastAuthAt(Date.now());
+                markAuthSessionFresh();
               }
 
               return { user, source: "refresh" };
@@ -512,7 +460,7 @@ export const authApi = {
       );
       if (!user) throw new Error("用户不存在，请先注册");
       saveSession(user);
-        setStoredLastAuthAt(Date.now());
+      setStoredLastAuthAt(Date.now());
       return { user };
     }
     const res = await fetchWithAuth(`${base}/api/auth/login-sms`, {

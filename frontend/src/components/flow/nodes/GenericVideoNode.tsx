@@ -472,6 +472,8 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       ? "seedance-2.0-fast"
       : data.seedanceModel === "seedance-2.0"
       ? "seedance-2.0"
+      : isLinglongRestrictedPalette()
+      ? "seedance-2.0"
       : "seedance-1.5-pro";
   const isSeedanceModel = provider === "doubao";
   const seedance2AccessEnabled = data.seedance2AccessEnabled === true;
@@ -481,9 +483,14 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
   const seedance20RestrictedForCurrentUser =
     isSeedanceModel && seedance2AccessResolved && !seedance2AccessEnabled;
   const isSeedance20LockedOption = React.useCallback(
-    (value: SeedanceModel): boolean =>
-      seedance20RestrictedForCurrentUser &&
-      (isSeedance20ModelValue(value) || isSeedance25ModelValue(value)),
+    (value: SeedanceModel): boolean => {
+      // 玲珑全量开放 2.0 / Fast / 2.5，不受 VIP 白名单限制
+      if (isLinglongRestrictedPalette()) return false;
+      return (
+        seedance20RestrictedForCurrentUser &&
+        (isSeedance20ModelValue(value) || isSeedance25ModelValue(value))
+      );
+    },
     [seedance20RestrictedForCurrentUser]
   );
   const isSeedance20Model =
@@ -1136,9 +1143,11 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
   );
   const filteredSeedanceModelOptions = React.useMemo(
     () => {
-      // 玲珑仅开放 Seedance 1.5 Pro
+      // 玲珑 91model：仅 Seedance 2.0 / 2.5（无 2.0 Fast）
       if (isLinglongRestrictedPalette()) {
-        return seedanceModelOptions.filter((opt) => opt.value === "seedance-1.5-pro");
+        return seedanceModelOptions.filter(
+          (opt) => opt.value === "seedance-2.0" || opt.value === "seedance-2.5"
+        );
       }
       if (seedance20AvailableForCurrentUser || seedance20RestrictedForCurrentUser) {
         return seedanceModelOptions;
@@ -1169,17 +1178,19 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
   );
   React.useEffect(() => {
     if (!isLinglongRestrictedPalette() || provider !== "doubao") return;
-    if (seedanceModel === "seedance-1.5-pro") return;
+    if (seedanceModel === "seedance-2.0" || seedanceModel === "seedance-2.5") {
+      return;
+    }
     const nextDuration =
-      clipDuration && clipDuration >= 4 && clipDuration <= 12 ? clipDuration : 5;
+      clipDuration && clipDuration >= 4 && clipDuration <= 15 ? clipDuration : 5;
     window.dispatchEvent(
       new CustomEvent("flow:updateNodeData", {
         detail: {
           id,
           patch: {
-            seedanceModel: "seedance-1.5-pro",
-            seedanceMode: "text",
-            clipDuration: nextDuration,
+            seedanceModel: "seedance-2.0",
+            managedModelKey: "seedance-2.0",
+            duration: nextDuration,
             vendorKey: "tianyi",
             platformKey: "tianyi",
           },
@@ -1188,6 +1199,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
     );
   }, [clipDuration, id, provider, seedanceModel]);
   React.useEffect(() => {
+    if (isLinglongRestrictedPalette()) return;
     if (!seedance20RestrictedForCurrentUser || !isSeedance2FamilyModel) return;
     const nextDuration =
       clipDuration && clipDuration >= 4 && clipDuration <= 12 ? clipDuration : 5;
@@ -1393,9 +1405,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       const expectedManagedKey =
         seedanceModel === "seedance-2.5"
           ? "seedance-2.5"
-          : seedanceModel === "seedance-2.0" || seedanceModel === "seedance-2.0-fast"
-          ? "seedance-2.0"
-          : "seedance-1.5";
+          : "seedance-2.0";
       const currentManagedKey =
         typeof data.managedModelKey === "string" ? data.managedModelKey.trim() : "";
       if (currentVendor === "tianyi" && currentManagedKey === expectedManagedKey) return;

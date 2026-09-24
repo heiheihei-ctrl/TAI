@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { AppLoader } from '@/components/AppLoader';
 import { getStoredTokenExpiry } from '@/services/authApi';
@@ -11,29 +10,30 @@ interface AuthWrapperProps {
 
 export const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
   const { user, initializing, error } = useAuthStore();
-  const navigate = useNavigate();
   const { i18n } = useTranslation();
   const isZh = (i18n.resolvedLanguage || i18n.language || '').toLowerCase().startsWith('zh');
   const lt = useCallback((zhText: string, enText: string) => (isZh ? zhText : enText), [isZh]);
 
   useEffect(() => {
+    // 等认证 init 完成后再判定；有 user 说明会话仍有效（可能刚刷新成功）。
+    // 避免在 refresh 进行中仅因本地 token_expiry 过期就硬跳登录页（用户感知为闪退）。
+    if (initializing || user) return;
     try {
       const expiry = getStoredTokenExpiry();
-      // 若没有本地过期时间或已过期，认为需要重新登录
-      if (!expiry || expiry <= Date.now()) {
-        window.dispatchEvent(
-          new CustomEvent('toast', {
-            detail: { message: lt('当前登录已过期，请重新登录', 'Your login session has expired. Please sign in again'), type: 'info' },
-          })
-        );
-        if (!window.location.pathname.startsWith('/auth')) {
-          navigate('/auth/login', { replace: true });
-        }
-      }
-    } catch (e) {
+      if (expiry && expiry > Date.now()) return;
+      window.dispatchEvent(
+        new CustomEvent('toast', {
+          detail: {
+            message: lt('当前登录已过期，请重新登录', 'Your login session has expired. Please sign in again'),
+            type: 'info',
+          },
+        })
+      );
+      // 真正无会话时由 ProtectedRoute Navigate 到登录页，此处不再硬跳，避免与 refresh 竞态。
+    } catch {
       // 忽略本地存储读取错误
     }
-  }, [lt, navigate]);
+  }, [lt, initializing, user]);
 
   // 如果正在初始化认证状态，显示加载器
   if (initializing) {

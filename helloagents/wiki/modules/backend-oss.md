@@ -8,7 +8,7 @@
 
 ## 关键文件
 - `backend/src/oss/oss.service.ts`：存储抽象、TOS client、本地落盘、public URL、允许域名白名单
-- `backend/src/oss/uploads.controller.ts`：`/uploads/*`（含 `storage-mode` / `file`）
+- `backend/src/oss/uploads.controller.ts`：`/uploads/*`（含 `storage-mode` / `file`）。**Fastify 下使用 `@fastify/multipart`（`req.file()`），禁止 Express `FileInterceptor`/multer**，否则会 `req.on is not a function` 500。
 - `backend/src/oss/assets.controller.ts`：`/assets/*`（local 模式可直接读盘）
 - `backend/src/oss/video-frames.controller.ts`：`/video-frames/*`
 - `backend/src/oss/video-gif.controller.ts`：`/video-gif/*`

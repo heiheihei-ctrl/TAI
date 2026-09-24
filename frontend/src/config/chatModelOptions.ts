@@ -1,6 +1,7 @@
 import type { ManualAIMode } from "@/stores/aiChatStore";
 import type { SupportedAIProvider } from "@/types/ai";
 import { SHOW_FOREIGN_NODES } from "@/config/featureFlags";
+import { getDeploymentBrand } from "@/config/deploymentBrand";
 
 export type ChatModelKey =
   | "nano-banana-pro"
@@ -122,7 +123,10 @@ export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
 ];
 
 export function getVisibleChatModelOptions(): ChatModelOption[] {
+  const isLinglong = getDeploymentBrand() === "linglong";
   return CHAT_MODEL_OPTIONS.filter((opt) => {
+    // 玲珑：对话框仅保留 Seedance
+    if (isLinglong) return opt.key === "seedance";
     if (opt.tab === "other" && !SHOW_FOREIGN_NODES) {
       return opt.key === "nano-banana-fast";
     }
@@ -149,9 +153,13 @@ export function resolveChatModelKeyFromState(input: {
     const found = getChatModelOption(input.chatModelKey);
     if (found) return input.chatModelKey;
   }
-  if (input.manualAIMode === "text") return "gpt-6";
+  if (input.manualAIMode === "text") {
+    return getDeploymentBrand() === "linglong" ? "seedance" : "gpt-6";
+  }
   if (input.manualAIMode === "video") return "seedance";
-  if (input.aiProvider === "seedream5Pro") return "seedream-5-pro";
+  if (input.aiProvider === "seedream5Pro") {
+    return getDeploymentBrand() === "linglong" ? "seedance" : "seedream-5-pro";
+  }
   if (input.aiProvider === "nano2") return "gpt-image-2";
   if (input.aiProvider === "banana-3.1") return "nano-banana-ultra";
   if (input.aiProvider === "banana") return "nano-banana-pro";

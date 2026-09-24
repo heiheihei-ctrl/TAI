@@ -39,6 +39,7 @@ import { getDeploymentBrand } from "../../config/deployment-brand";
 import {
   TianyiCloudService,
   TIANYI_SEEDANCE_TASK_PREFIX,
+  type TianyiSeedanceModelVersion,
 } from "./tianyi-cloud.service";
 
 // 默认请求超时时间（毫秒）
@@ -1767,11 +1768,22 @@ export class VideoProviderService {
     const isLinglongBrand = getDeploymentBrand() === "linglong";
     if (isLinglongBrand && (vendorKey === "tianyi" || !vendorKey)) {
       try {
-        const linglongResolved = {
-          modelKey: "seedance-1.5" as const,
-          modelVersion: "1.5-pro" as const,
-          label: "Seedance 1.5-Pro",
-        };
+        // 91model 仅 2.0 / 2.5；历史 1.5 / 2.0-fast 请求归一
+        const baseResolved = this.resolveManagedSeedanceModel(options);
+        let linglongResolved = baseResolved;
+        if (baseResolved.modelKey === "seedance-1.5") {
+          linglongResolved = {
+            modelKey: "seedance-2.0" as const,
+            modelVersion: "2.0" as const,
+            label: "Seedance 2.0",
+          };
+        } else if (baseResolved.modelVersion === "2.0-fast") {
+          linglongResolved = {
+            modelKey: "seedance-2.0" as const,
+            modelVersion: "2.0" as const,
+            label: "Seedance 2.0",
+          };
+        }
         return await this.generateSeedanceViaTianyi(options, linglongResolved);
       } catch (error) {
         throw this.wrapSeedanceException(error, options);
@@ -3226,7 +3238,9 @@ export class VideoProviderService {
       label: string;
     },
   ): Promise<VideoGenerationResult> {
-    const modelVersion = resolved.modelVersion;
+    // 91model 仅 2.0 / 2.5（无 2.0 Fast）
+    const modelVersion: TianyiSeedanceModelVersion =
+      resolved.modelVersion === "2.5" ? "2.5" : "2.0";
     const isSeedance2Model = modelVersion === "2.0" || modelVersion === "2.0-fast";
     const isSeedance25Model = modelVersion === "2.5";
     const normalizedPrompt =
@@ -3259,14 +3273,20 @@ export class VideoProviderService {
     }
 
     normalizedImageUrls.forEach((url, index) => {
+      // 对齐 91model curl：图生视频用 first_frame / last_frame；多图额外用 reference_image
       const imageItem: Record<string, any> = {
         type: "image_url",
         image_url: { url },
       };
-      if (isSeedance2Model || isSeedance25Model) {
+      if (options.videoMode === "start-end2video") {
+        imageItem.role =
+          index === 0 ? "first_frame" : index === 1 ? "last_frame" : "reference_image";
+      } else if (index === 0) {
+        imageItem.role = "first_frame";
+      } else if (index === 1 && normalizedImageUrls.length === 2) {
+        imageItem.role = "last_frame";
+      } else {
         imageItem.role = "reference_image";
-      } else if (options.videoMode === "start-end2video") {
-        imageItem.role = index === 0 ? "first_frame" : index === 1 ? "last_frame" : undefined;
       }
       content.push(imageItem);
     });
@@ -3307,20 +3327,15 @@ export class VideoProviderService {
           ? options.aspectRatio.trim()
           : "16:9",
       duration,
-      // 1.5 Pro 对齐 TokenHub 官方示例：不传 resolution / videoMode=text2video
-      resolution: isSeedance2Model || isSeedance25Model
-        ? typeof options.resolution === "string" && options.resolution.trim()
+      // 91model curl：1.5 / 2.0 均可传 resolution（如 720p / 1080p）
+      resolution:
+        typeof options.resolution === "string" && options.resolution.trim()
           ? options.resolution.trim()
-          : undefined
-        : undefined,
+          : "720p",
       generateAudio:
         typeof options.generateAudio === "boolean" ? options.generateAudio : undefined,
-      videoMode:
-        isSeedance2Model || isSeedance25Model
-          ? typeof options.videoMode === "string" && options.videoMode.trim()
-            ? options.videoMode.trim()
-            : undefined
-          : undefined,
+      watermark:
+        typeof options.watermark === "boolean" ? options.watermark : undefined,
       cameraFixed:
         typeof options.camerafixed === "boolean" ? options.camerafixed : undefined,
     });

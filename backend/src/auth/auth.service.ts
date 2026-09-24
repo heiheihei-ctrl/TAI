@@ -157,11 +157,11 @@ export class AuthService implements OnModuleInit {
   ) {}
 
   /**
-   * 启动时把历史 refresh token 收紧到当前 JWT_REFRESH_TTL（默认 3d），
-   * 让旧会话也按新规失效，而不是继续沿用签发时的 30d。
+   * 启动时把历史 refresh token 收紧到当前 JWT_REFRESH_TTL（默认 7d），
+   * 让旧会话也按新规失效，而不是继续沿用签发时的更长 TTL。
    */
   async onModuleInit() {
-    const ttlMs = parseJwtTtlMs(this.config.get("JWT_REFRESH_TTL"), "3d");
+    const ttlMs = parseJwtTtlMs(this.config.get("JWT_REFRESH_TTL"), "7d");
     const cutoff = new Date(Date.now() - ttlMs);
     try {
       const revoked = await this.prisma.refreshToken.updateMany({
@@ -207,8 +207,8 @@ export class AuthService implements OnModuleInit {
     role: string;
   }): Promise<TokenPair> {
     const payload = { sub: user.id, email: user.email, role: user.role };
-    const accessTtl = this.config.get<string>("JWT_ACCESS_TTL") || "3d";
-    const refreshTtl = this.config.get<string>("JWT_REFRESH_TTL") || "3d";
+    const accessTtl = this.config.get<string>("JWT_ACCESS_TTL") || "7d";
+    const refreshTtl = this.config.get<string>("JWT_REFRESH_TTL") || "7d";
 
     const accessToken = await this.jwt.signAsync(payload, {
       secret:
@@ -2083,7 +2083,7 @@ export class AuthService implements OnModuleInit {
   ) {
     const tokens = await this.signTokens(user);
     const refreshHash = await bcrypt.hash(tokens.refreshToken, 10);
-    const refreshTtlSec = this.config.get("JWT_REFRESH_TTL") || "3d";
+    const refreshTtlSec = this.config.get("JWT_REFRESH_TTL") || "7d";
     const expiresAt = new Date(Date.now() + parseJwtTtlMs(refreshTtlSec));
     await this.prisma.refreshToken.create({
       data: {
@@ -2142,7 +2142,7 @@ export class AuthService implements OnModuleInit {
   async refresh(userPayload: any, presentedToken: string) {
     const refreshMaxAgeMs = parseJwtTtlMs(
       this.config.get("JWT_REFRESH_TTL"),
-      "3d",
+      "7d",
     );
     const rt = await this.prisma.refreshToken.findFirst({
       where: { userId: userPayload.sub, isRevoked: false },
@@ -2171,7 +2171,7 @@ export class AuthService implements OnModuleInit {
       role: userPayload.role,
     });
     const refreshHash = await bcrypt.hash(tokens.refreshToken, 10);
-    const refreshTtlSec = this.config.get("JWT_REFRESH_TTL") || "3d";
+    const refreshTtlSec = this.config.get("JWT_REFRESH_TTL") || "7d";
     const expiresAt = new Date(Date.now() + parseJwtTtlMs(refreshTtlSec));
     await this.prisma.refreshToken.create({
       data: { userId: userPayload.sub, tokenHash: refreshHash, expiresAt },
@@ -2213,10 +2213,10 @@ export class AuthService implements OnModuleInit {
   setAuthCookies(reply: any, tokens: TokenPair, request?: any) {
     const base = this.cookieOptions(request);
     const accessTtl = parseJwtTtlMs(
-      this.config.get("JWT_ACCESS_TTL") || "3d"
+      this.config.get("JWT_ACCESS_TTL") || "7d"
     );
     const refreshTtl = parseJwtTtlMs(
-      this.config.get("JWT_REFRESH_TTL") || "3d"
+      this.config.get("JWT_REFRESH_TTL") || "7d"
     );
     reply.setCookie("access_token", tokens.accessToken, {
       ...base,

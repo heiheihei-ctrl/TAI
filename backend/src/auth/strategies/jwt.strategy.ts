@@ -41,7 +41,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       secretOrKey: secret,
       ignoreExpiration: false,
     });
-    this.accessMaxAgeMs = parseJwtTtlMs(config.get<string>('JWT_ACCESS_TTL'), '3d');
+    this.accessMaxAgeMs = parseJwtTtlMs(config.get<string>('JWT_ACCESS_TTL'), '7d');
   }
 
   async validate(payload: any) {

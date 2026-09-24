@@ -6,6 +6,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 ### Fixed
+- 上传：Fastify 下 `/api/uploads/image|file|video` 误用 Express `FileInterceptor`(multer) 导致 `req.on is not a function` 500；改为 `@fastify/multipart` 解析。玲珑默认走后端 multipart，受此影响最大。
+- 发送到画布：修正误用 TOS S3 API 域名（`tos-s3-*`）作为公共资源基址，改为 `tai-ai.tos-cn-*`；前端渲染时自动把历史 S3 API 链接改写为可直连 CDN，避免图片加载失败导致快速上传报错。
+- Auth: 登录会话 TTL 调整为 7 天（`JWT_ACCESS_TTL` / `JWT_REFRESH_TTL=7d`）；修复受保护路由在 token 刷新完成前因本地过期误跳登录（用户感知为闪退），刷新成功同步续期本地会话标记。
+- 玲珑 Seedance：运行时强制 2.0/2.5（不再默认 1.5「图生视频」）；无图有提示词按文生/全能参考放行，有图走参考/图生，消除误报「图生视频模式至少需要连接 1 张图片」。
 - Collab WS: 浏览器升级带 `Origin` 时，若 `CORS_ORIGIN` 未包含当前站点（如 `http://wedotai.com`）会 403；现允许 Origin host 与请求 Host 相同的同源升级。部署仍建议把站点写入 `CORS_ORIGIN`。
 - Collab WS: `VITE_API_BASE_URL=/` 时按当前页同源解析（https→wss），避免错误拼出 `ws://`；部署文档补齐 Nginx `location /ws/` 反代（wedotai 等 linglong 站缺此段会导致协同连不上）。
 - 玲珑本地落盘保存不再把火山 TOS / 天翼上的 `ai/videos/...` 远程地址当成缺失的本地文件而返回 400；新视频文件名会去掉任务 ID 里的冒号，避免 Windows 落盘失败。
@@ -40,6 +44,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - 画布图片工具栏「高清放大」功能及后端 `POST /api/ai/upscale-image` 接口（`hdUpscaleService`、`ExpandImageService.upscaleImage`）。
 
 ### Changed
+- AI/Linglong Seedance：上游改为 `91model.ai`（`TIANYI_SEEDANCE_BASE_URL` / `TIANYI_SEEDANCE_API_KEY`），仅支持 2.0/2.5；**Linglong 下线 Seedream**（隐藏节点、对话框模型、后端拒绝天翼生图，移除 `TIANYI_CLOUD_*` / `TIANYI_SEEDREAM_*`）。
 - AI/Linglong: 天翼云新建任务严格限定 `DEPLOYMENT_BRAND=linglong`；TAI 下忽略残留 `vendorKey=tianyi`，前端同步清掉 Seedance 节点粘性天翼渠道。
 - AI 对话框请求超时统一调整为 120 秒；GPT-6 文本模型固定按 10 积分/次扣费。
 - AI 对话框请求超时调整为 120 秒；GPT-6 文本模型固定按 10 积分扣费，其他文本模型价格不变。

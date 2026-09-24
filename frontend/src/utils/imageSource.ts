@@ -53,6 +53,43 @@ const maybeRemapLegacyCloudUrlToPublicBase = (absoluteUrl: string): string | nul
   }
 };
 
+/**
+ * 火山 TOS 的 S3 API 域名（tos-s3-*）不能当浏览器直链；
+ * 改写为虚拟主机公开域名：{bucket}.tos-{region}.volces.com
+ */
+const rewriteTosS3ApiUrlToPublic = (absoluteUrl: string): string | null => {
+  try {
+    const parsed = new URL(absoluteUrl);
+    const host = parsed.hostname.toLowerCase();
+    // path-style: tos-s3-cn-guangzhou.volces.com/uploads/...
+    // 错误虚拟主机: tai-ai.tos-s3-cn-guangzhou.volces.com/uploads/...
+    const match = host.match(/^(?:([a-z0-9-]+)\.)?tos-s3-(.+)$/i);
+    if (!match) return null;
+
+    const bucketFromHost = match[1] ? String(match[1]).toLowerCase() : "";
+    const regionSuffix = String(match[2] || "").toLowerCase(); // e.g. cn-guangzhou.volces.com
+    if (!regionSuffix) return null;
+
+    let pathKey = decodeURIComponent(parsed.pathname).replace(/^\/+/, "");
+    let bucket = bucketFromHost || DEFAULT_MANAGED_ASSET_HOST.split(".")[0] || "tai-ai";
+
+    if (!bucketFromHost) {
+      const firstSeg = pathKey.split("/")[0] || "";
+      if (firstSeg && !isAssetKeyRef(pathKey) && pathKey.startsWith(`${firstSeg}/`)) {
+        // path-style with bucket prefix: /tai-ai/uploads/...
+        bucket = firstSeg;
+        pathKey = pathKey.slice(firstSeg.length + 1);
+      }
+    }
+
+    if (!pathKey || !isAssetKeyRef(pathKey)) return null;
+    const search = parsed.search || "";
+    return `https://${bucket}.tos-${regionSuffix}/${pathKey}${search}`;
+  } catch {
+    return null;
+  }
+};
+
 const shouldAvoidSameOriginDirectBase = (baseUrl: string): boolean => {
   if (typeof window === "undefined" || !window.location?.origin) return false;
   try {
@@ -494,7 +531,10 @@ export const toRenderableImageSrc = (value?: string | null): string | null => {
   }
   if (isRemoteUrl(trimmed)) {
     // 绝对 URL：默认原样使用（DB 返回什么就渲染什么）。
-    // 仅当主机是历史 TOS/云存储、且当前公共 base 不同时，才按 key 迁到新 base。
+    // 先纠正误用的 TOS S3 API 域名，再按公共 base 迁移历史云主机。
+    const fromS3Api = rewriteTosS3ApiUrlToPublic(trimmed);
+    if (fromS3Api) return fromS3Api;
+
     const remapped = maybeRemapLegacyCloudUrlToPublicBase(trimmed);
     if (remapped) return remapped;
 

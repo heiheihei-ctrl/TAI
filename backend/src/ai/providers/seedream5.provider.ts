@@ -17,10 +17,8 @@ export class Seedream5Provider implements IAIProvider {
 
   async initialize(): Promise<void> {
     if (getDeploymentBrand() === 'linglong') {
-      this.available = !!this.config.get<string>('TIANYI_CLOUD_API_KEY')?.trim();
-      this.logger.log(
-        `Seedream5 provider initialized (linglong/tianyi): ${this.available ? 'available' : 'unavailable'}`,
-      );
+      this.available = false;
+      this.logger.log('Seedream5 provider initialized (linglong): unavailable (Seedream offline)');
       return;
     }
 

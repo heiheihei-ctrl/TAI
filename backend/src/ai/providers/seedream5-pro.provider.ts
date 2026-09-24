@@ -19,9 +19,9 @@ export class Seedream5ProProvider implements IAIProvider {
 
   async initialize(): Promise<void> {
     if (getDeploymentBrand() === 'linglong') {
-      this.available = !!this.config.get<string>('TIANYI_CLOUD_API_KEY')?.trim();
+      this.available = false;
       this.logger.log(
-        `Seedream5Pro provider initialized (linglong/tianyi): ${this.available ? 'available' : 'unavailable'}`,
+        'Seedream5Pro provider initialized (linglong): unavailable (Seedream offline)',
       );
       return;
     }
@@ -55,10 +55,16 @@ export class Seedream5ProProvider implements IAIProvider {
     const layerDecomposition =
       request.layerDecomposition === true ||
       request.providerOptions?.seedream?.layerDecomposition === true;
-    if (layerDecomposition && getDeploymentBrand() !== 'linglong') {
+    if (layerDecomposition) {
       return {
         success: false,
-        error: { message: '图层拆分仅在 linglong 天翼云下可用' },
+        error: { message: '图层拆分已不可用' },
+      };
+    }
+    if (getDeploymentBrand() === 'linglong') {
+      return {
+        success: false,
+        error: { message: '玲珑部署已下线 Seedream' },
       };
     }
     const providerInfo = await this.seedream5Service.getProviderExecutionInfo(

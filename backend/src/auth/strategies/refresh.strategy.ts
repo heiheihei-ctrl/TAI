@@ -30,7 +30,7 @@ export class RefreshJwtStrategy extends PassportStrategy(Strategy, 'jwt-refresh'
       ignoreExpiration: false,
       passReqToCallback: true,
     });
-    this.refreshMaxAgeMs = parseJwtTtlMs(config.get<string>('JWT_REFRESH_TTL'), '3d');
+    this.refreshMaxAgeMs = parseJwtTtlMs(config.get<string>('JWT_REFRESH_TTL'), '7d');
   }
 
   async validate(req: Request, payload: any) {

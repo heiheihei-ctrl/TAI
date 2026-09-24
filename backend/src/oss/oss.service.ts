@@ -604,9 +604,12 @@ export class OssService {
     const { cdnHost, bucket, endpoint } = this.conf;
 
     const rawEndpoint = (endpoint || '').replace(/^https?:\/\//i, '').replace(/\/+$/, '');
-
-    const defaultHost = rawEndpoint ? `${bucket}.${rawEndpoint}` : `${bucket}.oss-cn-hangzhou.aliyuncs.com`;
-    const host = cdnHost || defaultHost;
+    // OSS_ENDPOINT 常为 S3 API 域名（tos-s3-*），浏览器直链需用 tos-* 公开域名
+    const publicEndpoint = rawEndpoint.replace(/^tos-s3-/i, 'tos-');
+    const defaultHost = publicEndpoint
+      ? `${bucket}.${publicEndpoint}`
+      : `${bucket}.oss-cn-hangzhou.aliyuncs.com`;
+    const host = (cdnHost || defaultHost).replace(/^https?:\/\//i, '').replace(/\/+$/, '');
 
     return `https://${host}/${normalizedKey}`;
   }
@@ -616,11 +619,19 @@ export class OssService {
     const stripProtocol = (value: string) => value.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
 
     const rawEndpoint = (endpoint || '').replace(/^https?:\/\//i, '').replace(/\/+$/, '');
-    const defaultHost = rawEndpoint ? `${bucket}.${rawEndpoint}` : `${bucket}.oss-cn-hangzhou.aliyuncs.com`;
+    const publicEndpoint = rawEndpoint.replace(/^tos-s3-/i, 'tos-');
+    const defaultHost = publicEndpoint
+      ? `${bucket}.${publicEndpoint}`
+      : `${bucket}.oss-cn-hangzhou.aliyuncs.com`;
 
     const hosts = [defaultHost];
     if (cdnHost) {
       hosts.push(stripProtocol(cdnHost));
+    }
+    // 兼容历史误写入的 S3 API 域名
+    if (rawEndpoint) {
+      hosts.push(rawEndpoint);
+      hosts.push(`${bucket}.${rawEndpoint}`);
     }
     const localBase = this.getLocalPublicBaseUrl();
     if (localBase) {

@@ -101,6 +101,7 @@ const shouldUseAnonymousCrossOrigin = (source: string): boolean => {
         if (url.hostname === window.location.hostname) return true;
         // OSS / CDN 图片通常支持 CORS，开启 anonymous 以避免污染 canvas
         if (url.hostname.endsWith('.aliyuncs.com')) return true;
+        if (url.hostname.endsWith('.volces.com') || url.hostname.endsWith('.ivolces.com')) return true;
     } catch {}
     // 其他外部来源不强制 crossOrigin=anonymous，避免因缺少 CORS 头导致图片加载失败
     return false;

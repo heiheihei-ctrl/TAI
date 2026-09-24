@@ -133,6 +133,19 @@ export function isAllowedForSeedreamSeedancePalette(
   return false;
 }
 
+/** 玲珑面板：Seedance + 免费（已下线 Seedream） */
+export function isAllowedForLinglongPalette(
+  config?: Partial<NodeConfig> | null
+): boolean {
+  if (!config) return false;
+  const key = String(config.nodeKey || '').trim();
+  // 面板只保留 doubaoVideo 作为唯一 Seedance 入口
+  if (key === 'seedance20Video') return false;
+  if (isSeedancePaletteConfig(config)) return true;
+  if (isFreePaletteConfig(config)) return true;
+  return false;
+}
+
 /** @deprecated 使用 isAllowedForSeedreamSeedancePalette */
 export const isAllowedForInternationalEdition = isAllowedForSeedreamSeedancePalette;
 
@@ -142,5 +155,17 @@ export function isAllowedNodeKeyForSeedreamSeedancePalette(
 ): boolean {
   if (!nodeKey) return false;
   if (SEEDREAM_NODE_KEYS.has(nodeKey) || SEEDANCE_NODE_KEYS.has(nodeKey)) return true;
+  return isFreePaletteConfig({ nodeKey, creditsPerCall, serviceType: '' });
+}
+
+export function isAllowedNodeKeyForLinglongPalette(
+  nodeKey?: string | null,
+  creditsPerCall = 0,
+): boolean {
+  if (!nodeKey) return false;
+  if (SEEDREAM_NODE_KEYS.has(nodeKey)) return false;
+  // 玲珑面板只保留一个 Seedance 入口（doubaoVideo），隐藏 seedance20Video 避免重复
+  if (nodeKey === 'seedance20Video') return false;
+  if (nodeKey === 'doubaoVideo') return true;
   return isFreePaletteConfig({ nodeKey, creditsPerCall, serviceType: '' });
 }
