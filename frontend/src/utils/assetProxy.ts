@@ -73,6 +73,51 @@ export function isLegacyCloudAssetHost(hostname: string): boolean {
   return isCloudObjectStorageHost(hostname);
 }
 
+function isLoopbackHostname(hostname: string): boolean {
+  const host = String(hostname || "").trim().toLowerCase();
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+}
+
+function isManagedLocalUploadPath(pathname: string): boolean {
+  return /^\/(uploads|templates|projects|videos|ai)(\/|$)/i.test(pathname || "");
+}
+
+/**
+ * 把 loopback / 同源绝对托管地址收成相对路径（/uploads/...），
+ * 避免 wedotai.com 页面仍去请求 localhost:4000 导致裂图。
+ */
+export function toRelativeManagedAssetPath(input: string): string | null {
+  const value = typeof input === "string" ? input.trim() : "";
+  if (!value) return null;
+  try {
+    const base =
+      typeof window !== "undefined" && window.location?.origin
+        ? window.location.origin
+        : "http://localhost";
+    const url = new URL(value, base);
+    if (!isManagedLocalUploadPath(url.pathname)) return null;
+    const host = url.hostname.toLowerCase();
+    const pageHost =
+      typeof window !== "undefined"
+        ? String(window.location.hostname || "").toLowerCase()
+        : "";
+    if (isLoopbackHostname(host) || (pageHost && host === pageHost)) {
+      return `${url.pathname}${url.search || ""}${url.hash || ""}`;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 渲染用：跨域页面上把 localhost 托管图改写为当前页同源相对路径。
+ */
+export function rewriteLoopbackManagedAssetUrlForDisplay(input: string): string {
+  const relative = toRelativeManagedAssetPath(input);
+  return relative || input;
+}
+
 // 直连 OSS/CDN/本地静态的公共 base（用于将 key 拼成可访问 URL）
 export function getPublicAssetBaseUrl(): string {
   const raw = normalizePublicAssetBaseUrl(
@@ -81,8 +126,26 @@ export function getPublicAssetBaseUrl(): string {
 
   // linglong / 本地上传：禁止继续用 TOS 作为公共基址，否则 localhost 资源会被改写成 TOS
   if (isFrontendLocalUploadMode()) {
-    if (raw && !looksLikeCloudObjectStorageBase(raw)) return raw;
-    return getApiBaseUrl();
+    // 禁止把资源拼成跨域的 localhost 绝对地址（页面在 wedotai.com 等域名时会裂图 + CORS）
+    if (raw) {
+      try {
+        const host = new URL(raw).hostname.toLowerCase();
+        if (host === "localhost" || host === "127.0.0.1" || host === "::1") {
+          // fall through to same-origin
+        } else if (!looksLikeCloudObjectStorageBase(raw)) {
+          return raw;
+        }
+      } catch {
+        if (!looksLikeCloudObjectStorageBase(raw)) return raw;
+      }
+    }
+    const apiBase = getApiBaseUrl();
+    if (apiBase && /^https?:\/\//i.test(apiBase)) return apiBase;
+    // VITE_API_BASE_URL=/ 时用当前页 origin（开发态配合 Vite 反代 /uploads 等）
+    if (typeof window !== "undefined" && window.location?.origin) {
+      return window.location.origin;
+    }
+    return apiBase;
   }
 
   return raw;
@@ -165,6 +228,12 @@ export function proxifyRemoteAssetUrl(
 ): string {
   const value = typeof input === "string" ? input.trim() : "";
   if (!value) return input;
+
+  // 跨域页面上的 loopback 托管图收成相对路径（/uploads/...），走当前 origin 反代
+  const loopbackRelative = rewriteLoopbackManagedAssetUrlForDisplay(value);
+  if (loopbackRelative !== value) {
+    return loopbackRelative;
+  }
 
   const apiBase = getApiBaseUrl();
   const forceProxy = options?.forceProxy === true;

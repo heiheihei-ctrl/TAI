@@ -11,7 +11,7 @@ const path = require('path');
 console.log('🔍 检查CDN配置...\n');
 
 // 1. 检查环境变量文件
-const envFiles = ['.env', '.env.production', '.env.local'];
+const envFiles = ['.env', '.env.producti   on', '.env.local'];
 let envContent = '';
 let envFileFound = false;
 

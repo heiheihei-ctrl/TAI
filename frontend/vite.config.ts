@@ -79,17 +79,38 @@ export default defineConfig({
     proxy: {
       '/api': {
         // 后端服务器地址（与 backend/.env 的 PORT 一致）
-        target: 'http://localhost:4001',
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+      },
+      // linglong 本地落盘：公开 URL 常为 /uploads|/projects|...，需反代到后端静态挂载
+      '/uploads': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+      },
+      '/projects': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+      },
+      '/templates': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+      },
+      '/videos': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+      },
+      '/ai': {
+        target: 'http://localhost:4000',
         changeOrigin: true,
       },
       // Tanva 协同：原生 WebSocket /ws/collab（必须 ws:true，否则光标连不上）
       '/ws': {
-        target: 'http://localhost:4001',
+        target: 'http://localhost:4000',
         changeOrigin: true,
         ws: true,
       },
       '/socket.io': {
-        target: 'http://localhost:4001',
+        target: 'http://localhost:4000',
         changeOrigin: true,
         ws: true,
       },

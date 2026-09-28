@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 ### Fixed
+- TAI Seedance 2.0 / 2.0 Fast 积分不再固定 600：按分辨率×时长计费（标准 `480P/720P/1080P/4K`=`100/120/300/600` 每秒；Fast `480P/720P`=`80.6/96.6` 每秒；默认 5s 档）；`SEEDANCE20_FREE=1` 时可免费。预览与实扣共用同一逻辑。
+- 玲珑拖图上画布后刷新丢失：本地落盘公开 URL 改为相对路径 `/uploads/...`（禁止误用 TOS 基址），Vite 反代静态前缀；上传成功以 key/url 均可回写并清 pending，避免 autosave 一直拦截导致刷新丢图。
 - 上传：Fastify 下 `/api/uploads/image|file|video` 误用 Express `FileInterceptor`(multer) 导致 `req.on is not a function` 500；改为 `@fastify/multipart` 解析。玲珑默认走后端 multipart，受此影响最大。
 - 发送到画布：修正误用 TOS S3 API 域名（`tos-s3-*`）作为公共资源基址，改为 `tai-ai.tos-cn-*`；前端渲染时自动把历史 S3 API 链接改写为可直连 CDN，避免图片加载失败导致快速上传报错。
 - Auth: 登录会话 TTL 调整为 7 天（`JWT_ACCESS_TTL` / `JWT_REFRESH_TTL=7d`）；修复受保护路由在 token 刷新完成前因本地过期误跳登录（用户感知为闪退），刷新成功同步续期本地会话标记。
@@ -31,7 +33,17 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - GPT-6 文本请求不再沿用快速模型 20 秒超时：主备单次 90 秒、总预算 185 秒，前端同步等待 240 秒，保留超时取消与模型路由，增加预算回归测试。
 - Banana 文本主备超时预算冲突：ToAPIs 单次请求调整为 20 秒，通道总预算维持 45 秒；总超时取消在途请求并阻止取消后的备用请求，清理超时定时器，补充主备切换/取消回归测试。
 
+### Fixed
+- Linglong gpt-image-2 请求体严格对齐 91model 文档字段（model/prompt/n/size/quality/response_format/style/image|images/mask/stream/watermark）；size 仅用 `1024x1024`/`1536x1024`/`1024x1536`，避免非法像素触发「请求参数无效」；参考图单张走 `image`、多张走 `images`。
+- Linglong 生图结果在 wedotai.com 裂图：渲染时把 `http://localhost:4000/uploads/...` 收成同源相对路径；落库优先存 `/uploads/...`；后端忽略 loopback 的 `LOCAL_UPLOAD_PUBLIC_BASE_URL`。
+- Linglong 本地开发：Vite 反代目标与后端 `PORT=4000` 对齐（此前误指向 4001 导致 `/api/uploads/image` 500）；`VITE_ASSET_PUBLIC_BASE_URL` 不再写死 `localhost:4000`，避免 wedotai.com 页面裂图与跨域 OPTIONS 失败。
+- Linglong `gpt-image-2`：异步任务在尊享（stable）路线下不再劫持到 Banana/腾讯 VOD `CreateAigcImageTask`；固定 nano2 → 91model.ai（与 Seedance 同网关）。前端 linglong 下不再附带 stable imageRoute。
+
+### Changed
+- Linglong `gpt-image-2` 积分相对 TAI 价上浮 85%（×1.85，向上取整）；预览/扣费与面板回退价同步，默认 medium/1K 为 54。
+
 ### Added
+- Linglong：画布开放 `gptImage2` 生图节点，走 91model.ai `POST /v1/images/generations`（模型 `gpt-image-2`，与 Seedance 共用 `TIANYI_SEEDANCE_*` 网关/钥匙；可选 `TIANYI_GPT_IMAGE_2_MODEL`）。TAI 仍走 ToAPIs。
 - Linglong Seedream 5.0 Pro：天翼云对齐文生图/图生图，并新增图层拆分（`layerDecomposition` → `layer_decomposition`）；前端节点在 linglong 下可选「图层拆分」模式，多图结果回写节点。
 - Linglong: 画布左侧主工具栏下方单独显示供应链图库入口（不并入工具栏主壳），点击打开右侧弹窗；支持公共/个人 Tab、场景筛选、搜索与分页选择（当前为前端 mock 数据）。
 - GPT-Image-2.5 独立节点接入 ToAPIs，保留 gpt-image-2.5-sunburst-vip 模型与 metadata 分辨率/方向参数，默认 1:1、1K、high、单张。

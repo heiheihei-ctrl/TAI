@@ -5,6 +5,7 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../../prisma/prisma.service";
+import { getDeploymentBrand } from "../../config/deployment-brand";
 import {
   IAIProvider,
   ImageGenerationRequest,
@@ -2228,13 +2229,33 @@ export class BananaProvider implements IAIProvider {
       `Generating image with prompt: ${request.prompt.substring(0, 50)}...`
     );
 
+    const requestedModel = this.normalizeModelName(
+      request.model || this.DEFAULT_MODEL
+    );
+    // Linglong gpt-image-2 只走 91model（nano2），禁止尊享路线落到腾讯 VOD
+    if (
+      getDeploymentBrand() === "linglong" &&
+      requestedModel.toLowerCase().includes("gpt-image-2") &&
+      !requestedModel.toLowerCase().includes("gpt-image-2.5")
+    ) {
+      this.logger.warn(
+        `[Banana/Image] refuse linglong gpt-image-2 on Banana/Tencent; model=${requestedModel}`,
+      );
+      return {
+        success: false,
+        error: {
+          code: "PROVIDER_MISMATCH",
+          message:
+            "Linglong 下 gpt-image-2 仅走 91model.ai，请使用 nano2 通道（勿走腾讯尊享）",
+        },
+      };
+    }
+
     const providerMode = await this.getConfiguredImageProvider(
       request.providerOptions
     );
     this.logger.log(
-      `[Banana/Image] mode=${providerMode}, requestedModel=${this.normalizeModelName(
-        request.model || this.DEFAULT_MODEL
-      )}`
+      `[Banana/Image] mode=${providerMode}, requestedModel=${requestedModel}`
     );
 
     if (providerMode === "tencent") {

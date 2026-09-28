@@ -900,10 +900,12 @@ class PaperSaveService {
 
           const url = persistedRef || data?.localDataUrl || rawUrl || rawSrc;
           if (!url) return;
-          const pendingUpload =
-            !!data?.pendingUpload ||
-            !isPersistableImageRef(url) ||
-            requiresManagedImageUpload(url);
+          // 已有可持久化 key/URL 且非 pending 时，不要因为临时 blob src 误判为未上传
+          const hasPersistableManagedRef =
+            Boolean(persistedRef) &&
+            isPersistableImageRef(persistedRef) &&
+            !(isRemoteUrl(persistedRef) && requiresManagedImageUpload(persistedRef));
+          const pendingUpload = !!data?.pendingUpload || !hasPersistableManagedRef;
           collectedImageIds.add(instance.id);
           const locked = Boolean(
             instance?.locked ??

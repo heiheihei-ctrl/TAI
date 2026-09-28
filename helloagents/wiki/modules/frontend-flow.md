@@ -302,3 +302,7 @@ Flow 节点拖拽支持与其他节点进行边�?中心吸附，并显示对�
 - `gptImage2` 普通路线也展示质量选择（`low` / `medium` / `high`），上游模型为 ToAPIs `gpt-image-2-official`，提交参数 `quality`。
 - 普通路线积分按「平台价(元) × 1.2 × 100」向上取整，矩阵：`low=4/8/9`、`medium=29/63/80`、`high=114/251/318`（对应 `1K/2K/4K`）。
 - 尊享路线（`stable` / `gpt-image-2-official`）质量选项与计价保持不变。
+
+## 2026-09-28 Update
+- Linglong 面板开放 `gptImage2`（与 Seedance / 免费节点并列）；运行时强制模型 `gpt-image-2`、`imageRoute=normal`，不附带 ToAPIs 专用字段（background、moderation、outputFormat 等）；后端只按 91model 文档字段组 `/v1/images/generations` 请求体。TAI 仍走 ToAPIs `gpt-image-2-official`。
+- `shouldHideForeignFlowNode` 在 linglong 下对 `gptImage2` 放行，避免 `VITE_SHOW_FOREIGN_NODES=false` 时误藏。

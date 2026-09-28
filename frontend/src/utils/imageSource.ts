@@ -3,6 +3,8 @@ import {
   isLegacyCloudAssetHost,
   proxifyRemoteAssetUrl,
   resolvePublicAssetUrlFromKey,
+  rewriteLoopbackManagedAssetUrlForDisplay,
+  toRelativeManagedAssetPath,
 } from "@/utils/assetProxy";
 import { getDeploymentBrand } from "@/config/deploymentBrand";
 import {
@@ -340,10 +342,13 @@ const getManagedAssetHosts = (): Set<string> => {
   if (publicBaseHost) hosts.add(publicBaseHost);
   if (typeof window !== "undefined" && window.location?.hostname) {
     const runtimeHost = String(window.location.hostname).trim().toLowerCase();
-    if (runtimeHost && runtimeHost !== "localhost") {
+    if (runtimeHost) {
+      // linglong 本地落盘：同源 localhost / 局域网 IP 也视为可持久化托管域
       hosts.add(runtimeHost);
     }
   }
+  hosts.add("localhost");
+  hosts.add("127.0.0.1");
   return hosts;
 };
 
@@ -385,7 +390,7 @@ export const looksLikeSignedAssetUrl = (url: string): boolean =>
 
 export const isLikelyManagedAssetUrl = (url: string): boolean => {
   try {
-    const parsed = new URL(url);
+    const parsed = new URL(url, typeof window !== "undefined" ? window.location.origin : "http://localhost");
     const host = parsed.hostname.toLowerCase();
     if (getManagedAssetHosts().has(host)) return true;
     const pathKey = decodeURIComponent(parsed.pathname).replace(/^\/+/, "");
@@ -404,7 +409,7 @@ export const isLikelyManagedAssetUrl = (url: string): boolean => {
 
 /**
  * 上传成功后写入节点的持久化引用：
- * - 优先保留上传接口返回的绝对 URL（linglong 本地落盘常为 localhost）
+ * - linglong：优先相对路径 /uploads/...（禁止落 localhost 绝对链）
  * - 其次才用公共 base + key（避免把本地 URL 改写成 TOS）
  */
 export function pickPersistedImageRefFromUploadAsset(
@@ -412,10 +417,20 @@ export function pickPersistedImageRefFromUploadAsset(
   plannedKey: string
 ): string {
   const url = typeof asset?.url === "string" ? asset.url.trim() : "";
-  if (url && /^https?:\/\//i.test(url)) return url;
+  if (url) {
+    const relative = toRelativeManagedAssetPath(url);
+    if (relative) return relative;
+    if (/^https?:\/\//i.test(url)) return url;
+    if (url.startsWith("/")) return url;
+  }
 
   const assetKey = typeof asset?.key === "string" ? asset.key.trim() : "";
   if (assetKey) {
+    // linglong / 本地：直接存 key（相对路径），由渲染侧拼当前 origin
+    if (getDeploymentBrand() === "linglong" || isFrontendLocalUploadModeForPersist()) {
+      const withoutLeading = assetKey.replace(/^\/+/, "");
+      return withoutLeading.startsWith("/") ? withoutLeading : `/${withoutLeading}`;
+    }
     const direct = resolvePublicAssetUrlFromKey(assetKey);
     if (direct) return direct;
     return assetKey;
@@ -424,8 +439,25 @@ export function pickPersistedImageRefFromUploadAsset(
   const k =
     assetKey ||
     (typeof plannedKey === "string" ? plannedKey.trim() : "");
-  if (k) return k;
+  if (k) {
+    if (getDeploymentBrand() === "linglong" || isFrontendLocalUploadModeForPersist()) {
+      const withoutLeading = k.replace(/^\/+/, "");
+      return withoutLeading.startsWith("/") ? withoutLeading : `/${withoutLeading}`;
+    }
+    return k;
+  }
   return url;
+}
+
+function isFrontendLocalUploadModeForPersist(): boolean {
+  const raw = String(
+    (import.meta.env.VITE_UPLOAD_MODE as string | undefined) || "",
+  )
+    .trim()
+    .toLowerCase();
+  if (raw === "local" || raw === "disk" || raw === "nginx") return true;
+  if (raw === "tos" || raw === "oss" || raw === "s3" || raw === "cos") return false;
+  return getDeploymentBrand() === "linglong";
 }
 
 export const isPersistableImageRef = (value?: string | null): boolean => {
@@ -530,6 +562,12 @@ export const toRenderableImageSrc = (value?: string | null): string | null => {
     return withoutLeading.startsWith("/") ? withoutLeading : `/${withoutLeading}`;
   }
   if (isRemoteUrl(trimmed)) {
+    // loopback 托管图：跨域页面改为相对路径，走当前 origin 的 /uploads 反代
+    const loopbackRelative = rewriteLoopbackManagedAssetUrlForDisplay(trimmed);
+    if (loopbackRelative !== trimmed) {
+      return loopbackRelative;
+    }
+
     // 绝对 URL：默认原样使用（DB 返回什么就渲染什么）。
     // 先纠正误用的 TOS S3 API 域名，再按公共 base 迁移历史云主机。
     const fromS3Api = rewriteTosS3ApiUrlToPublic(trimmed);

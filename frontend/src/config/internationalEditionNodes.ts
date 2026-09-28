@@ -133,7 +133,7 @@ export function isAllowedForSeedreamSeedancePalette(
   return false;
 }
 
-/** 玲珑面板：Seedance + 免费（已下线 Seedream） */
+/** 玲珑面板：Seedance + GPT-Image-2 + 免费（已下线 Seedream） */
 export function isAllowedForLinglongPalette(
   config?: Partial<NodeConfig> | null
 ): boolean {
@@ -141,6 +141,17 @@ export function isAllowedForLinglongPalette(
   const key = String(config.nodeKey || '').trim();
   // 面板只保留 doubaoVideo 作为唯一 Seedance 入口
   if (key === 'seedance20Video') return false;
+  if (key === 'gptImage25') return false;
+  if (key === 'gptImage2') return true;
+  const model = String(readMetadataField(config, 'model') ?? '');
+  const flowType = String(readMetadataField(config, 'flowNodeType') ?? '');
+  if (
+    (flowType === 'gptImage2' ||
+      (model.includes('gpt-image-2') && !model.includes('gpt-image-2.5'))) &&
+    flowType !== 'gptImage25'
+  ) {
+    return true;
+  }
   if (isSeedancePaletteConfig(config)) return true;
   if (isFreePaletteConfig(config)) return true;
   return false;
@@ -167,5 +178,6 @@ export function isAllowedNodeKeyForLinglongPalette(
   // 玲珑面板只保留一个 Seedance 入口（doubaoVideo），隐藏 seedance20Video 避免重复
   if (nodeKey === 'seedance20Video') return false;
   if (nodeKey === 'doubaoVideo') return true;
+  if (nodeKey === 'gptImage2') return true;
   return isFreePaletteConfig({ nodeKey, creditsPerCall, serviceType: '' });
 }

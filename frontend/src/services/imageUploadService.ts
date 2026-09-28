@@ -124,15 +124,19 @@ async function uploadImageFile(file: File, options: ImageUploadOptions = {}): Pr
           contentType: options.contentType || file.type,
         });
 
-        if (!uploadResult.success || !uploadResult.url) {
+        if (!uploadResult.success || !(uploadResult.url || uploadResult.key)) {
           return { success: false, error: uploadResult.error || 'OSS 上传失败' };
         }
+
+        const persistedUrl =
+          uploadResult.url ||
+          (uploadResult.key ? `/${String(uploadResult.key).replace(/^\/+/, '')}` : '');
 
         return {
           success: true,
           asset: {
             id: `img_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-            url: uploadResult.url,
+            url: persistedUrl,
             key: uploadResult.key,
             fileName: resolvedFileName,
             width: undefined,

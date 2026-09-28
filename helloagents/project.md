@@ -42,6 +42,7 @@
 ### 环境变量与敏感信息
 - 后端使用 `.env`（见 `backend/src/app.module.ts` 的 `envFilePath` 配置：优先 `backend/.env`，其次 `../.env`）
 - 部署品牌（积分报价区分）：`DEPLOYMENT_BRAND=tai|linglong`（后端，默认 `tai`）；前端对应 `VITE_DEPLOYMENT_BRAND`
+- Linglong 91model：`TIANYI_SEEDANCE_BASE_URL` / `TIANYI_SEEDANCE_API_KEY` 同时用于 Seedance 与 `gpt-image-2`（`TIANYI_GPT_IMAGE_2_MODEL`，默认 `gpt-image-2`）；玲珑 `gpt-image-2` 积分 = TAI × 1.85（上浮 85%）
 - 上传存储：`UPLOAD_MODE=tos|local`（显式优先）；未配置且 `DEPLOYMENT_BRAND=linglong` 时默认 `local`（本机磁盘 + nginx）；前端对应 `VITE_UPLOAD_MODE` / linglong 品牌默认走 `/api/uploads/*` 中转
 - 不要提交密钥/凭据（`.gitignore` 已包含 `backend/.env` 等）
 

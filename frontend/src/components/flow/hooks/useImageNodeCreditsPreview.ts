@@ -1,5 +1,6 @@
 import React from "react";
 import { useBackendCreditsPreview } from "./useBackendCreditsPreview";
+import { getDeploymentBrand } from "@/config/deploymentBrand";
 
 type ImageNodeType =
   | "generate"
@@ -223,13 +224,17 @@ export const useImageNodeCreditsPreview = ({
           : bananaImageRoute === "stable"
           ? quality || "auto"
           : "medium";
+      const isLinglongGptImage2 =
+        nodeType === "gptImage2" && getDeploymentBrand() === "linglong";
       return {
         serviceType: "gpt-image-2",
         model:
           nodeType === "gptImage25" ? "gpt-image-2.5-sunburst-vip" :
+          isLinglongGptImage2 ? "gpt-image-2" :
           bananaImageRoute === "stable" ? "gpt-image-2" : "gpt-image-2-official",
         requestParams: {
           ...(nodeType === "gptImage25" ? { model: "gpt-image-2.5-sunburst-vip" } : {}),
+          ...(isLinglongGptImage2 ? { model: "gpt-image-2" } : {}),
           aiProvider: "nano2",
           imageSize: normalizeBananaImageSize(imageSize) || "1K",
           quality: resolvedQuality,

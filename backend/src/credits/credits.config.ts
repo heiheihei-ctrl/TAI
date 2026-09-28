@@ -316,10 +316,11 @@ export const CREDIT_PRICING_CONFIG = {
     },
   },
   'doubao-video': {
-    serviceName: 'Seedance 1.5 Pro 视频',
+    serviceName: 'Seedance 视频',
     provider: 'doubao',
-    creditsPerCall: 600,
-    description: '使用Seedance 1.5 Pro 生成视频',
+    creditsPerCall: 600, // 1.5 Pro 固定；2.0/2.0 Fast/2.5 由 resolveSeedance*Credits 按秒覆盖
+    description:
+      'Seedance 视频：1.5 Pro 固定价；2.0/2.0 Fast/2.5 按分辨率×时长动态计费',
   },
   'video-to-gif': {
     serviceName: '视频转GIF',

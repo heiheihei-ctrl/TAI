@@ -11,6 +11,7 @@ import { ContentModerationService } from '../../content-moderation/content-moder
 import crypto from 'crypto';
 import { Readable } from 'stream';
 import { rewriteToapisLegacyUrl } from '../../utils/toapisHttpClient';
+import { getDeploymentBrand } from '../../config/deployment-brand';
 
 const REFUND_RETRY_DELAYS_MS = [0, 150, 420];
 
@@ -272,6 +273,16 @@ export class ImageTaskService {
     const isGptImage2Model = normalizedModel.includes('gpt-image-2');
 
     if (!isGptImage2Model) return providerName;
+
+    // Linglong：gpt-image-2 固定走 nano2 → 91model.ai，禁止尊享路线劫持到 Banana/腾讯 VOD
+    if (getDeploymentBrand() === 'linglong') {
+      if (normalizedProvider !== 'nano2') {
+        this.logger.log(
+          `[ImageTask] linglong gpt-image-2 keep nano2 (refuse tencent/banana rewrite, from=${providerName || 'gemini'})`,
+        );
+      }
+      return 'nano2';
+    }
 
     const route = this.resolveTaskBananaImageRoute(requestData);
     if (route === 'stable' && !normalizedProvider.startsWith('banana')) {

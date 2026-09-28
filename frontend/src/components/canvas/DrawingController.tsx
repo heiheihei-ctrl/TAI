@@ -1625,25 +1625,30 @@ const DrawingController: React.FC<DrawingControllerProps> = ({ canvasRef }) => {
                 key,
               })
               .then((uploadResult) => {
-                if (!uploadResult.success || !uploadResult.asset?.url) {
+                if (!uploadResult.success || !(uploadResult.asset?.url || uploadResult.asset?.key)) {
                   logger.upload?.("⚠️ [CanvasDrop] 图片上传失败，已保留本地副本", {
                     error: uploadResult.error,
                   });
                   return;
                 }
+                const remoteUrl =
+                  uploadResult.asset.url ||
+                  (uploadResult.asset.key
+                    ? `/${String(uploadResult.asset.key).replace(/^\/+/, "")}`
+                    : "");
                 try {
                   window.dispatchEvent(
                     new CustomEvent("tanva:upgradeImageSource", {
                       detail: {
                         placeholderId: imageId,
                         key: uploadResult.asset.key || key,
-                        remoteUrl: uploadResult.asset.url,
+                        remoteUrl,
                       },
                     })
                   );
                 } catch {}
                 void recordImageHistoryEntry({
-                  remoteUrl: uploadResult.asset.url,
+                  remoteUrl,
                   title: file.name,
                   fileName: file.name,
                   nodeId: "canvas",

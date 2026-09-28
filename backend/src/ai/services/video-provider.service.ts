@@ -3238,10 +3238,10 @@ export class VideoProviderService {
       label: string;
     },
   ): Promise<VideoGenerationResult> {
-    // 91model 仅 2.0 / 2.5（无 2.0 Fast）
+    // 91model 仅 2.0 / 2.5（无 2.0 Fast；历史 2.0-fast 已归一为 2.0）
     const modelVersion: TianyiSeedanceModelVersion =
       resolved.modelVersion === "2.5" ? "2.5" : "2.0";
-    const isSeedance2Model = modelVersion === "2.0" || modelVersion === "2.0-fast";
+    const isSeedance2Model = modelVersion === "2.0";
     const isSeedance25Model = modelVersion === "2.5";
     const normalizedPrompt =
       typeof options.prompt === "string" ? options.prompt.trim() : "";

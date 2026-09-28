@@ -1,4 +1,5 @@
 import { SHOW_FOREIGN_NODES } from "@/config/featureFlags";
+import { getDeploymentBrand } from "@/config/deploymentBrand";
 
 /**
  * 国外模型公司节点（按能力归属，非接入通道）。
@@ -35,5 +36,11 @@ export const isForeignFlowNodeType = (nodeType?: string | null): boolean => {
 };
 
 /** 当前环境是否应隐藏该国外节点（已有画布节点不删，仅禁止新建入口） */
-export const shouldHideForeignFlowNode = (nodeType?: string | null): boolean =>
-  !SHOW_FOREIGN_NODES && isForeignFlowNodeType(nodeType);
+export const shouldHideForeignFlowNode = (nodeType?: string | null): boolean => {
+  if (!nodeType) return false;
+  // 玲珑：gpt-image-2 走 91model，面板需要保留入口
+  if (getDeploymentBrand() === "linglong" && nodeType === "gptImage2") {
+    return false;
+  }
+  return !SHOW_FOREIGN_NODES && isForeignFlowNodeType(nodeType);
+};

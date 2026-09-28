@@ -7,7 +7,8 @@
 - `generate-image`、`edit-image`、`text-chat` 统一走现有 provider 直连链路；不再存在 `NEW_API_IMAGE_MODELS` / `NEW_API_CHAT_MODELS` 白名单分流。
 - `volc-enhance-video` 相关后端入口已移除，不再对外暴露增强任务创建/轮询接口。
 - **工作流 Agent**：`POST /api/ai/workflow-chat`（DeepSeek 规划 prompt + Flow 图，SSE；生图由前端节点 Run）。需配置 `DEEPSEEK_API_KEY`。详见 `frontend/docs/22-工作流Agent.md`。
-- **Linglong / Seedance（91model.ai）**：仅当 `DEPLOYMENT_BRAND=linglong` 时，Seedance 新建/查询走 `TIANYI_SEEDANCE_BASE_URL`（默认 `https://91model.ai`）：`POST/GET /v1/contents/generations/tasks`。钥匙填 `TIANYI_SEEDANCE_API_KEY`。仅支持 **2.0 / 2.5**（`TIANYI_SEEDANCE_20_MODEL=doubao-seedance-2-0`，`TIANYI_SEEDANCE_25_MODEL=doubao-seedance-2-5`）。面板仅 Seedance + 免费节点（无 Seedream）。历史 `tianyi-seedance:` 任务仍可查询。
+- **Linglong / Seedance（91model.ai）**：仅当 `DEPLOYMENT_BRAND=linglong` 时，Seedance 新建/查询走 `TIANYI_SEEDANCE_BASE_URL`（默认 `https://91model.ai`）：`POST/GET /v1/contents/generations/tasks`。钥匙填 `TIANYI_SEEDANCE_API_KEY`。仅支持 **2.0 / 2.5**（`TIANYI_SEEDANCE_20_MODEL=doubao-seedance-2-0`，`TIANYI_SEEDANCE_25_MODEL=doubao-seedance-2-5`）。面板保留 Seedance + **GPT-Image-2** + 免费节点（无 Seedream）。历史 `tianyi-seedance:` 任务仍可查询。
+- **Linglong / GPT-Image-2（91model.ai）**：`gptImage2` 节点在 linglong 下走同一网关 `POST /v1/images/generations`，模型名默认 `gpt-image-2`（可用 `TIANYI_GPT_IMAGE_2_MODEL` 覆盖）。请求体**仅**按文档字段组装：`model`（必填）、`prompt`（必填）、`n`、`size`（`WIDTHxHEIGHT`，字母 `x`；白名单 `1024x1024`/`1536x1024`/`1024x1536`）、`quality`（`low`/`medium`/`high`）、`response_format`（默认 `url`）、`style`（`vivid`/`natural`）、`image`（单张参考图）或 `images`（多张，二者不混发）、`mask`、`stream`、`watermark`。不向 91model 透传 ToAPIs 专用字段（background/moderation/output_format 等）。TAI 品牌仍走 ToAPIs `gpt-image-2-official`。积分：相对 TAI 价 **上浮 85%**（`LINGLONG_GPT_IMAGE_2_CREDIT_MULTIPLIER=1.85`，向上取整）。
 - **Linglong / 星辰 TokenHub（Seedream）**：已下线；不再走 `ai.ctaigw.cn` 生图。
 
 ## 关键文件

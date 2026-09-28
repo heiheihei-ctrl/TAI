@@ -82,21 +82,24 @@ const ImageUploadComponent: React.FC<ImageUploadComponentProps> = ({
         key,
       });
 
-      if (result.success && result.asset?.url) {
+      if (result.success && (result.asset?.url || result.asset?.key)) {
         logger.upload('Image uploaded and upgraded to remote source.');
+        const remoteUrl =
+          result.asset.url ||
+          (result.asset.key ? `/${String(result.asset.key).replace(/^\/+/, '')}` : '');
         try {
           window.dispatchEvent(
             new CustomEvent('tanva:upgradeImageSource', {
               detail: {
                 placeholderId: imageId,
                 key: result.asset.key || key,
-                remoteUrl: result.asset.url,
+                remoteUrl,
               },
             }),
           );
         } catch {}
         void recordImageHistoryEntry({
-          remoteUrl: result.asset.url,
+          remoteUrl,
           title: file.name,
           fileName: file.name,
           nodeId: 'canvas',

@@ -124,10 +124,28 @@ export class OssService {
     const raw =
       this.config.get<string>('LOCAL_UPLOAD_PUBLIC_BASE_URL') ||
       this.config.get<string>('UPLOAD_PUBLIC_BASE_URL') ||
-      this.config.get<string>('OSS_CDN_HOST') ||
       '';
     const trimmed = String(raw || '').trim().replace(/\/+$/, '');
     if (!trimmed) return '';
+    // 本地落盘禁止误用 TOS/S3 API/CDN 作为公开基址（否则刷新后图链指向云端 404）
+    try {
+      const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+      const host = new URL(withProtocol).hostname.toLowerCase();
+      if (
+        host.endsWith('.volces.com') ||
+        host.endsWith('.ivolces.com') ||
+        host.endsWith('.aliyuncs.com') ||
+        host.includes('tos-s3-')
+      ) {
+        return '';
+      }
+      // loopback 基址在非本机页面（如 wedotai.com）必然裂图，强制改走相对路径
+      if (host === 'localhost' || host === '127.0.0.1' || host === '::1') {
+        return '';
+      }
+    } catch {
+      // ignore parse errors; fall through
+    }
     if (/^https?:\/\//i.test(trimmed)) return trimmed;
     return `https://${trimmed.replace(/^\/+/, '')}`;
   }
@@ -596,9 +614,8 @@ export class OssService {
     if (this.isLocalMode()) {
       const base = this.getLocalPublicBaseUrl();
       if (base) return `${base}/${normalizedKey}`;
-      // 未配置公网 base 时，默认拼本机 API，配合 main.ts 的本地静态挂载
-      const port = String(this.config.get<string>('PORT') || process.env.PORT || '4000').trim();
-      return `http://localhost:${port || '4000'}/${normalizedKey}`;
+      // 相对路径：同源 nginx / Vite 反代 `/uploads` 等前缀即可访问，避免写死错误端口
+      return `/${normalizedKey}`;
     }
 
     const { cdnHost, bucket, endpoint } = this.conf;

@@ -4,7 +4,7 @@ import type {
   SerializedConversationContext,
   SerializedImageHistoryEntry,
 } from "@/types/context";
-import { isPersistableImageRef, requiresManagedImageUpload } from "@/utils/imageSource";
+import { isPersistableImageRef, isRemoteUrl, requiresManagedImageUpload } from "@/utils/imageSource";
 import { FLOW_IMAGE_ASSET_PREFIX } from "@/services/flowImageAssetStore";
 
 export function getNonRemoteImageAssetIds(
@@ -17,7 +17,9 @@ export function getNonRemoteImageAssetIds(
   for (const image of images) {
     const url = typeof image?.url === "string" ? image.url.trim() : "";
     const src = typeof image?.src === "string" ? image.src.trim() : "";
+    const key = typeof image?.key === "string" ? image.key.trim() : "";
     const hasRemote =
+      (isPersistableImageRef(key) && !(isRemoteUrl(key) && requiresManagedImageUpload(key))) ||
       (isPersistableImageRef(url) && !requiresManagedImageUpload(url)) ||
       (isPersistableImageRef(src) && !requiresManagedImageUpload(src));
     if (hasRemote && !image?.pendingUpload) continue;

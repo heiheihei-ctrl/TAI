@@ -754,6 +754,12 @@ export class CreditsService {
       effectiveRequestParams,
     );
 
+    creditsToDeduct = this.resolveSeedance20Credits(
+      params.serviceType,
+      creditsToDeduct,
+      effectiveRequestParams,
+    );
+
     creditsToDeduct = this.resolveSeedanceCredits(
       params.serviceType,
       creditsToDeduct,
@@ -1425,12 +1431,107 @@ export class CreditsService {
     return duration * CreditsService.VIDU_Q3_CREDITS_PER_SECOND;
   }
 
+  /**
+   * Seedance 2.0 / 2.0 Fast：按分辨率 × 时长动态计费（覆盖 flat creditsPerCall / managed 固定价）。
+   * 单价见 模型定价清单：标准 100/120/300/600；Fast 80.6/96.6。
+   */
+  private static readonly SEEDANCE20_CREDITS_PER_SECOND: Record<string, number> = {
+    '480P': 100,
+    '720P': 120,
+    '1080P': 300,
+    '4K': 600,
+  };
+
+  private static readonly SEEDANCE20_FAST_CREDITS_PER_SECOND: Record<string, number> = {
+    '480P': 80.6,
+    '720P': 96.6,
+  };
+
   /** Seedance 2.5：按分辨率 × 时长动态计费（覆盖 managed pricing），当前按 8 折结算 */
   private static readonly SEEDANCE25_CREDITS_PER_SECOND: Record<string, number> = {
     '480P': 110,
     '720P': 240,
     '1080P': 600,
   };
+
+  private isSeedance20FreeEnabled(): boolean {
+    const raw = String(
+      this.configService.get<string>('SEEDANCE20_FREE') ??
+        process.env.SEEDANCE20_FREE ??
+        '',
+    )
+      .trim()
+      .toLowerCase();
+    return raw === '1' || raw === 'true' || raw === 'on' || raw === 'yes';
+  }
+
+  private resolveSeedanceModelToken(requestParams: any): string {
+    const fromSeedanceModel =
+      typeof requestParams?.seedanceModel === 'string'
+        ? requestParams.seedanceModel.trim().toLowerCase()
+        : '';
+    if (fromSeedanceModel) return fromSeedanceModel;
+
+    const fromManaged =
+      typeof requestParams?.managedModelKey === 'string'
+        ? requestParams.managedModelKey.trim().toLowerCase()
+        : typeof requestParams?.modelKey === 'string'
+          ? requestParams.modelKey.trim().toLowerCase()
+          : '';
+    return fromManaged;
+  }
+
+  private resolveSeedanceClipDurationSeconds(
+    requestParams: any,
+    minSec: number,
+    maxSec: number,
+  ): number {
+    const durationRaw = Number(
+      requestParams?.durationSec ??
+        requestParams?.duration ??
+        requestParams?.clipDuration,
+    );
+    if (!Number.isFinite(durationRaw) || durationRaw <= 0) {
+      return minSec;
+    }
+    const snapped = Math.round(durationRaw / 5) * 5;
+    return Math.max(minSec, Math.min(maxSec, snapped));
+  }
+
+  private resolveSeedance20Credits(
+    serviceType: ServiceType,
+    currentCredits: number,
+    requestParams: any,
+  ): number {
+    if (serviceType !== 'doubao-video') return currentCredits;
+
+    const seedanceModel = this.resolveSeedanceModelToken(requestParams);
+    const isFast =
+      seedanceModel === 'seedance-2.0-fast' || seedanceModel === '2.0-fast';
+    const isStandard =
+      seedanceModel === 'seedance-2.0' || seedanceModel === '2.0';
+    if (!isFast && !isStandard) {
+      return currentCredits;
+    }
+
+    if (this.isSeedance20FreeEnabled()) {
+      return 0;
+    }
+
+    const resolution = String(requestParams?.resolution || '720P')
+      .trim()
+      .toUpperCase();
+    const rateTable = isFast
+      ? CreditsService.SEEDANCE20_FAST_CREDITS_PER_SECOND
+      : CreditsService.SEEDANCE20_CREDITS_PER_SECOND;
+    const rate =
+      rateTable[resolution] ??
+      rateTable['720P'] ??
+      CreditsService.SEEDANCE20_CREDITS_PER_SECOND['720P'];
+
+    const duration = this.resolveSeedanceClipDurationSeconds(requestParams, 5, 15);
+    return Math.round(rate * duration);
+  }
 
   private resolveSeedance25Credits(
     serviceType: ServiceType,
@@ -1439,10 +1540,7 @@ export class CreditsService {
   ): number {
     if (serviceType !== 'doubao-video') return currentCredits;
 
-    const seedanceModel =
-      typeof requestParams?.seedanceModel === 'string'
-        ? requestParams.seedanceModel.trim().toLowerCase()
-        : '';
+    const seedanceModel = this.resolveSeedanceModelToken(requestParams);
     if (seedanceModel !== 'seedance-2.5' && seedanceModel !== '2.5') {
       return currentCredits;
     }
@@ -1454,15 +1552,7 @@ export class CreditsService {
       CreditsService.SEEDANCE25_CREDITS_PER_SECOND[resolution] ??
       CreditsService.SEEDANCE25_CREDITS_PER_SECOND['720P'];
 
-    const durationRaw = Number(
-      requestParams?.durationSec ??
-        requestParams?.duration ??
-        requestParams?.clipDuration,
-    );
-    const duration =
-      Number.isFinite(durationRaw) && durationRaw > 0
-        ? Math.max(5, Math.min(30, Math.round(durationRaw / 5) * 5))
-        : 5;
+    const duration = this.resolveSeedanceClipDurationSeconds(requestParams, 5, 30);
 
     // 限时 8 折：原价 rate*duration，结算按 80%
     return Math.round(rate * duration * 0.8);

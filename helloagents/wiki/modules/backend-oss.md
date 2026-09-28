@@ -32,7 +32,8 @@
   例：`/usr/share/nginx/html` 或 `/var/www/html`
 - `LOCAL_UPLOAD_PUBLIC_BASE_URL`：对外访问前缀（无尾斜杠）  
   例：`https://your-domain.com`  
-  对象 key `uploads/a.png` → 公开 URL `https://your-domain.com/uploads/a.png`
+  对象 key `uploads/a.png` → 公开 URL `https://your-domain.com/uploads/a.png`  
+  **开发态建议留空**：返回相对路径 `/uploads/a.png`，由 Vite/nginx 反代到后端本地静态挂载；勿填 TOS/S3 域名。
 
 ### 前端配套
 - `VITE_UPLOAD_MODE=local`（可选；linglong 品牌未配置时也会默认本地中转；后端 `presign.mode=local` 同样触发）

@@ -61,7 +61,7 @@ import {
   SHOW_TEAM_COLLABORATION,
 } from "@/config/featureFlags";
 import { shouldHideForeignFlowNode } from "@/config/foreignFlowNodes";
-import { getSeedream5ProCredits, getSeedream5Credits, getSeedanceFallbackCredits } from "@/config/brandCreditPricing";
+import { getSeedream5ProCredits, getSeedream5Credits, getSeedanceFallbackCredits, applyLinglongGptImage2CreditMultiplier } from "@/config/brandCreditPricing";
 import { isLinglongRestrictedPalette, shouldHideNodeForDeploymentPalette } from "@/config/linglongPalette";
 import { getDeploymentBrand } from "@/config/deploymentBrand";
 import {
@@ -163,6 +163,7 @@ import {
 import {
   proxifyRemoteAssetUrl,
   resolvePublicAssetUrlFromKey,
+  toRelativeManagedAssetPath,
 } from "@/utils/assetProxy";
 import { persistGeneratedVideoUrlForSave } from "@/utils/persistVideoForSave";
 import {
@@ -2595,6 +2596,9 @@ const resolveStableRouteCredits = (params: {
     const unitCredits = Number(pricingTable[normalizedQuality][normalizedSize]);
     if (Number.isFinite(unitCredits) && unitCredits > 0) {
       resolvedCredits = normalizedType === "gptImage25" ? Math.ceil(unitCredits * 1.25) : unitCredits;
+      if (normalizedType === "gptImage2") {
+        resolvedCredits = applyLinglongGptImage2CreditMultiplier(resolvedCredits);
+      }
     }
   }
 
@@ -3034,10 +3038,19 @@ const resolveNodeConfigCreditsPerCall = (config: Partial<NodeConfig>): number =>
       : undefined;
   const managedCredits = getManagedRouteCredits(metadata);
   if (typeof managedCredits === "number") {
+    const key = String(config.nodeKey || "").trim();
+    if (key === "gptImage2" || config.serviceType === "gpt-image-2") {
+      return applyLinglongGptImage2CreditMultiplier(managedCredits);
+    }
     return managedCredits;
   }
   const directCredits = Number(config.creditsPerCall ?? 0);
-  return Number.isFinite(directCredits) ? directCredits : 0;
+  const base = Number.isFinite(directCredits) ? directCredits : 0;
+  const key = String(config.nodeKey || "").trim();
+  if (key === "gptImage2" || config.serviceType === "gpt-image-2") {
+    return applyLinglongGptImage2CreditMultiplier(base);
+  }
+  return base;
 };
 
 const nodePaletteButtonStyle: React.CSSProperties = {
@@ -19237,10 +19250,16 @@ function FlowInner() {
             ? Math.max(1, Math.min(16, Math.floor(maxReferenceImagesRaw)))
             : 14;
         const requestedModel =
-          (typeof nodeData.model === "string" && nodeData.model.trim()) ||
-          (typeof metadata?.model === "string" && metadata.model.trim()) ||
-          (typeof defaultData?.model === "string" && defaultData.model.trim()) ||
-          (node.type === "gptImage25" ? "gpt-image-2.5-sunburst-vip" : "gemini-3.1-flash-image-preview");
+          node.type === "gptImage25"
+            ? "gpt-image-2.5-sunburst-vip"
+            : node.type === "gptImage2" && isLinglongRestrictedPalette()
+            ? "gpt-image-2"
+            : (typeof nodeData.model === "string" && nodeData.model.trim()) ||
+              (typeof metadata?.model === "string" && metadata.model.trim()) ||
+              (typeof defaultData?.model === "string" && defaultData.model.trim()) ||
+              (node.type === "gptImage2"
+                ? "gpt-image-2-official"
+                : "gemini-3.1-flash-image-preview");
         const {
           text: promptText,
           hasEdge: hasText,
@@ -19301,7 +19320,11 @@ function FlowInner() {
 
         try {
           const latestBananaImageRoute =
-            node.type === "gptImage25" ? "normal" : useAIChatStore.getState().bananaImageRoute || bananaImageRoute;
+            node.type === "gptImage25"
+              ? "normal"
+              : node.type === "gptImage2" && isLinglongRestrictedPalette()
+              ? "normal"
+              : useAIChatStore.getState().bananaImageRoute || bananaImageRoute;
           const nano2AspectRatio = (() => {
             const raw = nodeData?.aspectRatio ?? defaultData?.aspectRatio;
             return typeof raw === "string" && raw.trim().length ? raw.trim() : undefined;
@@ -19373,13 +19396,16 @@ function FlowInner() {
           const gptImage2MaskUrl = pickStringValue(
             nodeData?.maskUrl ?? defaultData?.maskUrl
           );
+          const isLinglongGptImage2 =
+            node.type === "gptImage2" && isLinglongRestrictedPalette();
           const result = await generateImageViaAPI({
             prompt: promptText,
             aiProvider: "nano2",
             model: requestedModel,
             providerOptions: {
               banana: {
-                imageRoute: latestBananaImageRoute,
+                // linglong gpt-image-2 必须显式 normal，否则 API 层会回落默认 stable
+                imageRoute: isLinglongGptImage2 ? "normal" : latestBananaImageRoute,
               },
             },
             aspectRatio: nano2AspectRatio,
@@ -19387,21 +19413,29 @@ function FlowInner() {
             imageSize: nano2Resolution,
             ...((node.type === "gptImage2" || node.type === "gptImage25")
               ? {
-                  officialFallback: gptImage2OfficialFallback,
-                  ...(gptImage2Quality ? { quality: gptImage2Quality } : {}),
-                  ...(gptImage2Background
-                    ? { background: gptImage2Background }
-                    : {}),
-                  ...(gptImage2Moderation
-                    ? { moderation: gptImage2Moderation }
-                    : {}),
-                  ...(gptImage2OutputFormat
-                    ? { outputFormat: gptImage2OutputFormat }
-                    : {}),
-                  ...(typeof gptImage2OutputCompression === "number"
-                    ? { outputCompression: gptImage2OutputCompression }
-                    : {}),
-                  ...(gptImage2MaskUrl ? { maskUrl: gptImage2MaskUrl } : {}),
+                  // linglong：只传 91model 文档字段对应项（quality / mask）；其余 ToAPIs 专用字段不发
+                  ...(isLinglongGptImage2
+                    ? {
+                        ...(gptImage2Quality ? { quality: gptImage2Quality } : {}),
+                        ...(gptImage2MaskUrl ? { maskUrl: gptImage2MaskUrl } : {}),
+                      }
+                    : {
+                        officialFallback: gptImage2OfficialFallback,
+                        ...(gptImage2Quality ? { quality: gptImage2Quality } : {}),
+                        ...(gptImage2Background
+                          ? { background: gptImage2Background }
+                          : {}),
+                        ...(gptImage2Moderation
+                          ? { moderation: gptImage2Moderation }
+                          : {}),
+                        ...(gptImage2OutputFormat
+                          ? { outputFormat: gptImage2OutputFormat }
+                          : {}),
+                        ...(typeof gptImage2OutputCompression === "number"
+                          ? { outputCompression: gptImage2OutputCompression }
+                          : {}),
+                        ...(gptImage2MaskUrl ? { maskUrl: gptImage2MaskUrl } : {}),
+                      }),
                 }
               : {}),
             ...((node.type !== "gptImage2" && node.type !== "gptImage25")
@@ -19463,7 +19497,10 @@ function FlowInner() {
             stableImageRef &&
             !isDataImageUrl(stableImageRef) &&
             !isBlobUrl(stableImageRef)
-              ? stableImageRef
+              ? (() => {
+                  const relative = toRelativeManagedAssetPath(stableImageRef);
+                  return relative || stableImageRef;
+                })()
               : undefined;
           const nodeImageData =
             stableImageRef &&

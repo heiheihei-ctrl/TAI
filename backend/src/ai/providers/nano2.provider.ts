@@ -3,8 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import { IAIProvider } from './ai-provider.interface';
 import { Nano2Service } from '../services/nano2.service';
 import { TencentVodAigcService } from '../services/tencent-vod-aigc.service';
+import { TianyiCloudService } from '../services/tianyi-cloud.service';
+import { UpstreamImageUrlService } from '../services/upstream-image-url.service';
 import { getToapisApiKey } from '../../utils/apimartHttpClient';
 import { isUpstreamImageTaskCompleted, isUpstreamImageTaskFailed } from '../../utils/upstreamImageTask.util';
+import { getDeploymentBrand } from '../../config/deployment-brand';
 
 type BananaImageRoute = 'normal' | 'stable';
 type GptImage2Quality = 'auto' | 'low' | 'medium' | 'high';
@@ -24,12 +27,25 @@ export class Nano2Provider implements IAIProvider {
     private readonly config: ConfigService,
     private readonly nano2Service: Nano2Service,
     private readonly tencentVodAigcService: TencentVodAigcService,
+    private readonly tianyiCloudService: TianyiCloudService,
+    private readonly upstreamImageUrl: UpstreamImageUrlService,
   ) {}
 
   async initialize(): Promise<void> {
     const apiKey = getToapisApiKey();
-    this.available = !!apiKey;
-    this.logger.log(`Nano2 provider initialized (ToAPIs): ${this.available ? 'available' : 'unavailable'}`);
+    const linglongTianyi =
+      getDeploymentBrand() === 'linglong' && this.tianyiCloudService.isSeedanceConfigured();
+    this.available = !!apiKey || linglongTianyi;
+    this.logger.log(
+      `Nano2 provider initialized (ToAPIs=${!!apiKey}, linglong91model=${linglongTianyi}): ${
+        this.available ? 'available' : 'unavailable'
+      }`,
+    );
+    if (getDeploymentBrand() === 'linglong' && !linglongTianyi) {
+      this.logger.warn(
+        'DEPLOYMENT_BRAND=linglong 但 TIANYI_SEEDANCE_API_KEY 未配置；gpt-image-2 / Seedance 91model 将不可用',
+      );
+    }
   }
 
   isAvailable(): boolean {
@@ -144,6 +160,16 @@ export class Nano2Provider implements IAIProvider {
         : 'gemini-3.1-flash-image-preview';
     const isGptImage25 = requestedModel === 'gpt-image-2.5-sunburst-vip';
     const isGptImage2Model = !isGptImage25 && this.isGptImage2Model(requestedModel);
+
+    // Linglong：gpt-image-2 走 91model.ai /v1/images/generations
+    if (
+      getDeploymentBrand() === 'linglong' &&
+      isGptImage2Model &&
+      !isGptImage25
+    ) {
+      return this.generateGptImage2ViaTianyi(request, requestedModel);
+    }
+
     const userRoute = isGptImage25 ? 'normal' : this.resolveUserRoute(request.providerOptions);
     const useOfficialProfile = isGptImage2Model && userRoute === 'stable';
     const useNormalGptProfile = isGptImage2Model && userRoute === 'normal';
@@ -397,6 +423,104 @@ export class Nano2Provider implements IAIProvider {
       success: false,
       error: { message: 'Nano2 image generation timeout after 15 minutes' },
     };
+  }
+
+  private async generateGptImage2ViaTianyi(
+    request: any,
+    _requestedModel: string,
+  ): Promise<any> {
+    const upstreamModel = this.tianyiCloudService.getGptImage2Model();
+
+    const aspectRatio =
+      typeof request.aspectRatio === 'string' && request.aspectRatio.trim()
+        ? request.aspectRatio.trim()
+        : typeof request.size === 'string' && request.size.trim()
+          ? request.size.trim()
+          : '1:1';
+    const resolution = this.normalizeResolution(
+      request.resolution || request.imageSize || '1K',
+      true,
+    );
+    const size = this.tianyiCloudService.resolveGptImage2Size(aspectRatio, resolution);
+
+    const rawImages: string[] = [];
+    const fromUrls = request.imageUrls || request.image_urls;
+    if (Array.isArray(fromUrls)) {
+      for (const item of fromUrls) {
+        if (typeof item === 'string' && item.trim()) rawImages.push(item.trim());
+      }
+    }
+    const resolvedImages =
+      rawImages.length > 0
+        ? await this.upstreamImageUrl.resolveHttpUrls(rawImages, {
+            uploadPrefix: 'ai/images/gpt-image-2-inputs',
+          })
+        : [];
+
+    const qualityRaw =
+      typeof request.quality === 'string' ? request.quality.trim().toLowerCase() : '';
+    // 91model 文档：quality 随模型变化；linglong 仅透传 low/medium/high
+    const quality =
+      qualityRaw === 'low' || qualityRaw === 'medium' || qualityRaw === 'high'
+        ? qualityRaw
+        : undefined;
+
+    const styleRaw =
+      typeof request.style === 'string' ? request.style.trim().toLowerCase() : '';
+    const style =
+      styleRaw === 'vivid' || styleRaw === 'natural' ? styleRaw : undefined;
+
+    this.logger.log(
+      `[Nano2/Image] linglong 91model gpt-image-2 size=${size}, quality=${quality || '-'}, images=${resolvedImages.length}`,
+    );
+
+    try {
+      const result = await this.tianyiCloudService.generateGptImage2({
+        prompt: request.prompt,
+        model: upstreamModel,
+        size,
+        n: 1,
+        quality,
+        style,
+        responseFormat: 'url',
+        images: resolvedImages,
+        mask:
+          typeof request.maskUrl === 'string'
+            ? request.maskUrl
+            : typeof request.mask_url === 'string'
+              ? request.mask_url
+              : typeof request.mask === 'string'
+                ? request.mask
+                : undefined,
+        watermark:
+          typeof request.watermark === 'boolean' ? request.watermark : undefined,
+      });
+
+      return {
+        success: true,
+        data: {
+          imageData: null,
+          imageUrl: result.imageUrl,
+          textResponse: 'Image generated successfully',
+          metadata: {
+            imageUrl: result.imageUrl,
+            provider: 'tianyi-91model',
+            aiProvider: 'nano2',
+            model: result.model,
+            route: 'linglong',
+            resolution,
+            size,
+          },
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error || 'gpt-image-2 failed');
+      this.logger.error(`[Nano2/Image] linglong gpt-image-2 failed: ${message}`);
+      return {
+        success: false,
+        error: { message },
+      };
+    }
   }
 
   async editImage(request: any): Promise<any> {

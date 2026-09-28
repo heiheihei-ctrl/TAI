@@ -13,6 +13,7 @@ export function isLinglongRestrictedPalette(): boolean {
  * 玲珑隐藏：
  * - Seedream 全系
  * - seedance20Video（与 doubaoVideo 重复，面板只保留一个 Seedance）
+ * 玲珑额外开放：gptImage2（91model.ai）
  */
 const LINGLONG_HIDDEN_NODE_KEYS = new Set([
   'seedream5',

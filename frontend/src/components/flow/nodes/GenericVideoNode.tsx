@@ -663,7 +663,9 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
     if (typeof data.watermark !== "undefined") {
       context.watermark = Boolean(data.watermark);
     }
-    if (typeof data.seedanceModel === "string" && data.seedanceModel.trim()) {
+    if (isSeedanceModel) {
+      context.seedanceModel = seedanceModel;
+    } else if (typeof data.seedanceModel === "string" && data.seedanceModel.trim()) {
       context.seedanceModel = data.seedanceModel.trim().toLowerCase();
     }
     if (viduModelForPreview) {
@@ -729,6 +731,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
     normalizedViduModelVariant,
     previewVideoMode,
     seedanceMode,
+    seedanceModel,
     provider,
     viduModelForPreview,
     isUnifiedKlingNode,
@@ -754,7 +757,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       klingModel: data.klingModel,
       viduModel: viduModelForPreview,
       viduModelVariant: normalizedViduModelVariant,
-      seedanceModel: data.seedanceModel,
+      seedanceModel: isSeedanceModel ? seedanceModel : undefined,
       // duration/durationSec 由 pricingContext 提供（clipDuration 未设置时默认 5s），
       // 不再用 undefined 覆盖，确保 Kling 等节点能正确进行按秒动态定价
       ...(typeof data.clipDuration === "number" && Number.isFinite(data.clipDuration)
@@ -794,6 +797,8 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       data.watermark,
       hasVideoInput,
       imageInputCount,
+      isSeedanceModel,
+      seedanceModel,
       normalizedViduModelVariant,
       pricingContext,
       previewVideoMode,
