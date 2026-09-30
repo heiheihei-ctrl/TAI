@@ -35,7 +35,9 @@ const getOssBaseUrl = (): string | null => {
   return `https://${DEFAULT_MANAGED_ASSET_HOST}/`;
 };
 
-/** 仅当「旧云主机 URL」需要迁到当前公共 base 时才改写 host */
+/** 仅当「旧云主机 URL」需要迁到当前显式配置的公共 base 时才改写 host。
+ * linglong 下 getPublicAssetBaseUrl 会回落到 page origin，绝不能把 TOS 图改写成同源 /uploads（会 404 裂图）。
+ */
 const maybeRemapLegacyCloudUrlToPublicBase = (absoluteUrl: string): string | null => {
   try {
     const parsed = new URL(absoluteUrl);
@@ -43,10 +45,25 @@ const maybeRemapLegacyCloudUrlToPublicBase = (absoluteUrl: string): string | nul
     if (!isAssetKeyRef(pathKey)) return null;
     if (!isLegacyCloudAssetHost(parsed.hostname)) return null;
 
+    // 仅信任显式 VITE_ASSET_PUBLIC_BASE_URL（非空且非 loopback、非 TOS）
+    const explicitRaw = String(
+      (import.meta.env.VITE_ASSET_PUBLIC_BASE_URL as string | undefined) || "",
+    ).trim();
+    if (!explicitRaw) return null;
+
     const publicBase = getPublicAssetBaseUrl();
     if (!publicBase) return null;
     const publicHost = normalizeUrlHost(publicBase);
     if (!publicHost || publicHost === parsed.hostname.toLowerCase()) return null;
+    // 禁止迁到当前页 origin（本地落盘回退基址）
+    if (
+      typeof window !== "undefined" &&
+      window.location?.hostname &&
+      publicHost === String(window.location.hostname).toLowerCase()
+    ) {
+      return null;
+    }
+    if (isLegacyCloudAssetHost(publicHost)) return null;
 
     const direct = resolvePublicAssetUrlFromKey(pathKey);
     return direct || null;
@@ -460,6 +477,28 @@ function isFrontendLocalUploadModeForPersist(): boolean {
   return getDeploymentBrand() === "linglong";
 }
 
+/** linglong 生产 nginx 通常只反代 /api，直链 /uploads 会 404；统一走后端读盘代理 */
+const shouldRenderLocalAssetsViaProxy = (): boolean =>
+  getDeploymentBrand() === "linglong" || isFrontendLocalUploadModeForPersist();
+
+const buildLocalManagedAssetProxySrc = (keyOrPath: string): string => {
+  const key = String(keyOrPath || "")
+    .trim()
+    .replace(/^\/+/, "")
+    .split("?")[0]
+    .split("#")[0];
+  return `/api/assets/proxy?key=${encodeURIComponent(key)}`;
+};
+
+const toLinglongRenderableManagedSrc = (keyOrPath: string): string => {
+  const withoutLeading = String(keyOrPath || "").trim().replace(/^\/+/, "");
+  if (!withoutLeading) return "";
+  if (shouldRenderLocalAssetsViaProxy()) {
+    return buildLocalManagedAssetProxySrc(withoutLeading);
+  }
+  return `/${withoutLeading}`;
+};
+
 export const isPersistableImageRef = (value?: string | null): boolean => {
   if (typeof value !== "string") return false;
   const trimmed = value.trim();
@@ -553,6 +592,9 @@ export const toRenderableImageSrc = (value?: string | null): string | null => {
   if (isBlobUrl(trimmed)) return null;
   if (isAssetKeyRef(trimmed)) {
     const withoutLeading = trimmed.replace(/^\/+/, "");
+    // linglong：走 /api/assets/proxy 读盘（生产 nginx 往往不直接托管 /uploads）
+    const rendered = toLinglongRenderableManagedSrc(withoutLeading);
+    if (rendered) return rendered;
     const direct = resolvePublicAssetUrlFromKey(withoutLeading);
     if (direct) return direct;
     const directBase = getOssBaseUrl();
@@ -562,10 +604,32 @@ export const toRenderableImageSrc = (value?: string | null): string | null => {
     return withoutLeading.startsWith("/") ? withoutLeading : `/${withoutLeading}`;
   }
   if (isRemoteUrl(trimmed)) {
-    // loopback 托管图：跨域页面改为相对路径，走当前 origin 的 /uploads 反代
+    // loopback / 同源托管图：先收成相对路径，linglong 再转 proxy
     const loopbackRelative = rewriteLoopbackManagedAssetUrlForDisplay(trimmed);
     if (loopbackRelative !== trimmed) {
+      if (isAssetKeyRef(loopbackRelative)) {
+        return toLinglongRenderableManagedSrc(loopbackRelative) || loopbackRelative;
+      }
       return loopbackRelative;
+    }
+
+    // 同源 https://wedotai.com/uploads/... → proxy（避免 nginx 未挂静态目录时裂图）
+    if (shouldRenderLocalAssetsViaProxy()) {
+      try {
+        const parsed = new URL(trimmed);
+        const pathKey = decodeURIComponent(parsed.pathname).replace(/^\/+/, "");
+        const pageHost =
+          typeof window !== "undefined"
+            ? String(window.location.hostname || "").toLowerCase()
+            : "";
+        const sameHost =
+          !!pageHost && parsed.hostname.toLowerCase() === pageHost;
+        if (isAssetKeyRef(pathKey) && (sameHost || parsed.hostname === "localhost")) {
+          return buildLocalManagedAssetProxySrc(pathKey);
+        }
+      } catch {
+        // ignore
+      }
     }
 
     // 绝对 URL：默认原样使用（DB 返回什么就渲染什么）。
@@ -596,6 +660,9 @@ export const toRenderableImageSrc = (value?: string | null): string | null => {
     trimmed.startsWith("./") ||
     trimmed.startsWith("../")
   ) {
+    if (isAssetKeyRef(trimmed)) {
+      return toLinglongRenderableManagedSrc(trimmed) || trimmed;
+    }
     return trimmed;
   }
   // 兜底：裸 base64

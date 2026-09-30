@@ -8,7 +8,8 @@
 - `volc-enhance-video` 相关后端入口已移除，不再对外暴露增强任务创建/轮询接口。
 - **工作流 Agent**：`POST /api/ai/workflow-chat`（DeepSeek 规划 prompt + Flow 图，SSE；生图由前端节点 Run）。需配置 `DEEPSEEK_API_KEY`。详见 `frontend/docs/22-工作流Agent.md`。
 - **Linglong / Seedance（91model.ai）**：仅当 `DEPLOYMENT_BRAND=linglong` 时，Seedance 新建/查询走 `TIANYI_SEEDANCE_BASE_URL`（默认 `https://91model.ai`）：`POST/GET /v1/contents/generations/tasks`。钥匙填 `TIANYI_SEEDANCE_API_KEY`。仅支持 **2.0 / 2.5**（`TIANYI_SEEDANCE_20_MODEL=doubao-seedance-2-0`，`TIANYI_SEEDANCE_25_MODEL=doubao-seedance-2-5`）。面板保留 Seedance + **GPT-Image-2** + 免费节点（无 Seedream）。历史 `tianyi-seedance:` 任务仍可查询。
-- **Linglong / GPT-Image-2（91model.ai）**：`gptImage2` 节点在 linglong 下走同一网关 `POST /v1/images/generations`，模型名默认 `gpt-image-2`（可用 `TIANYI_GPT_IMAGE_2_MODEL` 覆盖）。请求体**仅**按文档字段组装：`model`（必填）、`prompt`（必填）、`n`、`size`（`WIDTHxHEIGHT`，字母 `x`；白名单 `1024x1024`/`1536x1024`/`1024x1536`）、`quality`（`low`/`medium`/`high`）、`response_format`（默认 `url`）、`style`（`vivid`/`natural`）、`image`（单张参考图）或 `images`（多张，二者不混发）、`mask`、`stream`、`watermark`。不向 91model 透传 ToAPIs 专用字段（background/moderation/output_format 等）。TAI 品牌仍走 ToAPIs `gpt-image-2-official`。积分：相对 TAI 价 **上浮 85%**（`LINGLONG_GPT_IMAGE_2_CREDIT_MULTIPLIER=1.85`，向上取整）。
+- **Linglong / GPT-Image-2（91model.ai）**：文生图 `POST /v1/images/generations`，请求体对齐文档：**仅** `model` / `prompt` / `n` / `size`（`auto` 或 `1024x1024`/`1536x1024`/`1024x1536`）；**不要传 `response_format`**（文档写明不支持，**只以 `b64_json` 输出**）。后端优先解析 `data[].b64_json` → `imageData` → 本地/OSS 落盘。图生图走 `POST /v1/images/edits`。TAI 仍走 ToAPIs。积分：相对 TAI 价 **上浮 85%**（×1.85）。
+- **Linglong / 91model 出站网络**：`TianyiCloudService` **直连** `91model.ai`，**不**使用 ToAPIs 的 `API_PROXY_URL` / 全局 `HTTP(S)_PROXY`。可选 `TIANYI_HTTP_TIMEOUT_MS`（默认 180000）。
 - **Linglong / 星辰 TokenHub（Seedream）**：已下线；不再走 `ai.ctaigw.cn` 生图。
 
 ## 关键文件
@@ -20,7 +21,7 @@
 - `backend/src/ai/providers/*`：图像/文本供应商适配。
 
 ## 注意事项
-- 阿里云内容审核独立于 ToAPIs 模型调用。审核 SDK 连接/读取超时默认 10/30 秒，可通过 `ALIYUN_GREEN_CONNECT_TIMEOUT_MS` / `ALIYUN_GREEN_READ_TIMEOUT_MS` 配置（1000–120000ms）；文本连接超时仅重试一次，不重试鉴权/业务错误，不改变审核开关、拦截结果或既有失败策略。
+- 阿里云内容审核独立于 ToAPIs 模型调用。**`DEPLOYMENT_BRAND=linglong` 时整条审核链路关闭**（不请求 green-cip）。TAI 下审核 SDK 连接/读取超时默认 10/30 秒，可通过 `ALIYUN_GREEN_CONNECT_TIMEOUT_MS` / `ALIYUN_GREEN_READ_TIMEOUT_MS` 配置（1000–120000ms）；文本连接超时仅重试一次，不重试鉴权/业务错误，不改变审核开关、拦截结果或既有失败策略。
 - AI 对话框文本请求前端等待 120 秒；Banana 文本通道预算 115 秒，ToAPIs 主备各 55 秒，预留返回时间，超时通过 AbortSignal 取消在途请求。GPT-6 文本模型固定基础价 10 积分，其他文本模型沿用原有定价；部署反向代理的读取超时需覆盖 120 秒。
 - `Omni Flash Ext` 仍使用 `backend/src/ai/services/omni-flash-ext.adapter.ts` 做请求规范化，但最终上游为 APIMart 直连。
 - 若历史数据库里的 `model_provider_mapping_v2` 仍残留 `new_api` vendor，需要同步改成 `apimart` 或其他现行 vendor，避免旧配置回灌。

@@ -386,7 +386,7 @@ server {
     # ssl_certificate_key /etc/letsencrypt/live/tai.tanva.tgtai.com/privkey.pem;
 
     # 上传大小限制
-    client_max_body_size 100M;
+    client_max_body_size 512M;
 
     # 前端静态文件
     location / {

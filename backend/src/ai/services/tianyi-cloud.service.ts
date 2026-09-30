@@ -6,11 +6,17 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Agent, fetch as undiciFetch } from 'undici';
 import { getDeploymentBrand } from '../../config/deployment-brand';
 
 export const TIANYI_SEEDANCE_TASK_PREFIX = 'tianyi-seedance:';
 
 export type TianyiSeedanceModelVersion = '2.0' | '2.5';
+
+/** Linglong 91model：强制直连，不走 API_PROXY_URL / 全局 HTTP(S)_PROXY */
+const tianyiDirectDispatcher = new Agent({
+  connect: { timeout: 30_000 },
+});
 
 /**
  * 91model OpenAI 兼容生图 size：仅使用常见合法档位（字母 x）。
@@ -126,11 +132,14 @@ export class TianyiCloudService {
   }
 
   /**
-   * 将节点比例映射为 91model `WIDTHxHEIGHT`（小写 x）。
-   * 仅输出允许的尺寸集合，避免上游「请求参数无效」。
+   * 将节点比例映射为 91model `WIDTHxHEIGHT`（小写 x）或 `auto`。
+   * gpt-image-2* 文档：size 支持 auto / 自定义像素；常用档位优先。
    */
   resolveGptImage2Size(aspectRatio?: string, _resolution?: string): string {
     const rawSize = typeof aspectRatio === 'string' ? aspectRatio.trim() : '';
+    if (!rawSize || rawSize.toLowerCase() === 'auto') {
+      return 'auto';
+    }
     if (/^\d{2,5}x\d{2,5}$/i.test(rawSize)) {
       const normalized = rawSize.toLowerCase();
       if (GPT_IMAGE_2_ALLOWED_SIZES.has(normalized)) return normalized;
@@ -145,7 +154,7 @@ export class TianyiCloudService {
       return '1024x1024';
     }
 
-    const ratioKey = (rawSize || '1:1').replace(/\s+/g, '');
+    const ratioKey = rawSize.replace(/\s+/g, '');
     return GPT_IMAGE_2_RATIO_TO_SIZE[ratioKey] || '1024x1024';
   }
 
@@ -181,32 +190,106 @@ export class TianyiCloudService {
     return `${this.seedanceBaseUrl}${normalizedPath}`;
   }
 
-  /** Node fetch 网络失败时常只有 "fetch failed"，把 cause code 带上便于排查 */
+  /** Node 直连失败时常只有 "fetch failed"，把 cause code 带上便于排查 */
   private formatFetchNetworkError(error: unknown, requestUrl: string): string {
     const err = error instanceof Error ? error : new Error(String(error));
     const cause = (err as Error & { cause?: { code?: string; message?: string; errno?: string } })
       .cause;
     const causeDetail =
       (typeof cause?.code === 'string' && cause.code) ||
+      (typeof (err as any)?.code === 'string' && (err as any).code) ||
       (typeof cause?.errno === 'string' && cause.errno) ||
       (typeof cause?.message === 'string' && cause.message) ||
       '';
     const base = err.message || 'fetch failed';
     const detail = causeDetail && causeDetail !== base ? `${base} (${causeDetail})` : base;
-    return `上游请求失败: ${detail}; url=${requestUrl}`;
+    return `上游请求失败: ${detail}; url=${requestUrl}; proxy=direct`;
   }
 
+  private resolveHttpTimeoutMs(): number {
+    const raw = this.config.get<string>('TIANYI_HTTP_TIMEOUT_MS');
+    const parsed = raw ? Number.parseInt(String(raw).trim(), 10) : NaN;
+    if (Number.isFinite(parsed) && parsed >= 10_000 && parsed <= 600_000) {
+      return parsed;
+    }
+    return 180_000;
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private isRetryableNetworkError(error: unknown): boolean {
+    const err = error as any;
+    const code = String(err?.code || err?.cause?.code || '').toUpperCase();
+    const message = String(err?.message || '').toLowerCase();
+    if (err?.name === 'AbortError' || message.includes('aborted')) return true;
+    return (
+      code === 'ETIMEDOUT' ||
+      code === 'ECONNRESET' ||
+      code === 'ECONNREFUSED' ||
+      code === 'ENOTFOUND' ||
+      code === 'EAI_AGAIN' ||
+      code === 'UND_ERR_CONNECT_TIMEOUT' ||
+      code === 'UND_ERR_HEADERS_TIMEOUT' ||
+      code === 'UND_ERR_BODY_TIMEOUT' ||
+      code === 'UND_ERR_SOCKET' ||
+      message.includes('etimedout') ||
+      message.includes('fetch failed') ||
+      message.includes('network')
+    );
+  }
+
+  /**
+   * Linglong 91model：Node 直连，不走 ToAPIs 的 API_PROXY_URL / 全局 HTTP(S)_PROXY。
+   * 使用独立 undici Agent，避免 main.ts 里 EnvHttpProxyAgent 劫持出站。
+   */
   private async fetchTianyi(
     requestUrl: string,
     init: RequestInit,
   ): Promise<Response> {
-    try {
-      return await fetch(requestUrl, init);
-    } catch (error) {
-      const message = this.formatFetchNetworkError(error, requestUrl);
-      this.logger.error(message);
-      throw new BadGatewayException(message);
+    const timeout = this.resolveHttpTimeoutMs();
+    const maxAttempts = 3;
+    let lastError: unknown;
+    const method = String(init.method || 'GET').toUpperCase();
+    const headers =
+      init.headers && typeof init.headers === 'object' && !(init.headers instanceof Headers)
+        ? (init.headers as Record<string, string>)
+        : undefined;
+    const body = typeof init.body === 'string' ? init.body : undefined;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeout);
+      try {
+        const response = await undiciFetch(requestUrl, {
+          method,
+          headers,
+          body,
+          signal: controller.signal,
+          dispatcher: tianyiDirectDispatcher,
+        });
+        return response as unknown as Response;
+      } catch (error) {
+        lastError = error;
+        const retryable = this.isRetryableNetworkError(error);
+        this.logger.warn(
+          `91model direct request failed attempt=${attempt}/${maxAttempts} retryable=${retryable} url=${requestUrl} err=${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        if (!retryable || attempt >= maxAttempts) {
+          break;
+        }
+        await this.sleep(500 * attempt);
+      } finally {
+        clearTimeout(timer);
+      }
     }
+
+    const message = this.formatFetchNetworkError(lastError, requestUrl);
+    this.logger.error(message);
+    throw new BadGatewayException(message);
   }
 
   async createSeedanceTask(params: {
@@ -376,9 +459,10 @@ export class TianyiCloudService {
   }
 
   /**
-   * Linglong gpt-image-2：POST /v1/images/generations
-   * 请求体严格对齐文档字段：
-   * model / prompt / n / size / quality / response_format / style / image|images / mask / stream / watermark
+   * Linglong gpt-image-2：对齐 91model 文档。
+   * 文生图 POST /v1/images/generations，body：model/prompt/n/size（勿传 response_format）。
+   * 文档明确：response_format 不支持，**只以 b64_json 输出图片**。
+   * 图生图/编辑 POST /v1/images/edits（公网 image / images）。
    */
   async generateGptImage2(params: {
     prompt: string;
@@ -392,7 +476,7 @@ export class TianyiCloudService {
     stream?: boolean;
     watermark?: boolean;
     model?: string;
-  }): Promise<{ imageUrl: string; model: string }> {
+  }): Promise<{ imageUrl?: string; imageData?: string; model: string }> {
     this.assertLinglongCreateAllowed();
     this.assertSeedanceConfigured();
 
@@ -410,57 +494,43 @@ export class TianyiCloudService {
         ? Math.max(1, Math.min(4, Math.floor(params.n)))
         : 1;
 
-    // 必填 + 常用可选：只放文档列出的字段
+    // 文档 curl 示例仅这四个字段；多余字段（quality/response_format 等）易触发「请求参数无效」
     const payload: Record<string, unknown> = {
       model,
       prompt,
       n,
       size,
-      response_format: params.responseFormat === 'b64_json' ? 'b64_json' : 'url',
     };
-
-    const qualityRaw =
-      typeof params.quality === 'string' ? params.quality.trim().toLowerCase() : '';
-    if (qualityRaw === 'low' || qualityRaw === 'medium' || qualityRaw === 'high') {
-      payload.quality = qualityRaw;
-    }
-
-    const styleRaw =
-      typeof params.style === 'string' ? params.style.trim().toLowerCase() : '';
-    if (styleRaw === 'vivid' || styleRaw === 'natural') {
-      payload.style = styleRaw;
-    }
-
-    if (params.stream === true) {
-      payload.stream = true;
-    }
-
-    if (typeof params.watermark === 'boolean') {
-      payload.watermark = params.watermark;
-    }
-
-    if (typeof params.mask === 'string' && params.mask.trim()) {
-      payload.mask = params.mask.trim();
-    }
 
     const imageList = Array.isArray(params.images)
       ? params.images
           .filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
           .map((u) => u.trim())
+          .filter((u) => this.isPublicHttpImageUrl(u))
       : [];
-    // 单张用 image；多张用 images。不要两个字段混发、不要把数组塞进 image。
-    if (imageList.length === 1) {
-      payload.image = imageList[0];
-    } else if (imageList.length > 1) {
-      payload.images = imageList;
+
+    const hasImages = imageList.length > 0;
+    if (hasImages) {
+      if (imageList.length === 1) {
+        payload.image = imageList[0];
+      } else {
+        payload.images = imageList;
+      }
+      if (typeof params.mask === 'string' && params.mask.trim()) {
+        const mask = params.mask.trim();
+        if (this.isPublicHttpImageUrl(mask)) {
+          payload.mask = mask;
+        }
+      }
     }
 
-    const requestUrl = this.buildSeedanceUrl('/v1/images/generations');
+    // 文生图 → generations；图生图/编辑 → edits（文档分端点）
+    const path = hasImages ? '/v1/images/edits' : '/v1/images/generations';
+    const requestUrl = this.buildSeedanceUrl(path);
     this.logger.log(
-      `gpt-image-2 create model=${model}, size=${size}, n=${n}, quality=${String(
-        payload.quality || '-',
-      )}, images=${imageList.length}, url=${requestUrl}`,
+      `gpt-image-2 create model=${model}, size=${size}, n=${n}, images=${imageList.length}, path=${path}`,
     );
+    this.logger.debug(`gpt-image-2 payload=${JSON.stringify(payload)}`);
 
     const response = await this.fetchTianyi(requestUrl, {
       method: 'POST',
@@ -490,6 +560,9 @@ export class TianyiCloudService {
       const message = requestId
         ? `${String(baseMessage)} (request id: ${String(requestId)})`
         : String(baseMessage);
+      this.logger.warn(
+        `gpt-image-2 upstream error status=${response.status} body=${rawText.slice(0, 400)}`,
+      );
       if (response.status >= 400 && response.status < 500) {
         throw new BadRequestException(message);
       }
@@ -497,63 +570,187 @@ export class TianyiCloudService {
     }
 
     const data = await response.json();
-    const imageUrl = this.extractGptImage2Url(data);
-    if (!imageUrl) {
-      this.logger.error(
-        `gpt-image-2 empty image payload: ${JSON.stringify(data).slice(0, 500)}`,
+    const extracted = this.extractGptImage2Payload(data);
+    if (!extracted.imageUrl && !extracted.imageData) {
+      const preview = this.safeJsonPreview(data, 800);
+      this.logger.error(`gpt-image-2 empty image payload: ${preview}`);
+      throw new ServiceUnavailableException(
+        `gpt-image-2 未返回可解析图片（keys=${this.summarizePayloadKeys(data)}）`,
       );
-      throw new ServiceUnavailableException('gpt-image-2 未返回图片');
     }
 
-    return { imageUrl, model };
+    this.logger.log(
+      `gpt-image-2 parsed kind=${extracted.imageUrl ? 'url' : 'b64'} urlLen=${
+        extracted.imageUrl?.length || 0
+      } dataLen=${extracted.imageData?.length || 0}`,
+    );
+
+    return {
+      imageUrl: extracted.imageUrl,
+      imageData: extracted.imageData,
+      model,
+    };
   }
 
-  private extractGptImage2Url(payload: unknown): string | undefined {
-    if (!payload || typeof payload !== 'object') return undefined;
+  /** 91model 只能拉公网 http(s)；拒绝 localhost / 相对路径 / data / blob */
+  private isPublicHttpImageUrl(value: string): boolean {
+    const trimmed = value.trim();
+    if (!/^https?:\/\//i.test(trimmed)) return false;
+    try {
+      const host = new URL(trimmed).hostname.toLowerCase();
+      if (
+        host === 'localhost' ||
+        host === '127.0.0.1' ||
+        host === '::1' ||
+        host.endsWith('.local')
+      ) {
+        return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private safeJsonPreview(value: unknown, maxLen: number): string {
+    try {
+      const text = JSON.stringify(value);
+      if (!text) return '';
+      return text.length > maxLen ? `${text.slice(0, maxLen)}…` : text;
+    } catch {
+      return String(value).slice(0, maxLen);
+    }
+  }
+
+  private summarizePayloadKeys(value: unknown): string {
+    if (!value || typeof value !== 'object') return typeof value;
+    if (Array.isArray(value)) return `array(len=${value.length})`;
+    const keys = Object.keys(value as Record<string, unknown>).slice(0, 20);
+    return keys.join(',') || '(empty)';
+  }
+
+  private normalizePossibleImageRef(
+    raw: unknown,
+    opts?: { preferB64?: boolean },
+  ): { imageUrl?: string; imageData?: string } | undefined {
+    if (typeof raw !== 'string') return undefined;
+    // 保留 base64 原串两端 trim；中间空白去掉（部分网关会折行）
+    const trimmed = raw.trim();
+    if (!trimmed) return undefined;
+    const compact = trimmed.replace(/\s+/g, '');
+
+    if (!opts?.preferB64 && /^https?:\/\//i.test(compact)) {
+      return { imageUrl: compact };
+    }
+    if (/^data:image\//i.test(trimmed)) {
+      return { imageData: trimmed.includes('base64,') ? trimmed.replace(/\s+/g, '') : trimmed };
+    }
+    if (!opts?.preferB64 && compact.startsWith('/')) {
+      return { imageUrl: `${this.seedanceBaseUrl}${compact}` };
+    }
+
+    // 91model 文档：只出 b64_json。显式 b64 字段或长串都按图片数据收。
+    // 兼容标准 base64 与 base64url（-/ _）
+    const looksLikeB64 =
+      compact.length > 64 &&
+      /^[A-Za-z0-9+/_-]+=*$/.test(compact);
+    if (opts?.preferB64 || looksLikeB64) {
+      return {
+        imageData: compact.startsWith('data:')
+          ? compact
+          : `data:image/png;base64,${compact}`,
+      };
+    }
+    return undefined;
+  }
+
+  private pickImageFromUnknown(item: unknown): { imageUrl?: string; imageData?: string } | undefined {
+    if (typeof item === 'string') {
+      return this.normalizePossibleImageRef(item);
+    }
+    if (!item || typeof item !== 'object') return undefined;
+    const row = item as Record<string, unknown>;
+
+    // 文档：response_format 不支持，只以 b64_json 输出 —— 优先读 b64
+    const b64Candidates: unknown[] = [
+      row.b64_json,
+      row.b64Json,
+      row.base64,
+      row.image_base64,
+      row.imageBase64,
+      row.image_data,
+      row.imageData,
+      typeof row.image === 'string' ? row.image : undefined,
+    ];
+    for (const candidate of b64Candidates) {
+      if (typeof candidate === 'string' && candidate.trim()) {
+        const normalized = this.normalizePossibleImageRef(candidate, { preferB64: true });
+        if (normalized?.imageData) return normalized;
+      }
+    }
+
+    const urlCandidates: unknown[] = [
+      row.url,
+      row.image_url,
+      row.imageUrl,
+      row.download_url,
+      row.downloadUrl,
+      row.file_url,
+      row.fileUrl,
+      typeof row.image === 'object' && row.image
+        ? (row.image as Record<string, unknown>).url
+        : undefined,
+    ];
+    for (const candidate of urlCandidates) {
+      if (typeof candidate === 'string') {
+        const normalized = this.normalizePossibleImageRef(candidate);
+        if (normalized?.imageUrl || normalized?.imageData) return normalized;
+      }
+    }
+
+    return undefined;
+  }
+
+  private extractGptImage2Payload(payload: unknown): {
+    imageUrl?: string;
+    imageData?: string;
+  } {
+    if (!payload || typeof payload !== 'object') return {};
     const root = payload as Record<string, unknown>;
 
-    const pickFromItem = (item: unknown): string | undefined => {
-      if (!item || typeof item !== 'object') return undefined;
-      const row = item as Record<string, unknown>;
-      const url =
-        (typeof row.url === 'string' && row.url.trim()) ||
-        (typeof row.image_url === 'string' && row.image_url.trim()) ||
-        (typeof row.imageUrl === 'string' && row.imageUrl.trim()) ||
-        '';
-      if (url) return url;
-      const b64 =
-        (typeof row.b64_json === 'string' && row.b64_json.trim()) ||
-        (typeof row.b64Json === 'string' && row.b64Json.trim()) ||
-        (typeof row.base64 === 'string' && row.base64.trim()) ||
-        '';
-      if (b64) {
-        return b64.startsWith('data:')
-          ? b64
-          : `data:image/png;base64,${b64}`;
+    const tryList = (list: unknown): { imageUrl?: string; imageData?: string } | undefined => {
+      if (!Array.isArray(list) || list.length === 0) return undefined;
+      for (const item of list) {
+        const picked = this.pickImageFromUnknown(item);
+        if (picked?.imageUrl || picked?.imageData) return picked;
       }
       return undefined;
     };
 
-    const data = root.data;
-    if (Array.isArray(data) && data.length > 0) {
-      const fromFirst = pickFromItem(data[0]);
-      if (fromFirst) return fromFirst;
-    }
-    if (data && typeof data === 'object' && !Array.isArray(data)) {
-      const nested = data as Record<string, unknown>;
-      const fromNested = pickFromItem(nested);
+    const fromDataArr = tryList(root.data);
+    if (fromDataArr) return fromDataArr;
+
+    const fromImages = tryList(root.images);
+    if (fromImages) return fromImages;
+
+    const fromOutput = tryList(root.output);
+    if (fromOutput) return fromOutput;
+
+    if (root.data && typeof root.data === 'object' && !Array.isArray(root.data)) {
+      const nested = root.data as Record<string, unknown>;
+      const fromNested = this.pickImageFromUnknown(nested);
       if (fromNested) return fromNested;
-      if (Array.isArray(nested.data) && nested.data.length > 0) {
-        const fromDeep = pickFromItem(nested.data[0]);
-        if (fromDeep) return fromDeep;
-      }
+      const fromNestedData = tryList(nested.data);
+      if (fromNestedData) return fromNestedData;
+      const fromNestedImages = tryList(nested.images);
+      if (fromNestedImages) return fromNestedImages;
+      const fromNestedResult = this.pickImageFromUnknown(nested.result);
+      if (fromNestedResult) return fromNestedResult;
     }
 
-    const direct =
-      (typeof root.url === 'string' && root.url.trim()) ||
-      (typeof root.image_url === 'string' && root.image_url.trim()) ||
-      (typeof root.imageUrl === 'string' && root.imageUrl.trim()) ||
-      '';
-    return direct || undefined;
+    const fromRoot = this.pickImageFromUnknown(root);
+    if (fromRoot) return fromRoot;
+
+    return {};
   }
 }

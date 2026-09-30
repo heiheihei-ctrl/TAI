@@ -61,6 +61,9 @@ export function isEventSettingsActive(
   if (!hasEventSettingsContent(config)) return false;
 
   const nowMs = now.getTime();
+  // 与夏季促销海报对齐：2026-10-01 00:00 起统一停弹（即便后台未填结束时间）
+  const hardEndMs = new Date(2026, 9, 1, 0, 0, 0, 0).getTime();
+  if (nowMs >= hardEndMs) return false;
 
   if (config.eventAt) {
     const startMs = new Date(config.eventAt).getTime();

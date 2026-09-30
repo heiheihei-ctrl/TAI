@@ -32,7 +32,7 @@ const SUPPORTED_VIDEO_TYPES = [
 ];
 
 const MAX_VIDEO_SIZE = 500 * 1024 * 1024; // 500MB
-const MAX_IMAGE_SIZE = 32 * 1024 * 1024; // 32MB
+const MAX_IMAGE_SIZE = 100 * 1024 * 1024; // 100MB（对齐 Cloudflare 免费上传上限；nginx 需 client_max_body_size ≥ 此值）
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 通用文件上限（本地模式）
 const SUPPORTED_IMAGE_TYPES = [
   'image/png',

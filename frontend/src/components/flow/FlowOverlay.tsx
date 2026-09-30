@@ -175,6 +175,7 @@ import {
   isRemoteUrl,
   normalizeRemoteUrl,
   normalizePersistableImageRef,
+  pickPersistedImageRefFromUploadAsset,
   requiresManagedImageUpload,
   resolveImageToBlob,
   resolveImageToDataUrl,
@@ -7756,8 +7757,14 @@ function FlowInner() {
         fileName,
       });
 
-      const ref = (result.asset?.key || result.asset?.url || "").trim();
-      if (!result.success || !ref) {
+      if (!result.success || !result.asset) {
+        throw new Error(result.error || "图片上传失败");
+      }
+      const plannedKey =
+        (typeof result.asset.key === "string" && result.asset.key.trim()) ||
+        fileName;
+      const ref = pickPersistedImageRefFromUploadAsset(result.asset, plannedKey);
+      if (!ref) {
         throw new Error(result.error || "图片上传失败");
       }
       return ref;

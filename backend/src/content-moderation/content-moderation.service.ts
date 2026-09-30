@@ -4,6 +4,7 @@ import {
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { getDeploymentBrand } from '../config/deployment-brand';
 import { AliyunGreenClient } from './aliyun-green.client';
 import type {
   ContentModerationDecision,
@@ -17,6 +18,8 @@ export class ContentModerationService {
   constructor(private readonly green: AliyunGreenClient) {}
 
   isEnabled(): boolean {
+    // 玲珑品牌不走阿里云内容审核（避免 green-cip 超时拖垮生图/生视频）
+    if (getDeploymentBrand() === 'linglong') return false;
     return this.green.isEnabled();
   }
 

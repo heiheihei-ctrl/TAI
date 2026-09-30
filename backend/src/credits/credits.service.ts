@@ -1447,7 +1447,7 @@ export class CreditsService {
     '720P': 96.6,
   };
 
-  /** Seedance 2.5：按分辨率 × 时长动态计费（覆盖 managed pricing），当前按 8 折结算 */
+  /** Seedance 2.5：按分辨率 × 时长动态计费（覆盖 managed pricing） */
   private static readonly SEEDANCE25_CREDITS_PER_SECOND: Record<string, number> = {
     '480P': 110,
     '720P': 240,
@@ -1553,9 +1553,7 @@ export class CreditsService {
       CreditsService.SEEDANCE25_CREDITS_PER_SECOND['720P'];
 
     const duration = this.resolveSeedanceClipDurationSeconds(requestParams, 5, 30);
-
-    // 限时 8 折：原价 rate*duration，结算按 80%
-    return Math.round(rate * duration * 0.8);
+    return Math.round(rate * duration);
   }
 
   /**

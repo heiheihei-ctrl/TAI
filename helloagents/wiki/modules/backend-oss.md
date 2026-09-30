@@ -40,6 +40,7 @@
 - `VITE_ASSET_PUBLIC_BASE_URL`：与 `LOCAL_UPLOAD_PUBLIC_BASE_URL` 保持一致  
   这样历史 TOS 全路径（`https://xxx.volces.com/uploads/...`）会按 **同一 key** 重写到本机 nginx，新旧路径兼容。
   **linglong 部署请勿继续指向火山 TOS CDN**；若误配 TOS，前端会自动回退到 `VITE_API_BASE_URL`。
+- **Linglong 渲染**：托管 key / `/uploads/...` / 同源绝对托管 URL 一律经 `/api/assets/proxy?key=` 读盘展示；不要依赖 nginx 直接托管 `/uploads`（多数 linglong 站只反代 `/api`）。
 - **绝对 URL 渲染原则**：DB/接口返回的 `http(s)://...` 地址原样用于展示；仅当主机是历史云存储（TOS/阿里云等）且当前公共 base 不同时，才按 key 迁到新 base。禁止把 `localhost` 改写成 TOS。
 
 ### Linglong
@@ -57,6 +58,8 @@ server {
   server_name your-domain.com;
   root /usr/share/nginx/html;
   client_max_body_size 512m;
+
+  # Linglong 本地上传必配：过小（默认 1m）会导致 POST /api/uploads/image 返回 413
 
   location / {
     try_files $uri $uri/ /index.html;

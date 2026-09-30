@@ -70,6 +70,73 @@ function isBackendImageRelayEnabled(): boolean {
     .toLowerCase();
   return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
 }
+
+/** linglong 本地中转：过大图先压成 JPEG，降低 nginx/Cloudflare 413 */
+const LOCAL_UPLOAD_COMPRESS_THRESHOLD = 8 * 1024 * 1024;
+const LOCAL_UPLOAD_MAX_EDGE = 4096;
+
+async function maybeCompressForLocalUpload(
+  data: Blob | File,
+  options: OssUploadOptions,
+): Promise<{ blob: Blob; fileName: string; contentType: string }> {
+  const fileName = options.fileName || (data instanceof File ? data.name : "upload");
+  const contentType =
+    options.contentType ||
+    (data instanceof File ? data.type : data.type) ||
+    "application/octet-stream";
+
+  if (
+    !isFrontendLocalUploadMode() ||
+    !contentType.startsWith("image/") ||
+    contentType.includes("svg") ||
+    contentType.includes("gif") ||
+    data.size <= LOCAL_UPLOAD_COMPRESS_THRESHOLD
+  ) {
+    return { blob: data, fileName, contentType };
+  }
+
+  try {
+    if (typeof createImageBitmap !== "function") {
+      return { blob: data, fileName, contentType };
+    }
+    const bitmap = await createImageBitmap(data);
+    const scale = Math.min(
+      1,
+      LOCAL_UPLOAD_MAX_EDGE / Math.max(bitmap.width, bitmap.height, 1),
+    );
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      bitmap.close();
+      return { blob: data, fileName, contentType };
+    }
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close();
+
+    const compressed = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((b) => resolve(b), "image/jpeg", 0.85);
+    });
+    if (!compressed || compressed.size <= 0 || compressed.size >= data.size) {
+      return { blob: data, fileName, contentType };
+    }
+
+    const nextName = fileName.replace(/\.[^.]+$/i, "") + ".jpg";
+    logger.info("Local upload compressed oversized image", {
+      from: data.size,
+      to: compressed.size,
+      width,
+      height,
+    });
+    return { blob: compressed, fileName: nextName, contentType: "image/jpeg" };
+  } catch (error) {
+    logger.warn("Local upload compress skipped", { error });
+    return { blob: data, fileName, contentType };
+  }
+}
 function normalizeDir(baseDir: string | undefined, projectId?: string | null) {
   const trimmed = baseDir?.trim();
   if (trimmed) return trimmed.endsWith("/") ? trimmed : `${trimmed}/`;
@@ -224,17 +291,27 @@ async function uploadFileViaBackend(
   endpoint: "image" | "file" = "file",
 ): Promise<OssUploadResult> {
   const API_BASE = getApiBaseUrl();
-  const fileName = options.fileName || "upload";
+  const prepared =
+    endpoint === "image"
+      ? await maybeCompressForLocalUpload(data, options)
+      : {
+          blob: data,
+          fileName: options.fileName || (data instanceof File ? data.name : "upload"),
+          contentType:
+            options.contentType ||
+            (data instanceof File ? data.type : data.type) ||
+            "application/octet-stream",
+        };
   const file =
-    data instanceof File
-      ? data
-      : new File([data], fileName, {
-          type: options.contentType || (data as File).type || "application/octet-stream",
+    prepared.blob instanceof File
+      ? prepared.blob
+      : new File([prepared.blob], prepared.fileName, {
+          type: prepared.contentType,
         });
   const formData = new FormData();
   formData.append("file", file);
   if (options.dir) formData.append("dir", options.dir);
-  if (fileName) formData.append("fileName", fileName);
+  if (prepared.fileName) formData.append("fileName", prepared.fileName);
   if (fallbackKey) formData.append("key", fallbackKey);
 
   const headers: Record<string, string> = {};
@@ -248,14 +325,38 @@ async function uploadFileViaBackend(
       auth: options.authToken ? "omit" : "auto",
       credentials: options.authToken ? "omit" : "include",
     });
-    const dataJson = await res.json().catch(() => null);
+    const rawText = await res.text().catch(() => "");
+    let dataJson: any = null;
+    try {
+      dataJson = rawText ? JSON.parse(rawText) : null;
+    } catch {
+      dataJson = null;
+    }
     if (!res.ok) {
+      // Cloudflare 源站宕机时常返回 HTML 521/522/523，与业务 JSON 错误区分
+      if (res.status === 521 || res.status === 522 || res.status === 523) {
+        return {
+          success: false,
+          error: `上传源站不可达（Cloudflare ${res.status}），请检查 wedotai 后端/nginx 是否在线`,
+        };
+      }
+      if (res.status === 413) {
+        return {
+          success: false,
+          error:
+            "上传失败：请求体过大（HTTP 413）。请在 nginx 将 client_max_body_size 调到 ≥100m（建议 512m）并 reload，或换更小的图片后再试",
+        };
+      }
+      const htmlHint =
+        !dataJson && /cloudflare|error code|web server is down|request entity too large/i.test(rawText)
+          ? `（网关返回非 JSON，HTTP ${res.status}）`
+          : "";
       return {
         success: false,
         error:
           dataJson?.message ||
           dataJson?.error ||
-          `Backend upload failed: ${res.status}`,
+          `Backend upload failed: ${res.status}${htmlHint}`,
       };
     }
 
@@ -268,7 +369,7 @@ async function uploadFileViaBackend(
       success: true,
       url: url || undefined,
       key: key || undefined,
-      size: data.size,
+      size: file.size,
     };
   } catch (error: any) {
     return {

@@ -457,21 +457,9 @@ export class Nano2Provider implements IAIProvider {
           })
         : [];
 
-    const qualityRaw =
-      typeof request.quality === 'string' ? request.quality.trim().toLowerCase() : '';
-    // 91model 文档：quality 随模型变化；linglong 仅透传 low/medium/high
-    const quality =
-      qualityRaw === 'low' || qualityRaw === 'medium' || qualityRaw === 'high'
-        ? qualityRaw
-        : undefined;
-
-    const styleRaw =
-      typeof request.style === 'string' ? request.style.trim().toLowerCase() : '';
-    const style =
-      styleRaw === 'vivid' || styleRaw === 'natural' ? styleRaw : undefined;
-
+    // 91model 文档 curl 示例仅 model/prompt/n/size；勿默认透传 quality/response_format
     this.logger.log(
-      `[Nano2/Image] linglong 91model gpt-image-2 size=${size}, quality=${quality || '-'}, images=${resolvedImages.length}`,
+      `[Nano2/Image] linglong 91model gpt-image-2 size=${size}, images=${resolvedImages.length}`,
     );
 
     try {
@@ -480,9 +468,6 @@ export class Nano2Provider implements IAIProvider {
         model: upstreamModel,
         size,
         n: 1,
-        quality,
-        style,
-        responseFormat: 'url',
         images: resolvedImages,
         mask:
           typeof request.maskUrl === 'string'
@@ -492,24 +477,45 @@ export class Nano2Provider implements IAIProvider {
               : typeof request.mask === 'string'
                 ? request.mask
                 : undefined,
-        watermark:
-          typeof request.watermark === 'boolean' ? request.watermark : undefined,
       });
+
+      const imageUrl =
+        typeof result.imageUrl === 'string' && /^https?:\/\//i.test(result.imageUrl.trim())
+          ? result.imageUrl.trim()
+          : null;
+      const imageData =
+        typeof result.imageData === 'string' && result.imageData.trim().length > 0
+          ? result.imageData.trim()
+          : null;
+
+      if (!imageUrl && !imageData) {
+        this.logger.error(
+          `[Nano2/Image] linglong gpt-image-2 parsed empty after upstream ok model=${result.model}`,
+        );
+        return {
+          success: false,
+          error: {
+            message:
+              'gpt-image-2 上游已成功但未解析出 imageUrl/imageData，请检查后端日志中的 payload keys',
+          },
+        };
+      }
 
       return {
         success: true,
         data: {
-          imageData: null,
-          imageUrl: result.imageUrl,
+          imageData,
+          imageUrl,
           textResponse: 'Image generated successfully',
           metadata: {
-            imageUrl: result.imageUrl,
+            ...(imageUrl ? { imageUrl } : {}),
             provider: 'tianyi-91model',
             aiProvider: 'nano2',
             model: result.model,
             route: 'linglong',
             resolution,
             size,
+            payloadKind: imageUrl ? 'url' : 'b64',
           },
         },
       };

@@ -5,7 +5,18 @@ All notable changes to this knowledge base will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning (knowledge-base versioning).
 
 ## [Unreleased]
+### Changed
+- TAI Seedance 2.5：取消限时 8 折，按分辨率×时长原价扣费/预览（`480P/720P/1080P`=`110/240/600` 积分/秒）；节点 Run 去掉「8折」角标。
+- TAI 画布促销海报与活动弹窗：统一在 2026-10-01 00:00（本地）起不再弹出（含顶部横幅；后台活动未填结束时间也会硬截止）。
+
 ### Fixed
+- Linglong 91model（Seedance / gpt-image-2）：**Node 直连** `91model.ai`，不走 ToAPIs 的 `API_PROXY_URL` / 全局 `HTTP(S)_PROXY`（独立 undici Agent）；网络失败最多重试 3 次。超时可用 `TIANYI_HTTP_TIMEOUT_MS`（默认 180s）。
+- Linglong 画布裂图：本地落盘图渲染改为 `/api/assets/proxy?key=...`（生产 nginx 通常只反代 `/api`，直链 `/uploads` 会 404，表现为选框可见但图不显示）。持久化仍存相对 key。
+- Linglong 发布到画布上传 `413 Payload Too Large`：nginx 示例 `client_max_body_size` 提到 512M；后端图片上限 100MB；本地中转对 >8MB 图先压 JPEG；前端 413 提示明确要求调大 nginx。
+- Linglong gpt-image-2：按 91model 文档对齐——`response_format` **不支持**，响应**只出 `b64_json`**；解析优先读 `b64_json` 写入 `imageData` 再落盘，不再指望 `url`。size 支持文档中的 `auto`。
+- Linglong：`DEPLOYMENT_BRAND=linglong` 时关闭阿里云内容审核（`ContentModerationService.isEnabled()` 直接 false），不再请求 green-cip，避免 ConnectTimeout 拖慢/干扰生图生视频。
+- Linglong gpt-image-2：91model 请求体对齐文档 curl（仅 `model`/`prompt`/`n`/`size`），去掉易触发「请求参数无效」的 `response_format`/`quality`；有参考图改走 `POST /v1/images/edits`，且仅透传公网 http(s) 图链。
+- Linglong 全局图片预览裂图：禁止把 TOS 绝对链误改写成 page origin；预览模态统一 `toRenderableImageSrc`；历史记录落相对路径；`uploadImageToStableUrl` 改用 `pickPersistedImageRefFromUploadAsset`。前后端 `DEPLOYMENT_BRAND` 需同为 linglong，否则本地上传与 TOS 混用会裂图。
 - TAI Seedance 2.0 / 2.0 Fast 积分不再固定 600：按分辨率×时长计费（标准 `480P/720P/1080P/4K`=`100/120/300/600` 每秒；Fast `480P/720P`=`80.6/96.6` 每秒；默认 5s 档）；`SEEDANCE20_FREE=1` 时可免费。预览与实扣共用同一逻辑。
 - 玲珑拖图上画布后刷新丢失：本地落盘公开 URL 改为相对路径 `/uploads/...`（禁止误用 TOS 基址），Vite 反代静态前缀；上传成功以 key/url 均可回写并清 pending，避免 autosave 一直拦截导致刷新丢图。
 - 上传：Fastify 下 `/api/uploads/image|file|video` 误用 Express `FileInterceptor`(multer) 导致 `req.on is not a function` 500；改为 `@fastify/multipart` 解析。玲珑默认走后端 multipart，受此影响最大。

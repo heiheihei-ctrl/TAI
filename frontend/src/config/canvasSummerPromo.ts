@@ -1,10 +1,11 @@
 import { getDeploymentBrand } from "@/config/deploymentBrand";
 
-/** 画布居中促销海报：2026-08-06 ~ 2026-09-30（含首尾日，本地时区） */
+/** 画布居中促销海报：2026-08-06 ~ 2026-09-30 24:00（本地时区，到点即停） */
 export const CANVAS_SUMMER_PROMO = {
   id: "canvas-summer-promo-20260806",
   start: new Date(2026, 7, 6, 0, 0, 0, 0), // month is 0-indexed
-  end: new Date(2026, 8, 30, 23, 59, 59, 999),
+  /** 2026-10-01 00:00:00 起不再弹出（含顶部横幅） */
+  end: new Date(2026, 9, 1, 0, 0, 0, 0),
   /** 与 MembershipPlan vip_69 对齐：月卡额度 7350 到账，签到共 1900，合计 9250 */
   dailyPlanMonthlyCredits: 9250,
   instantCredits: 7350,
@@ -37,7 +38,7 @@ export type FlowOpenAddPanelDetail = {
 
 export function isCanvasSummerPromoActive(now = new Date()): boolean {
   const t = now.getTime();
-  return t >= CANVAS_SUMMER_PROMO.start.getTime() && t <= CANVAS_SUMMER_PROMO.end.getTime();
+  return t >= CANVAS_SUMMER_PROMO.start.getTime() && t < CANVAS_SUMMER_PROMO.end.getTime();
 }
 
 const MS_HOUR = 60 * 60 * 1000;

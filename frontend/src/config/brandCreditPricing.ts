@@ -46,11 +46,11 @@ export function getSeedanceFallbackCredits(
   return scaleCredits(TAI_SEEDANCE_FALLBACK_CREDITS, brand);
 }
 
-/** Seedance 2.5 默认 5 秒 × 720P(240/s) × 8 折 */
+/** Seedance 2.5 默认 5 秒 × 720P(240/s) 原价 */
 export function getSeedance25FallbackCredits(
   brand: DeploymentBrand = getDeploymentBrand(),
 ): number {
-  return scaleCredits(Math.round(1200 * 0.8), brand);
+  return scaleCredits(1200, brand);
 }
 
 export function applyLinglongCreditMultiplier(

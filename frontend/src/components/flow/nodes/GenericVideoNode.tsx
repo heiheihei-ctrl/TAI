@@ -2534,30 +2534,6 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
             </button>
           )}
           <div style={{ position: "relative", display: "inline-flex" }}>
-            {isSeedance25Model ? (
-              <span
-                aria-hidden="true"
-                style={{
-                  position: "absolute",
-                  top: -7,
-                  right: -8,
-                  zIndex: 2,
-                  padding: "1px 5px",
-                  borderRadius: 999,
-                  background: "linear-gradient(135deg, #ef4444, #f97316)",
-                  color: "#fff",
-                  fontSize: 9,
-                  fontWeight: 800,
-                  lineHeight: 1.2,
-                  letterSpacing: "0.02em",
-                  boxShadow: "0 2px 6px rgba(249, 115, 22, 0.45)",
-                  pointerEvents: "none",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                8折
-              </span>
-            ) : null}
             <button
             className="tanva-video-header-btn tanva-video-header-run run-btn-with-credit"
             onClick={onRun}

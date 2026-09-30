@@ -11,6 +11,7 @@ import {
   normalizePersistableImageRef,
   resolveImageToBlob,
 } from '@/utils/imageSource';
+import { toRelativeManagedAssetPath } from '@/utils/assetProxy';
 
 const PENDING_GLOBAL_HISTORY_KEY = 'tanva-global-image-history-pending-v1';
 const MAX_PENDING_GLOBAL_HISTORY = 120;
@@ -195,6 +196,18 @@ async function flushPendingGlobalHistoryWrites(): Promise<void> {
   }
 }
 
+const normalizeHistoryDisplayUrl = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+  const relative = toRelativeManagedAssetPath(trimmed);
+  if (relative) return relative;
+  // 本地 key → 相对路径
+  if (/^(uploads|templates|projects|videos|ai)\//i.test(trimmed.replace(/^\/+/, ''))) {
+    return `/${trimmed.replace(/^\/+/, '')}`;
+  }
+  return trimmed;
+};
+
 const ensurePersistableRemoteHistoryUrl = async (
   remoteUrl: string,
   options: {
@@ -205,16 +218,16 @@ const ensurePersistableRemoteHistoryUrl = async (
   }
 ): Promise<string> => {
   const trimmed = remoteUrl.trim();
-  if (!isRemoteUrl(trimmed)) return remoteUrl;
+  if (!isRemoteUrl(trimmed)) return normalizeHistoryDisplayUrl(remoteUrl);
 
   // 托管 OSS/CDN 的稳定 URL 直接使用；签名链接或第三方外链尝试转存。
   if (isLikelyManagedAssetUrl(trimmed) && !looksLikeSignedAssetUrl(trimmed)) {
-    return trimmed;
+    return normalizeHistoryDisplayUrl(trimmed);
   }
 
   try {
     const blob = await resolveImageToBlob(trimmed, { preferProxy: true });
-    if (!blob) return trimmed;
+    if (!blob) return normalizeHistoryDisplayUrl(trimmed);
     const upload = await imageUploadService.uploadImageSource(blob, {
       projectId: options.projectId ?? undefined,
       dir: options.dir ?? 'uploads/history/',
@@ -223,14 +236,17 @@ const ensurePersistableRemoteHistoryUrl = async (
         `${options.nodeType}_${new Date().toISOString().replace(/[:.]/g, '-')}.png`,
       contentType: blob.type || 'image/png',
     });
-    if (upload.success && upload.asset?.url && upload.asset.url.startsWith('http')) {
-      return upload.asset.url;
+    if (upload.success && upload.asset) {
+      const url = typeof upload.asset.url === 'string' ? upload.asset.url.trim() : '';
+      const key = typeof upload.asset.key === 'string' ? upload.asset.key.trim() : '';
+      if (url) return normalizeHistoryDisplayUrl(url);
+      if (key) return normalizeHistoryDisplayUrl(key);
     }
   } catch (error) {
     console.warn('[ImageHistory] 远程 URL 转存失败，保留原链接:', error);
   }
 
-  return trimmed;
+  return normalizeHistoryDisplayUrl(trimmed);
 };
 
 const normalizePersistableHistoryRef = (value?: string): string | undefined => {
@@ -239,7 +255,7 @@ const normalizePersistableHistoryRef = (value?: string): string | undefined => {
   if (!trimmed) return undefined;
   const normalized = normalizePersistableImageRef(trimmed);
   if (!normalized || !isPersistableImageRef(normalized)) return undefined;
-  return normalized;
+  return normalizeHistoryDisplayUrl(normalized);
 };
 
 interface RecordImageHistoryOptions {
@@ -392,7 +408,7 @@ export async function recordImageHistoryEntry(options: RecordImageHistoryOptions
     });
 
     if (uploadResult.success && uploadResult.asset?.url) {
-      const remoteUrl = uploadResult.asset.url;
+      const remoteUrl = normalizeHistoryDisplayUrl(uploadResult.asset.url);
       store.updateImage(id, {
         src: remoteUrl,
         remoteUrl,

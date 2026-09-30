@@ -125,11 +125,17 @@ export class ImageTaskService {
       };
     }
 
-    const imageData =
-      typeof resultData.imageData === 'string' && resultData.imageData.trim().length > 0
-        ? resultData.imageData
-        : undefined;
-    if (imageData) return { imageData };
+    const imageDataCandidate =
+      (typeof resultData.imageData === 'string' && resultData.imageData.trim().length > 0
+        ? resultData.imageData.trim()
+        : undefined) ||
+      (typeof resultData.imageUrl === 'string' &&
+      (/^data:/i.test(resultData.imageUrl.trim()) || resultData.imageUrl.trim().length > 64) &&
+      !/^https?:\/\//i.test(resultData.imageUrl.trim())
+        ? resultData.imageUrl.trim()
+        : undefined);
+
+    if (imageDataCandidate) return { imageData: imageDataCandidate };
 
     return {};
   }
@@ -329,7 +335,23 @@ export class ImageTaskService {
 
       const normalized = this.extractProviderImagePayload(providerResult.data);
       if (!normalized.imageUrl && !normalized.imageData) {
-        throw new BadGatewayException('Provider task succeeded but no image payload returned');
+        const data = providerResult.data;
+        const keys =
+          data && typeof data === 'object' ? Object.keys(data as Record<string, unknown>) : [];
+        const imageUrlType = data ? typeof (data as any).imageUrl : 'n/a';
+        const imageDataType = data ? typeof (data as any).imageData : 'n/a';
+        const imageUrlLen =
+          typeof (data as any)?.imageUrl === 'string' ? (data as any).imageUrl.length : 0;
+        const imageDataLen =
+          typeof (data as any)?.imageData === 'string' ? (data as any).imageData.length : 0;
+        this.logger.error(
+          `[ImageTask] provider=${effectiveProviderName} success but empty payload keys=${keys.join(
+            ',',
+          )} imageUrlType=${imageUrlType} imageUrlLen=${imageUrlLen} imageDataType=${imageDataType} imageDataLen=${imageDataLen}`,
+        );
+        throw new BadGatewayException(
+          `Provider task succeeded but no image payload returned (provider=${effectiveProviderName}, keys=${keys.join(',') || 'none'})`,
+        );
       }
 
       return {

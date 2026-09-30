@@ -9,7 +9,8 @@ import { Button } from './button';
 import SmartImage from './SmartImage';
 import './ImagePreviewModal.css';
 import { useTranslation } from 'react-i18next';
-import { findPreviewImageId } from '@/utils/previewImageMatch';
+import { findPreviewImageId, isSamePreviewImage } from '@/utils/previewImageMatch';
+import { toRenderableImageSrc } from '@/utils/imageSource';
 
 export interface ImageItem {
   id: string;
@@ -17,6 +18,11 @@ export interface ImageItem {
   title?: string;
   timestamp?: number;
 }
+
+const resolveDisplaySrc = (value?: string | null): string => {
+  if (!value) return '';
+  return toRenderableImageSrc(value) || value.trim();
+};
 
 interface ImagePreviewModalProps {
   isOpen: boolean;
@@ -81,9 +87,15 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
   const displayImageSrc = useMemo(() => {
     if (activeImageId && hasCollection) {
       const activeItem = sortedCollection.find((item) => item.id === activeImageId);
-      if (activeItem?.src) return activeItem.src;
+      if (activeItem?.src) {
+        // 与当前主图同一张时优先用 imageSrc（节点上的可渲染引用更可靠）
+        if (imageSrc && isSamePreviewImage(imageSrc, activeItem.src)) {
+          return resolveDisplaySrc(imageSrc) || resolveDisplaySrc(activeItem.src);
+        }
+        return resolveDisplaySrc(activeItem.src);
+      }
     }
-    return imageSrc;
+    return resolveDisplaySrc(imageSrc);
   }, [activeImageId, hasCollection, imageSrc, sortedCollection]);
 
   const highlightedImageId = useMemo(() => {
@@ -299,7 +311,7 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
                       )}
                       <div className="aspect-video bg-gray-800">
                         <SmartImage
-                          src={item.src}
+                          src={resolveDisplaySrc(item.src)}
                           alt={item.title || lt(`图片 ${index + 1}`, `Image ${index + 1}`)}
                           className="w-full h-full object-cover"
                           loading="lazy"
