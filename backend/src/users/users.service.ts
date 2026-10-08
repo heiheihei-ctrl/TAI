@@ -63,6 +63,7 @@ const AUTH_USER_SELECT = {
   avatarUrl: true,
   role: true,
   status: true,
+  isCsAgent: true,
   createdAt: true,
 } as const;
 
@@ -134,7 +135,17 @@ export class UsersService {
         name: data.name,
         phone: data.phone,
       },
-      select: { id: true, email: true, phone: true, name: true, avatarUrl: true, role: true, status: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        phone: true,
+        name: true,
+        avatarUrl: true,
+        role: true,
+        status: true,
+        isCsAgent: true,
+        createdAt: true,
+      },
     });
   }
 

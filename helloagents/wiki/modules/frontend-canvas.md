@@ -11,6 +11,8 @@
   - `InteractionController.tsx`：交互控制（拖拽、选择等）
   - `GridRenderer.tsx`、`SnapGuideRenderer.tsx`、`ScaleBarRenderer.tsx`：辅助渲染
   - `TextEditor.tsx` / `SimpleTextEditor.tsx`：文字编辑
+  - `CsChatEntry.tsx`：linglong 画布右下角客服入口（对接 `/api/cs` + `/ws/cs`）
+  - `SupplyChainLibraryButton.tsx`：linglong 供应链图库入口
 - `frontend/src/components/panels/LibraryPanel.tsx`：右侧库面板（手动素材 / 全局历史切换，支持拖拽或发送到画板）
 - `frontend/src/components/canvas/hooks/`：与画布交互相关 hooks
 

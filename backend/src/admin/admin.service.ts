@@ -67,6 +67,7 @@ export interface UserWithCredits {
   name: string | null;
   role: string;
   status: string;
+  isCsAgent: boolean;
   wechatBound: boolean;
   createdAt: Date;
   lastLoginAt: Date | null;
@@ -761,6 +762,7 @@ export class AdminService {
       name: user.name,
       role: user.role,
       status: user.status,
+      isCsAgent: Boolean(user.isCsAgent),
       wechatBound: Boolean(user.wechatOfficialOpenId || user.wechatUnionId),
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,
@@ -1574,6 +1576,24 @@ export class AdminService {
     return this.prisma.user.update({
       where: { id: userId },
       data: { role },
+    });
+  }
+
+  async updateUserCsAgent(userId: string, isCsAgent: boolean) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('用户不存在');
+    }
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { isCsAgent: Boolean(isCsAgent) },
+      select: {
+        id: true,
+        phone: true,
+        name: true,
+        role: true,
+        isCsAgent: true,
+      },
     });
   }
 

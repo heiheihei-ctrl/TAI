@@ -6,6 +6,7 @@ import PaperCanvasManager from '@/components/canvas/PaperCanvasManager';
 import ToolBar from '@/components/toolbar/ToolBar';
 import FocusModeButton from '@/components/canvas/FocusModeButton';
 import SupplyChainLibraryButton from '@/components/canvas/SupplyChainLibraryButton';
+import CsChatEntry from '@/components/canvas/CsChatEntry';
 import DrawingController from '@/components/canvas/DrawingController';
 import LayerPanel from '@/components/panels/LayerPanel';
 import LibraryPanel from '@/components/panels/LibraryPanel';
@@ -121,6 +122,7 @@ const Canvas: React.FC = () => {
           <SelectionBoxOverlay />
           <ToolBar />
           <SupplyChainLibraryButton />
+          <CsChatEntry />
           <FocusModeButton />
           <ZoomIndicator />
           <LayerPanel />

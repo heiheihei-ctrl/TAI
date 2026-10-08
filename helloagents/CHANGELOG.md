@@ -5,7 +5,11 @@ All notable changes to this knowledge base will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning (knowledge-base versioning).
 
 ## [Unreleased]
+### Added
+- Linglong 客服：`User.isCsAgent` 座席开关；在线/暂离（`CsAgentPresence`）；创建会话后按最低负载自动分单；转接；待接入池防双抢。详见 `helloagents/wiki/modules/cs-desk.md`。
+- Linglong 客服工作台完整链路：Prisma 会话/消息/工单/快捷回复/服务包/协同请求；Nest `cs-desk` REST + `/ws/cs`；管理后台「客服工作台」三栏；画布右下角用户客服入口（仅 linglong）。详见 `helloagents/wiki/modules/cs-desk.md`。
 ### Changed
+- TAI Seedance 1.5 Pro：取消固定 600，按分辨率×时长计费（`480P/720P/1080P`=`100/120/300` 积分/秒，时长 4–12 秒）；预览与实扣共用 `resolveSeedance15Credits`。默认 `5s×720P` 仍为 600。
 - TAI Seedance 2.5：取消限时 8 折，按分辨率×时长原价扣费/预览（`480P/720P/1080P`=`110/240/600` 积分/秒）；节点 Run 去掉「8折」角标。
 - TAI 画布促销海报与活动弹窗：统一在 2026-10-01 00:00（本地）起不再弹出（含顶部横幅；后台活动未填结束时间也会硬截止）。
 

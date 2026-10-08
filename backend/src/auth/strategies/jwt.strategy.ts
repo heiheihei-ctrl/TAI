@@ -60,6 +60,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       phone: user.phone,
       avatarUrl: user.avatarUrl,
       role: user.role,
+      isCsAgent: Boolean((user as any).isCsAgent),
       createdAt: user.createdAt?.toISOString?.() ?? user.createdAt,
     };
     console.log('JWT validate result:', result);

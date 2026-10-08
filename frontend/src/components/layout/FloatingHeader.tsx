@@ -1397,7 +1397,10 @@ const FloatingHeader: React.FC = () => {
     }
   })();
   const normalizedRole = (user?.role || "").trim().toLowerCase();
-  const isAdmin = normalizedRole === "admin" || normalizedRole === "normal_admin";
+  const isAdmin =
+    normalizedRole === "admin" ||
+    normalizedRole === "normal_admin" ||
+    Boolean(user?.isCsAgent);
 
   useEffect(() => {
     if (!isProfileEditorOpen) return;

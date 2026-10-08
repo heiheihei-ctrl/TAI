@@ -16,6 +16,7 @@ import { AppModule } from "./app.module";
 import { OpenObserveTelemetryService } from "./telemetry/openobserve-telemetry.service";
 import { EnvHttpProxyAgent, setGlobalDispatcher } from "undici";
 import { WsCollabGateway } from "./team-collab/ws-collab.gateway";
+import { CsWsGateway } from "./cs-desk/cs-ws.gateway";
 import { OssService } from "./oss/oss.service";
 
 // 配置 undici ProxyAgent 以支持代理（修复 Node.js 20+ 中 @google/genai 的代理问题）
@@ -311,6 +312,10 @@ async function bootstrap() {
   const wsGateway = app.get(WsCollabGateway);
   wsGateway.setOriginCheck((origin: string) => isOriginAllowed(origin));
   wsGateway.attach(fastifyInstance.server);
+
+  const csWsGateway = app.get(CsWsGateway);
+  csWsGateway.setOriginCheck((origin: string) => isOriginAllowed(origin));
+  csWsGateway.attach(fastifyInstance.server);
 
   // local/linglong：直接托管落盘资源，使 http://localhost:4000/uploads/... 等 DB 地址可访问
   const ossService = app.get(OssService);

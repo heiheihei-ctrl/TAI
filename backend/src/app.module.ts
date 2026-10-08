@@ -27,6 +27,7 @@ import { TeamCollabModule } from './team-collab/team-collab.module';
 import { CanvasCommentsModule } from './canvas-comments/canvas-comments.module';
 import { TeamLibraryModule } from './team-library/team-library.module';
 import { ClassroomModule } from './classroom/classroom.module';
+import { CsDeskModule } from './cs-desk/cs-desk.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { ClassroomModule } from './classroom/classroom.module';
     CanvasCommentsModule,
     TeamLibraryModule,
     ClassroomModule,
+    CsDeskModule,
   ],
 })
 export class AppModule {}

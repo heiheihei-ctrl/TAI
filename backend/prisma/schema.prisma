@@ -32,6 +32,10 @@ model User {
   sourceChannelRewardClaimed Boolean                @default(false)
   role                       String                 @default("user")
   status                     String                 @default("active")
+  /// 玲珑客服座席开关（与 role 独立；true 时可进客服工作台）
+  isCsAgent                  Boolean                @default(false)
+  /// 最近一次自动分单时间（负载相同时轮询）
+  csAgentLastAssignedAt      DateTime?
   noWatermark                Boolean                @default(false)
   googleCustomApiKey         String?
   googleKeyMode              String                 @default("official")
@@ -64,12 +68,19 @@ model User {
   teamJoinRequests           TeamJoinRequest[] @relation("TeamJoinApplicant")
   invitedBy                  User?                  @relation("UserInvitedBy", fields: [invitedById], references: [id])
   invites                    User[]                 @relation("UserInvitedBy")
+  csConversationsAsUser      CsConversation[]       @relation("CsConversationUser")
+  csConversationsAsAgent     CsConversation[]       @relation("CsConversationAgent")
+  csTicketsAsUser            CsTicket[]             @relation("CsTicketUser")
+  csTicketsAsAgent           CsTicket[]             @relation("CsTicketAgent")
+  csCollabRequestsAsAgent    CsCollabRequest[]      @relation("CsCollabRequestAgent")
+  csAgentPresence            CsAgentPresence?
 
   // 索引优化：加速用户验证和查找
   @@index([phone, status])  // 手机号登录优化
   @@index([email, status])  // 邮箱登录优化（如果支持）
   @@index([role, status])   // 角色筛选优化
   @@index([wechatUnionId])
+  @@index([isCsAgent, status])
 }
 
 model WechatLoginSession {
@@ -991,6 +1002,127 @@ model BioAuthGroup {
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
+}
+
+/// 玲珑客服：会话
+model CsConversation {
+  id            String   @id @default(uuid())
+  userId        String
+  agentId       String?
+  status        String   @default("waiting") // waiting | active | ended
+  lastMessageAt DateTime @default(now())
+  unreadUser    Int      @default(0)
+  unreadAgent   Int      @default(0)
+  endedAt       DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user     User              @relation("CsConversationUser", fields: [userId], references: [id], onDelete: Cascade)
+  agent    User?             @relation("CsConversationAgent", fields: [agentId], references: [id], onDelete: SetNull)
+  messages CsMessage[]
+  tickets  CsTicket[]
+  collabs  CsCollabRequest[]
+
+  @@index([status, lastMessageAt(sort: Desc)])
+  @@index([userId, status, lastMessageAt(sort: Desc)])
+  @@index([agentId, status, lastMessageAt(sort: Desc)])
+}
+
+/// 玲珑客服：消息
+model CsMessage {
+  id             String    @id @default(uuid())
+  conversationId String
+  senderRole     String // user | agent | system
+  senderId       String?
+  type           String    @default("text") // text | service_package | collab_request | attachment | system
+  content        Json
+  readAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  conversation CsConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+/// 玲珑客服：工单
+model CsTicket {
+  id             String   @id @default(uuid())
+  conversationId String
+  userId         String
+  agentId        String
+  title          String
+  status         String   @default("open") // open | in_progress | closed
+  note           String?  @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  conversation CsConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User           @relation("CsTicketUser", fields: [userId], references: [id], onDelete: Cascade)
+  agent        User           @relation("CsTicketAgent", fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+}
+
+/// 玲珑客服：快捷回复
+model CsQuickReply {
+  id        String   @id @default(uuid())
+  title     String
+  body      String   @db.Text
+  sortOrder Int      @default(0)
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([enabled, sortOrder])
+}
+
+/// 玲珑客服：服务包目录
+model CsServicePackage {
+  id          String   @id @default(uuid())
+  name        String
+  priceCents  Int
+  description String?  @db.Text
+  tag         String?
+  sortOrder   Int      @default(0)
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([enabled, sortOrder])
+}
+
+/// 玲珑客服：协同操作请求
+model CsCollabRequest {
+  id              String    @id @default(uuid())
+  conversationId  String
+  agentId         String
+  projectId       String?
+  pricePerMinute  Int       @default(50)
+  status          String    @default("pending") // pending | accepted | rejected | ended
+  startedAt       DateTime?
+  endedAt         DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  conversation CsConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  agent        User           @relation("CsCollabRequestAgent", fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+}
+
+/// 玲珑客服：座席在线状态（连上 /ws/cs 为 online）
+model CsAgentPresence {
+  userId    String   @id
+  status    String   @default("offline") // online | away | offline
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, updatedAt])
 }
 
 /// This table has subclasses and requires additional setup for migrations. Visit https://pris.ly/d/table-inheritance for more info.

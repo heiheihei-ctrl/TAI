@@ -8,6 +8,7 @@
 - `backend/src/admin/admin.service.ts`
 - `backend/src/admin/services/template.service.ts`
 - `backend/src/admin/dto/*`
+- 玲珑客服座席 API 另见 `backend/src/cs-desk/`（`/api/cs/admin/*`，前端 Admin tab「客服工作台」）
 
 ## API（前缀 `/api/admin`，节选）
 - `GET dashboard`

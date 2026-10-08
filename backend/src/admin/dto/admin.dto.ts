@@ -1,4 +1,13 @@
-import { IsString, IsOptional, IsNumber, IsDateString, Min, Max, IsIn } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsDateString,
+  Min,
+  Max,
+  IsIn,
+  IsBoolean,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class DashboardQueryDto {
@@ -154,6 +163,12 @@ export class UpdateUserRoleDto {
   @ApiProperty({ description: '用户角色', enum: ['user', 'admin', 'normal_admin'] })
   @IsString()
   role!: string;
+}
+
+export class UpdateUserCsAgentDto {
+  @ApiProperty({ description: '是否为玲珑客服座席' })
+  @IsBoolean()
+  isCsAgent!: boolean;
 }
 
 export class CreditChangeRecordsQueryDto {

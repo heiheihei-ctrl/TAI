@@ -5,8 +5,8 @@
 - 提供统一 API 前缀 `/api`，并对开发环境的跨域/代理做兼容。
 
 ## 关键文件
-- `backend/src/main.ts`：应用入口（FastifyAdapter、CORS、Cookie、Multipart、Swagger、ProxyAgent）
-- `backend/src/app.module.ts`：根模块，组合各业务模块；配置 `ConfigModule.forRoot`
+- `backend/src/main.ts`：应用入口（FastifyAdapter、CORS、Cookie、Multipart、Swagger、ProxyAgent）；挂载 `/ws/collab` 与 linglong `/ws/cs`
+- `backend/src/app.module.ts`：根模块，组合各业务模块（含 `CsDeskModule`）；配置 `ConfigModule.forRoot`
 
 ## 关键行为
 - 请求体限制：`bodyLimit` 200MB（适配较大的项目内容请求）

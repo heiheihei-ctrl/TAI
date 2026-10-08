@@ -75,6 +75,7 @@ export interface UserWithCredits {
   name: string | null;
   role: string;
   status: string;
+  isCsAgent?: boolean;
   wechatBound: boolean;
   createdAt: string;
   lastLoginAt: string | null;
@@ -327,6 +328,16 @@ export async function updateUserRole(userId: string, role: string) {
     method: "PATCH",
     headers: JSON_HEADERS,
     body: JSON.stringify({ role }),
+  });
+  return response.json();
+}
+
+/** 设置用户是否为玲珑客服座席（仅完整管理员） */
+export async function updateUserCsAgent(userId: string, isCsAgent: boolean) {
+  const response = await request(`/api/admin/users/${userId}/cs-agent`, {
+    method: "PATCH",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ isCsAgent }),
   });
   return response.json();
 }

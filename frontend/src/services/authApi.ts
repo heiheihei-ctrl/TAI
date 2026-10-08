@@ -26,6 +26,8 @@ export type UserInfo = {
   email: string;
   name?: string;
   role?: string;
+  /** 玲珑客服座席开关（与 role 独立） */
+  isCsAgent?: boolean;
   phone?: string;
   avatarUrl?: string | null;
   createdAt?: string | null;

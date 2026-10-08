@@ -38,6 +38,7 @@ import {
   unbindUserWechat,
   updateUserStatus,
   updateUserRole,
+  updateUserCsAgent,
   getSettings,
   getSetting,
   upsertSetting,
@@ -126,6 +127,8 @@ import type { PublicTemplate, TemplateCategoryGroups } from "@/services/publicTe
 import { OpenObserveLogButton } from "@/components/admin/OpenObserveLogButton";
 import DashboardTrendChart from "@/components/admin/DashboardTrendChart";
 import UserProfileDemographicsPanel from "@/components/admin/UserProfileDemographicsPanel";
+import CsWorkbench from "@/components/admin/cs-workbench/CsWorkbench";
+import { getDeploymentBrand } from "@/config/deploymentBrand";
 
 const FULL_ADMIN_ROLE = "admin";
 const NORMAL_ADMIN_ROLE = "normal_admin";
@@ -142,7 +145,8 @@ type AdminTabKey =
   | "settings"
   | "templates"
   | "classroom"
-  | "volc-review";
+  | "volc-review"
+  | "cs-workbench";
 
 type CreditSubTabKey = "records" | "anomalies";
 
@@ -154,20 +158,36 @@ const NORMAL_ADMIN_ALLOWED_TABS = new Set<AdminTabKey>([
   "watermark",
   "templates",
   "classroom",
+  "cs-workbench",
 ]);
 
 const normalizeRole = (role?: string | null) => (role || "").trim().toLowerCase();
 
-const canAccessAdminPanel = (role?: string | null) => {
+const canAccessAdminPanel = (
+  role?: string | null,
+  isCsAgent?: boolean | null,
+) => {
   const normalizedRole = normalizeRole(role);
-  return normalizedRole === FULL_ADMIN_ROLE || normalizedRole === NORMAL_ADMIN_ROLE;
+  if (normalizedRole === FULL_ADMIN_ROLE || normalizedRole === NORMAL_ADMIN_ROLE) {
+    return true;
+  }
+  return Boolean(isCsAgent);
 };
 
 const isFullAdmin = (role?: string | null) => normalizeRole(role) === FULL_ADMIN_ROLE;
 
-const canAccessAdminTab = (role: string | null | undefined, tab: AdminTabKey) => {
+const canAccessAdminTab = (
+  role: string | null | undefined,
+  tab: AdminTabKey,
+  isCsAgent?: boolean | null,
+) => {
   if (isFullAdmin(role)) return true;
-  return normalizeRole(role) === NORMAL_ADMIN_ROLE && NORMAL_ADMIN_ALLOWED_TABS.has(tab);
+  if (normalizeRole(role) === NORMAL_ADMIN_ROLE && NORMAL_ADMIN_ALLOWED_TABS.has(tab)) {
+    return true;
+  }
+  // 仅客服身份：只开放客服工作台
+  if (Boolean(isCsAgent) && tab === "cs-workbench") return true;
+  return false;
 };
 
 const DASHBOARD_TREND_MAX_DAYS = 90;
@@ -4690,7 +4710,7 @@ function UsersTab({
   const [membershipEffectiveMode, setMembershipEffectiveMode] = useState<
     "immediate" | "next_cycle"
   >("immediate");
-  const tableColumnCount = canManageSensitiveUserFields ? 9 : 7;
+  const tableColumnCount = canManageSensitiveUserFields ? 10 : 7;
 
   const loadUsers = async () => {
     setLoading(true);
@@ -4772,6 +4792,20 @@ function UsersTab({
       loadUsers();
     } catch (error) {
       console.error("更新角色失败:", error);
+    }
+  };
+
+  const handleCsAgentChange = async (userId: string, isCsAgent: boolean) => {
+    try {
+      await updateUserCsAgent(userId, isCsAgent);
+      if (userId === currentUserId) {
+        useAuthStore.setState((state) => ({
+          user: state.user ? { ...state.user, isCsAgent } : state.user,
+        }));
+      }
+      loadUsers();
+    } catch (error: any) {
+      alert(error?.message || "更新客服身份失败");
     }
   };
 
@@ -5117,6 +5151,9 @@ Request error: ${err.message}`);
                   <th className='px-4 py-3 text-left'>角色</th>
                 )}
                 {canManageSensitiveUserFields && (
+                  <th className='px-4 py-3 text-left'>客服</th>
+                )}
+                {canManageSensitiveUserFields && (
                   <th className='px-4 py-3 text-left'>状态</th>
                 )}
                 <th className='px-4 py-3 text-left'>注册时间</th>
@@ -5179,6 +5216,20 @@ Request error: ${err.message}`);
                           <option value='normal_admin'>普通管理</option>
                           <option value='admin'>管理员</option>
                         </select>
+                      </td>
+                    )}
+                    {canManageSensitiveUserFields && (
+                      <td className='px-4 py-3'>
+                        <label className='inline-flex items-center gap-1.5 text-xs text-gray-700'>
+                          <input
+                            type='checkbox'
+                            checked={Boolean(user.isCsAgent)}
+                            onChange={(e) =>
+                              void handleCsAgentChange(user.id, e.target.checked)
+                            }
+                          />
+                          开启
+                        </label>
                       </td>
                     )}
                     {canManageSensitiveUserFields && (
@@ -14877,9 +14928,17 @@ export default function Admin() {
     useState<DashboardReportType>("daily");
   const [exportingDashboardReport, setExportingDashboardReport] = useState(false);
   const userRole = user?.role;
-  const hasAdminPanelAccess = canAccessAdminPanel(userRole);
+  const userIsCsAgent = Boolean(user?.isCsAgent);
+  const hasAdminPanelAccess = canAccessAdminPanel(userRole, userIsCsAgent);
   const canManageSensitiveUserFields = isFullAdmin(userRole);
-  const currentTab = canAccessAdminTab(userRole, activeTab) ? activeTab : "dashboard";
+  const isCsAgentOnly =
+    userIsCsAgent &&
+    normalizeRole(userRole) !== FULL_ADMIN_ROLE &&
+    normalizeRole(userRole) !== NORMAL_ADMIN_ROLE;
+  const defaultAdminTab: AdminTabKey = isCsAgentOnly ? "cs-workbench" : "dashboard";
+  const currentTab = canAccessAdminTab(userRole, activeTab, userIsCsAgent)
+    ? activeTab
+    : defaultAdminTab;
 
   useEffect(() => {
     if (user && !hasAdminPanelAccess) {
@@ -14890,13 +14949,13 @@ export default function Admin() {
 
   useEffect(() => {
     if (!hasAdminPanelAccess) return;
-    if (!canAccessAdminTab(userRole, activeTab)) {
-      setActiveTab("dashboard");
+    if (!canAccessAdminTab(userRole, activeTab, userIsCsAgent)) {
+      setActiveTab(defaultAdminTab);
     }
-  }, [activeTab, hasAdminPanelAccess, userRole]);
+  }, [activeTab, defaultAdminTab, hasAdminPanelAccess, userIsCsAgent, userRole]);
 
   useEffect(() => {
-    if (!user || !hasAdminPanelAccess) return;
+    if (!user || !hasAdminPanelAccess || isCsAgentOnly) return;
 
     let cancelled = false;
     let timer: ReturnType<typeof setInterval> | null = null;
@@ -14992,8 +15051,12 @@ export default function Admin() {
     );
   }
 
+  const isLinglongAdmin = getDeploymentBrand() === "linglong";
   const tabs: { key: AdminTabKey; label: string }[] = [
     { key: "dashboard", label: "概览" },
+    ...(isLinglongAdmin
+      ? [{ key: "cs-workbench" as const, label: "客服工作台" }]
+      : []),
     { key: "users", label: "用户管理" },
     { key: "paid-users", label: "付费用户" },
     { key: "credit-records", label: "积分记录" },
@@ -15005,21 +15068,23 @@ export default function Admin() {
     { key: "templates", label: "公共模板" },
     { key: "settings", label: "系统设置" },
   ];
-  const visibleTabs = tabs.filter((tab) => canAccessAdminTab(userRole, tab.key));
+  const visibleTabs = tabs.filter((tab) =>
+    canAccessAdminTab(userRole, tab.key, userIsCsAgent)
+  );
 
   return (
     <div className='h-screen overflow-y-auto bg-gray-100'>
-      {/* 顶部导航 */}
-      <header className='bg-white border-b'>
-        <div className='max-w-7xl mx-auto px-4 py-4 flex items-center justify-between'>
-          <div className='flex items-center gap-4'>
-            <h1 className='text-xl font-bold'>管理后台</h1>
-            <nav className='flex gap-1 ml-8'>
+      {/* 顶部导航：居中加宽，菜单紧凑成组，不拉散到全屏 */}
+      <header className='sticky top-0 z-20 bg-white border-b'>
+        <div className='mx-auto flex w-full max-w-[1600px] items-center justify-between gap-4 px-6 py-3'>
+          <div className='flex min-w-0 items-center gap-5'>
+            <h1 className='shrink-0 text-xl font-bold'>管理后台</h1>
+            <nav className='flex flex-wrap items-center gap-1'>
               {visibleTabs.map((tab) => (
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition ${
+                  className={`whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition ${
                     currentTab === tab.key
                       ? "bg-blue-100 text-blue-700"
                       : "text-gray-600 hover:bg-gray-100"
@@ -15030,14 +15095,21 @@ export default function Admin() {
               ))}
             </nav>
           </div>
-          <Button variant='ghost' onClick={() => navigate(-1)}>
+          <Button variant='ghost' className='shrink-0' onClick={() => navigate(-1)}>
             返回
           </Button>
         </div>
       </header>
 
       {/* 主内容区 */}
-      <main className='max-w-7xl mx-auto px-4 py-6'>
+      <main
+        className={
+          currentTab === "cs-workbench"
+            ? "mx-auto w-full max-w-none px-3 py-3"
+            : "max-w-7xl mx-auto px-4 py-6"
+        }
+      >
+        {currentTab === "cs-workbench" && isLinglongAdmin && <CsWorkbench />}
         {currentTab === "dashboard" && (
           <div>
             {loading && !stats ? (

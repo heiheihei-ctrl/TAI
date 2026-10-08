@@ -45,6 +45,7 @@ import {
   AllModelsMonthlyStatsQueryDto,
   UpdateUserStatusDto,
   UpdateUserRoleDto,
+  UpdateUserCsAgentDto,
   CreditChangeRecordsQueryDto,
   CreditAnomalyRecordsQueryDto,
 } from './dto/admin.dto';
@@ -293,6 +294,21 @@ export class AdminController {
   ) {
     this.checkAdmin(req);
     return this.adminService.updateUserRole(userId, dto.role);
+  }
+
+  @Patch('users/:userId/cs-agent')
+  @ApiOperation({ summary: '设置用户是否为玲珑客服座席' })
+  async updateUserCsAgent(
+    @Request() req: AuthenticatedRequest,
+    @Param('userId') userId: string,
+    @Body() dto: UpdateUserCsAgentDto,
+  ) {
+    // 仅完整管理员可授予客服身份
+    const role = typeof req.user?.role === 'string' ? req.user.role.toLowerCase() : '';
+    if (role !== FULL_ADMIN_ROLE) {
+      throw new ForbiddenException('Only administrators can update cs agent flag');
+    }
+    return this.adminService.updateUserCsAgent(userId, dto.isCsAgent);
   }
 
   @Delete('users/:userId')

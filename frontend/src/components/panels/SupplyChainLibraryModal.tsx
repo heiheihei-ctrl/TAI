@@ -68,8 +68,7 @@ const SupplyChainLibraryModal: React.FC = () => {
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
 
   const isLinglong = isLinglongRestrictedPalette();
-  // 与入口按钮同步：临时关闭时强制收起弹窗
-  const entryEnabled = false;
+  const entryEnabled = true;
 
   React.useEffect(() => {
     if ((!isLinglong || !entryEnabled) && isOpen) setOpen(false);

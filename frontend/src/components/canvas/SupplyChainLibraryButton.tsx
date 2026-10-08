@@ -16,9 +16,8 @@ import { cn } from "@/lib/utils";
 
 /**
  * 玲珑专属：左侧工具栏下方单独一颗供应链图库入口（不并入工具栏主壳）。
- * 临时关闭：linglong 画布先隐藏该入口。
  */
-const SUPPLY_CHAIN_LIBRARY_ENTRY_ENABLED = false;
+const SUPPLY_CHAIN_LIBRARY_ENTRY_ENABLED = true;
 
 const SupplyChainLibraryButton: React.FC = () => {
   const { lt } = useLocaleText();
