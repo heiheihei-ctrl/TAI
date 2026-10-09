@@ -5139,25 +5139,25 @@ Request error: ${err.message}`);
 
           <div className='bg-white rounded-lg border overflow-hidden'>
         <div className='max-h-[1100px] overflow-auto'>
-          <table className='w-full text-sm'>
+          <table className='w-full min-w-[1280px] text-sm'>
             <thead className='bg-gray-50'>
               <tr>
-                <th className='px-4 py-3 text-left'>用户</th>
-                <th className='px-4 py-3 text-left'>手机号</th>
-                <th className='px-4 py-3 text-left'>积分余额</th>
-                <th className='px-4 py-3 text-left'>总消费</th>
-                <th className='px-4 py-3 text-left'>API调用</th>
+                <th className='px-4 py-3 text-left whitespace-nowrap'>用户</th>
+                <th className='px-4 py-3 text-left whitespace-nowrap'>手机号</th>
+                <th className='px-4 py-3 text-left whitespace-nowrap'>积分余额</th>
+                <th className='px-4 py-3 text-left whitespace-nowrap'>总消费</th>
+                <th className='px-4 py-3 text-left whitespace-nowrap'>API调用</th>
                 {canManageSensitiveUserFields && (
-                  <th className='px-4 py-3 text-left'>角色</th>
+                  <th className='px-4 py-3 text-left whitespace-nowrap'>角色</th>
                 )}
                 {canManageSensitiveUserFields && (
-                  <th className='px-4 py-3 text-left'>客服</th>
+                  <th className='px-4 py-3 text-left whitespace-nowrap'>客服</th>
                 )}
                 {canManageSensitiveUserFields && (
-                  <th className='px-4 py-3 text-left'>状态</th>
+                  <th className='px-4 py-3 text-left whitespace-nowrap'>状态</th>
                 )}
-                <th className='px-4 py-3 text-left'>注册时间</th>
-                <th className='px-4 py-3 text-left'>操作</th>
+                <th className='px-4 py-3 text-left whitespace-nowrap'>注册时间</th>
+                <th className='px-4 py-3 text-left whitespace-nowrap'>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -5251,7 +5251,7 @@ Request error: ${err.message}`);
                       {new Date(user.createdAt).toLocaleDateString()}
                     </td>
                     <td className='px-4 py-3'>
-                      <div className='flex flex-wrap gap-1'>
+                      <div className='flex flex-nowrap gap-1 whitespace-nowrap'>
                         <Button
                           size='sm'
                           variant='outline'
@@ -15101,12 +15101,12 @@ export default function Admin() {
         </div>
       </header>
 
-      {/* 主内容区 */}
+      {/* 主内容区：与顶栏同宽居中，避免用户表等宽表被挤扁 */}
       <main
         className={
           currentTab === "cs-workbench"
             ? "mx-auto w-full max-w-none px-3 py-3"
-            : "max-w-7xl mx-auto px-4 py-6"
+            : "mx-auto w-full max-w-[1600px] px-6 py-6"
         }
       >
         {currentTab === "cs-workbench" && isLinglongAdmin && <CsWorkbench />}

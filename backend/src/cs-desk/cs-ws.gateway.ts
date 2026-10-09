@@ -170,7 +170,8 @@ export class CsWsGateway implements OnModuleInit, OnModuleDestroy {
       return this.reject(socket, 401, 'Unauthorized');
     }
     role = String(user.role || role || '').toLowerCase();
-    const isAgent = this.csDesk.isAgentCapable(user);
+    // 仅显式 isCsAgent 才算可接待座席；用户侧连 WS 不会把自己标成在线客服
+    const isAgent = this.csDesk.isDispatchableAgent(user);
 
     this.wss.handleUpgrade(req, socket, head, (ws) => {
       const conn: CsWsConn = {

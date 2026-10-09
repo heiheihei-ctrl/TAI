@@ -10,16 +10,18 @@
 
 ## 客服身份
 
-- `User.isCsAgent`（与 `role` 独立）。完整管理员在用户管理勾选「座席」。
-- 可进工作台：`admin` / `normal_admin` **或** `isCsAgent=true`。
+- `User.isCsAgent`（与 `role` 独立）。完整管理员在用户管理勾选「客服 → 开启」。
+- 可进工作台查看：`admin` / `normal_admin` **或** `isCsAgent=true`。
+- **可上线/自动分单/手动接入/转接目标：仅 `isCsAgent=true`**（管理员未开客服身份不算在线客服）。
 - 仅 `isCsAgent`：`/admin` 只显示「客服工作台」。
+- 禁止把会话分给咨询用户本人。
 
 ## 多客服分单
 
-- 打开工作台并连接 `/ws/cs` → `CsAgentPresence=online`（可手动切「暂离」`away`）。
-- 用户建会话后：在线客服中按 **active 会话数最低**（同分按 `csAgentLastAssignedAt`）自动分配；原子 `UPDATE waiting AND agentId IS NULL`。
-- 无人在线：留在待接入池，座席手动接入（同样条件更新防双抢）。
-- 转接：`POST /api/cs/admin/conversations/:id/transfer`，目标须在线。
+- 已开启客服身份的账号打开工作台并连接 `/ws/cs` → `CsAgentPresence=online`（可手动切「暂离」`away`）。
+- 用户建会话后：在线且 `isCsAgent` 的客服中按 **active 会话数最低**（同分按 `csAgentLastAssignedAt`）自动分配；原子 `UPDATE waiting AND agentId IS NULL`。
+- 无人在线：留在待接入池，由已开启客服身份的座席手动接入（同样条件更新防双抢）。
+- 转接：`POST /api/cs/admin/conversations/:id/transfer`，目标须在线且为客服身份。
 
 ## API
 

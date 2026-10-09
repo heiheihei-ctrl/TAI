@@ -75,6 +75,7 @@ function messageText(msg?: CsMessage) {
 const CsWorkbench: React.FC = () => {
   const authUser = useAuthStore((s) => s.user);
   const isFullAdmin = (authUser?.role || "").toLowerCase() === "admin";
+  const canDispatch = Boolean(authUser?.isCsAgent);
   const [queueTab, setQueueTab] = React.useState<QueueTab>("waiting");
   const [activeScope, setActiveScope] = React.useState<"mine" | "all">("mine");
   const [items, setItems] = React.useState<CsConversation[]>([]);
@@ -181,7 +182,12 @@ const CsWorkbench: React.FC = () => {
 
   React.useEffect(() => {
     csRealtimeClient.start();
-    void csDeskApi.adminSetPresence("online").then(() => setPresence("online")).catch(() => undefined);
+    if (canDispatch) {
+      void csDeskApi
+        .adminSetPresence("online")
+        .then(() => setPresence("online"))
+        .catch(() => undefined);
+    }
     const unsub = csRealtimeClient.subscribe((env) => {
       if (!env || typeof env !== "object") return;
       if (env.type === "message" && env.conversationId) {
@@ -204,7 +210,7 @@ const CsWorkbench: React.FC = () => {
       unsub();
       csRealtimeClient.stop();
     };
-  }, [loadConversationDetail, refreshList, selectedId]);
+  }, [canDispatch, loadConversationDetail, refreshList, selectedId]);
 
   React.useEffect(() => {
     if (!selectedId) {
@@ -382,18 +388,24 @@ const CsWorkbench: React.FC = () => {
             </div>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => void handleTogglePresence()}
-          className={cn(
-            "rounded-full px-3 py-1 font-medium",
-            presence === "online"
-              ? "bg-emerald-50 text-emerald-700"
-              : "bg-amber-50 text-amber-700"
-          )}
-        >
-          {presence === "online" ? "接待中（点此暂离）" : "暂离（点此接待）"}
-        </button>
+        {canDispatch ? (
+          <button
+            type="button"
+            onClick={() => void handleTogglePresence()}
+            className={cn(
+              "rounded-full px-3 py-1 font-medium",
+              presence === "online"
+                ? "bg-emerald-50 text-emerald-700"
+                : "bg-amber-50 text-amber-700"
+            )}
+          >
+            {presence === "online" ? "接待中（点此暂离）" : "暂离（点此接待）"}
+          </button>
+        ) : (
+          <span className="rounded-full bg-gray-100 px-3 py-1 font-medium text-gray-500">
+            未开启客服身份（仅可查看）
+          </span>
+        )}
       </div>
 
       <div className="flex min-h-0 flex-1">
@@ -492,7 +504,7 @@ const CsWorkbench: React.FC = () => {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                {selected.status === "waiting" && (
+                {selected.status === "waiting" && canDispatch && (
                   <button
                     type="button"
                     onClick={() => void handleAccept()}
@@ -501,7 +513,7 @@ const CsWorkbench: React.FC = () => {
                     接入
                   </button>
                 )}
-                {selected.status === "active" && (
+                {selected.status === "active" && canDispatch && (
                   <button
                     type="button"
                     onClick={() => void openTransfer()}
@@ -510,7 +522,7 @@ const CsWorkbench: React.FC = () => {
                     转接
                   </button>
                 )}
-                {selected.status !== "ended" && (
+                {selected.status !== "ended" && (canDispatch || isFullAdmin) && (
                   <button
                     type="button"
                     onClick={() => void handleEnd()}

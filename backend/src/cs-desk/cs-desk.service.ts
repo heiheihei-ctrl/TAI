@@ -41,7 +41,8 @@ export class CsDeskService implements OnModuleInit {
     }
   }
 
-  isAgentCapable(user: {
+  /** 可打开客服工作台：管理员或已开启客服身份 */
+  canAccessWorkbench(user: {
     role?: string | null;
     isCsAgent?: boolean | null;
     status?: string | null;
@@ -52,14 +53,40 @@ export class CsDeskService implements OnModuleInit {
     return Boolean(user.isCsAgent);
   }
 
+  /** 可接待/自动分单/计为在线客服：必须显式开启 isCsAgent */
+  isDispatchableAgent(user: {
+    isCsAgent?: boolean | null;
+    status?: string | null;
+  }): boolean {
+    if (user.status && user.status !== 'active') return false;
+    return Boolean(user.isCsAgent);
+  }
+
+  /** @deprecated 兼容旧调用：工作台访问权 */
+  isAgentCapable(user: {
+    role?: string | null;
+    isCsAgent?: boolean | null;
+    status?: string | null;
+  }): boolean {
+    return this.canAccessWorkbench(user);
+  }
+
   async assertAgentUser(userId: string) {
     this.assertLinglongEnabled();
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, role: true, isCsAgent: true, status: true, name: true },
     });
-    if (!user || !this.isAgentCapable(user)) {
+    if (!user || !this.canAccessWorkbench(user)) {
       throw new ForbiddenException('仅客服/管理员可访问');
+    }
+    return user;
+  }
+
+  async assertDispatchableAgent(userId: string) {
+    const user = await this.assertAgentUser(userId);
+    if (!this.isDispatchableAgent(user)) {
+      throw new ForbiddenException('当前账号未开启客服身份，不能接待/上线');
     }
     return user;
   }
@@ -243,20 +270,26 @@ export class CsDeskService implements OnModuleInit {
    * 在线客服中选负载最低者原子接入；无人在线则保持 waiting。
    */
   async tryAutoAssign(conversationId: string): Promise<boolean> {
+    const conv = await this.prisma.csConversation.findUnique({
+      where: { id: conversationId },
+      select: { id: true, userId: true, status: true, agentId: true },
+    });
+    if (!conv || conv.status !== 'waiting' || conv.agentId) return false;
+
     const online = await this.prisma.csAgentPresence.findMany({
       where: { status: 'online' },
       select: { userId: true },
     });
     if (online.length === 0) return false;
 
+    // 仅 isCsAgent 参与自动分单；禁止把会话分给咨询用户本人
     const candidates = await this.prisma.user.findMany({
       where: {
-        id: { in: online.map((o) => o.userId) },
+        id: {
+          in: online.map((o) => o.userId).filter((id) => id !== conv.userId),
+        },
         status: 'active',
-        OR: [
-          { isCsAgent: true },
-          { role: { in: ['admin', 'normal_admin'] } },
-        ],
+        isCsAgent: true,
       },
       select: {
         id: true,
@@ -379,14 +412,25 @@ export class CsDeskService implements OnModuleInit {
       }),
     ]);
 
-    const onlineCount = await this.prisma.csAgentPresence.count({
+    const onlinePresence = await this.prisma.csAgentPresence.findMany({
       where: { status: 'online' },
+      select: { userId: true },
     });
+    const onlineAgentCount =
+      onlinePresence.length === 0
+        ? 0
+        : await this.prisma.user.count({
+            where: {
+              id: { in: onlinePresence.map((p) => p.userId) },
+              status: 'active',
+              isCsAgent: true,
+            },
+          });
 
     return {
       items: rows.map((r) => this.mapConversation(r)),
       counts: { waiting, active: myActive, ended },
-      onlineAgentCount: onlineCount,
+      onlineAgentCount,
       myActiveCount: myActive,
     };
   }
@@ -583,11 +627,15 @@ export class CsDeskService implements OnModuleInit {
 
   async acceptConversation(conversationId: string, agentId: string) {
     this.assertLinglongEnabled();
+    await this.assertDispatchableAgent(agentId);
     const conv = await this.prisma.csConversation.findUnique({
       where: { id: conversationId },
       include: { agent: true },
     });
     if (!conv) throw new NotFoundException('会话不存在');
+    if (conv.userId === agentId) {
+      throw new BadRequestException('不能接待自己发起的咨询');
+    }
     if (conv.status === 'ended') {
       throw new BadRequestException('会话已结束');
     }
@@ -676,8 +724,11 @@ export class CsDeskService implements OnModuleInit {
         status: true,
       },
     });
-    if (!target || !this.isAgentCapable(target)) {
-      throw new BadRequestException('目标不是有效客服');
+    if (!target || !this.isDispatchableAgent(target)) {
+      throw new BadRequestException('目标不是有效客服（需开启客服身份）');
+    }
+    if (target.id === conv.userId) {
+      throw new BadRequestException('不能转接给咨询用户本人');
     }
     const presence = await this.prisma.csAgentPresence.findUnique({
       where: { userId: toAgentId },
@@ -717,7 +768,19 @@ export class CsDeskService implements OnModuleInit {
     status: 'online' | 'away' | 'offline',
   ) {
     this.assertLinglongEnabled();
-    await this.assertAgentUser(userId);
+    // 仅显式客服身份可上线参与分单；管理员未开客服身份时直接忽略
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, isCsAgent: true, status: true, role: true },
+    });
+    if (!user || user.status !== 'active' || !this.isDispatchableAgent(user)) {
+      if (status === 'offline') {
+        await this.prisma.csAgentPresence
+          .updateMany({ where: { userId }, data: { status: 'offline' } })
+          .catch(() => undefined);
+      }
+      return { userId, status: 'offline' as const };
+    }
     return this.prisma.csAgentPresence.upsert({
       where: { userId },
       create: { userId, status },
@@ -747,10 +810,7 @@ export class CsDeskService implements OnModuleInit {
       where: {
         id: { in: ids },
         status: 'active',
-        OR: [
-          { isCsAgent: true },
-          { role: { in: ['admin', 'normal_admin'] } },
-        ],
+        isCsAgent: true,
       },
       select: { id: true, name: true, phone: true },
     });

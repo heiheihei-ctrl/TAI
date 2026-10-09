@@ -5,6 +5,8 @@ All notable changes to this knowledge base will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning (knowledge-base versioning).
 
 ## [Unreleased]
+### Fixed
+- Linglong 客服：自动分单/在线人数仅统计已开启 `isCsAgent` 的账号；管理员未开客服身份不再因打开工作台或画布咨询被当成在线客服；禁止把会话分给咨询用户本人。
 ### Added
 - Linglong 客服：`User.isCsAgent` 座席开关；在线/暂离（`CsAgentPresence`）；创建会话后按最低负载自动分单；转接；待接入池防双抢。详见 `helloagents/wiki/modules/cs-desk.md`。
 - Linglong 客服工作台完整链路：Prisma 会话/消息/工单/快捷回复/服务包/协同请求；Nest `cs-desk` REST + `/ws/cs`；管理后台「客服工作台」三栏；画布右下角用户客服入口（仅 linglong）。详见 `helloagents/wiki/modules/cs-desk.md`。
