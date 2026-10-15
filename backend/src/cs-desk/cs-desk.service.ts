@@ -488,11 +488,20 @@ export class CsDeskService implements OnModuleInit {
     senderId: string | null;
     type: CsMessageType;
     content: MessageContent;
-  }) {
+  }): Promise<ReturnType<CsDeskService['mapMessage']>> {
     const conv = await this.prisma.csConversation.findUnique({
       where: { id: params.conversationId },
     });
     if (!conv) throw new NotFoundException('会话不存在');
+    // A new customer message starts a fresh reception round; keep history and consent closed.
+    if (conv.status === 'ended' && params.senderRole === 'user') {
+      if (!params.senderId || conv.userId !== params.senderId) {
+        throw new ForbiddenException('Cannot send to another customer session');
+      }
+      const next = await this.getOrCreateOpenConversation(params.senderId);
+      await this.tryAutoAssign(next.id);
+      return this.postMessage({ ...params, conversationId: next.id });
+    }
     if (conv.status === 'ended' && params.senderRole !== 'system') {
       throw new BadRequestException('会话已结束');
     }
@@ -1082,6 +1091,16 @@ export class CsDeskService implements OnModuleInit {
       throw new BadRequestException('该协同请求已处理');
     }
 
+    if (collab.conversation.status !== 'active' || collab.conversation.agentId !== collab.agentId) {
+      throw new BadRequestException('会话已结束或已转接，请重新发起协同');
+    }
+    if (action === 'accepted') {
+      const targetId = projectId || collab.projectId;
+      const project = targetId ? await this.prisma.project.findUnique({ where: { id: targetId } }) : null;
+      if (!project || project.userId !== userId || project.teamId) {
+        throw new BadRequestException('请选择自己的个人画布进行协同');
+      }
+    }
     const nextStatus = action as CsCollabStatus;
     const updated = await this.prisma.csCollabRequest.update({
       where: { id: collabId },

@@ -1,3 +1,4 @@
+import { hasCsCanvasAccess } from '../utils/csCanvasAccess';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -79,6 +80,7 @@ export class CollaborationService {
       select: { id: true, userId: true, teamId: true },
     });
     if (!project) throw new NotFoundException('项目不存在');
+    if (await hasCsCanvasAccess(this.prisma, userId, project)) return;
     if (project.teamId) {
       await this.teams.assertMember(project.teamId, userId);
       return;

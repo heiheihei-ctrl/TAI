@@ -5,6 +5,9 @@ All notable changes to this knowledge base will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning (knowledge-base versioning).
 
 ## [Unreleased]
+### Fixed — Canvas screenshot
+- 修复相机截图因跨域 Raster 污染画布导致 SecurityError；增加安全验证和代理重试，并等待组合内图片绘制。
+
 ### Fixed
 - Linglong 客服：自动分单/在线人数仅统计已开启 `isCsAgent` 的账号；管理员未开客服身份不再因打开工作台或画布咨询被当成在线客服；禁止把会话分给咨询用户本人。
 ### Added
@@ -798,3 +801,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Flow/Video Compose / Assets Proxy: preview metadata loading no longer falls back to direct browser fetches for backend-allowed remote video hosts such as `getapib.org`, avoiding noisy CORS failures when proxy playback is the intended path; backend `/api/assets/proxy` now logs request start, redirects, retries, client aborts, and final upstream response headers for easier video debugging (`frontend/src/components/flow/nodes/VideoComposeEditorModal.tsx`, `backend/src/oss/assets.controller.ts`).
 - Asset proxy: `proxifyRemoteAssetUrl(..., { forceProxy: true })` now truly forces proxying for ordinary video URLs as well, instead of returning direct `mp4/webm/m3u8` links on the early video branch; this fixes compose/video preview cases where `getapib.org` still bypassed `/api/assets/proxy` and hit browser CORS (`frontend/src/utils/assetProxy.ts`).
 - Flow/Video Compose: node card copy and controls were cleaned up. The idle helper text `本地浏览器合成，不走服务端转码` and ready-state status text `仅拼接视频时间线` were removed, the result action button is now a more prominent `重新合成` pill with a refresh glyph, and the audio input handle size now matches the video handle (`frontend/src/components/flow/nodes/VideoComposeNode.tsx`).
+
+## 2026-10-10
+
+- Added the customer support canvas entry and scoped personal project authorization; validated consent ownership and session status.
+
+- Customers can send after support ends a session; the next message starts a new reception round with automatic agent assignment and realtime subscription handoff.
+
+- Fixed stale cached CS identity hiding the canvas entry: synchronize the authenticated viewer from admin conversation-list responses and persist the updated login cache.

@@ -1,3 +1,4 @@
+import { hasCsCanvasAccess } from '../utils/csCanvasAccess';
 import {
   Body,
   Controller,
@@ -343,6 +344,7 @@ export class TeamCollabController {
     if (typeof role === 'string' && role.toLowerCase() === 'admin') return;
     const project = await this.prisma.project.findUniqueOrThrow({ where: { id: projectId } });
     if (project.userId === userId) return;
+    if (await hasCsCanvasAccess(this.prisma, userId, project)) return;
 
     if (!teamId) throw new ForbiddenException('无权访问此项目');
 

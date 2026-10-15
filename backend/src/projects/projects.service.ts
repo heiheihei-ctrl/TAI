@@ -1,3 +1,4 @@
+import { hasCsCanvasAccess } from '../utils/csCanvasAccess';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
@@ -29,8 +30,10 @@ export class ProjectsService {
 
   private async assertProjectAccess(
     userId: string,
-    project: { userId: string; teamId: string | null },
+    project: { id?: string; userId: string; teamId: string | null },
+    allowCs = true,
   ) {
+    if (allowCs && await hasCsCanvasAccess(this.prisma, userId, project)) return;
     if (project.teamId) {
       await this.teams.assertMember(project.teamId, userId);
       return;
@@ -269,7 +272,7 @@ export class ProjectsService {
   async remove(userId: string, id: string) {
     const p = await this.prisma.project.findUnique({ where: { id } });
     if (!p) throw new NotFoundException('项目不存在');
-    await this.assertProjectAccess(userId, p);
+    await this.assertProjectAccess(userId, p, false);
     await this.prisma.project.delete({ where: { id } });
     return { ok: true };
   }

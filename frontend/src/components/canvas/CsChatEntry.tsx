@@ -88,7 +88,9 @@ const CsChatEntry: React.FC = () => {
         }
       }
       if (env.type === "status" && activeId && env.conversationId === activeId) {
-        void csDeskApi.getMine(activeId).then(setConversation).catch(() => undefined);
+        void csDeskApi.getMine(activeId).then((conv) => {
+          if (conversationIdRef.current === activeId) setConversation(conv);
+        }).catch(() => undefined);
       }
     });
     return () => {
@@ -120,10 +122,31 @@ const CsChatEntry: React.FC = () => {
     setError(null);
     try {
       const msg = await csDeskApi.sendMessage(conversation.id, { text });
-      setMessages((prev) =>
-        prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]
-      );
-      setDraft("");
+      if (msg.conversationId !== conversation.id) {
+        // Subscribe before fetching so messages arriving during the handoff are retained.
+        conversationIdRef.current = msg.conversationId;
+        setConversation((prev) => prev ? {
+          ...prev, id: msg.conversationId, status: "waiting", agentId: null, agent: null,
+        } : prev);
+        csRealtimeClient.join(msg.conversationId);
+        setMessages((prev) => prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]);
+        setDraft("");
+        const [conv, msgs] = await Promise.all([
+          csDeskApi.getMine(msg.conversationId),
+          csDeskApi.listMessages(msg.conversationId),
+        ]);
+        setConversation(conv);
+        setMessages((prev) => {
+          const history = prev.filter((m) => m.conversationId !== msg.conversationId);
+          const fetchedIds = new Set(msgs.map((m) => m.id));
+          const live = prev.filter((m) => m.conversationId === msg.conversationId && !fetchedIds.has(m.id));
+          return [...history, ...msgs, ...live];
+        });
+        void csDeskApi.markRead(conv.id).catch(() => undefined);
+      } else {
+        setMessages((prev) => prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]);
+        setDraft("");
+      }
     } catch (e: any) {
       setError(e?.message || lt("发送失败", "Send failed"));
     } finally {
@@ -186,7 +209,7 @@ const CsChatEntry: React.FC = () => {
                       `Active · ${conversation.agent?.name || "Agent"}`
                     )
                   : conversation?.status === "ended"
-                    ? lt("会话已结束", "Session ended")
+                    ? lt("本次服务已结束，发送消息可重新接待", "Send a message to connect with an agent again")
                     : lt("排队中，客服即将接入", "Waiting for an agent")}
               </div>
             </div>
@@ -330,7 +353,7 @@ const CsChatEntry: React.FC = () => {
                   }
                 }}
                 rows={2}
-                disabled={!conversation || conversation.status === "ended"}
+                disabled={!conversation || loading || sending}
                 placeholder={lt("输入消息…", "Type a message…")}
                 className="min-h-[56px] flex-1 resize-none rounded-lg border border-[#E5E7EB] px-2.5 py-2 text-sm outline-none focus:border-[#2563EB]"
               />
@@ -340,7 +363,7 @@ const CsChatEntry: React.FC = () => {
                   sending ||
                   !draft.trim() ||
                   !conversation ||
-                  conversation.status === "ended"
+                  loading
                 }
                 onClick={() => void handleSend()}
                 className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-[#2563EB] text-white disabled:opacity-50"

@@ -74,13 +74,17 @@ export class CsDeskAdminController {
     @Request() req: AuthenticatedRequest,
     @Query() query: AdminListQueryDto,
   ) {
-    await this.assertAgent(req);
-    return this.csDesk.listAdmin({
+    const viewer = await this.assertAgent(req);
+    const result = await this.csDesk.listAdmin({
       status: query.status,
       scope: query.scope,
       agentId: this.agentId(req),
       isFullAdmin: this.isFullAdmin(req),
     });
+    return {
+      ...result,
+      viewer: { id: viewer.id, role: viewer.role, isCsAgent: Boolean(viewer.isCsAgent) },
+    };
   }
 
   @Get('conversations/:id')

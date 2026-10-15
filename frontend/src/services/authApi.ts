@@ -103,7 +103,7 @@ function saveSession(user: UserInfo) {
   } catch {}
 }
 
-function mergeSession(partialUser: UserInfo) {
+export function mergeSession(partialUser: UserInfo) {
   const current = loadSession();
   saveSession({ ...(current || {}), ...partialUser } as UserInfo);
 }

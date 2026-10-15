@@ -620,7 +620,7 @@ export class AutoScreenshotService {
         }
       } catch (error) {
         logger.warn(`绘制元素失败 (${element.type}, layer: ${element.layerIndex}):`, error);
-        continue;
+        throw error;
       }
     }
     
@@ -642,7 +642,7 @@ export class AutoScreenshotService {
       if (item instanceof paper.Path && item.segments && item.segments.length > 0) {
         this.drawPaperPath(ctx, item);
       } else if (item instanceof paper.Group) {
-        this.drawPaperGroup(ctx, item);
+        await this.drawPaperGroup(ctx, item);
       } else if (item instanceof paper.Raster && !item.data?.isHelper) {
         await this.drawPaperRaster(ctx, item);
       } else if (item instanceof paper.PointText) {
@@ -667,6 +667,7 @@ export class AutoScreenshotService {
     ) => {
       const relativeX = sourceBounds.x - bounds.x;
       const relativeY = sourceBounds.y - bounds.y;
+      this.assertExportableImage(element);
       ctx.drawImage(
         element,
         relativeX,
@@ -940,7 +941,7 @@ export class AutoScreenshotService {
             if (item instanceof paper.Path && item.segments && item.segments.length > 0) {
               this.drawPaperPath(tempCtx, item);
             } else if (item instanceof paper.Group) {
-              this.drawPaperGroup(tempCtx, item);
+              await this.drawPaperGroup(tempCtx, item);
             } else if (item instanceof paper.Raster && !item.data?.isHelper) {
               await this.drawPaperRaster(tempCtx, item);
             } else if (item instanceof paper.PointText) {
@@ -1106,7 +1107,7 @@ export class AutoScreenshotService {
   /**
    * 绘制Paper.js组
    */
-  private static drawPaperGroup(ctx: CanvasRenderingContext2D, group: paper.Group): void {
+  private static async drawPaperGroup(ctx: CanvasRenderingContext2D, group: paper.Group): Promise<void> {
     if ((group.data as any)?.isHelper) return;
 
     for (const child of group.children) {
@@ -1116,11 +1117,11 @@ export class AutoScreenshotService {
       if (child instanceof paper.Path) {
         this.drawPaperPath(ctx, child);
       } else if (child instanceof paper.Raster && !child.data?.isHelper) {
-        this.drawPaperRaster(ctx, child);
+        await this.drawPaperRaster(ctx, child);
       } else if (child instanceof paper.PointText) {
         this.drawPaperText(ctx, child);
       } else if (child instanceof paper.Group) {
-        this.drawPaperGroup(ctx, child);
+        await this.drawPaperGroup(ctx, child);
       }
     }
   }
@@ -1132,69 +1133,32 @@ export class AutoScreenshotService {
   private static async drawPaperRaster(ctx: CanvasRenderingContext2D, raster: paper.Raster): Promise<void> {
     if (!raster.image || !raster.bounds) return;
 
+    let imageToDraw: CanvasImageSource = raster.image;
     try {
-      ctx.save();
-      
-      // 检查是否是跨域图片，如果是则重新加载以设置 crossOrigin
-      let imageToDraw: CanvasImageSource = raster.image;
-      
-      // 如果 raster.image 是 HTMLImageElement 且是跨域图片，需要重新加载
-      if (raster.image instanceof HTMLImageElement) {
-        const imgSrc = raster.image.src;
-        // 检查是否是跨域 URL（不是 data: 或 blob:）
-        if (imgSrc && !/^data:/i.test(imgSrc) && !/^blob:/i.test(imgSrc)) {
-          // 仅当“确实跨域”且未设置 crossOrigin 时才需要重载；同源（含 /api/assets/proxy）无需重载。
-          const failedLoad = raster.image.complete && raster.image.naturalWidth === 0;
-          let isCrossOrigin = true;
-          try {
-            const base =
-              typeof window !== 'undefined' && window.location?.origin
-                ? window.location.origin
-                : '';
-            if (base) {
-              const normalized = new URL(imgSrc, base);
-              isCrossOrigin = normalized.origin !== base;
-            }
-          } catch {
-            isCrossOrigin = true;
-          }
-
-          const needsReload = failedLoad || (isCrossOrigin && !raster.image.crossOrigin);
-          
-          if (needsReload) {
-            try {
-              // 尝试使用代理 URL 重新加载图片，确保设置 crossOrigin
-              const proxiedSrc = toRenderableImageSrc(imgSrc) || proxifyRemoteAssetUrl(imgSrc);
-              const cleanImg = await this.loadImageFromSrc(proxiedSrc);
-              imageToDraw = cleanImg;
-              logger.debug('✅ 跨域图片已重新加载（设置 crossOrigin）', { src: imgSrc });
-            } catch (loadError) {
-              // 如果重新加载失败，记录警告但继续使用原图片
-              // 这可能会导致 canvas 被污染，但至少不会完全失败
-              logger.warn('⚠️ 跨域图片重新加载失败，使用原图片（可能导致截图失败）:', {
-                src: imgSrc,
-                error: loadError
-              });
-              imageToDraw = raster.image;
-            }
-          }
-        }
-      }
-      
-      // 绘制图像到指定边界
-      ctx.drawImage(
-        imageToDraw,
-        raster.bounds.x,
-        raster.bounds.y,
-        raster.bounds.width,
-        raster.bounds.height
-      );
-      
-      ctx.restore();
-    } catch (error) {
-      logger.warn('绘制Paper.js光栅图像失败:', error);
-      // 不抛出错误，继续处理其他元素
+      this.assertExportableImage(imageToDraw);
+    } catch {
+      const source = raster.image instanceof HTMLImageElement
+        ? raster.image.currentSrc || raster.image.src : '';
+      if (!source) throw new Error('图片无法安全截图，请重新加载图片后重试');
+      imageToDraw = await this.loadImageFromSrc(source);
     }
+    ctx.save();
+    try {
+      ctx.drawImage(imageToDraw, raster.bounds.x, raster.bounds.y,
+        raster.bounds.width, raster.bounds.height);
+    } finally {
+      ctx.restore();
+    }
+  }
+
+  // Validate on a disposable canvas before touching the screenshot canvas.
+  private static assertExportableImage(image: CanvasImageSource): void {
+    const probe = document.createElement('canvas');
+    probe.width = probe.height = 1;
+    const context = probe.getContext('2d');
+    if (!context) throw new Error('无法创建截图画布');
+    context.drawImage(image, 0, 0, 1, 1);
+    context.getImageData(0, 0, 1, 1);
   }
 
   /**
@@ -1634,17 +1598,29 @@ export class AutoScreenshotService {
   /**
    * 从src加载图片
    */
-  private static loadImageFromSrc(src: string): Promise<HTMLImageElement> {
-    return new Promise((resolve, reject) => {
+  private static async loadImageFromSrc(src: string): Promise<HTMLImageElement> {
+    const finalSrc = toRenderableImageSrc(src) || proxifyRemoteAssetUrl(src);
+    const load = (source: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
       const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error('图片加载失败'));
-      const finalSrc = toRenderableImageSrc(src) || proxifyRemoteAssetUrl(src);
-      if (!/^data:/i.test(finalSrc) && !/^blob:/i.test(finalSrc)) {
-        img.crossOrigin = 'anonymous';
-      }
-      img.src = finalSrc;
+      img.onload = () => {
+        try {
+          this.assertExportableImage(img);
+          resolve(img);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      img.onerror = () => reject(new Error('截图图片加载失败，请检查网络后重试'));
+      img.crossOrigin = 'anonymous';
+      img.src = source;
     });
+    try {
+      return await load(finalSrc);
+    } catch (error) {
+      const proxySrc = proxifyRemoteAssetUrl(finalSrc, { forceProxy: true });
+      if (proxySrc === finalSrc || /^(data:|blob:)/i.test(finalSrc)) throw error;
+      return load(proxySrc);
+    }
   }
 
   private static findRasterByImageId(imageId: string): paper.Raster | null {

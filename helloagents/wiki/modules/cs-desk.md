@@ -40,3 +40,20 @@
 `CsConversation` / `CsMessage` / `CsTicket` / `CsQuickReply` / `CsServicePackage` / `CsCollabRequest` / `CsAgentPresence`
 
 迁移：`202610080001_add_cs_desk`、`202610080002_cs_agent_presence`
+
+## Customer support canvas access
+
+- A green canvas button appears beside End session after a collaboration request; consent enables opening the personal canvas in a new tab.
+- Linglong only: access requires the requesting agent to remain the assigned CS agent, an active session, accepted consent and a customer-owned personal project.
+- CS consent does not authorize deleting the project or accessing team projects. Existing realtime connections are not actively disconnected when a session ends.
+
+## New reception after ending a session
+
+- Ending a session keeps customer input available. The next customer message creates or reuses an open session and runs online-agent assignment again; with no available agent it stays waiting.
+- The message API returns the actual destination conversationId. The customer joins that conversation and refreshes its messages and agent status, retaining visible previous messages.
+- Ended sessions and their collaboration consent remain closed.
+
+## Workbench identity synchronization
+
+- Admin conversation lists return the database-backed viewer id, role and isCsAgent. The workbench synchronizes these to the matching authenticated user and login cache on entry and every 15 seconds.
+- Reception status and canvas-button availability use the synchronized CS identity; permissions remain enforced by the backend.

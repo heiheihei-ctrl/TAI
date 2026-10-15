@@ -16,6 +16,7 @@ import {
 } from "@/services/csDeskApi";
 import { csRealtimeClient } from "@/services/csRealtimeClient";
 import { useAuthStore } from "@/stores/authStore";
+import { mergeSession } from "@/services/authApi";
 import { cn } from "@/lib/utils";
 
 type QueueTab = "waiting" | "active" | "ended";
@@ -123,6 +124,23 @@ const CsWorkbench: React.FC = () => {
     [items, selectedId]
   );
 
+  const latestCollab = React.useMemo(() => {
+    const request = [...messages].reverse().find(
+      (message) => message.conversationId === selectedId && message.type === "collab_request"
+    );
+    if (!request) return null;
+    const response = [...messages].reverse().find(
+      (message) => message.conversationId === selectedId &&
+        message.type === "system" && message.content?.collabId === request.content?.collabId
+    );
+    const content = { ...request.content, ...response?.content };
+    return { status: content.status as unknown, projectId: content.projectId as unknown, agentId: request.senderId };
+  }, [messages, selectedId]);
+  const canvasProjectId = selected?.status === "active" &&
+    selected.agentId === authUser?.id && latestCollab?.agentId === authUser?.id &&
+    latestCollab?.status === "accepted" && typeof latestCollab?.projectId === "string"
+      ? latestCollab.projectId : null;
+
   const refreshList = React.useCallback(async () => {
     setLoadingList(true);
     setError(null);
@@ -134,6 +152,17 @@ const CsWorkbench: React.FC = () => {
             ? activeScope
             : "mine";
       const result = await csDeskApi.adminList(queueTab, scope);
+      // Role changes must follow database state rather than the cached login snapshot.
+      if (result.viewer) {
+        const current = useAuthStore.getState().user;
+        if (current?.id === result.viewer.id) {
+          const user = { ...current, ...result.viewer };
+          mergeSession(user);
+          if (current.isCsAgent !== user.isCsAgent || current.role !== user.role) {
+            useAuthStore.setState({ user });
+          }
+        }
+      }
       setItems(result.items);
       setCounts(result.counts);
       setOnlineAgentCount(result.onlineAgentCount ?? 0);
@@ -520,6 +549,22 @@ const CsWorkbench: React.FC = () => {
                     className="rounded-lg border border-[#E5E7EB] px-3 py-1.5 text-xs text-[#4B5563] hover:bg-[#F9FAFB]"
                   >
                     转接
+                  </button>
+                )}
+                {selected.status === "active" && latestCollab && canDispatch && (
+                  <button
+                    type="button"
+                    disabled={!canvasProjectId}
+                    title={canvasProjectId ? "打开用户授权的画布" : "等待用户同意协同并选择画布"}
+                    onClick={() => {
+                      if (canvasProjectId) window.open(
+                        `/app?projectId=${encodeURIComponent(canvasProjectId)}`,
+                        "_blank", "noopener,noreferrer"
+                      );
+                    }}
+                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    进入画布
                   </button>
                 )}
                 {selected.status !== "ended" && (canDispatch || isFullAdmin) && (
