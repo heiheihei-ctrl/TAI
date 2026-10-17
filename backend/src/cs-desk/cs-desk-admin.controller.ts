@@ -83,7 +83,7 @@ export class CsDeskAdminController {
     });
     return {
       ...result,
-      viewer: { id: viewer.id, role: viewer.role, isCsAgent: Boolean(viewer.isCsAgent) },
+      viewer: { id: viewer.id, name: viewer.name, role: viewer.role, isCsAgent: Boolean(viewer.isCsAgent) },
     };
   }
 

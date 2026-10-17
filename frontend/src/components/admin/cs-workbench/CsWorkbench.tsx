@@ -76,8 +76,10 @@ function messageText(msg?: CsMessage) {
 
 const CsWorkbench: React.FC = () => {
   const authUser = useAuthStore((s) => s.user);
-  const isFullAdmin = (authUser?.role || "").toLowerCase() === "admin";
-  const canDispatch = Boolean(authUser?.isCsAgent);
+  const [viewer, setViewer] = React.useState<{ id: string; name?: string | null; role: string; isCsAgent: boolean } | null>(null);
+  const isFullAdmin = (viewer?.role || "").toLowerCase() === "admin";
+  const canDispatch = Boolean(viewer?.isCsAgent);
+  const [takingOver, setTakingOver] = React.useState(false);
   const [queueTab, setQueueTab] = React.useState<QueueTab>("waiting");
   const [activeScope, setActiveScope] = React.useState<"mine" | "all">("mine");
   const [items, setItems] = React.useState<CsConversation[]>([]);
@@ -141,8 +143,10 @@ const CsWorkbench: React.FC = () => {
     const content = { ...request.content, ...response?.content };
     return { status: content.status as unknown, projectId: content.projectId as unknown, agentId: request.senderId };
   }, [messages, selectedId]);
+  const isAssignedToMe = Boolean(viewer && selected?.agentId === viewer.id);
+  const canReply = Boolean(canDispatch && isAssignedToMe && selected?.status === "active");
   const canvasProjectId = selected?.status === "active" &&
-    selected.agentId === authUser?.id && latestCollab?.agentId === authUser?.id &&
+    selected.agentId === viewer?.id && latestCollab?.agentId === viewer?.id &&
     latestCollab?.status === "accepted" && typeof latestCollab?.projectId === "string"
       ? latestCollab.projectId : null;
 
@@ -159,9 +163,10 @@ const CsWorkbench: React.FC = () => {
       const result = await csDeskApi.adminList(queueTab, scope);
       // Role changes must follow database state rather than the cached login snapshot.
       if (result.viewer) {
+        setViewer(result.viewer);
         const current = useAuthStore.getState().user;
         if (current?.id === result.viewer.id) {
-          const user = { ...current, ...result.viewer };
+          const user = { ...current, ...result.viewer, name: result.viewer.name ?? current.name };
           mergeSession(user);
           if (current.isCsAgent !== user.isCsAgent || current.role !== user.role) {
             useAuthStore.setState({ user });
@@ -324,7 +329,7 @@ const CsWorkbench: React.FC = () => {
 
   const handleSend = async (text?: string) => {
     const value = (text ?? draft).trim();
-    if (!selectedId || !value || sending) return;
+    if (!selectedId || !value || sending || !canReply) return;
     setSending(true);
     setError(null);
     try {
@@ -337,6 +342,7 @@ const CsWorkbench: React.FC = () => {
       void refreshList();
     } catch (e: any) {
       setError(e?.message || "发送失败");
+      void refreshList();
     } finally {
       setSending(false);
     }
@@ -430,6 +436,7 @@ const CsWorkbench: React.FC = () => {
           <span>
             在线客服 <strong className="text-[#111827]">{onlineAgentCount}</strong>
           </span>
+          <span>当前登录客服：<strong className="text-[#111827]">{viewer ? viewer.name || (viewer.id === authUser?.id ? authUser.name : null) || "未命名客服" : "正在确认…"}</strong></span>
           <span>
             我的接待中 <strong className="text-[#111827]">{myActiveCount}</strong>
           </span>
@@ -469,7 +476,7 @@ const CsWorkbench: React.FC = () => {
                 : "bg-amber-50 text-amber-700"
             )}
           >
-            {presence === "online" ? "接待中（点此暂离）" : "暂离（点此接待）"}
+            {presence === "online" ? "在线（点此暂离）" : "暂离（点此上线）"}
           </button>
         ) : (
           <span className="rounded-full bg-gray-100 px-3 py-1 font-medium text-gray-500">
@@ -583,7 +590,7 @@ const CsWorkbench: React.FC = () => {
                     接入
                   </button>
                 )}
-                {selected.status === "active" && canDispatch && (
+                {selected.status === "active" && (isAssignedToMe || isFullAdmin) && canDispatch && (
                   <button
                     type="button"
                     onClick={() => void openTransfer()}
@@ -616,7 +623,7 @@ const CsWorkbench: React.FC = () => {
                     {openingCanvas ? '检查中…' : '进入画布'}
                   </button>
                 )}
-                {selected.status !== "ended" && (canDispatch || isFullAdmin) && (
+                {selected.status !== "ended" && ((canDispatch && isAssignedToMe) || isFullAdmin) && (
                   <button
                     type="button"
                     onClick={() => void handleEnd()}
@@ -712,7 +719,26 @@ const CsWorkbench: React.FC = () => {
               <div ref={bottomRef} />
             </div>
 
-            {selected.status !== "ended" && (
+            {selected.status === "active" && !canReply && (
+              <div className="flex items-center justify-between gap-3 border-t border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                <span>{!viewer ? "正在确认当前客服身份…" : !isAssignedToMe ? `当前为查看模式，此会话由 ${selected.agent?.name || "其他客服"} 接待。转接给你后才能回复。` : "当前账号未开启客服身份，暂不可回复。"}</span>
+                {isFullAdmin && canDispatch && !isAssignedToMe && selected.userId !== viewer?.id && (
+                  <button type="button" disabled={takingOver || presence !== "online"} className="shrink-0 rounded-lg bg-[#2563EB] px-3 py-2 text-xs text-white disabled:opacity-50" onClick={async () => {
+                    if (!viewer || takingOver) return;
+                    setTakingOver(true);
+                    setError(null);
+                    try {
+                      const updated = await csDeskApi.adminTransfer(selected.id, viewer.id);
+                      setItems((previous) => previous.map((item) => item.id === updated.id ? updated : item));
+                      await refreshList();
+                    } catch (cause) {
+                      setError(cause instanceof Error ? cause.message : "转接失败");
+                    } finally { setTakingOver(false); }
+                  }}>{takingOver ? "正在转接…" : "转给我接待"}</button>
+                )}
+              </div>
+            )}
+            {canReply && (
               <div className="border-t border-[#EEF1F5] px-4 py-3">
                 <div className="mb-2 flex flex-wrap gap-2">
                   <button
@@ -928,7 +954,7 @@ const CsWorkbench: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => void handleCollab()}
-                  disabled={!selected || selected.status !== "active"}
+                  disabled={!canReply}
                   className="rounded-lg bg-[#2563EB] px-2 py-2 text-xs font-medium text-white disabled:opacity-50"
                 >
                   发起协同

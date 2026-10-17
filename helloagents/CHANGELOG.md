@@ -5,6 +5,7 @@ All notable changes to this knowledge base will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning (knowledge-base versioning).
 
 ## [Unreleased]
+- 修复客服「全部」视图把他人会话展示为可回复的误导：明确当前登录客服与会话归属，在线状态不再写「接待中」；他人会话只读，有权限的管理员可显式转给自己后回复。
 - 对齐客服 WS 与 HTTP 登录令牌优先级，避免旧 query token 覆盖有效登录 Cookie；增加不含令牌内容的握手拒绝诊断日志。
 - 修复客服工作台 WS 生命周期依赖变化清掉入房状态、列表更新但聊天状态未同步的问题；连接与事件订阅分离，重连补拉并每 2 秒补齐聊天消息，合并实时响应并隔离旧会话请求。
 - 加固客服鼠标同步握手：启动连接幂等、重连重新登记画布、后端确认后才发送鼠标，登记失败显示中文原因。

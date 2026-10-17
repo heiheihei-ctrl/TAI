@@ -158,7 +158,7 @@ export const csDeskApi = {
       counts: { waiting: number; active: number; ended: number };
       onlineAgentCount?: number;
       myActiveCount?: number;
-      viewer?: { id: string; role: string; isCsAgent: boolean };
+      viewer?: { id: string; name?: string | null; role: string; isCsAgent: boolean };
     }>(`api/cs/admin/conversations${qs ? `?${qs}` : ""}`);
   },
 
