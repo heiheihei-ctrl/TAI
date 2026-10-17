@@ -46,6 +46,8 @@ function RootRoutes() {
     void refreshTeams()
       .catch(() => {})
       .finally(() => {
+        // A support entry loads only the customer-authorized target in App.
+        if (window.location.pathname === '/app' && new URLSearchParams(window.location.search).has('csConversationId')) return;
         void loadProjects();
       });
   }, [user, loadProjects]);

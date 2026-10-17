@@ -7,9 +7,11 @@ import {
   type CsMessage,
 } from "@/services/csDeskApi";
 import { csRealtimeClient } from "@/services/csRealtimeClient";
+import { collabStatusText, resolveCollabMessages } from "@/services/csCollabStatus";
 import { useProjectStore } from "@/stores/projectStore";
 import { useLocaleText } from "@/utils/localeText";
 import { cn } from "@/lib/utils";
+import { CsCanvasContext } from "./CsCanvasContext";
 
 function formatTime(iso?: string | null) {
   if (!iso) return "";
@@ -27,11 +29,18 @@ function formatTime(iso?: string | null) {
 const CsChatEntry: React.FC = () => {
   const { lt } = useLocaleText();
   const currentProjectId = useProjectStore((s) => s.currentProjectId);
+  const csCanvas = React.useContext(CsCanvasContext);
+  React.useEffect(() => {
+    if (!isLinglongRestrictedPalette()) return;
+    csRealtimeClient.setCanvasProject(currentProjectId, csCanvas?.conversationId);
+    return () => csRealtimeClient.setCanvasProject(null);
+  }, [currentProjectId, csCanvas?.conversationId]);
   const [open, setOpen] = React.useState(false);
   const [conversation, setConversation] = React.useState<CsConversation | null>(
     null
   );
   const [messages, setMessages] = React.useState<CsMessage[]>([]);
+  const displayMessages = React.useMemo(() => resolveCollabMessages(messages), [messages]);
   const [draft, setDraft] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [sending, setSending] = React.useState(false);
@@ -229,7 +238,7 @@ const CsChatEntry: React.FC = () => {
                 {lt("连接中...", "Connecting...")}
               </div>
             )}
-            {messages.map((msg) => {
+            {displayMessages.map((msg) => {
               if (msg.type === "system") {
                 return (
                   <div
@@ -305,7 +314,7 @@ const CsChatEntry: React.FC = () => {
                           </div>
                         ) : (
                           <div className="text-xs opacity-70">
-                            {String(msg.content?.status || "")}
+                            {collabStatusText(msg.content?.status)}
                           </div>
                         )}
                       </div>

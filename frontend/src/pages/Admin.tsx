@@ -128,6 +128,7 @@ import { OpenObserveLogButton } from "@/components/admin/OpenObserveLogButton";
 import DashboardTrendChart from "@/components/admin/DashboardTrendChart";
 import UserProfileDemographicsPanel from "@/components/admin/UserProfileDemographicsPanel";
 import CsWorkbench from "@/components/admin/cs-workbench/CsWorkbench";
+import SupplyChainGalleryManager from "@/components/admin/SupplyChainGalleryManager";
 import { getDeploymentBrand } from "@/config/deploymentBrand";
 
 const FULL_ADMIN_ROLE = "admin";
@@ -144,6 +145,7 @@ type AdminTabKey =
   | "node-configs"
   | "settings"
   | "templates"
+  | "supply-chain-gallery"
   | "classroom"
   | "volc-review"
   | "cs-workbench";
@@ -15066,6 +15068,7 @@ export default function Admin() {
     { key: "watermark", label: "水印白名单" },
     { key: "node-configs", label: "节点管理" },
     { key: "templates", label: "公共模板" },
+    ...(isLinglongAdmin ? [{ key: "supply-chain-gallery" as const, label: "供应链图库" }] : []),
     { key: "settings", label: "系统设置" },
   ];
   const visibleTabs = tabs.filter((tab) =>
@@ -15110,6 +15113,7 @@ export default function Admin() {
         }
       >
         {currentTab === "cs-workbench" && isLinglongAdmin && <CsWorkbench />}
+        {currentTab === "supply-chain-gallery" && isLinglongAdmin && <SupplyChainGalleryManager />}
         {currentTab === "dashboard" && (
           <div>
             {loading && !stats ? (

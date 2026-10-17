@@ -1,4 +1,6 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/guards/jwt.guard';
+import { SUPPLY_CHAIN_GALLERY_KEY, parseSupplyChainGallery } from './supply-chain-gallery';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 
@@ -43,6 +45,14 @@ const parseEventSettings = (value?: string | null): EventSettingsPayload => {
 @Controller('settings')
 export class SettingsPublicController {
   constructor(private readonly adminService: AdminService) {}
+
+  @Get('supply-chain-gallery')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: '获取已上架的供应链公共图库' })
+  async getSupplyChainGallery() {
+    const setting = await this.adminService.getSetting(SUPPLY_CHAIN_GALLERY_KEY);
+    return parseSupplyChainGallery(setting?.value).filter((item) => item.isActive);
+  }
 
   @Get('wechat-qrcodes')
   @ApiOperation({ summary: '获取微信二维码配置（公开接口）' })

@@ -87,6 +87,12 @@ export class CsDeskAdminController {
     };
   }
 
+  @Get('conversations/:id/canvas-target')
+  @ApiOperation({ summary: '校验授权与用户画布在线状态，获取协同目标' })
+  async canvasTarget(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.csDesk.getCanvasTarget(id, this.agentId(req));
+  }
+
   @Get('conversations/:id')
   @ApiOperation({ summary: '座席查看会话' })
   async getOne(
@@ -218,6 +224,17 @@ export class CsDeskAdminController {
   ) {
     await this.assertAgent(req);
     return this.csDesk.createCollabRequest(id, this.agentId(req), body);
+  }
+
+  @Post('conversations/:id/collab/:collabId/end')
+  @ApiOperation({ summary: '结束当前协同，保留客服会话' })
+  async endCollab(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Param('collabId') collabId: string,
+  ) {
+    await this.assertAgent(req);
+    return this.csDesk.endCollab(id, collabId, this.agentId(req));
   }
 
   @Get('conversations/:id/customer')

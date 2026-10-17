@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import ExcelJS from 'exceljs';
 import { PrismaService } from '../prisma/prisma.service';
+import { SUPPLY_CHAIN_GALLERY_KEY, validateSupplyChainGallery } from './supply-chain-gallery';
 import { ApiResponseStatus } from '../credits/dto/credits.dto';
 import {
   buildAllModelsMonthlySeries,
@@ -1762,6 +1763,12 @@ export class AdminService {
     description?: string,
     metadata?: Record<string, any>,
   ) {
+    if (key === SUPPLY_CHAIN_GALLERY_KEY) {
+      let parsed: unknown;
+      try { parsed = JSON.parse(value); }
+      catch { throw new BadRequestException('无效的供应链图库数据'); }
+      value = JSON.stringify(validateSupplyChainGallery(parsed));
+    }
     return this.prisma.systemSetting.upsert({
       where: { key },
       update: {

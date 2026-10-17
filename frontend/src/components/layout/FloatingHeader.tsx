@@ -143,6 +143,7 @@ import {
 } from "@/services/referralApi";
 import gzhImg from "@/assets/gzh.png";
 import ForgotPasswordModal from "@/components/auth/ForgotPasswordModal";
+import { CsCanvasContext } from "@/components/canvas/CsCanvasContext";
 
 // Nano Banana 闂傚倸鍊搁崐鎼佸磹妞嬪孩顐介柨鐔哄Т绾惧鏌涘☉鍗炲箻闁哄棗妫濋弻娑樷槈濮楀牆濮涘銈傛櫆閻擄繝寮诲☉銏犵婵＄偠顕ф禍楣冩⒑缁嬫鍎愰柟鎼佺畺楠炲骞橀鑲╊槹濡炪倖鎸炬慨纾嬨亹鎼淬劍鈷掑ù锝堟鐢稓绱掗鎯р枅鐎规洖缍婇獮搴ㄦ寠婢跺鈧剙顪冮妶鍡樼５闁稿鎸婚〃銉╂倷鐎电顫ч梺鐟板槻閹虫ê鐣烽妸锔剧瘈閹煎瓨绻勯弫?
 type BananaPricingTier = "fast" | "pro" | "ultra";
@@ -227,6 +228,7 @@ const getTodayDateKey = () => {
 };
 
 const FloatingHeader: React.FC = () => {
+  const csCanvas = React.useContext(CsCanvasContext);
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -2443,7 +2445,7 @@ const FloatingHeader: React.FC = () => {
 
   return (
     <>
-      {showReminderBanner ? (
+      {showReminderBanner && !csCanvas ? (
         <ReminderBannerStack onHeightChange={handleBannerStackHeightChange}>
           <ProfileCheckInReminderBanner
             profile={extendedProfile}
@@ -2464,7 +2466,7 @@ const FloatingHeader: React.FC = () => {
           focusMode && "hidden"
         )}
         style={
-          bannerStackHeight > 0 ? { top: bannerStackHeight } : undefined
+          !csCanvas && bannerStackHeight > 0 ? { top: bannerStackHeight } : undefined
         }
       >
         {/* 闂傚倷娴囬褎顨ラ崫銉х濠电姴鍋嗛悞浠嬫煠婵劕鈧澹曢懞銉﹀弿婵☆垱瀵х涵楣冩煟閵堝鐣洪柡灞剧洴椤㈡洟鏁愰崱娆樻К闂備礁鎲￠崝蹇涘磻閹剧粯鈷掑┑鐘查娴滄粍绻涚仦鍌氱伈鐎规洘娲栭悾鐑藉炊閳哄啫绠垫繝纰樺墲椤ㄥ牓銆侀崳淇?+ Beta + 婵犵數濮烽。顔炬閺囥垹纾婚柟杈剧畱绾惧綊鏌￠崶鈺佸壋闁兼澘娼￠弻娑樜旈崘褏闂梺缁樺灦閿氭い鏇憾閺屸剝寰勭€ｎ亞浼囬悶姘箞閺岋絾鎯旈敍鍕殯闂佺楠稿畷顒勫煝?*/}
@@ -2714,6 +2716,17 @@ const FloatingHeader: React.FC = () => {
               </Button>
             )}
 
+            {csCanvas ? (
+              <div className="flex items-center gap-2 text-xs text-slate-700" aria-label="客户信息">
+                <span className="flex max-w-40 items-center gap-1 truncate rounded-full border border-blue-100 bg-blue-50 px-3 py-1" title={csCanvas.customer.phone}>
+                  <UserCircle className="h-3.5 w-3.5 shrink-0" />
+                  {csCanvas.customer.profileRealName || csCanvas.customer.name || csCanvas.customer.phone || "客户"} · 个人
+                </span>
+                {csCanvas.customer.profileCompany && <span className="max-w-32 truncate" title={csCanvas.customer.profileCompany}>{csCanvas.customer.profileCompany}</span>}
+                <span className="rounded-full border border-teal-100 bg-teal-50 px-2.5 py-1 text-teal-800">{csCanvas.customer.membershipPlanName || "暂无会员"}</span>
+                <span className="flex items-center gap-1 rounded-full border px-2.5 py-1" title="客户积分余额"><Star className="h-3.5 w-3.5 text-amber-500" />{csCanvas.customer.creditBalance.toLocaleString("zh-CN")} 积分</span>
+              </div>
+            ) : <>
             {SHOW_WORKSPACE_SWITCHER && (
               <TeamSwitcher variant="header" />
             )}
@@ -2800,6 +2813,8 @@ const FloatingHeader: React.FC = () => {
                 )}
               </Tooltip>
             </TooltipProvider>
+
+            </>}
 
             {showBananaRouteSelector ? (
             <DropdownMenu>

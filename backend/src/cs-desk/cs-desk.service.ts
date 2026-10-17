@@ -19,6 +19,39 @@ type MessageContent = Record<string, unknown>;
 
 @Injectable()
 export class CsDeskService implements OnModuleInit {
+  private canvasOnline: (userId: string, projectId: string) => boolean = () => false;
+
+  setCanvasOnlineChecker(check: (userId: string, projectId: string) => boolean) {
+    this.canvasOnline = check;
+  }
+
+  async getCanvasTarget(conversationId: string, agentId: string) {
+    this.assertLinglongEnabled();
+    await this.assertDispatchableAgent(agentId);
+    const conversation = await this.prisma.csConversation.findUnique({ where: { id: conversationId } });
+    if (!conversation || conversation.status !== 'active' || conversation.agentId !== agentId || conversation.userId === agentId) {
+      throw new ForbiddenException('当前会话不可进入用户画布');
+    }
+    const collab = await this.prisma.csCollabRequest.findFirst({
+      where: { conversationId, agentId }, orderBy: { createdAt: 'desc' },
+    });
+    if (!collab || collab.status !== 'accepted' || collab.endedAt || !collab.projectId) {
+      throw new BadRequestException('请先等待用户同意协同并选择画布');
+    }
+    const project = await this.prisma.project.findUnique({ where: { id: collab.projectId } });
+    if (!project || project.userId !== conversation.userId || project.teamId) {
+      throw new ForbiddenException('用户授权的画布不可用，请重新发起协同');
+    }
+    if (!this.canvasOnline(conversation.userId, project.id)) {
+      throw new BadRequestException('对方不在线或已离开授权画布，请对方打开画布后重试');
+    }
+    const customer = await this.getCustomerProfile(conversation.userId);
+    return {
+      projectId: project.id, conversationId, customer,
+      collabId: collab.id,
+      startedAt: collab.startedAt?.toISOString() ?? null,
+    };
+  }
   private broadcast:
     | ((conversationId: string, event: Record<string, unknown>) => void)
     | null = null;
@@ -1133,6 +1166,24 @@ export class CsDeskService implements OnModuleInit {
     });
 
     return updated;
+  }
+
+  async endCollab(conversationId: string, collabId: string, agentId: string) {
+    this.assertLinglongEnabled();
+    await this.assertDispatchableAgent(agentId);
+    const result = await this.prisma.csCollabRequest.updateMany({
+      where: {
+        id: collabId, conversationId, agentId, status: 'accepted', endedAt: null,
+        conversation: { status: 'active', agentId },
+      },
+      data: { status: 'ended', endedAt: new Date() },
+    });
+    if (!result.count) throw new BadRequestException('协同已结束或无权操作');
+    await this.postMessage({
+      conversationId, senderRole: 'system', senderId: null, type: 'system',
+      content: { text: '客服已结束协同操作', collabId, status: 'ended' },
+    });
+    return { ok: true };
   }
 
   async listQuickReplies() {

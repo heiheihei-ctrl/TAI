@@ -18,6 +18,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { AdminService } from './admin.service';
+import { SUPPLY_CHAIN_GALLERY_KEY, parseSupplyChainGallery, validateSupplyChainGallery } from './supply-chain-gallery';
 import { DashboardReportExportService } from './dashboard-report-export.service';
 import { CreditsService } from '../credits/credits.service';
 import { CreditsAnomalyService } from '../credits/credits-anomaly.service';
@@ -450,6 +451,21 @@ export class AdminController {
   }
 
   // ==================== 系统设置 ====================
+
+  @Get('supply-chain-gallery')
+  async getSupplyChainGallery(@Request() req: AuthenticatedRequest) {
+    this.checkAdmin(req);
+    const setting = await this.adminService.getSetting(SUPPLY_CHAIN_GALLERY_KEY);
+    return parseSupplyChainGallery(setting?.value);
+  }
+
+  @Post('supply-chain-gallery')
+  async saveSupplyChainGallery(@Request() req: AuthenticatedRequest, @Body() body: { items: unknown }) {
+    this.checkAdmin(req);
+    const items = validateSupplyChainGallery(body?.items);
+    await this.adminService.upsertSetting(SUPPLY_CHAIN_GALLERY_KEY, JSON.stringify(items), req.user.id, '玲珑供应链公共图库');
+    return items;
+  }
 
   @Get('settings')
   @ApiOperation({ summary: '获取所有系统设置' })

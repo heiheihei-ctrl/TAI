@@ -57,6 +57,9 @@ let ws: WebSocket | null = null;
 let generation = 0;
 let enabled = false;
 let activeConversationId: string | null = null;
+let canvasProjectId: string | null = null;
+let canvasConversationId: string | null = null;
+let canvasReady = false;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let backoff = 1_000;
 const listeners = new Set<Listener>();
@@ -73,6 +76,7 @@ function buildUrl(): string | null {
 }
 
 function closeSocket(): void {
+  canvasReady = false;
   if (ws) {
     try {
       ws.onopen = null;
@@ -148,6 +152,11 @@ function connect(): void {
     } catch {
       return;
     }
+    if (env.type === "ready") {
+      sock.send(JSON.stringify({ type: "canvas_presence", projectId: canvasProjectId, conversationId: canvasConversationId }));
+    }
+    if (env.type === "canvas_ready") canvasReady = Boolean(canvasProjectId && env.projectId === canvasProjectId);
+    if (env.type === "canvas_error") canvasReady = false;
     for (const l of listeners) {
       try {
         l(env);
@@ -158,6 +167,14 @@ function connect(): void {
   };
   sock.onclose = () => {
     if (gen !== generation) return;
+    canvasReady = false;
+    for (const listener of listeners) {
+      try {
+        listener({ type: "canvas_error", message: "实时连接已断开，正在重连；若持续出现，请检查后端服务与登录状态" });
+      } catch {
+        // A failed subscriber must not interrupt reconnection.
+      }
+    }
     scheduleReconnect();
   };
   sock.onerror = () => {
@@ -171,6 +188,7 @@ function connect(): void {
 
 export const csRealtimeClient = {
   start(): void {
+    if (enabled && ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
     enabled = true;
     connect();
   },
@@ -193,7 +211,7 @@ export const csRealtimeClient = {
       } catch {
         // ignore
       }
-    } else {
+    } else if (!ws || ws.readyState !== WebSocket.CONNECTING) {
       connect();
     }
   },
@@ -211,12 +229,21 @@ export const csRealtimeClient = {
     }
   },
   send(env: unknown): void {
+    if (typeof env === "object" && env !== null && "type" in env && env.type === "canvas_cursor" && !canvasReady) return;
     if (ws && ws.readyState === WebSocket.OPEN) {
       try {
         ws.send(JSON.stringify(env));
       } catch {
         // ignore
       }
+    }
+  },
+  setCanvasProject(projectId: string | null, conversationId: string | null = null): void {
+    canvasReady = false;
+    canvasProjectId = projectId;
+    canvasConversationId = conversationId;
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'canvas_presence', projectId, conversationId }));
     }
   },
   subscribe(listener: Listener): () => void {

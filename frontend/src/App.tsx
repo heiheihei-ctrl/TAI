@@ -1,11 +1,16 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Canvas from '@/pages/Canvas';
+import { CsCanvasContext } from '@/components/canvas/CsCanvasContext';
+import { CsCanvasSessionBanner } from '@/components/canvas/CsCanvasSessionBanner';
+import type { CsCanvasTarget } from '@/services/csDeskApi';
 import PromptOptimizerDemo from '@/pages/PromptOptimizerDemo';
 import Sora2Test from '@/pages/Sora2Test';
 import ProjectAutosaveManager from '@/components/autosave/ProjectAutosaveManager';
 import SaveDebugPanel from '@/components/autosave/SaveDebugPanel';
 import { useProjectStore } from '@/stores/projectStore';
+import { projectApi } from '@/services/projectApi';
+import { csDeskApi } from '@/services/csDeskApi';
 import { useProjectContentStore } from '@/stores/projectContentStore';
 import KeyboardShortcuts from '@/components/KeyboardShortcuts';
 import LoginModal from '@/components/auth/LoginModal';
@@ -92,6 +97,16 @@ const App: React.FC = () => {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const paramProjectId = searchParams.get('projectId');
+  const csConversationId = searchParams.get('csConversationId');
+  const isCsEntry = searchParams.has('csConversationId');
+  const [csCanvasReady, setCsCanvasReady] = useState(false);
+  const [csCanvasTarget, setCsCanvasTarget] = useState<CsCanvasTarget | null>(null);
+  const [csCanvasError, setCsCanvasError] = useState('');
+  const [csCanvasRetry, setCsCanvasRetry] = useState(0);
+  const handleCsCanvasLoadError = React.useCallback((message: string) => {
+    setCsCanvasError(message);
+    setCsCanvasReady(false);
+  }, []);
   const paramTeamId = searchParams.get('teamId');
   const teamInviteCode = resolveActiveTeamInvite(searchParams);
   const [teamInviteOpen, setTeamInviteOpen] = useState(false);
@@ -102,6 +117,50 @@ const App: React.FC = () => {
 
   // 获取认证状态用于显示加载指示器
   const { user, loading: authLoading } = useAuthStore();
+
+  useEffect(() => {
+    if (!isCsEntry || !user?.id) return;
+    let cancelled = false;
+    setCsCanvasReady(false);
+    setCsCanvasError('');
+    void (async () => {
+      try {
+        if (!csConversationId || !paramProjectId) throw new Error('缺少用户画布信息，请从客服工作台重新进入');
+        const target = await csDeskApi.adminCanvasTarget(csConversationId);
+        if (target.projectId !== paramProjectId) throw new Error('用户授权画布已变化，请从客服工作台重新进入');
+        const project = await projectApi.get(target.projectId);
+        if (cancelled) return;
+        setCsCanvasTarget(target);
+        useProjectContentStore.getState().beginSwitch();
+        useProjectStore.setState((state) => ({
+          currentProjectId: project.id, currentProject: project, modalOpen: false, error: null,
+          projects: [project, ...state.projects.filter((item) => item.id !== project.id)],
+        }));
+        setCsCanvasReady(true);
+      } catch (cause) {
+        if (!cancelled) setCsCanvasError(cause instanceof Error ? cause.message : '无法进入用户画布');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isCsEntry, csConversationId, paramProjectId, user?.id, csCanvasRetry]);
+
+  useEffect(() => {
+    if (!isCsEntry || !csCanvasReady || !csConversationId) return;
+    let cancelled = false;
+    const timer = window.setInterval(() => {
+      void csDeskApi.adminCanvasTarget(csConversationId).then((target) => {
+        if (cancelled) return;
+        if (target.projectId !== paramProjectId) {
+          handleCsCanvasLoadError('用户授权画布已变化，请从客服工作台重新进入');
+          return;
+        }
+        setCsCanvasTarget(target);
+      }).catch((cause: unknown) => {
+        if (!cancelled) handleCsCanvasLoadError(cause instanceof Error ? cause.message : '协同连接已中断');
+      });
+    }, 15_000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [isCsEntry, csCanvasReady, csConversationId, paramProjectId, handleCsCanvasLoadError]);
 
   // 记录上一次打开的项目ID，避免重复打开
   const lastOpenedProjectIdRef = useRef<string | null>(null);
@@ -180,7 +239,7 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!paramProjectId) {
+    if (isCsEntry || !paramProjectId) {
       return;
     }
     // 避免重复打开同一个项目
@@ -192,7 +251,7 @@ const App: React.FC = () => {
     // Get the openProject method directly in the effect to avoid dependency issues
     const openProjectFn = useProjectStore.getState().open;
     openProjectFn(paramProjectId);
-  }, [paramProjectId]);
+  }, [paramProjectId, isCsEntry]);
 
   // 使用稳定的 projectId，优先使用 currentProjectId
   const projectId = useMemo(() => {
@@ -205,6 +264,7 @@ const App: React.FC = () => {
   }, [paramProjectId, currentProjectId]);
 
   useEffect(() => {
+    if (isCsEntry) return;
     if (!currentProjectId) {
       return;
     }
@@ -214,7 +274,7 @@ const App: React.FC = () => {
     const next = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
     next.set('projectId', currentProjectId);
     setSearchParams(next, { replace: true });
-  }, [currentProjectId, paramProjectId, setSearchParams]);
+  }, [currentProjectId, paramProjectId, setSearchParams, isCsEntry]);
 
   // 条件渲染放在所有 Hooks 之后
   // 移动设备优先显示提示
@@ -230,11 +290,24 @@ const App: React.FC = () => {
     return <Sora2Test />;
   }
 
+  if (isCsEntry && (!csCanvasReady || currentProjectId !== paramProjectId)) {
+    return <div className="flex h-screen items-center justify-center bg-slate-50 p-6">
+      <div className="space-y-4 text-center">
+        <p role={csCanvasError ? 'alert' : 'status'}>{csCanvasError || '正在连接用户画布…'}</p>
+        {csCanvasError && <button className="rounded bg-blue-600 px-4 py-2 text-white" onClick={() => setCsCanvasRetry((value) => value + 1)}>重试</button>}
+        <div><a className="text-blue-600" href="/admin">返回客服工作台</a></div>
+      </div>
+    </div>;
+  }
+
   return (
     <div className="w-screen h-screen">
       <KeyboardShortcuts />
-      <ProjectAutosaveManager projectId={projectId} />
-      <Canvas />
+      <ProjectAutosaveManager projectId={projectId} onLoadError={isCsEntry ? handleCsCanvasLoadError : undefined} />
+      <CsCanvasContext.Provider value={isCsEntry ? csCanvasTarget : null}>
+        <CsCanvasSessionBanner />
+        <Canvas />
+      </CsCanvasContext.Provider>
       <LoginModal />
       <EventSettingsModalHost />
       <ExportWatermarkModalHost />

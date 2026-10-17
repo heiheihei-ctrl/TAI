@@ -11,34 +11,14 @@ import { useUIStore } from "@/stores";
 import { isLinglongRestrictedPalette } from "@/config/linglongPalette";
 import { useLocaleText } from "@/utils/localeText";
 import { cn } from "@/lib/utils";
+import SmartImage from "@/components/ui/SmartImage";
+import { supplyChainGalleryApi, type SupplyChainGalleryItem } from "@/services/supplyChainGalleryApi";
+import { personalLibraryApi } from "@/services/personalLibraryApi";
+import { useAuthStore } from "@/stores/authStore";
 
 type GalleryTab = "public" | "personal";
 
-type SupplyChainGalleryItem = {
-  id: string;
-  name: string;
-  scene: string;
-  scope: GalleryTab;
-};
-
-const SCENE_OPTIONS = ["场景1", "场景2", "场景3", "场景4", "场景5"] as const;
 const PAGE_SIZE_OPTIONS = [9, 18, 27] as const;
-const TOTAL_MOCK_ITEMS = 128;
-
-function buildMockGalleries(): SupplyChainGalleryItem[] {
-  return Array.from({ length: TOTAL_MOCK_ITEMS }, (_, index) => {
-    const n = index + 1;
-    const scene = SCENE_OPTIONS[index % SCENE_OPTIONS.length];
-    return {
-      id: `supply-chain-gallery-${n}`,
-      name: `供应商风景图库 ${String(n).padStart(2, "0")}`,
-      scene,
-      scope: index % 7 === 0 ? "personal" : "public",
-    };
-  });
-}
-
-const ALL_GALLERIES = buildMockGalleries();
 
 function pageNumbers(current: number, total: number): Array<number | "ellipsis"> {
   if (total <= 7) {
@@ -60,15 +40,51 @@ const SupplyChainLibraryModal: React.FC = () => {
   const setOpen = useUIStore((s) => s.setShowSupplyChainLibrary);
 
   const [tab, setTab] = React.useState<GalleryTab>("public");
-  const [scene, setScene] = React.useState<string>(SCENE_OPTIONS[0]);
+  const [scene, setScene] = React.useState("");
   const [keywordInput, setKeywordInput] = React.useState("");
   const [keyword, setKeyword] = React.useState("");
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState<(typeof PAGE_SIZE_OPTIONS)[number]>(9);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const userId = useAuthStore((s) => s.user?.id);
+  const [galleries, setGalleries] = React.useState<SupplyChainGalleryItem[]>([]);
+  const [loadedScope, setLoadedScope] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState('');
+  const [reload, setReload] = React.useState(0);
+  const requestScope = `${userId || ''}:${tab}`;
 
   const isLinglong = isLinglongRestrictedPalette();
   const entryEnabled = true;
+
+  React.useEffect(() => {
+    if (!isOpen || !isLinglong) return;
+    let cancelled = false;
+    setLoading(true);
+    setGalleries([]);
+    setError('');
+    setSelectedId(null);
+    const load = async () => {
+      try {
+        const items = tab === 'public'
+          ? await supplyChainGalleryApi.list()
+          : (await personalLibraryApi.list('2d')).filter((asset) => asset.type === '2d' && asset.url).map((asset) => ({
+              id: asset.id, name: asset.name, scene: '', imageUrl: asset.url, isActive: true,
+            }));
+        if (!cancelled) setGalleries(items);
+      } catch (cause) {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : '图库加载失败');
+      } finally {
+        if (!cancelled) { setLoadedScope(requestScope); setLoading(false); }
+      }
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, [isOpen, isLinglong, tab, userId, requestScope, reload]);
+
+  const availableGalleries = React.useMemo(() => loadedScope === requestScope ? galleries : [], [loadedScope, requestScope, galleries]);
+  const isLoading = loading || loadedScope !== requestScope;
+  const sceneOptions = Array.from(new Set(availableGalleries.map((item) => item.scene).filter(Boolean)));
 
   React.useEffect(() => {
     if ((!isLinglong || !entryEnabled) && isOpen) setOpen(false);
@@ -89,13 +105,12 @@ const SupplyChainLibraryModal: React.FC = () => {
 
   const filtered = React.useMemo(() => {
     const q = keyword.trim().toLowerCase();
-    return ALL_GALLERIES.filter((item) => {
-      if (item.scope !== tab) return false;
+    return availableGalleries.filter((item) => {
       if (scene && item.scene !== scene) return false;
       if (q && !item.name.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [tab, scene, keyword]);
+  }, [availableGalleries, scene, keyword]);
 
   const total = filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -109,17 +124,24 @@ const SupplyChainLibraryModal: React.FC = () => {
   const handleReset = () => {
     setKeywordInput("");
     setKeyword("");
-    setScene(SCENE_OPTIONS[0]);
+    setScene("");
     setPage(1);
   };
 
   const handleSelect = (item: SupplyChainGalleryItem) => {
     setSelectedId(item.id);
+    window.dispatchEvent(new CustomEvent('triggerQuickImageUpload', {
+      detail: {
+        imageData: { id: item.id, url: item.imageUrl, src: item.imageUrl, fileName: item.name },
+        fileName: item.name,
+        operationType: 'manual',
+      },
+    }));
     try {
       window.dispatchEvent(
         new CustomEvent("toast", {
           detail: {
-            message: lt(`已选择：${item.name}`, `Selected: ${item.name}`),
+            message: lt(`已发送到画布：${item.name}`, `Sent to canvas: ${item.name}`),
             type: "success",
           },
         })
@@ -183,7 +205,7 @@ const SupplyChainLibraryModal: React.FC = () => {
                       ? "border-[#2563EB] text-[#2563EB]"
                       : "border-transparent text-[#6B7280] hover:text-[#374151]"
                   )}
-                  onClick={() => setTab(item.id)}
+                  onClick={() => { setTab(item.id); setScene(''); setPage(1); }}
                 >
                   {item.label}
                 </button>
@@ -192,7 +214,7 @@ const SupplyChainLibraryModal: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {SCENE_OPTIONS.map((option) => {
+            {["", ...sceneOptions].map((option) => {
               const active = scene === option;
               return (
                 <button
@@ -206,7 +228,7 @@ const SupplyChainLibraryModal: React.FC = () => {
                   )}
                   onClick={() => setScene(option)}
                 >
-                  {option}
+                  {option || lt("全部", "All")}
                 </button>
               );
             })}
@@ -228,6 +250,14 @@ const SupplyChainLibraryModal: React.FC = () => {
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                className="h-10 rounded-lg px-3 text-sm text-[#6B7280] transition hover:bg-[#F3F4F6] disabled:opacity-40"
+                onClick={() => setReload((value) => value + 1)}
+                disabled={isLoading}
+              >
+                {lt("刷新", "Refresh")}
+              </button>
+              <button
+                type="button"
                 className="h-10 rounded-lg px-3 text-sm text-[#6B7280] transition hover:bg-[#F3F4F6] hover:text-[#111827]"
                 onClick={handleReset}
               >
@@ -244,13 +274,14 @@ const SupplyChainLibraryModal: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {pageItems.map((item) => {
+            {!isLoading && !error && pageItems.map((item) => {
               const selected = selectedId === item.id;
               return (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => handleSelect(item)}
+                  title={lt("发送到画布", "Send to canvas")}
                   className={cn(
                     "overflow-hidden rounded-xl border bg-white text-left transition",
                     selected
@@ -258,16 +289,20 @@ const SupplyChainLibraryModal: React.FC = () => {
                       : "border-[#E5E7EB] hover:border-[#93C5FD] hover:shadow-md"
                   )}
                 >
-                  <div className="aspect-[4/3] bg-gradient-to-br from-[#DBEAFE] via-[#E0F2FE] to-[#F0F9FF]" />
+                  <SmartImage src={item.imageUrl} alt={item.name} className="aspect-[4/3] w-full bg-[#F8FAFC] object-contain" />
                   <div className="truncate px-3 py-2.5 text-sm font-medium text-[#1F2937]">
                     {item.name}
                   </div>
                 </button>
               );
             })}
-            {pageItems.length === 0 && (
+            {isLoading && <div role="status" className="col-span-full py-12 text-center text-sm text-[#6B7280]">{lt("正在加载图库…", "Loading gallery…")}</div>}
+            {!isLoading && error && <div role="alert" className="col-span-full py-12 text-center text-sm text-red-600">
+              <p>{error}</p><button type="button" className="mt-3 text-[#2563EB]" onClick={() => setReload((value) => value + 1)}>{lt("重新加载", "Retry")}</button>
+            </div>}
+            {!isLoading && !error && pageItems.length === 0 && (
               <div className="col-span-full rounded-xl border border-dashed border-[#E5E7EB] px-4 py-12 text-center text-sm text-[#9CA3AF]">
-                {lt("暂无匹配的图库", "No matching galleries")}
+                {keyword || scene ? lt("暂无匹配的图库", "No matching galleries") : tab === 'public' ? lt("暂无公共图库图片", "No public gallery images yet") : lt("个人图库暂无图片", "No personal images yet")}
               </div>
             )}
           </div>

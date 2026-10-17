@@ -17,9 +17,10 @@ import { createEmptyProjectContent } from '@/types/project';
 
 type ProjectAutosaveManagerProps = {
   projectId: string | null;
+  onLoadError?: (message: string) => void;
 };
 
-export default function ProjectAutosaveManager({ projectId }: ProjectAutosaveManagerProps) {
+export default function ProjectAutosaveManager({ projectId, onLoadError }: ProjectAutosaveManagerProps) {
   const setProject = useProjectContentStore((state) => state.setProject);
   const hydrate = useProjectContentStore((state) => state.hydrate);
   const setError = useProjectContentStore((state) => state.setError);
@@ -203,6 +204,10 @@ export default function ProjectAutosaveManager({ projectId }: ProjectAutosaveMan
         // 不再用空内容覆盖当前画布，避免“闪一下又消失”
         const msg = err?.message || '加载项目内容失败';
         setError(msg);
+        if (onLoadError) {
+          onLoadError(msg);
+          return;
+        }
 
         const isProjectNotFound = typeof msg === 'string' && msg.includes('项目不存在');
 
@@ -306,7 +311,7 @@ export default function ProjectAutosaveManager({ projectId }: ProjectAutosaveMan
       hydrationReadyRef.current = false;
       try { (window as any).tanvaPaperRestored = false; } catch {}
     };
-  }, [projectId, setProject, hydrate, setError, completeSwitch]);
+  }, [projectId, setProject, hydrate, setError, completeSwitch, onLoadError]);
 
   useEffect(() => {
     if (!projectId) return undefined;

@@ -77,6 +77,14 @@ export type CsCustomerProfile = {
   membershipExpiresAt: string | null;
 };
 
+export type CsCanvasTarget = {
+  projectId: string;
+  conversationId: string;
+  customer: CsCustomerProfile;
+  collabId: string;
+  startedAt: string | null;
+};
+
 export type CsQuickReply = {
   id: string;
   title: string;
@@ -217,6 +225,15 @@ export const csDeskApi = {
       `api/cs/admin/conversations/${encodeURIComponent(id)}/collab`,
       { method: "POST", body: JSON.stringify(opts || {}) }
     ),
+
+  adminCanvasTarget: (id: string) => request<CsCanvasTarget>(
+    `api/cs/admin/conversations/${encodeURIComponent(id)}/canvas-target`
+  ),
+
+  adminEndCollab: (id: string, collabId: string) => request<{ ok: boolean }>(
+    `api/cs/admin/conversations/${encodeURIComponent(id)}/collab/${encodeURIComponent(collabId)}/end`,
+    { method: "POST", body: "{}" }
+  ),
 
   adminCustomer: (id: string) =>
     request<{

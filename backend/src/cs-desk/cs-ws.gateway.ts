@@ -19,6 +19,8 @@ interface CsWsConn {
   isAgent: boolean;
   rooms: Set<string>;
   isAlive: boolean;
+  canvasProjectId: string | null;
+  canvasPresenceVersion: number;
 }
 
 @Injectable()
@@ -37,6 +39,9 @@ export class CsWsGateway implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
+    this.csDesk.setCanvasOnlineChecker((userId, projectId) => [...this.conns].some(
+      (conn) => conn.userId === userId && conn.canvasProjectId === projectId && conn.ws.readyState === WebSocket.OPEN,
+    ));
     this.csDesk.setBroadcaster((conversationId, event) => {
       this.broadcast(conversationId, event);
     });
@@ -44,6 +49,7 @@ export class CsWsGateway implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleDestroy() {
+    this.csDesk.setCanvasOnlineChecker(() => false);
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     for (const conn of this.conns) {
       try {
@@ -76,6 +82,7 @@ export class CsWsGateway implements OnModuleInit, OnModuleDestroy {
   }
 
   private reject(socket: Duplex, code: number, msg: string): void {
+    this.logger.warn(`客服实时连接握手被拒绝：${code} ${msg}`);
     try {
       socket.write(`HTTP/1.1 ${code} ${msg}\r\nConnection: close\r\n\r\n`);
     } catch {
@@ -105,14 +112,7 @@ export class CsWsGateway implements OnModuleInit, OnModuleDestroy {
   }
 
   private extractToken(req: IncomingMessage, url: URL): string {
-    const fromQuery = url.searchParams.get('token');
-    if (typeof fromQuery === 'string' && fromQuery.trim()) return fromQuery.trim();
-
-    const header = req.headers.authorization;
-    if (typeof header === 'string' && header.startsWith('Bearer ')) {
-      return header.slice('Bearer '.length).trim();
-    }
-
+    // Match HTTP JWT authentication: the current cookie wins over cached tokens.
     const cookie = req.headers.cookie;
     if (typeof cookie === 'string') {
       const match = cookie.match(/(?:^|;\s*)access_token=([^;]+)/);
@@ -124,6 +124,12 @@ export class CsWsGateway implements OnModuleInit, OnModuleDestroy {
         }
       }
     }
+    const header = req.headers.authorization;
+    if (typeof header === 'string' && header.startsWith('Bearer ')) {
+      return header.slice('Bearer '.length).trim();
+    }
+    const fromQuery = url.searchParams.get('token');
+    if (typeof fromQuery === 'string' && fromQuery.trim()) return fromQuery.trim();
     return '';
   }
 
@@ -157,7 +163,8 @@ export class CsWsGateway implements OnModuleInit, OnModuleDestroy {
       const payload = await this.jwt.verifyAsync<any>(token);
       userId = String(payload?.sub ?? '');
       role = String(payload?.role ?? '').toLowerCase();
-    } catch {
+    } catch (error) {
+      this.logger.warn(`客服实时连接令牌校验失败：${error instanceof Error ? error.name : '未知错误'}`);
       return this.reject(socket, 401, 'Unauthorized');
     }
     if (!userId) return this.reject(socket, 401, 'Unauthorized');
@@ -182,6 +189,8 @@ export class CsWsGateway implements OnModuleInit, OnModuleDestroy {
         isAgent,
         rooms: new Set(),
         isAlive: true,
+        canvasProjectId: null,
+        canvasPresenceVersion: 0,
       };
       this.conns.add(conn);
       this.send(conn, {
@@ -208,7 +217,8 @@ export class CsWsGateway implements OnModuleInit, OnModuleDestroy {
       ws.on('message', (data) => {
         void this.onMessage(conn, data);
       });
-      ws.on('close', () => {
+      ws.on('close', (code) => {
+        this.logger.debug(`客服实时连接已关闭：${code}`);
         void this.cleanup(conn);
       });
       ws.on('error', () => {
@@ -245,6 +255,7 @@ export class CsWsGateway implements OnModuleInit, OnModuleDestroy {
   }
 
   private async cleanup(conn: CsWsConn) {
+    this.clearCanvasCursor(conn);
     for (const room of [...conn.rooms]) {
       this.leaveRoom(conn, room);
     }
@@ -292,6 +303,15 @@ export class CsWsGateway implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  private clearCanvasCursor(conn: CsWsConn) {
+    if (!conn.canvasProjectId) return;
+    for (const peer of this.conns) {
+      if (peer !== conn && peer.canvasProjectId === conn.canvasProjectId) {
+        this.send(peer, { type: 'canvas_cursor', projectId: conn.canvasProjectId, userId: conn.userId, hidden: true });
+      }
+    }
+  }
+
   private async onMessage(conn: CsWsConn, raw: RawData) {
     let msg: any;
     try {
@@ -303,6 +323,57 @@ export class CsWsGateway implements OnModuleInit, OnModuleDestroy {
     const conversationId = String(msg?.conversationId || '').trim();
 
     try {
+      if (type === 'canvas_presence') {
+        const version = ++conn.canvasPresenceVersion;
+        this.clearCanvasCursor(conn);
+        conn.canvasProjectId = null;
+        const projectId = typeof msg.projectId === 'string' ? msg.projectId.trim() : '';
+        if (!projectId) return this.send(conn, { type: 'canvas_ready', projectId: null });
+        if (conversationId && conn.isAgent) {
+          const target = await this.csDesk.getCanvasTarget(conversationId, conn.userId);
+          if (version === conn.canvasPresenceVersion && target.projectId === projectId) {
+            conn.canvasProjectId = projectId;
+            this.send(conn, { type: 'canvas_ready', projectId });
+          }
+          return;
+        }
+        const project = await this.prisma.project.findUnique({ where: { id: projectId }, select: { userId: true, teamId: true } });
+        if (version === conn.canvasPresenceVersion && project?.userId === conn.userId && !project.teamId) {
+          conn.canvasProjectId = projectId;
+          this.send(conn, { type: 'canvas_ready', projectId });
+        }
+        return;
+      }
+      if (type === 'canvas_cursor') {
+        const projectId = conn.canvasProjectId;
+        if (!projectId || msg.projectId !== projectId) return;
+        const hidden = msg.hidden === true;
+        if (!hidden && (!Number.isFinite(msg.x) || !Number.isFinite(msg.y))) return;
+        const collab = await this.prisma.csCollabRequest.findFirst({
+          where: {
+            projectId,
+            conversation: { status: 'active', OR: [{ userId: conn.userId }, { agentId: conn.userId }] },
+          },
+          orderBy: { createdAt: 'desc' },
+          include: { conversation: { include: { user: { select: { name: true } }, agent: { select: { name: true, isCsAgent: true } } } } },
+        });
+        if (!collab || collab.status !== 'accepted' || collab.endedAt ||
+            collab.agentId !== collab.conversation.agentId || !collab.conversation.agent?.isCsAgent ||
+            conn.canvasProjectId !== projectId) return;
+        const customerId = collab.conversation.userId;
+        const agentId = collab.agentId;
+        const isCustomer = conn.userId === customerId;
+        if (!isCustomer && (!conn.isAgent || conn.userId !== agentId)) return;
+        const event = {
+          type: 'canvas_cursor', projectId, userId: conn.userId, hidden,
+          name: (isCustomer ? collab.conversation.user.name : collab.conversation.agent.name) || (isCustomer ? '客户' : '客服'),
+          color: isCustomer ? '#38bdf8' : '#fb923c', x: msg.x, y: msg.y,
+        };
+        for (const peer of this.conns) {
+          if (peer.userId === (isCustomer ? agentId : customerId) && peer.canvasProjectId === projectId) this.send(peer, event);
+        }
+        return;
+      }
       if (type === 'join') {
         if (!conversationId) {
           return this.send(conn, { type: 'error', message: 'missing conversationId' });
@@ -339,7 +410,7 @@ export class CsWsGateway implements OnModuleInit, OnModuleDestroy {
       }
     } catch (err) {
       this.send(conn, {
-        type: 'error',
+        type: type === 'canvas_presence' ? 'canvas_error' : 'error',
         message: err instanceof Error ? err.message : 'error',
       });
     }

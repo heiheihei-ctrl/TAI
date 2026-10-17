@@ -35,6 +35,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const currentOrigin = typeof window !== "undefined" ? window.location.origin : "";
   const wechatLoginEnabled = !WECHAT_LOGIN_HIDDEN_ORIGINS.has(currentOrigin);
+  const linglongIdentityEnabled = getDeploymentBrand() === "linglong";
   const [tab, setTab] = useState<"wechat" | "password" | "sms">("password");
   const [loginIdentity, setLoginIdentity] = useState<LoginIdentity>(() =>
     getDeploymentBrand() === "linglong" ? "linglong" : "personal",
@@ -157,20 +158,24 @@ export default function LoginPage() {
     if (loginIdentity === "personal") {
       return [
         { key: "enterprise" as const, label: t("auth.login.identityEnterprise") },
-        { key: "linglong" as const, label: t("auth.login.identityLinglong") },
+        ...(linglongIdentityEnabled
+          ? [{ key: "linglong" as const, label: t("auth.login.identityLinglong") }]
+          : []),
       ];
     }
     if (loginIdentity === "enterprise") {
       return [
         { key: "personal" as const, label: t("auth.login.identityPersonal") },
-        { key: "linglong" as const, label: t("auth.login.identityLinglong") },
+        ...(linglongIdentityEnabled
+          ? [{ key: "linglong" as const, label: t("auth.login.identityLinglong") }]
+          : []),
       ];
     }
     return [
       { key: "enterprise" as const, label: t("auth.login.identityEnterprise") },
       { key: "personal" as const, label: t("auth.login.identityPersonal") },
     ];
-  }, [loginIdentity, t]);
+  }, [loginIdentity, linglongIdentityEnabled, t]);
 
   const agreementInsideCard = false; // Always render agreement outside the card
 

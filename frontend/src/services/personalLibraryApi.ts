@@ -23,7 +23,7 @@ async function json<T>(res: Response): Promise<T> {
 
 export const personalLibraryApi = {
   async list(type?: PersonalAssetType): Promise<PersonalLibraryAsset[]> {
-    const url = new URL(`${base}/api/personal-library/assets`);
+    const url = new URL(`${base}/api/personal-library/assets`, window.location.origin);
     if (type) url.searchParams.set("type", type);
     const res = await fetchWithAuth(url.toString());
     return json<PersonalLibraryAsset[]>(res);

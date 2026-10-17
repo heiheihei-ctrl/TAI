@@ -15,6 +15,7 @@ import {
   type CsServicePackage,
 } from "@/services/csDeskApi";
 import { csRealtimeClient } from "@/services/csRealtimeClient";
+import { collabStatusText, resolveCollabMessages, mergeConversationMessages } from "@/services/csCollabStatus";
 import { useAuthStore } from "@/stores/authStore";
 import { mergeSession } from "@/services/authApi";
 import { cn } from "@/lib/utils";
@@ -91,7 +92,10 @@ const CsWorkbench: React.FC = () => {
     "offline"
   );
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const selectedIdRef = React.useRef(selectedId);
+  selectedIdRef.current = selectedId;
   const [messages, setMessages] = React.useState<CsMessage[]>([]);
+  const displayMessages = React.useMemo(() => resolveCollabMessages(messages), [messages]);
   const [profile, setProfile] = React.useState<CsCustomerProfile | null>(null);
   const [history, setHistory] = React.useState<
     Array<{
@@ -111,6 +115,7 @@ const CsWorkbench: React.FC = () => {
   const [draft, setDraft] = React.useState("");
   const [loadingList, setLoadingList] = React.useState(false);
   const [sending, setSending] = React.useState(false);
+  const [openingCanvas, setOpeningCanvas] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [showQuick, setShowQuick] = React.useState(false);
   const [showPackages, setShowPackages] = React.useState(false);
@@ -180,12 +185,13 @@ const CsWorkbench: React.FC = () => {
         csDeskApi.adminMessages(id),
         csDeskApi.adminCustomer(id),
       ]);
-      setMessages(msgs);
+      if (selectedIdRef.current !== id) return;
+      setMessages((previous) => mergeConversationMessages(previous, msgs, id));
       setProfile(customer.profile);
       setHistory(customer.history);
       void csDeskApi.adminMarkRead(id).catch(() => undefined);
     } catch (e: any) {
-      setError(e?.message || "加载会话详情失败");
+      if (selectedIdRef.current === id) setError(e?.message || "加载会话详情失败");
     }
   }, []);
 
@@ -211,14 +217,24 @@ const CsWorkbench: React.FC = () => {
 
   React.useEffect(() => {
     csRealtimeClient.start();
+    return () => csRealtimeClient.stop();
+  }, []);
+
+  React.useEffect(() => {
     if (canDispatch) {
       void csDeskApi
         .adminSetPresence("online")
         .then(() => setPresence("online"))
         .catch(() => undefined);
     }
+  }, [canDispatch]);
+
+  React.useEffect(() => {
     const unsub = csRealtimeClient.subscribe((env) => {
       if (!env || typeof env !== "object") return;
+      if ((env.type === "ready" || env.type === "joined") && selectedId) {
+        void loadConversationDetail(selectedId);
+      }
       if (env.type === "message" && env.conversationId) {
         if (env.conversationId === selectedId && env.message) {
           setMessages((prev) => {
@@ -237,9 +253,8 @@ const CsWorkbench: React.FC = () => {
     });
     return () => {
       unsub();
-      csRealtimeClient.stop();
     };
-  }, [canDispatch, loadConversationDetail, refreshList, selectedId]);
+  }, [loadConversationDetail, refreshList, selectedId]);
 
   React.useEffect(() => {
     if (!selectedId) {
@@ -251,6 +266,32 @@ const CsWorkbench: React.FC = () => {
     }
     csRealtimeClient.join(selectedId);
     void loadConversationDetail(selectedId);
+    // Recover missed WS events without replacing newer live responses or another conversation.
+    let cancelled = false;
+    let fetching = false;
+    const refreshMessages = async () => {
+      if (fetching) return;
+      fetching = true;
+      try {
+        const fetched = await csDeskApi.adminMessages(selectedId);
+        if (!cancelled && selectedIdRef.current === selectedId) {
+          setMessages((previous) => mergeConversationMessages(previous, fetched, selectedId));
+        }
+      } catch {
+        // The WS subscription and next poll can recover a temporary fetch failure.
+      } finally {
+        fetching = false;
+      }
+    };
+    const timer = window.setInterval(() => void refreshMessages(), 2000);
+    const onFocus = () => void refreshMessages();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+      csRealtimeClient.leave(selectedId);
+    };
   }, [loadConversationDetail, selectedId]);
 
   React.useEffect(() => {
@@ -554,17 +595,25 @@ const CsWorkbench: React.FC = () => {
                 {selected.status === "active" && latestCollab && canDispatch && (
                   <button
                     type="button"
-                    disabled={!canvasProjectId}
+                    disabled={!canvasProjectId || openingCanvas}
                     title={canvasProjectId ? "打开用户授权的画布" : "等待用户同意协同并选择画布"}
-                    onClick={() => {
-                      if (canvasProjectId) window.open(
-                        `/app?projectId=${encodeURIComponent(canvasProjectId)}`,
-                        "_blank", "noopener,noreferrer"
-                      );
+                    onClick={async () => {
+                      if (!canvasProjectId || openingCanvas) return;
+                      setOpeningCanvas(true);
+                      setError(null);
+                      try {
+                        const target = await csDeskApi.adminCanvasTarget(selected.id);
+                        window.open(
+                          `/app?projectId=${encodeURIComponent(target.projectId)}&csConversationId=${encodeURIComponent(target.conversationId)}`,
+                          "_blank", "noopener,noreferrer"
+                        );
+                      } catch (cause) {
+                        setError(cause instanceof Error ? cause.message : '无法进入用户画布');
+                      } finally { setOpeningCanvas(false); }
                     }}
                     className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    进入画布
+                    {openingCanvas ? '检查中…' : '进入画布'}
                   </button>
                 )}
                 {selected.status !== "ended" && (canDispatch || isFullAdmin) && (
@@ -580,7 +629,7 @@ const CsWorkbench: React.FC = () => {
             </div>
 
             <div className="flex-1 space-y-3 overflow-y-auto bg-[#F8FAFC] px-4 py-4">
-              {messages.map((msg) => {
+              {displayMessages.map((msg) => {
                 if (msg.type === "system") {
                   return (
                     <div
@@ -631,7 +680,7 @@ const CsWorkbench: React.FC = () => {
                             {msg.content?.pricePerMinute || 50} 元/次/分钟
                           </div>
                           <div className="text-xs opacity-80">
-                            状态: {msg.content?.status || "pending"}
+                            状态：{collabStatusText(msg.content?.status || "pending")}
                           </div>
                         </div>
                       ) : msg.type === "attachment" ? (
@@ -926,7 +975,7 @@ const CsWorkbench: React.FC = () => {
                       {formatDateTime(h.createdAt)}
                     </div>
                     <div className="text-[#6B7280]">
-                      {h.agentName || "未接入"} · {h.status}
+                      {h.agentName || "未接入"} · {h.status === "waiting" ? "待接入" : h.status === "active" ? "进行中" : h.status === "ended" ? "已结束" : "未知状态"}
                     </div>
                     {h.preview && (
                       <div className="mt-0.5 truncate text-[#9CA3AF]">

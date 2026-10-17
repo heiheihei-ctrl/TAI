@@ -13,6 +13,7 @@ import LibraryPanel from '@/components/panels/LibraryPanel';
 import SupplyChainLibraryModal from '@/components/panels/SupplyChainLibraryModal';
 import AIChatDialog from '@/components/chat/AIChatDialog';
 import FloatingHeader from '@/components/layout/FloatingHeader';
+import { CsCanvasCursors } from '@/components/canvas/CsCanvasCursors';
 import ActivitySettingsModalHost from '@/components/home/ActivitySettingsModalHost';
 import CodeSandboxPanel from '@/components/sandbox/CodeSandboxPanel';
 import SelectionBoxOverlay from '@/components/canvas/SelectionBoxOverlay';
@@ -123,6 +124,7 @@ const Canvas: React.FC = () => {
           <ToolBar />
           <SupplyChainLibraryButton />
           <CsChatEntry />
+          <CsCanvasCursors />
           <FocusModeButton />
           <ZoomIndicator />
           <LayerPanel />
