@@ -76,7 +76,7 @@ export class ArchitectureController {
     if (bffSecret) headers['x-bff-token'] = bffSecret;
 
     // 稳定用户标识：tgagent 默认用 sha256(bearer) 派生会话归属，
-    // 而 access token 只有 900s（JWT_ACCESS_TTL）就刷新一次，
+    // 而 access token 在重新登录或恢复凭证时可能变化，
     // token 一换会话键就变，上一轮的图与需求档案全部失联。
     // 这里把 JWT 的 subject 透传过去，让会话跟随用户而不是跟随 token。
     const userId = this.extractUserId(req);

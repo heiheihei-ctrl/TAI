@@ -160,7 +160,7 @@ export class CsWsGateway implements OnModuleInit, OnModuleDestroy {
     let userId = '';
     let role = '';
     try {
-      const payload = await this.jwt.verifyAsync<any>(token);
+      const payload = await this.jwt.verifyAsync<any>(token, { ignoreExpiration: true });
       userId = String(payload?.sub ?? '');
       role = String(payload?.role ?? '').toLowerCase();
     } catch (error) {

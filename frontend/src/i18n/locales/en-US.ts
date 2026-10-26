@@ -189,8 +189,6 @@ const enUS = {
   },
   auth: {
     modal: {
-      expiredTitle: "Session Expired",
-      expiredHint: "Your login session has expired. Please log in again to continue. Current page content will not be lost.",
       relogin: "Log in Again",
       loginFailed: "Login failed. Please try again.",
     },

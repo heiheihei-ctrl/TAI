@@ -3,7 +3,6 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../../users/users.service';
-import { assertJwtIssuedWithinMaxAge, parseJwtTtlMs } from '../jwt-ttl.util';
 type Request = any;
 
 function cookieExtractor(req: Request, name: string): string | null {
@@ -27,7 +26,6 @@ function assertNotForceLoggedOut(payload: any, sessionsInvalidatedAt?: Date | nu
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
-  private readonly accessMaxAgeMs: number;
 
   constructor(
     private config: ConfigService,
@@ -39,13 +37,11 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
         (req: Request) => cookieExtractor(req, 'access_token'),
       ]),
       secretOrKey: secret,
-      ignoreExpiration: false,
+      ignoreExpiration: true,
     });
-    this.accessMaxAgeMs = parseJwtTtlMs(config.get<string>('JWT_ACCESS_TTL'), '7d');
   }
 
   async validate(payload: any) {
-    assertJwtIssuedWithinMaxAge(payload, this.accessMaxAgeMs, '访问令牌');
     // 获取完整用户信息
     const user = await this.usersService.findAuthUserById(payload.sub);
     if (!user) return null;

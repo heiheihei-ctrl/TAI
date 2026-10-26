@@ -30,6 +30,9 @@
 - `POST logout`：登出（需要 `RefreshAuthGuard`）
 
 ## 注意事项
+- 登录凭证不设置 JWT `exp`，HTTP 和 WebSocket 兼容历史令牌的过期字段；保留签名、用户权限及管理员强制下线校验。
+- `RefreshToken` 仅记录凭证哈希及撤销状态，不再保存或校验到期时间。部署前执行迁移 `202610260001_remove_login_expiration` 并生成 Prisma Client。
+- 前端已移除会话到期计时、定时刷新和过期登录弹窗；刷新接口保留用于凭证恢复。Cookie 使用浏览器允许的长效存储，本地凭证持续保存至退出或清理浏览器数据。
 - Controller 注释提示：生产短信建议配置阿里云与 `REDIS_URL`；开发可启用 `SMS_DEBUG=true`。
 - 观猹 OAuth 依赖环境变量：`WATCHA_OAUTH_CLIENT_ID`、`WATCHA_OAUTH_CLIENT_SECRET`、`WATCHA_OAUTH_REDIRECT_URI`；可选 `WATCHA_OAUTH_SCOPE`、`WATCHA_OAUTH_FRONTEND_BASE_URL`、`WATCHA_OAUTH_FAILURE_PATH`。
 - 用户表新增 `watchaUserId`（唯一）用于稳定关联第三方账号；若观猹未返回可用手机号，会自动生成 `watcha_*` 形式占位手机号，仅用于账号标识。

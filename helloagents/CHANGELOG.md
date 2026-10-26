@@ -5,6 +5,7 @@ All notable changes to this knowledge base will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning (knowledge-base versioning).
 
 ## [Unreleased]
+- 取消登录到期：删除 JWT/刷新令牌时间限制、历史会话到期清理、前端定时刷新及过期弹窗；同步 WebSocket 校验，保留主动退出、权限校验和管理员强制下线，新增删除刷新令牌到期字段的迁移。
 - 修复客服「全部」视图把他人会话展示为可回复的误导：明确当前登录客服与会话归属，在线状态不再写「接待中」；他人会话只读，有权限的管理员可显式转给自己后回复。
 - 对齐客服 WS 与 HTTP 登录令牌优先级，避免旧 query token 覆盖有效登录 Cookie；增加不含令牌内容的握手拒绝诊断日志。
 - 修复客服工作台 WS 生命周期依赖变化清掉入房状态、列表更新但聊天状态未同步的问题；连接与事件订阅分离，重连补拉并每 2 秒补齐聊天消息，合并实时响应并隔离旧会话请求。
@@ -43,7 +44,6 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - 玲珑拖图上画布后刷新丢失：本地落盘公开 URL 改为相对路径 `/uploads/...`（禁止误用 TOS 基址），Vite 反代静态前缀；上传成功以 key/url 均可回写并清 pending，避免 autosave 一直拦截导致刷新丢图。
 - 上传：Fastify 下 `/api/uploads/image|file|video` 误用 Express `FileInterceptor`(multer) 导致 `req.on is not a function` 500；改为 `@fastify/multipart` 解析。玲珑默认走后端 multipart，受此影响最大。
 - 发送到画布：修正误用 TOS S3 API 域名（`tos-s3-*`）作为公共资源基址，改为 `tai-ai.tos-cn-*`；前端渲染时自动把历史 S3 API 链接改写为可直连 CDN，避免图片加载失败导致快速上传报错。
-- Auth: 登录会话 TTL 调整为 7 天（`JWT_ACCESS_TTL` / `JWT_REFRESH_TTL=7d`）；修复受保护路由在 token 刷新完成前因本地过期误跳登录（用户感知为闪退），刷新成功同步续期本地会话标记。
 - 玲珑 Seedance：运行时强制 2.0/2.5（不再默认 1.5「图生视频」）；无图有提示词按文生/全能参考放行，有图走参考/图生，消除误报「图生视频模式至少需要连接 1 张图片」。
 - Collab WS: 浏览器升级带 `Origin` 时，若 `CORS_ORIGIN` 未包含当前站点（如 `http://wedotai.com`）会 403；现允许 Origin host 与请求 Host 相同的同源升级。部署仍建议把站点写入 `CORS_ORIGIN`。
 - Collab WS: `VITE_API_BASE_URL=/` 时按当前页同源解析（https→wss），避免错误拼出 `ws://`；部署文档补齐 Nginx `location /ws/` 反代（wedotai 等 linglong 站缺此段会导致协同连不上）。

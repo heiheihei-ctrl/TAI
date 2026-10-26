@@ -22,6 +22,13 @@ export function getRefreshToken(): string | null {
   }
 }
 
+const tokenListeners = new Set<() => void>();
+
+export function subscribeTokenChanges(listener: () => void) {
+  tokenListeners.add(listener);
+  return () => tokenListeners.delete(listener);
+}
+
 export function setTokens(tokens: AuthTokens) {
   try {
     if (typeof tokens.accessToken === "string") {
@@ -31,6 +38,9 @@ export function setTokens(tokens: AuthTokens) {
       localStorage.setItem(LS_REFRESH_TOKEN, tokens.refreshToken);
     }
   } catch {}
+  tokenListeners.forEach((listener) => {
+    try { listener(); } catch (error) { console.warn("Token change listener failed", error); }
+  });
 }
 
 export function clearTokens() {

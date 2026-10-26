@@ -13,12 +13,10 @@ import { projectApi } from '@/services/projectApi';
 import { csDeskApi } from '@/services/csDeskApi';
 import { useProjectContentStore } from '@/stores/projectContentStore';
 import KeyboardShortcuts from '@/components/KeyboardShortcuts';
-import LoginModal from '@/components/auth/LoginModal';
 import EventSettingsModalHost from '@/components/home/EventSettingsModalHost';
 import ExportWatermarkModalHost from '@/components/export/ExportWatermarkModalHost';
 import { SHOW_TEAM_COLLABORATION, SHOW_ENTERPRISE_CONSOLE } from '@/config/featureFlags';
 import { TeamInviteConfirmModal } from '@/components/team/TeamInviteConfirmModal';
-import { tokenRefreshManager } from '@/services/tokenRefreshManager';
 import { useAuthStore } from '@/stores/authStore';
 import { refreshTeams, useTeamStore } from '@/stores/teamStore';
 import {
@@ -197,13 +195,6 @@ const App: React.FC = () => {
     setTeamInviteOpen(false);
   };
 
-  // 初始化 TokenRefreshManager
-  useEffect(() => {
-    tokenRefreshManager.init();
-    return () => {
-      tokenRefreshManager.destroy();
-    };
-  }, []);
 
   // 监听窗口大小变化，更新移动设备状态
   useEffect(() => {
@@ -308,7 +299,6 @@ const App: React.FC = () => {
         <CsCanvasSessionBanner />
         <Canvas />
       </CsCanvasContext.Provider>
-      <LoginModal />
       <EventSettingsModalHost />
       <ExportWatermarkModalHost />
 

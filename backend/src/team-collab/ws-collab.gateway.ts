@@ -175,7 +175,7 @@ export class WsCollabGateway implements OnModuleDestroy {
     let tokenName = '';
     let role = '';
     try {
-      const payload = await this.jwt.verifyAsync<any>(token);
+      const payload = await this.jwt.verifyAsync<any>(token, { ignoreExpiration: true });
       userId = String(payload?.sub ?? '');
       tokenName = String(payload?.name ?? payload?.username ?? '').trim();
       role = String(payload?.role ?? '');

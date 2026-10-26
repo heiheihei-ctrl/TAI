@@ -188,8 +188,6 @@ const zhCN = {
   },
   auth: {
     modal: {
-      expiredTitle: "登录已过期",
-      expiredHint: "您的登录状态已过期，请重新登录以继续操作。当前页面内容不会丢失。",
       relogin: "重新登录",
       loginFailed: "登录失败，请重试",
     },

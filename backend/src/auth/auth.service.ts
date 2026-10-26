@@ -5,7 +5,6 @@ import {
   Inject,
   forwardRef,
   Logger,
-  OnModuleInit,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
@@ -24,7 +23,6 @@ import { SmsService } from "./sms.service";
 import { ReferralService } from "../referral/referral.service";
 import { CreditsService } from "../credits/credits.service";
 import { OpenObserveTelemetryService } from "../telemetry/openobserve-telemetry.service";
-import { parseJwtTtlMs } from "./jwt-ttl.util";
 
 type TokenPair = { accessToken: string; refreshToken: string };
 type WatchaTokenResponse = {
@@ -138,7 +136,7 @@ type WechatOfficialCallbackReply = {
 };
 
 @Injectable()
-export class AuthService implements OnModuleInit {
+export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   private wechatOfficialAccessTokenCache:
     | { token: string; expiresAt: number }
@@ -156,43 +154,6 @@ export class AuthService implements OnModuleInit {
     private readonly openObserveTelemetryService: OpenObserveTelemetryService
   ) {}
 
-  /**
-   * 启动时把历史 refresh token 收紧到当前 JWT_REFRESH_TTL（默认 7d），
-   * 让旧会话也按新规失效，而不是继续沿用签发时的更长 TTL。
-   */
-  async onModuleInit() {
-    const ttlMs = parseJwtTtlMs(this.config.get("JWT_REFRESH_TTL"), "7d");
-    const cutoff = new Date(Date.now() - ttlMs);
-    try {
-      const revoked = await this.prisma.refreshToken.updateMany({
-        where: {
-          isRevoked: false,
-          createdAt: { lt: cutoff },
-        },
-        data: { isRevoked: true },
-      });
-
-      const clamped = await this.prisma.$executeRaw`
-        UPDATE "RefreshToken"
-        SET "expiresAt" = "createdAt" + (${ttlMs} * INTERVAL '1 millisecond')
-        WHERE "isRevoked" = false
-          AND "expiresAt" > "createdAt" + (${ttlMs} * INTERVAL '1 millisecond')
-      `;
-
-      if (revoked.count > 0 || Number(clamped) > 0) {
-        this.logger.log(
-          `Applied ${ttlMs}ms refresh TTL to legacy tokens: revoked=${revoked.count}, clampedExpiresAt=${clamped}`,
-        );
-      }
-    } catch (error) {
-      this.logger.warn(
-        `Failed to tighten legacy refresh tokens: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-  }
-
   private async touchUserLastLoginAt(userId: string) {
     await this.prisma.user.update({
       where: { id: userId },
@@ -207,18 +168,14 @@ export class AuthService implements OnModuleInit {
     role: string;
   }): Promise<TokenPair> {
     const payload = { sub: user.id, email: user.email, role: user.role };
-    const accessTtl = this.config.get<string>("JWT_ACCESS_TTL") || "7d";
-    const refreshTtl = this.config.get<string>("JWT_REFRESH_TTL") || "7d";
 
     const accessToken = await this.jwt.signAsync(payload, {
       secret:
         this.config.get<string>("JWT_ACCESS_SECRET") || "dev-access-secret",
-      expiresIn: accessTtl,
     });
     const refreshToken = await this.jwt.signAsync(payload, {
       secret:
         this.config.get<string>("JWT_REFRESH_SECRET") || "dev-refresh-secret",
-      expiresIn: refreshTtl,
     });
     return { accessToken, refreshToken };
   }
@@ -2083,15 +2040,12 @@ export class AuthService implements OnModuleInit {
   ) {
     const tokens = await this.signTokens(user);
     const refreshHash = await bcrypt.hash(tokens.refreshToken, 10);
-    const refreshTtlSec = this.config.get("JWT_REFRESH_TTL") || "7d";
-    const expiresAt = new Date(Date.now() + parseJwtTtlMs(refreshTtlSec));
     await this.prisma.refreshToken.create({
       data: {
         userId: user.id,
         tokenHash: refreshHash,
         ip: meta?.ip,
         userAgent: meta?.ua,
-        expiresAt,
       },
     });
     await this.touchUserLastLoginAt(user.id);
@@ -2140,10 +2094,6 @@ export class AuthService implements OnModuleInit {
   }
 
   async refresh(userPayload: any, presentedToken: string) {
-    const refreshMaxAgeMs = parseJwtTtlMs(
-      this.config.get("JWT_REFRESH_TTL"),
-      "7d",
-    );
     const rt = await this.prisma.refreshToken.findFirst({
       where: { userId: userPayload.sub, isRevoked: false },
       orderBy: { createdAt: "desc" },
@@ -2151,16 +2101,6 @@ export class AuthService implements OnModuleInit {
     if (!rt) throw new UnauthorizedException("刷新令牌无效");
     const ok = await bcrypt.compare(presentedToken, rt.tokenHash);
     if (!ok) throw new UnauthorizedException("刷新令牌无效");
-    if (rt.expiresAt < new Date())
-      throw new UnauthorizedException("刷新令牌过期");
-    // 历史 token 可能仍带 30d expiresAt：按 createdAt + 新 TTL 再截断一次
-    if (Date.now() - rt.createdAt.getTime() > refreshMaxAgeMs) {
-      await this.prisma.refreshToken.update({
-        where: { id: rt.id },
-        data: { isRevoked: true },
-      });
-      throw new UnauthorizedException("刷新令牌已按新规过期，请重新登录");
-    }
     await this.prisma.refreshToken.update({
       where: { id: rt.id },
       data: { isRevoked: true },
@@ -2171,10 +2111,8 @@ export class AuthService implements OnModuleInit {
       role: userPayload.role,
     });
     const refreshHash = await bcrypt.hash(tokens.refreshToken, 10);
-    const refreshTtlSec = this.config.get("JWT_REFRESH_TTL") || "7d";
-    const expiresAt = new Date(Date.now() + parseJwtTtlMs(refreshTtlSec));
     await this.prisma.refreshToken.create({
-      data: { userId: userPayload.sub, tokenHash: refreshHash, expiresAt },
+      data: { userId: userPayload.sub, tokenHash: refreshHash },
     });
     await this.touchUserLastLoginAt(userPayload.sub);
     return tokens;
@@ -2187,7 +2125,7 @@ export class AuthService implements OnModuleInit {
     });
   }
 
-  /** 强制使某用户当前所有 JWT/会话立即失效（含未过期的 access token） */
+  /** 强制使某用户当前所有 JWT/会话立即失效（含 access token） */
   async invalidateUserSessions(userId: string) {
     const now = new Date();
     await this.prisma.$executeRaw`
@@ -2212,19 +2150,15 @@ export class AuthService implements OnModuleInit {
 
   setAuthCookies(reply: any, tokens: TokenPair, request?: any) {
     const base = this.cookieOptions(request);
-    const accessTtl = parseJwtTtlMs(
-      this.config.get("JWT_ACCESS_TTL") || "7d"
-    );
-    const refreshTtl = parseJwtTtlMs(
-      this.config.get("JWT_REFRESH_TTL") || "7d"
-    );
+    // Cookie 受浏览器存储上限约束；服务端凭证不按时间失效。
+    const cookieMaxAge = 400 * 24 * 60 * 60;
     reply.setCookie("access_token", tokens.accessToken, {
       ...base,
-      maxAge: Math.floor(accessTtl / 1000),
+      maxAge: cookieMaxAge,
     });
     reply.setCookie("refresh_token", tokens.refreshToken, {
       ...base,
-      maxAge: Math.floor(refreshTtl / 1000),
+      maxAge: cookieMaxAge,
     });
   }
 

@@ -131,14 +131,11 @@ model RefreshToken {
   userAgent String?
   ip        String?
   isRevoked Boolean  @default(false)
-  expiresAt DateTime
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id])
 
   // 索引优化：加速token验证和清理
   @@index([userId, isRevoked])           // 用户活跃token查询
-  @@index([expiresAt])                   // 过期token清理
-  @@index([userId, expiresAt, isRevoked]) // 复合索引：用户未过期未撤销token
 }
 
 model Project {

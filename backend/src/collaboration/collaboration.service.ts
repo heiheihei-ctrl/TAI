@@ -62,6 +62,7 @@ export class CollaborationService {
         this.config.get<string>('JWT_ACCESS_SECRET') || 'dev-access-secret';
       const payload = await this.jwt.verifyAsync<CollaborationUserPayload>(token.trim(), {
         secret,
+        ignoreExpiration: true,
       });
       if (!payload?.sub && !payload?.id) return null;
       return payload;

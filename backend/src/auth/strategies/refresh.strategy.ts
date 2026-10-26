@@ -3,7 +3,6 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../../users/users.service';
-import { assertJwtIssuedWithinMaxAge, parseJwtTtlMs } from '../jwt-ttl.util';
 type Request = any;
 
 function cookieExtractor(req: Request, name: string): string | null {
@@ -16,7 +15,6 @@ function cookieExtractor(req: Request, name: string): string | null {
 
 @Injectable()
 export class RefreshJwtStrategy extends PassportStrategy(Strategy, 'jwt-refresh') {
-  private readonly refreshMaxAgeMs: number;
 
   constructor(
     config: ConfigService,
@@ -27,14 +25,12 @@ export class RefreshJwtStrategy extends PassportStrategy(Strategy, 'jwt-refresh'
         (req: Request) => cookieExtractor(req, 'refresh_token'),
       ]),
       secretOrKey: config.get<string>('JWT_REFRESH_SECRET') || 'dev-refresh-secret',
-      ignoreExpiration: false,
+      ignoreExpiration: true,
       passReqToCallback: true,
     });
-    this.refreshMaxAgeMs = parseJwtTtlMs(config.get<string>('JWT_REFRESH_TTL'), '7d');
   }
 
   async validate(req: Request, payload: any) {
-    assertJwtIssuedWithinMaxAge(payload, this.refreshMaxAgeMs, '刷新令牌');
     const user = await this.usersService.findAuthUserById(payload.sub);
     if (!user) {
       throw new UnauthorizedException('刷新令牌无效');

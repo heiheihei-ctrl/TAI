@@ -1,5 +1,5 @@
 import { getAccessToken } from './authTokenStorage';
-import { tokenRefreshManager } from './tokenRefreshManager';
+import { subscribeTokenChanges } from "./authTokenStorage";
 
 type Listener = (env: any) => void;
 
@@ -134,8 +134,7 @@ function scheduleReconnect(): void {
 function ensureTokenRefreshHook(): void {
   if (tokenHookInstalled) return;
   tokenHookInstalled = true;
-  tokenRefreshManager.subscribe((event) => {
-    if (event !== 'token-refreshed') return;
+  subscribeTokenChanges(() => {
     if (!teamId && !projectId) return;
     connect();
   });

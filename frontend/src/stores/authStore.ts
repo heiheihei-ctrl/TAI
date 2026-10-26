@@ -124,8 +124,6 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
     try {
       localStorage.removeItem('mock_user');
-      localStorage.removeItem('token_expiry');
-      localStorage.removeItem('last_auth_at');
       clearTokens();
     } catch {}
   }

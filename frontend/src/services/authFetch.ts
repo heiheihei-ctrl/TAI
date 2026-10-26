@@ -1,5 +1,4 @@
-import { tokenRefreshManager } from './tokenRefreshManager';
-import { triggerAuthExpired } from './authEvents';
+import { triggerAuthInvalid } from './authEvents';
 import { getAccessToken, getRefreshAuthHeader, setTokens } from './authTokenStorage';
 import { ensureTraceHeader } from '../utils/trace';
 import { getBillingTeamId } from '@/stores/teamStore';
@@ -109,8 +108,6 @@ async function ensureRefresh(): Promise<boolean> {
               if (data?.tokens) {
                 setTokens(data.tokens);
               }
-              // 刷新成功，通知 tokenRefreshManager
-              tokenRefreshManager.onLoginSuccess();
               return true;
             });
         }
@@ -186,7 +183,7 @@ export async function fetchWithAuth(
   }
 
   if (!allowRefresh) {
-    triggerAuthExpired();
+    triggerAuthInvalid();
     return response;
   }
 
@@ -195,14 +192,14 @@ export async function fetchWithAuth(
     const retryNormalized = normalizeInit({ ...rest, auth });
     const retryResponse = await fetch(input, retryNormalized);
     // refresh 返回 ok 但重试仍 401：认为登录态已失效，触发退出/登录提示。
-    // 403 是业务权限拒绝（例如会员权益不足），不能当作登录过期处理。
+    // 403 是业务权限拒绝（例如会员权益不足），不能当作登录失效处理。
     if (retryResponse.status === 401) {
-      triggerAuthExpired();
+      triggerAuthInvalid();
     }
     notifyCreditsRefreshIfNeeded(input, retryNormalized, retryResponse);
     return retryResponse;
   }
 
-  triggerAuthExpired();
+  triggerAuthInvalid();
   return response;
 }

@@ -1,6 +1,6 @@
 import { io, type Socket } from 'socket.io-client';
 import { getAccessToken } from './authTokenStorage';
-import { tokenRefreshManager } from './tokenRefreshManager';
+import { subscribeTokenChanges } from "./authTokenStorage";
 import type { CommentThreadSnapshot } from '@/types/comment';
 
 export interface CollaborationPeer {
@@ -214,8 +214,8 @@ class CollaborationSocketManager {
 
   private ensureTokenRefreshHook() {
     if (this.tokenUnsub) return;
-    this.tokenUnsub = tokenRefreshManager.subscribe((event) => {
-      if (event !== 'token-refreshed' || !this.socket) return;
+    this.tokenUnsub = subscribeTokenChanges(() => {
+      if (!this.socket) return;
       const token = getAccessToken();
       if (!token) return;
       this.socket.auth = { token };

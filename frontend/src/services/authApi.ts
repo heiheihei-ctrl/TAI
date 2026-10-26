@@ -5,21 +5,7 @@ import {
   setTokens,
 } from "./authTokenStorage";
 import { fetchWithAuth } from "./authFetch";
-import {
-  clearStoredLastAuthAt,
-  clearStoredTokenExpiry,
-  getStoredTokenExpiry,
-  markAuthSessionFresh,
-  setStoredLastAuthAt,
-} from "./authSessionStorage";
 
-export {
-  getStoredTokenExpiry,
-  getStoredLastAuthAt,
-  setStoredLastAuthAt,
-  clearStoredLastAuthAt,
-  markAuthSessionFresh,
-} from "./authSessionStorage";
 
 export type UserInfo = {
   id: string;
@@ -130,7 +116,6 @@ function completeAuthSession<T extends { user: UserInfo; tokens?: { accessToken?
     setTokens(out.tokens);
   }
   saveSession(out.user);
-  markAuthSessionFresh();
   return out;
 }
 
@@ -275,15 +260,7 @@ export const authApi = {
       return { user: loadSession(), source: "mock" };
     }
 
-    // 优化：先检查本地token是否可能有效，避免不必要的网络请求
-    const tokenExpiry = getStoredTokenExpiry();
     const localUser = loadSession();
-
-    // 如果本地有用户信息且token未过期（提前1分钟检查），直接返回本地数据
-    if (localUser && tokenExpiry && tokenExpiry > Date.now() + 60000) {
-      console.log("[authApi] 使用本地缓存的用户信息，避免网络请求");
-      return { user: localUser, source: "local" };
-    }
 
     try {
       let res = await fetchWithAuth(`${base}/api/auth/me`, {
@@ -299,10 +276,6 @@ export const authApi = {
             ? (data.user as UserInfo)
             : (data as UserInfo);
 
-        // 更新本地token过期时间（与 JWT_ACCESS_TTL=7d 对齐）
-        if (user) {
-          markAuthSessionFresh();
-        }
 
         return { user, source: "server" };
       }
@@ -333,10 +306,6 @@ export const authApi = {
                   ? (data.user as UserInfo)
                   : (data as UserInfo);
 
-              // 更新本地token过期时间（与 JWT_ACCESS_TTL=7d 对齐）
-              if (user) {
-                markAuthSessionFresh();
-              }
 
               return { user, source: "refresh" };
             }
@@ -350,8 +319,6 @@ export const authApi = {
       // 明确未授权：清空本地会话，避免“假登录”
       if (res.status === 401 || res.status === 403) {
         clearSession();
-        clearStoredTokenExpiry();
-        clearStoredLastAuthAt();
         clearTokens();
         return { user: null, source: null };
       }
@@ -462,7 +429,6 @@ export const authApi = {
       );
       if (!user) throw new Error("用户不存在，请先注册");
       saveSession(user);
-      setStoredLastAuthAt(Date.now());
       return { user };
     }
     const res = await fetchWithAuth(`${base}/api/auth/login-sms`, {
@@ -543,8 +509,6 @@ export const authApi = {
         // 明确未授权：清空本地会话，避免“假登录”
         if (res.status === 401 || res.status === 403) {
           clearSession();
-          clearStoredTokenExpiry();
-          clearStoredLastAuthAt();
           clearTokens();
           return null;
         }
@@ -565,7 +529,6 @@ export const authApi = {
     if (isMock) {
       await delay(200);
       clearSession();
-      clearStoredTokenExpiry(); // 清除token过期时间
       return { ok: true } as { ok: boolean };
     }
 
@@ -592,8 +555,6 @@ export const authApi = {
       console.warn("authApi.logout network error:", error);
     } finally {
       clearSession();
-      clearStoredTokenExpiry(); // 清除token过期时间
-      clearStoredLastAuthAt();
       clearTokens();
     }
 

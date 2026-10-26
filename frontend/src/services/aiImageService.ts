@@ -9,9 +9,8 @@
  */
 
 import { v4 as uuidv4 } from "uuid";
-import { tokenRefreshManager } from "./tokenRefreshManager";
-import { getRefreshAuthHeader } from "./authTokenStorage";
-import { triggerAuthExpired } from "./authEvents";
+import { getRefreshAuthHeader, setTokens } from "./authTokenStorage";
+import { triggerAuthInvalid } from "./authEvents";
 import { fetchWithAuth } from "./authFetch";
 import type {
   AIImageGenerateRequest,
@@ -179,8 +178,6 @@ class AIImageService {
   async generateImage(
     request: AIImageGenerateRequest
   ): Promise<AIServiceResponse<AIImageResult>> {
-    // 关键操作前确保 token 有效
-    await tokenRefreshManager.ensureValidToken();
 
     const response = await this.callAPI<AIImageResult>(
       `${this.API_BASE}/ai/generate-image`,
@@ -197,8 +194,6 @@ class AIImageService {
   async editImage(
     request: AIImageEditRequest
   ): Promise<AIServiceResponse<AIImageResult>> {
-    // 关键操作前确保 token 有效
-    await tokenRefreshManager.ensureValidToken();
 
     const response = await this.callAPI<AIImageResult>(
       `${this.API_BASE}/ai/edit-image`,
@@ -217,8 +212,6 @@ class AIImageService {
   async blendImages(
     request: AIImageBlendRequest
   ): Promise<AIServiceResponse<AIImageResult>> {
-    // 关键操作前确保 token 有效
-    await tokenRefreshManager.ensureValidToken();
 
     const response = await this.callAPI<AIImageResult>(
       `${this.API_BASE}/ai/blend-images`,
@@ -237,8 +230,6 @@ class AIImageService {
   async analyzeImage(
     request: AIImageAnalyzeRequest
   ): Promise<AIServiceResponse<AIImageAnalysisResult>> {
-    // 关键操作前确保 token 有效，减少因 401/403 触发 public fallback 导致的响应结构差异
-    await tokenRefreshManager.ensureValidToken();
 
     const response = await this.callAPI<any>(
       `${this.API_BASE}/ai/analyze-image`,
@@ -488,7 +479,7 @@ class AIImageService {
         }
 
         // 刷新失败：说明登录态已失效，触发自动退出/弹窗
-        triggerAuthExpired();
+        triggerAuthInvalid();
 
         const fallback = await this.callPublicAPI<T>(
           url,
@@ -759,9 +750,9 @@ class AIImageService {
         allowRefresh: false,
       });
       if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data?.tokens) setTokens(data.tokens);
         console.log("🔄 Session refresh succeeded");
-        // 通知 tokenRefreshManager 刷新成功
-        tokenRefreshManager.onLoginSuccess();
         return true;
       }
       console.warn("Session refresh failed with status", res.status);
