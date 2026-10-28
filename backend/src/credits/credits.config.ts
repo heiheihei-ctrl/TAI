@@ -8,6 +8,12 @@ const TAI_SEEDREAM5_RESOLUTION_PRICING = getSeedream5ResolutionPricing('tai');
 
 // 积分定价配置
 export const CREDIT_PRICING_CONFIG = {
+  'ark-visual-agent': {
+    serviceName: '视觉创作 Agent',
+    provider: 'volcengine',
+    creditsPerCall: 0, // resolved from server VISUAL_AGENT_CREDITS_PER_TURN; unavailable until configured
+    description: '方舟托管视觉创作，按创作轮次计费',
+  },
   // Gemini 图像服务
   'gemini-3-pro-image': {
     serviceName: 'Nano banana Pro 生图',

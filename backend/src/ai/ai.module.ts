@@ -7,6 +7,10 @@ import { AiController } from './ai.controller';
 import { ArchitectureController } from './architecture.controller';
 import { WorkflowAgentController } from './workflow-agent/workflow-agent.controller';
 import { WorkflowAgentService } from './workflow-agent/workflow-agent.service';
+import { VisualAgentClient } from './visual-agent/visual-agent.client';
+import { VisualAgentController } from './visual-agent/visual-agent.controller';
+import { VisualAgentService } from './visual-agent/visual-agent.service';
+import { TeamCoreModule } from '../team-core/team-core.module';
 import { GeminiProProvider } from './providers/gemini-pro.provider';
 import { BananaProvider } from './providers/banana.provider';
 import { RunningHubProvider } from './providers/runninghub.provider';
@@ -44,6 +48,7 @@ import { ContentModerationModule } from '../content-moderation/content-moderatio
 
 @Module({
   imports: [
+    TeamCoreModule,
     ConfigModule,
     UsersModule,
     CreditsModule,
@@ -84,6 +89,8 @@ import { ContentModerationModule } from '../content-moderation/content-moderatio
     UpstreamImageUrlService,
     ImageTaskService, // 添加图像任务服务
     WorkflowAgentService,
+    VisualAgentClient,
+    VisualAgentService,
     ApiKeyOrJwtGuard,
   ],
   // ArchitectureController = 建筑设计 AI（tgagent）BFF 转发，路由 /api/ai/architecture-chat。
@@ -93,6 +100,7 @@ import { ContentModerationModule } from '../content-moderation/content-moderatio
     AiController,
     ArchitectureController,
     WorkflowAgentController,
+    VisualAgentController,
   ],
   exports: [AIProviderFactory, CostCalculatorService, BackgroundRemovalService, VeoVideoService], // 导出工厂和成本计算器供其他模块使用
 })

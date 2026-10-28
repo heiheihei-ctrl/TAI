@@ -63,6 +63,8 @@ import {
   Unlock,
 } from "lucide-react";
 import ChatModelPickerPanel from "@/components/chat/ChatModelPickerPanel";
+import VisualCreationPanel from "@/components/chat/VisualCreationPanel";
+import { useAuthStore } from "@/stores/authStore";
 import {
   getChatModelOption,
   resolveChatModelKeyFromState,
@@ -288,6 +290,7 @@ const getResendInfoFromMessage = (message: ChatMessage): ResendInfo | null => {
 };
 
 const AIChatDialog: React.FC = () => {
+  const visualAgentUserId = useAuthStore(state => state.user?.id);
   const { t, i18n } = useTranslation();
   const {
     isVisible,
@@ -2440,6 +2443,7 @@ const AIChatDialog: React.FC = () => {
 
   // 处理发送 - 使用AI智能工具选择
   const handleSend = async () => {
+    if (manualAIMode === "visual-agent") return;
     const trimmedInput = currentInput.trim();
     if (
       !trimmedInput ||
@@ -3193,9 +3197,17 @@ const AIChatDialog: React.FC = () => {
             showHistory && !isMaximized && "h-full"
           )}
         >
+          {manualAIMode === "visual-agent" && (
+            <VisualCreationPanel
+              key={`${visualAgentUserId || 'anonymous'}:${currentProjectId || ''}`}
+              projectId={currentProjectId || ''}
+              onExit={() => setManualAIMode("auto")}
+            />
+          )}
           {/* 输入区域 */}
           <div
             ref={inputAreaRef}
+            style={manualAIMode === "visual-agent" ? { display: "none" } : undefined}
             className={cn(
               "order-2 flex-shrink-0",
               showHistory && !isMaximized && "mt-auto",
@@ -3737,6 +3749,7 @@ const AIChatDialog: React.FC = () => {
                             key={option.value}
                             onClick={(event) => {
                               setManualAIMode(option.value);
+                              if (option.value === "visual-agent") setShowHistory(true);
                               const root = (
                                 event.currentTarget as HTMLElement
                               ).closest(".dropdown-menu-root");
@@ -4185,7 +4198,7 @@ const AIChatDialog: React.FC = () => {
           </div>
 
           {/* 错误提示 */}
-          {generationStatus.error && (
+          {manualAIMode !== "visual-agent" && generationStatus.error && (
             <div className='order-3 mt-4'>
               <div className='flex items-center gap-2 p-3 border border-red-200 rounded-lg bg-red-50'>
                 <AlertCircle className='flex-shrink-0 w-4 h-4 text-red-600' />
@@ -4197,7 +4210,7 @@ const AIChatDialog: React.FC = () => {
           )}
 
           {/* 消息历史（点击对话框时显示，最大化时始终显示） */}
-          {shouldShowHistoryPanel && (
+          {manualAIMode !== "visual-agent" && shouldShowHistoryPanel && (
             <div
               data-history-ignore-toggle
               className={cn(

@@ -608,6 +608,7 @@ export type ManualAIMode =
   | "video"
   | "vector"
   | "architecture"
+  | "visual-agent"
   | "workflow";
 type AvailableTool =
   | "generateImage"
@@ -2751,6 +2752,7 @@ interface AIChatState {
     | "video"
     | "vector"
     | "architecture"
+    | "visual-agent"
     | "workflow";
 
   // 配置管理
@@ -8100,6 +8102,7 @@ export const useAIChatStore = create<AIChatState>()(
             video: "generateVideo",
             vector: "generatePaperJS",
             architecture: null,
+            "visual-agent": null,
             workflow: null,
           };
 
@@ -8547,6 +8550,7 @@ export const useAIChatStore = create<AIChatState>()(
             video: "generateVideo",
             vector: "generatePaperJS",
             architecture: null,
+            "visual-agent": null,
             workflow: null,
           };
 
@@ -9278,6 +9282,7 @@ export const useAIChatStore = create<AIChatState>()(
           "video",
           "vector",
           "architecture",
+          "visual-agent",
           "workflow",
         ];
         const validSendShortcuts = ["enter", "mod-enter"];

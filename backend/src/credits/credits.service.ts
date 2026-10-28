@@ -562,6 +562,13 @@ export class CreditsService {
     serviceType: ServiceType;
     requestParams?: any;
   }) {
+    if (params.serviceType === 'ark-visual-agent') {
+      const creditsPerCall = Number(this.configService.get<string>('VISUAL_AGENT_CREDITS_PER_TURN'));
+      if (!Number.isSafeInteger(creditsPerCall) || creditsPerCall <= 0) {
+        throw new BadRequestException('视觉创作 Agent 尚未配置每轮积分价格');
+      }
+      return { ...CREDIT_PRICING_CONFIG['ark-visual-agent'], creditsPerCall };
+    }
     const staticPricing =
       CREDIT_PRICING_CONFIG[params.serviceType as keyof typeof CREDIT_PRICING_CONFIG];
     const {

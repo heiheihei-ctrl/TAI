@@ -5,6 +5,7 @@ All notable changes to this knowledge base will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning (knowledge-base versioning).
 
 ## [Unreleased]
+- 新增方舟视觉创作 Agent：AI 对话独立模式、参考图与多轮创作、图片/视频产物预览及画布导入；NestJS 托管会话、持久化恢复、取消与租约互斥、产物转存/补充同步、个人/团队积分计费。新增 Prisma 迁移及启用说明，详见 `helloagents/wiki/modules/visual-agent.md`。
 - 取消登录到期：删除 JWT/刷新令牌时间限制、历史会话到期清理、前端定时刷新及过期弹窗；同步 WebSocket 校验，保留主动退出、权限校验和管理员强制下线，新增删除刷新令牌到期字段的迁移。
 - 修复客服「全部」视图把他人会话展示为可回复的误导：明确当前登录客服与会话归属，在线状态不再写「接待中」；他人会话只读，有权限的管理员可显式转给自己后回复。
 - 对齐客服 WS 与 HTTP 登录令牌优先级，避免旧 query token 覆盖有效登录 Cookie；增加不含令牌内容的握手拒绝诊断日志。
@@ -822,3 +823,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Customers can send after support ends a session; the next message starts a new reception round with automatic agent assignment and realtime subscription handoff.
 
 - Fixed stale cached CS identity hiding the canvas entry: synchronize the authenticated viewer from admin conversation-list responses and persist the updated login cache.
+# 视觉创作联调诊断补充（2026-10-28）
+
+- 方舟请求错误保留安全的接口类型、错误码和请求编号，移除将所有错误指向权限/余额的通用提示。客户端 4 项模拟测试通过；尚未确认用户本次上游 400 的具体原因。
+
+# 视觉创作入口暂时隐藏（2026-10-28）
+
+- 从 AI 对话模式菜单移除视觉创作入口；已有模式通过菜单可用性检查回退，保留后端与面板实现供后续恢复。
+
