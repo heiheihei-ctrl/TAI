@@ -236,10 +236,6 @@ const SEEDANCE20_FAST_DOC_RESOLUTIONS = ["480P", "720P"] as const;
 const SEEDANCE20_MODE_VALUES: Seedance20Mode[] = ["reference_images", "start_end"];
 const SEEDANCE15_MODE_VALUES: Seedance15Mode[] = ["text", "image", "start_end"];
 
-const isSeedance25ModelValue = (value: unknown): boolean => {
-  const normalized = String(value || "").trim().toLowerCase();
-  return normalized === "seedance-2.5" || normalized === "2.5";
-};
 const isSeedance20ModelValue = (value: unknown): boolean => {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
   return normalized === "seedance-2.0" || normalized === "seedance-2.0-fast";
@@ -488,7 +484,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       if (isLinglongRestrictedPalette()) return false;
       return (
         seedance20RestrictedForCurrentUser &&
-        (isSeedance20ModelValue(value) || isSeedance25ModelValue(value))
+        isSeedance20ModelValue(value)
       );
     },
     [seedance20RestrictedForCurrentUser]
@@ -1205,7 +1201,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
   }, [clipDuration, id, provider, seedanceModel]);
   React.useEffect(() => {
     if (isLinglongRestrictedPalette()) return;
-    if (!seedance20RestrictedForCurrentUser || !isSeedance2FamilyModel) return;
+    if (!seedance20RestrictedForCurrentUser || !isSeedance20Model) return;
     const nextDuration =
       clipDuration && clipDuration >= 4 && clipDuration <= 12 ? clipDuration : 5;
     window.dispatchEvent(
@@ -1220,7 +1216,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
         },
       })
     );
-  }, [clipDuration, id, isSeedance2FamilyModel, seedance20RestrictedForCurrentUser]);
+  }, [clipDuration, id, isSeedance20Model, seedance20RestrictedForCurrentUser]);
   const durationOptions = React.useMemo(() => {
     if (provider === "doubao" && isSeedance2FamilyModel) {
       const values = isSeedance25Model
@@ -1694,8 +1690,8 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
             detail: {
               type: "info",
               message: lt(
-                "Seedance 2.0 / 2.0 Fast / 2.5 需开通 VIP 权益或进入水印白名单后才可选择",
-                "Seedance 2.0 / 2.0 Fast / 2.5 requires VIP access or watermark whitelist access",
+                "Seedance 2.0 / 2.0 Fast 需开通 VIP 权益或进入水印白名单后才可选择",
+                "Seedance 2.0 / 2.0 Fast requires VIP access or watermark whitelist access",
               ),
             },
           })

@@ -5,6 +5,7 @@ All notable changes to this knowledge base will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning (knowledge-base versioning).
 
 ## [Unreleased]
+- Seedance 2.5：取消会员限制、前端选项锁定及自动回退至 1.5；后端权益校验同步排除 2.5，保留 2.0 / Fast 原有规则。
 - 新增方舟视觉创作 Agent：AI 对话独立模式、参考图与多轮创作、图片/视频产物预览及画布导入；NestJS 托管会话、持久化恢复、取消与租约互斥、产物转存/补充同步、个人/团队积分计费。新增 Prisma 迁移及启用说明，详见 `helloagents/wiki/modules/visual-agent.md`。
 - 取消登录到期：删除 JWT/刷新令牌时间限制、历史会话到期清理、前端定时刷新及过期弹窗；同步 WebSocket 校验，保留主动退出、权限校验和管理员强制下线，新增删除刷新令牌到期字段的迁移。
 - 修复客服「全部」视图把他人会话展示为可回复的误导：明确当前登录客服与会话归属，在线状态不再写「接待中」；他人会话只读，有权限的管理员可显式转给自己后回复。

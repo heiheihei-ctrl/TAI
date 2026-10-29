@@ -379,9 +379,7 @@ export class AiController {
       (normalizedSeedanceModel === 'seedance-2.0' ||
         normalizedSeedanceModel === '2.0' ||
         normalizedSeedanceModel === 'seedance-2.0-fast' ||
-        normalizedSeedanceModel === '2.0-fast' ||
-        normalizedSeedanceModel === 'seedance-2.5' ||
-        normalizedSeedanceModel === '2.5');
+        normalizedSeedanceModel === '2.0-fast');
 
     if (!isSeedance2Request || !userId) {
       return;
@@ -390,7 +388,7 @@ export class AiController {
     const access = await this.resolveSeedance2CombinedAccess(userId, req);
     if (!access.allowed) {
       throw new BadRequestException(
-        'Seedance 2.0 / 2.0 Fast / 2.5 requires VIP access or watermark whitelist access',
+        'Seedance 2.0 / 2.0 Fast requires VIP access or watermark whitelist access',
       );
     }
   }
