@@ -11,7 +11,7 @@ export type AuthFetchInit = RequestInit & {
   allowRefresh?: boolean;
 };
 
-let refreshPromise: Promise<boolean> | null = null;
+let refreshPromise: Promise<boolean | null> | null = null;
 
 const SAFE_URL_BASE = "http://localhost";
 const CREDITS_AFFECTING_PATH_PATTERNS = [
@@ -92,7 +92,7 @@ const refreshUrl =
     ? `${import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, "")}/api/auth/refresh`
     : "/api/auth/refresh";
 
-async function ensureRefresh(): Promise<boolean> {
+async function ensureRefresh(): Promise<boolean | null> {
   if (!refreshPromise) {
     refreshPromise = fetch(refreshUrl, {
       method: 'POST',
@@ -111,9 +111,10 @@ async function ensureRefresh(): Promise<boolean> {
               return true;
             });
         }
-        return res.ok;
+        // 网络/服务异常不代表凭证失效；只有认证明确拒绝才退出。
+        return res.status === 401 ? false : null;
       })
-      .catch(() => false)
+      .catch(() => null)
       .finally(() => {
         refreshPromise = null;
       });
@@ -200,6 +201,6 @@ export async function fetchWithAuth(
     return retryResponse;
   }
 
-  triggerAuthInvalid();
+  if (refreshed === false) triggerAuthInvalid();
   return response;
 }

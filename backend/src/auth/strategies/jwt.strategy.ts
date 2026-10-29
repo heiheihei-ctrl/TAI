@@ -6,11 +6,12 @@ import { UsersService } from '../../users/users.service';
 type Request = any;
 
 function cookieExtractor(req: Request, name: string): string | null {
+  const fromHeader = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
+  if (fromHeader) return fromHeader;
   const anyReq: any = req as any;
   const fromCookie = anyReq?.cookies?.[name];
   if (fromCookie) return fromCookie as string;
-  const fromHeader = req.headers?.authorization?.replace('Bearer ', '') ?? null;
-  return fromHeader || null;
+  return null;
 }
 
 function assertNotForceLoggedOut(payload: any, sessionsInvalidatedAt?: Date | null) {

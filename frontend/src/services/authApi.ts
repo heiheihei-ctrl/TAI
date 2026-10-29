@@ -288,6 +288,10 @@ export const authApi = {
             auth: "omit",
             allowRefresh: false,
           });
+          if (!r.ok && r.status !== 401) {
+            return { user: localUser, source: localUser ? "local" : null };
+          }
+          if (!r.ok) res = r;
           if (r.ok) {
             const refreshData = await r.json().catch(() => null);
             if (refreshData?.tokens) {
@@ -312,12 +316,13 @@ export const authApi = {
           }
         } catch (e) {
           console.warn("authApi.refresh failed:", e);
+          return { user: localUser, source: localUser ? "local" : null };
         }
       }
       console.warn("authApi.me not ok:", res.status);
 
       // 明确未授权：清空本地会话，避免“假登录”
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
         clearSession();
         clearTokens();
         return { user: null, source: null };
@@ -487,6 +492,8 @@ export const authApi = {
               auth: "omit",
               allowRefresh: false,
             });
+            if (!r.ok && r.status !== 401) return loadSession();
+            if (!r.ok) res = r;
             if (r.ok) {
               const refreshData = await r.json().catch(() => null);
               if (refreshData?.tokens) {
@@ -501,13 +508,14 @@ export const authApi = {
             }
           } catch (e) {
             console.warn("authApi.refresh failed:", e);
+            return loadSession();
           }
         }
       }
       if (!res.ok) {
         console.warn("authApi.me not ok:", res.status);
         // 明确未授权：清空本地会话，避免“假登录”
-        if (res.status === 401 || res.status === 403) {
+        if (res.status === 401) {
           clearSession();
           clearTokens();
           return null;

@@ -6,11 +6,12 @@ import { UsersService } from '../../users/users.service';
 type Request = any;
 
 function cookieExtractor(req: Request, name: string): string | null {
+  const fromHeader = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
+  if (fromHeader) return fromHeader;
   const anyReq: any = req as any;
   const fromCookie = anyReq?.cookies?.[name];
   if (fromCookie) return fromCookie as string;
-  const fromHeader = req.headers?.authorization?.replace(/^Bearer\s+/i, '') ?? null;
-  return fromHeader || null;
+  return null;
 }
 
 @Injectable()
@@ -42,10 +43,7 @@ export class RefreshJwtStrategy extends PassportStrategy(Strategy, 'jwt-refresh'
         throw new UnauthorizedException('登录已失效，请重新登录');
       }
     }
-    const refreshToken =
-      (req as any).cookies?.['refresh_token'] ??
-      req.headers?.authorization?.replace(/^Bearer\s+/i, '') ??
-      null;
+    const refreshToken = cookieExtractor(req, 'refresh_token');
     return { ...payload, refreshToken };
   }
 }

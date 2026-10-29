@@ -2094,28 +2094,26 @@ export class AuthService {
   }
 
   async refresh(userPayload: any, presentedToken: string) {
-    const rt = await this.prisma.refreshToken.findFirst({
+    const records = await this.prisma.refreshToken.findMany({
       where: { userId: userPayload.sub, isRevoked: false },
       orderBy: { createdAt: "desc" },
     });
-    if (!rt) throw new UnauthorizedException("刷新令牌无效");
-    const ok = await bcrypt.compare(presentedToken, rt.tokenHash);
-    if (!ok) throw new UnauthorizedException("刷新令牌无效");
-    await this.prisma.refreshToken.update({
-      where: { id: rt.id },
-      data: { isRevoked: true },
-    });
+    let matched = false;
+    for (const record of records) {
+      if (await bcrypt.compare(presentedToken, record.tokenHash)) {
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) throw new UnauthorizedException("刷新令牌无效");
     const tokens = await this.signTokens({
       id: userPayload.sub,
       email: userPayload.email,
       role: userPayload.role,
     });
-    const refreshHash = await bcrypt.hash(tokens.refreshToken, 10);
-    await this.prisma.refreshToken.create({
-      data: { userId: userPayload.sub, tokenHash: refreshHash },
-    });
     await this.touchUserLastLoginAt(userPayload.sub);
-    return tokens;
+    // 永久凭证只在主动退出或管理员撤销时失效，刷新不影响其他标签页/设备。
+    return { accessToken: tokens.accessToken, refreshToken: presentedToken };
   }
 
   async logout(userId: string) {

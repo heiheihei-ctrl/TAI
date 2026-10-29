@@ -32,7 +32,7 @@ test('historical refresh records are accepted independently of their age', async
   const writes = [];
   const prisma = {
     refreshToken: {
-      findFirst: async () => record,
+      findMany: async () => [record],
       update: async (args) => { writes.push(args); },
       create: async ({ data }) => { assert.equal('expiresAt' in data, false); },
     },
@@ -41,9 +41,43 @@ test('historical refresh records are accepted independently of their age', async
   const service = new AuthService({}, prisma, new JwtService(), new ConfigService(), {}, {}, {}, {});
   const tokens = await service.refresh({ sub: 'user', email: '', role: 'user' }, token);
   assert.ok(tokens.accessToken);
-  assert.deepEqual(writes, [{ where: { id: 'record' }, data: { isRevoked: true } }]);
+  assert.equal(tokens.refreshToken, token);
+  assert.deepEqual(writes, []);
   await assert.rejects(service.refresh({ sub: 'user' }, 'invalid'), /刷新令牌无效/);
 });
+
+test('refresh accepts an older device credential without revoking it', async () => {
+  const oldToken = 'older-device';
+  const records = [
+    { id: 'new', tokenHash: await bcrypt.hash('newer-device', 4) },
+    { id: 'old', tokenHash: await bcrypt.hash(oldToken, 4) },
+  ];
+  const prisma = {
+    refreshToken: { findMany: async () => records },
+    user: { update: async () => ({ id: 'user' }) },
+  };
+  const service = new AuthService({}, prisma, new JwtService(), new ConfigService(), {}, {}, {}, {});
+  for (let i = 0; i < 2; i++) {
+    const tokens = await service.refresh({ sub: 'user', email: '', role: 'user' }, oldToken);
+    assert.equal(tokens.refreshToken, oldToken);
+  }
+});
+
+for (const Strategy of [JwtStrategy, RefreshJwtStrategy]) {
+  test(`${Strategy.name} uses the explicit bearer credential ahead of stale cookies`, async () => {
+    const strategy = new Strategy(new ConfigService(), {
+      findAuthUserById: async () => ({ id: 'user' }),
+      getSessionsInvalidatedAt: async () => null,
+    });
+    const req = { headers: { authorization: 'Bearer current' }, cookies: { access_token: 'old-access', refresh_token: 'old-refresh' } };
+    assert.equal(strategy._jwtFromRequest(req), 'current');
+    if (Strategy === RefreshJwtStrategy) {
+      assert.equal((await strategy.validate(req, { sub: 'user' })).refreshToken, 'current');
+    }
+    req.headers = {};
+    assert.equal(strategy._jwtFromRequest(req), Strategy === JwtStrategy ? 'old-access' : 'old-refresh');
+  });
+}
 
 for (const Strategy of [JwtStrategy, RefreshJwtStrategy]) {
   test(`${Strategy.name} accepts old signed JWTs but preserves forced logout`, async () => {

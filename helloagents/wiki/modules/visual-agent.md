@@ -14,5 +14,7 @@
 
 # 入口状态
 
-视觉创作入口暂时从 AI 对话模式菜单隐藏。此前选中的模式通过 AIChatDialog 的可用模式检查回退；后台接口和历史数据保留。
+前端入口由 `frontend/.env` 的 `VITE_VISUAL_AGENT_ENABLED=true` 控制；设为 `false` 或未配置时隐藏，并通过可用模式检查回退。修改后需重启 Vite，生产环境需重新构建。后端 `VISUAL_AGENT_ENABLED` 独立控制服务执行，关闭服务需设为 `false` 并重启后端。
+
+视觉创作入口已恢复：AI 对话 → 模式 → 视觉创作。使用现有 VisualCreationPanel、后台接口和历史会话；服务可用性仍由后端配置控制。
 

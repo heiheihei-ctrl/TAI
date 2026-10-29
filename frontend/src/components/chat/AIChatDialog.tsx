@@ -108,6 +108,7 @@ const BASE_MANUAL_MODE_OPTIONS: ManualModeOption[] = [
   { value: "blend", label: "Blend", description: "多图融合模式" },
   { value: "analyze", label: "Analysis", description: "图像分析模式" },
   { value: "video", label: "Video", description: "视频生成模式" },
+  { value: "visual-agent", label: "视觉创作", description: "Agent 图片与视频创作" },
   { value: "vector", label: "Vector", description: "矢量图形模式" },
   {
     value: "architecture",
@@ -526,7 +527,9 @@ const AIChatDialog: React.FC = () => {
     : null;
   const availableManualModeOptions = useMemo(() => {
     const baseOptions =
-      PROVIDER_MODE_OPTIONS[aiProvider] ?? BASE_MANUAL_MODE_OPTIONS;
+      (PROVIDER_MODE_OPTIONS[aiProvider] ?? BASE_MANUAL_MODE_OPTIONS).filter(
+        (option) => option.value !== "visual-agent" || import.meta.env.VITE_VISUAL_AGENT_ENABLED === "true"
+      );
     if (!isTencentStableBanana) return baseOptions;
     return baseOptions.filter((option) => option.value !== "analyze");
   }, [aiProvider, isTencentStableBanana]);
