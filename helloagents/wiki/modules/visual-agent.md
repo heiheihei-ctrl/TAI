@@ -14,7 +14,7 @@
 
 # 入口状态
 
-前端入口由 `frontend/.env` 的 `VITE_VISUAL_AGENT_ENABLED=true` 控制；设为 `false` 或未配置时隐藏，并通过可用模式检查回退。修改后需重启 Vite，生产环境需重新构建。后端 `VISUAL_AGENT_ENABLED` 独立控制服务执行，关闭服务需设为 `false` 并重启后端。
+前端入口默认显示；`frontend/.env` 设置 `VITE_VISUAL_AGENT_ENABLED=false` 时隐藏，并通过可用模式检查回退。该开关忽略首尾空格及大小写。修改后需重启 Vite，生产环境需重新构建；只修改后端 env 或已部署静态文件旁的 env 不会改变前端菜单。后端 `VISUAL_AGENT_ENABLED` 独立控制服务执行，关闭服务需设为 `false` 并重启后端。
 
 视觉创作入口已恢复：AI 对话 → 模式 → 视觉创作。使用现有 VisualCreationPanel、后台接口和历史会话；服务可用性仍由后端配置控制。
 

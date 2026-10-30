@@ -765,7 +765,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       resolution:
         typeof data.resolution === "string" && data.resolution.trim()
           ? data.resolution.trim().toUpperCase()
-          : undefined,
+          : pricingContext.resolution,
       aspectRatio: data.aspectRatio,
       videoMode: previewVideoMode,
       generationMode: previewVideoMode,
@@ -804,21 +804,24 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       viduModelForPreview,
     ]
   );
-  const { credits: backendCredits } = useBackendCreditsPreview({
+  const { credits: backendCredits, failed: quoteFailed, retry: retryQuote } = useBackendCreditsPreview({
     serviceType: resolveVideoServiceType(data.provider, data),
-    model: resolvePreviewVideoBillingModel(provider, data, normalizedViduModelVariant),
+    model: isSeedanceModel ? seedanceModel : resolvePreviewVideoBillingModel(provider, data, normalizedViduModelVariant),
     requestParams: previewRequestParams,
     enabled: true,
   });
   const selectedCredits =
     typeof backendCredits === "number"
       ? backendCredits
+      : isSeedanceModel
+      ? undefined
       : typeof resolvedManagedPricing?.credits === "number"
       ? resolvedManagedPricing.credits
       : typeof data.creditsPerCall === "number" && !managedRoutesMetadata
       ? data.creditsPerCall
       : getManagedRouteCredits(nodeConfigMetadata, data.vendorKey);
   const hasRunCredits = typeof selectedCredits === "number" && selectedCredits > 0;
+  const seedanceQuoteUnavailable = isSeedanceModel && typeof backendCredits !== "number";
   const showRunCredits = hasRunCredits;
   const vodAspectOptions = React.useMemo(() => {
     if (!Array.isArray(vodConfig?.outputConfig?.aspectRatios)) return [];
@@ -999,7 +1002,13 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
     }, delay);
   }, []);
 
-  const onRun = React.useCallback(() => data.onRun?.(id), [data, id]);
+  const onRun = React.useCallback(() => {
+    if (seedanceQuoteUnavailable) {
+      if (quoteFailed) retryQuote();
+      return;
+    }
+    data.onRun?.(id);
+  }, [data, id, seedanceQuoteUnavailable, quoteFailed, retryQuote]);
   const onSend = React.useCallback(() => data.onSend?.(id), [data, id]);
 
   const clipDuration =
@@ -2534,7 +2543,8 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
             className="tanva-video-header-btn tanva-video-header-run run-btn-with-credit"
             onClick={onRun}
             onMouseDown={handleButtonMouseDown}
-            disabled={data.status === "running"}
+            disabled={data.status === "running" || (seedanceQuoteUnavailable && !quoteFailed)}
+            title={seedanceQuoteUnavailable ? lt("正在获取积分报价，暂不可运行", "Waiting for a credit quote") : undefined}
             data-flow-onboarding={
               isOnboardingKlingRunTarget ? "kling-run-button" : undefined
             }
@@ -2550,7 +2560,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              cursor: data.status === "running" ? "not-allowed" : "pointer",
+              cursor: data.status === "running" || seedanceQuoteUnavailable ? "not-allowed" : "pointer",
               fontSize: 12,
               opacity: data.status === "running" ? 0.6 : 1,
               gap: 0,
@@ -2560,7 +2570,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
                 <span className="run-text-trigger">Running...</span>
               ) : (
                 <>
-                  <span className="run-text-trigger">Run</span>
+                  <span className="run-text-trigger">{seedanceQuoteUnavailable ? quoteFailed ? lt("重试报价", "Retry quote") : lt("报价中", "Quoting") : "Run"}</span>
                   {showRunCredits ? (
                     <RunCreditBadge credits={selectedCredits} runButton />
                   ) : null}

@@ -941,7 +941,7 @@ export class VideoProviderService {
     }
   }
 
-  // API Keys 优先从环境变量获取，否则使用默认值（仅供参考）
+  // Seedance 仅使用部署凭证，兼容方舟统一的 ARK_API_KEY；禁止内置密钥兜底。
   private readonly apiKeys = {
     kling: process.env.KLING_API_KEY || "sk-kling-xxx",
     "kling-2.6": process.env.KLING_API_KEY || "sk-kling-xxx",
@@ -949,7 +949,7 @@ export class VideoProviderService {
     vidu: process.env.VIDU_API_KEY || "sk-vidu-xxx",
     "viduq3-pro": process.env.VIDU_API_KEY || "sk-vidu-xxx",
     doubao:
-      process.env.DOUBAO_API_KEY || "0ac5fae84-f299-4db4-8d7e-3f7fc355c6ac",
+      process.env.DOUBAO_API_KEY?.trim() || process.env.ARK_API_KEY?.trim() || "",
     "omni-flash-ext": getToapisApiKey() || "",
   };
 

@@ -1,6 +1,8 @@
 # 前端模块：Flow（frontend-flow�?
 
 ## 2026-09-01 Update
+
+- Seedance 积分报价按请求签名隔离，切换模型、时长、分辨率或线路后不沿用旧值；Run 仅展示后端当前报价，不以基础价兜底。报价未就绪禁止提交，失败可重试；预览默认分辨率保留 720P。
 - Workflow Agent：对话模式 `Workflow` 可通过 `flow:agent-apply` 自动创建 `textPrompt`→`generate`（可选 `image`）并 `runNode`；执行器见 `FlowAgentApplyBridge.tsx`，契约见 `frontend/docs/22-工作流Agent.md`。
 
 ## 2026-06-30 Update

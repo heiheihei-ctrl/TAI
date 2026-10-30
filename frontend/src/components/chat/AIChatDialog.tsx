@@ -528,7 +528,7 @@ const AIChatDialog: React.FC = () => {
   const availableManualModeOptions = useMemo(() => {
     const baseOptions =
       (PROVIDER_MODE_OPTIONS[aiProvider] ?? BASE_MANUAL_MODE_OPTIONS).filter(
-        (option) => option.value !== "visual-agent" || import.meta.env.VITE_VISUAL_AGENT_ENABLED === "true"
+        (option) => option.value !== "visual-agent" || import.meta.env.VITE_VISUAL_AGENT_ENABLED?.trim().toLowerCase() !== "false"
       );
     if (!isTencentStableBanana) return baseOptions;
     return baseOptions.filter((option) => option.value !== "analyze");

@@ -20,6 +20,9 @@ export const useBackendCreditsPreview = ({
   enabled = true,
 }: Params) => {
   const [credits, setCredits] = React.useState<number | undefined>(undefined);
+  const [resolvedSignature, setResolvedSignature] = React.useState("");
+  const [failed, setFailed] = React.useState(false);
+  const [retryCount, setRetryCount] = React.useState(0);
   const [available, setAvailable] = React.useState<boolean>(true);
   const [unavailableReason, setUnavailableReason] = React.useState<string | null>(null);
   const requestSignature = React.useMemo(() => {
@@ -41,6 +44,7 @@ export const useBackendCreditsPreview = ({
     }
 
     let cancelled = false;
+    setFailed(false);
     const timer = window.setTimeout(() => {
       previewCredits({
         serviceType,
@@ -57,13 +61,15 @@ export const useBackendCreditsPreview = ({
           );
           const nextCredits = Number(result?.credits);
           setCredits(
-            isAvailable && Number.isFinite(nextCredits) && nextCredits > 0
+            isAvailable && Number.isFinite(nextCredits) && nextCredits >= 0
               ? nextCredits
               : undefined,
           );
+          setResolvedSignature(requestSignature);
         })
         .catch(() => {
           if (cancelled) return;
+          setFailed(true);
           setCredits(undefined);
           setAvailable(true);
           setUnavailableReason(null);
@@ -74,12 +80,14 @@ export const useBackendCreditsPreview = ({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [enabled, outputImageCount, requestSignature, serviceType]);
+  }, [enabled, outputImageCount, requestSignature, serviceType, retryCount]);
 
   return {
-    credits,
-    hasCredits: typeof credits === "number" && credits > 0,
-    available,
-    unavailableReason,
+    credits: resolvedSignature === requestSignature ? credits : undefined,
+    hasCredits: resolvedSignature === requestSignature && typeof credits === "number" && credits > 0,
+    available: resolvedSignature === requestSignature ? available : true,
+    unavailableReason: resolvedSignature === requestSignature ? unavailableReason : null,
+    failed,
+    retry: () => setRetryCount(retryCount + 1),
   };
 };

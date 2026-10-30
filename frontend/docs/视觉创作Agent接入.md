@@ -4,7 +4,7 @@ Tanva 在 AI 对话的模式菜单中新增「视觉创作」。用户可以上�
 
 ## 启用
 
-前端入口开关：在 `frontend/.env` 设置 `VITE_VISUAL_AGENT_ENABLED=true` 显示「视觉创作」模式；设为 `false` 或不配置则隐藏。修改后重启前端开发服务，生产环境需重新构建部署。后端执行开关为 `backend/.env` 中的 `VISUAL_AGENT_ENABLED`；设为 `false` 并重启后端可禁用服务。
+前端入口开关：「视觉创作」模式默认显示，在 `frontend/.env` 设置 `VITE_VISUAL_AGENT_ENABLED=false` 才隐藏（忽略首尾空格及大小写）。修改后重启前端开发服务，生产环境需重新构建部署；只修改后端 env 或已部署静态文件旁的 env 不会更新菜单。后端执行开关为 `backend/.env` 中的 `VISUAL_AGENT_ENABLED`；设为 `false` 并重启后端可禁用服务。
 
 1. 在火山方舟开通 Managed Agents、视觉增强 Agent、主模型、图片模型、视频模型及相关搜索工具权限。普通生图/视频模型可用不代表 Managed Agents 已开通。
 2. 将 `backend/.env.visual-agent.example` 中的配置合并到后端环境。填写 `ARK_API_KEY`、三个模型 ID 和每轮积分价格，设置 `VISUAL_AGENT_ENABLED=true`。模型以该账号控制台实际支持列表为准。

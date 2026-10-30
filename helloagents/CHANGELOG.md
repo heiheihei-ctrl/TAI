@@ -5,6 +5,9 @@ All notable changes to this knowledge base will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning (knowledge-base versioning).
 
 ## [Unreleased]
+- 修复 Seedance 官方线路凭证配置：移除内置旧密钥，兼容 `ARK_API_KEY`，保留显式 `DOUBAO_API_KEY` 优先级；新增配置优先级和无密钥回归测试。
+- 修复 Seedance Run 显示旧模型报价或基础价导致运行前后积分跳变：报价绑定请求签名，未就绪不展示兜底价、不允许提交；失败支持重试报价，预览保留默认分辨率。
+- 修复更新后视觉创作 Agent 入口仍隐藏：前端开关默认显示，仅显式配置 `VITE_VISUAL_AGENT_ENABLED=false` 时关闭；补充构建时配置说明。
 - 新增前端 `VITE_VISUAL_AGENT_ENABLED` 环境开关控制视觉创作 Agent 入口，配合已有后端 `VISUAL_AGENT_ENABLED` 服务开关。
 - 恢复 AI 对话模式菜单中的「视觉创作 Agent」入口，沿用现有面板、接口及历史会话。
 - 修复永久登录仍反复要求登录：统一 HTTP Bearer 优先级，刷新兼容所有未撤销设备凭证并保持凭证稳定；网络/服务异常不再触发前端清空登录态，保留主动退出和管理员强制下线。
