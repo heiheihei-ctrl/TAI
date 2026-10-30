@@ -1,6 +1,7 @@
 # 后端模块：AI（backend-ai）
 
 ## 当前状态
+- ToAPIs Seedance 2.0/Fast/2.5 请求合约、素材角色、整数秒计费及任务查询已按文档核验；首尾帧和多模态参考分离，审核等待与备用视频下载处理详见 [`seedance-toapis.md`](../seedance-toapis.md)。1.5 当前仍使用官方线路。
 - Seedance 2.5 对非会员开放：前端不锁定选项、不自动回退至 1.5；后端权益校验排除 2.5，2.0 / Fast 保留原有规则。
 - TAI Seedream 5.0 Pro 按 `providerOptions.banana.imageRoute`（兼容 `bananaImageRoute`）分流：normal 使用 ToAPIs `doubao-seedream-5-0-pro` 异步提交/轮询，stable（含未传线路）使用豆包官方 `doubao-seedream-5-0-pro-260628`。分别读取 `TOAPIS_TOKEN` 与 `ARK_API_KEY`/`DOUBAO_API_KEY`，不再受 Watcha 全局配置影响。**Linglong 已下线 Seedream**（面板隐藏 `seedream5`/`seedream5Pro`，后端拒绝生图）。
 - 业务后端不再通过独立 `new-api` 网关转发图像、文本或视频请求。

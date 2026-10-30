@@ -14,6 +14,7 @@ import {
 import { useLocaleText } from "@/utils/localeText";
 import { useFlowOnboardingStore } from "@/stores/flowOnboardingStore";
 import RunCreditBadge from "./RunCreditBadge";
+import { getSeedanceDurations } from "@/config/seedanceCapabilities";
 import NodeSelect from "./NodeSelect";
 import FlowResizableNodeShell from "./FlowResizableNodeShell";
 import { useBackendCreditsPreview } from "../hooks/useBackendCreditsPreview";
@@ -472,6 +473,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       ? "seedance-2.0"
       : "seedance-1.5-pro";
   const isSeedanceModel = provider === "doubao";
+  const isSeedanceToapis = isSeedanceModel && ["toapis", "apimart"].includes(String(data.vendorKey || data.platformKey).toLowerCase());
   const seedance2AccessEnabled = data.seedance2AccessEnabled === true;
   const seedance2AccessResolved = data.seedance2AccessResolved === true;
   const seedance20AvailableForCurrentUser =
@@ -1089,7 +1091,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
 
   const aspectOptions = React.useMemo(() => {
     if (provider === "doubao" && isSeedance2FamilyModel) {
-      return [...SEEDANCE20_DOC_ASPECT_RATIOS].map((value) => ({ label: value, value }));
+      return [...SEEDANCE20_DOC_ASPECT_RATIOS, ...(isSeedanceToapis ? ["adaptive"] : [])].map((value) => ({ label: value, value }));
     }
     if (vodAspectOptions.length > 0) {
       return vodAspectOptions;
@@ -1111,7 +1113,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       return ratios.map((value) => ({ label: value, value }));
     }
     return getAspectOptions();
-  }, [getAspectOptions, isSeedance2FamilyModel, lt, provider, vodAspectOptions]);
+  }, [getAspectOptions, isSeedance2FamilyModel, isSeedanceToapis, lt, provider, vodAspectOptions]);
   const klingModelOptions = React.useMemo(
     () => [
       { label: "Kling 2.6", value: "kling-v2-6" as const },
@@ -1228,9 +1230,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
   }, [clipDuration, id, isSeedance20Model, seedance20RestrictedForCurrentUser]);
   const durationOptions = React.useMemo(() => {
     if (provider === "doubao" && isSeedance2FamilyModel) {
-      const values = isSeedance25Model
-        ? [...SEEDANCE25_DOC_DURATIONS]
-        : [...SEEDANCE20_DOC_DURATIONS];
+      const values = getSeedanceDurations(isSeedance25Model, isSeedanceToapis);
       return values.map((value) => ({
         label: lt(`${value}秒`, `${value}s`),
         value,
@@ -1243,7 +1243,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       }));
     }
     return vodDurationOptions.length > 0 ? vodDurationOptions : getDurationOptions();
-  }, [getDurationOptions, isSeedance2FamilyModel, isSeedance25Model, lt, provider, vodDurationOptions]);
+  }, [getDurationOptions, isSeedance2FamilyModel, isSeedance25Model, isSeedanceToapis, lt, provider, vodDurationOptions]);
   const durationOptionValues = React.useMemo(
     () => durationOptions.map((option) => option.value),
     [durationOptions]
@@ -1260,8 +1260,8 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
     () =>
       seedanceModel === "seedance-2.0-fast"
         ? [...SEEDANCE20_FAST_DOC_RESOLUTIONS]
-        : [...SEEDANCE20_DOC_RESOLUTIONS],
-    [seedanceModel]
+        : [...SEEDANCE20_DOC_RESOLUTIONS, ...(isSeedanceToapis && !isSeedance25Model ? ["4K"] : [])],
+    [seedanceModel, isSeedanceToapis, isSeedance25Model]
   );
   const legacySeedanceResolutionOptions = React.useMemo(() => {
     if (provider !== "doubao" || isVodManagedNode) return [];
@@ -1270,6 +1270,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
   const resolutionOptions = React.useMemo(
     () => {
       if (provider === "doubao" && isSeedance2FamilyModel) {
+        if (isSeedanceToapis) return seedance20ResolutionList;
         if (vodResolutionOptions.length === 0) return seedance20ResolutionList;
         const allowed = new Set(seedance20ResolutionList);
         const filtered = vodResolutionOptions.filter((value) => allowed.has(value));
@@ -1282,6 +1283,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
     [
       isSeedance2FamilyModel,
       legacySeedanceResolutionOptions,
+      isSeedanceToapis,
       provider,
       seedance20ResolutionList,
       vodResolutionOptions,
@@ -1320,7 +1322,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       if (isSeedance25Model) {
         return [
           lt("图片大小：单图建议不超过 30MB", "Image size: each image should be <= 30MB"),
-          lt("生成时长：4-30 秒", "Output duration: 4-30s"),
+          isSeedanceToapis ? lt("生成时长：4-30 秒（整数）", "Output duration: 4-30s (integer)") : lt("生成时长：5-30 秒，5秒步长", "Output duration: 5-30s, step 5s"),
           resolutionTip,
           lt(
             "全能参考：图≤30，视频≤10，音频≤10（合计≤50；音频每条≤5秒）",
@@ -1330,17 +1332,18 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       }
       return [
         lt("图片大小：单图建议不超过 30MB", "Image size: each image should be <= 30MB"),
-        lt("生成时长：4-30 秒", "Output duration: 4-30s"),
+        isSeedanceToapis ? lt("生成时长：4-15 秒（整数）", "Output duration: 4-15s (integer)") : lt("生成时长：5-15 秒，5秒步长", "Output duration: 5-15s, step 5s"),
         resolutionTip,
+        ...(isSeedanceToapis && !isSeedance25Model && seedanceModel !== "seedance-2.0-fast" ? [lt("普通线路另支持 4K 与 adaptive 自动尺寸", "Standard route also supports 4K and adaptive ratio")] : []),
         lt("参考视频最多 3 条；音频最多 3 条且每条≤5秒", "Video refs <=3; audio refs <=3 and <=5s each"),
       ];
     }
     return [
       lt("图片大小：单图建议不超过 30MB", "Image size: each image should be <= 30MB"),
-      lt("生成时长：4-30 秒", "Output duration: 4-30s"),
+      lt("生成时长：4-12 秒", "Output duration: 4-12s"),
       lt("分辨率/尺寸：720P；16:9、9:16、1:1", "Resolution/ratio: 720P; 16:9, 9:16, 1:1"),
     ];
-  }, [isSeedance20Model, isSeedance25Model, isSeedanceModel, lt, seedanceModel]);
+  }, [isSeedance20Model, isSeedance2FamilyModel, isSeedance25Model, isSeedanceToapis, isSeedanceModel, lt, seedanceModel]);
   const seedanceModeOptions = React.useMemo(
     () =>
       // 2.0 / 2.0 Fast / 2.5 共用：全能参考 + 首尾帧；不展示 1.5 的「图生视频」
@@ -1725,14 +1728,17 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
         return Math.round(clamped / 5) * 5;
       };
       const nextDuration = isSeedance2FamilySelection
-        ? snapSeedanceStepDuration(clipDuration, value === "seedance-2.5" ? 30 : 15)
+        ? isSeedanceToapis
+          ? Math.max(4, Math.min(value === "seedance-2.5" ? 30 : 15, Math.round(clipDuration || 5)))
+          : snapSeedanceStepDuration(clipDuration, value === "seedance-2.5" ? 30 : 15)
         : clipDuration && clipDuration >= 4 && clipDuration <= 12
         ? clipDuration
         : 5;
       const currentResolution =
         typeof data.resolution === "string" ? data.resolution.trim().toUpperCase() : "";
       const nextResolution =
-        value === "seedance-2.0-fast" && currentResolution === "1080P"
+        (value === "seedance-2.0-fast" && ["1080P", "4K"].includes(currentResolution)) ||
+        (value === "seedance-2.5" && currentResolution === "4K")
           ? "720P"
           : undefined;
       window.dispatchEvent(
@@ -1755,7 +1761,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
         })
       );
     },
-    [clipDuration, data.generateAudio, data.resolution, id, isSeedance20LockedOption, lt, seedanceModel]
+    [clipDuration, data.generateAudio, data.resolution, id, isSeedance20LockedOption, isSeedanceToapis, lt, seedanceModel]
   );
 
   const handleSeedanceAudioToggle = React.useCallback(() => {

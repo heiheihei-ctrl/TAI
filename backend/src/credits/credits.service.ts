@@ -1501,6 +1501,10 @@ export class CreditsService {
     if (!Number.isFinite(durationRaw) || durationRaw <= 0) {
       return minSec;
     }
+    const vendor = String(requestParams?.vendorKey || requestParams?.platformKey || requestParams?.providerChannel || '').toLowerCase();
+    if (vendor === 'toapis' || vendor === 'apimart') {
+      return Math.max(4, Math.min(maxSec, Math.round(durationRaw)));
+    }
     const snapped = Math.round(durationRaw / 5) * 5;
     return Math.max(minSec, Math.min(maxSec, snapped));
   }

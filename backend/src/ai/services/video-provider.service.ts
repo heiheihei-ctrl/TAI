@@ -1,3 +1,4 @@
+import { buildSeedanceToapisPayload } from './seedance-toapis.adapter';
 // Video provider integration (Kling/Vidu/Seedance) with OSS post-processing.
 import {
   BadGatewayException,
@@ -1314,63 +1315,10 @@ export class VideoProviderService {
     return { status: "processing" };
   }
 
-  private normalizeSeedance25ToapisResolution(resolution: unknown): string {
-    const normalized = String(resolution || "720P").trim().toUpperCase();
-    if (normalized === "480P") return "480p";
-    if (normalized === "1080P") return "1080p";
-    return "720p";
-  }
-
-  private normalizeSeedance25ToapisAspectRatio(aspectRatio: unknown): string {
-    const normalized = String(aspectRatio || "16:9").trim();
-    return normalized || "16:9";
-  }
-
   private buildSeedance25ToapisPayload(options: VideoProviderRequestDto): Record<string, any> {
-    const isSeedance20 = this.resolveManagedSeedanceModel(options).modelKey === "seedance-2.0";
-    const prompt = typeof options.prompt === "string" ? options.prompt.trim() : "";
-    if (!prompt) {
-      throw new BadRequestException("prompt 不能为空");
-    }
-
-    const durationRaw = Number(options.duration);
-    const duration =
-      Number.isFinite(durationRaw) && durationRaw > 0
-        ? isSeedance20
-          ? Math.max(4, Math.min(15, Math.round(durationRaw)))
-          : Math.max(5, Math.min(30, Math.round(Math.round(durationRaw) / 5) * 5))
-        : 5;
-    const aspectRatio = this.normalizeSeedance25ToapisAspectRatio(options.aspectRatio);
-
-    const payload: Record<string, any> = {
-      model: isSeedance20 ? "seedance-2" : "seedance-2-5",
-      prompt,
-      duration,
-      size: aspectRatio,
-      aspect_ratio: aspectRatio,
-      resolution: this.normalizeSeedance25ToapisResolution(options.resolution),
-      metadata: {},
-      generate_audio:
-        typeof options.generateAudio === "boolean" ? options.generateAudio : true,
-      ...(!isSeedance20 ? { video_operation: "generate", output_format: "mp4" } : {}),
-    };
-
-    const referenceImages = Array.isArray(options.referenceImages)
-      ? options.referenceImages
-          .map((item) => {
-            if (typeof item === "string") return item.trim();
-            if (item && typeof item === "object" && typeof item.url === "string") {
-              return item.url.trim();
-            }
-            return "";
-          })
-          .filter((url) => url.length > 0)
-      : [];
-    if (referenceImages.length > 0) {
-      payload.image_urls = referenceImages;
-    }
-
-    return payload;
+    const version = this.resolveManagedSeedanceModel(options).modelVersion;
+    if (version === "1.5-pro") throw new BadRequestException("Seedance 1.5 尚未接入 ToAPIs，请使用官方线路");
+    return buildSeedanceToapisPayload(options, version);
   }
 
   private async generateSeedance25ViaToapis(
@@ -1383,9 +1331,6 @@ export class VideoProviderService {
     }
 
     const resolved = this.resolveManagedSeedanceModel(options);
-    if (resolved.modelVersion === "2.0-fast") {
-      throw new BadRequestException("ToAPIs 当前接入仅支持 Seedance 2.0 标准版，请切换模型或供应商");
-    }
     const taskPrefix = resolved.modelKey === "seedance-2.0"
       ? SEEDANCE20_TOAPIS_TASK_PREFIX : SEEDANCE25_TOAPIS_TASK_PREFIX;
     const payload = this.buildSeedance25ToapisPayload(options);
@@ -1434,7 +1379,11 @@ export class VideoProviderService {
     }
 
     const rawTaskId = extractUpstreamImageTaskId(data);
-    const videoUrl =
+    const parsedCreate = parseOmniFlashExtTaskResponse(data, rawTaskId || undefined);
+    if (parsedCreate.status === "failed") {
+      throw new BadRequestException(data?.error?.message || "ToAPIs Seedance 创建任务失败");
+    }
+    const videoUrl = parsedCreate.videoUrl ||
       data?.videoUrl ||
       data?.video_url ||
       data?.url ||
@@ -1466,7 +1415,7 @@ export class VideoProviderService {
 
   private async querySeedance25ToapisTask(
     taskId: string,
-  ): Promise<{ status: string; videoUrl?: string; thumbnailUrl?: string }> {
+  ): Promise<{ status: string; videoUrl?: string; thumbnailUrl?: string; error?: string }> {
     const taskPrefix = taskId.startsWith(SEEDANCE20_TOAPIS_TASK_PREFIX)
       ? SEEDANCE20_TOAPIS_TASK_PREFIX : SEEDANCE25_TOAPIS_TASK_PREFIX;
     const rawTaskId = taskId.startsWith(taskPrefix)
@@ -1525,10 +1474,20 @@ export class VideoProviderService {
           : (response.data ?? {});
 
       const parsed = parseOmniFlashExtTaskResponse(raw, rawTaskId);
+      if (parsed.status === "failed") {
+        const error = raw?.error?.message || raw?.data?.error?.message || raw?.message || "ToAPIs Seedance 生成失败";
+        return { status: "failed", error: String(error) };
+      }
       if (parsed.videoUrl) {
-        const finalVideoUrl = this.isOssPublicUrl(parsed.videoUrl)
-          ? parsed.videoUrl
-          : await this.uploadRemoteVideoToOss(parsed.videoUrl, `seedance25-${rawTaskId}`);
+        let finalVideoUrl: string;
+        try {
+          finalVideoUrl = this.isOssPublicUrl(parsed.videoUrl) ? parsed.videoUrl
+            : await this.uploadRemoteVideoToOss(parsed.videoUrl, `seedance-${rawTaskId}`);
+        } catch (error) {
+          const fallback = raw?.result?.data?.[0]?.fallback_url;
+          if (typeof fallback !== "string" || !/^https?:\/\//i.test(fallback) || fallback === parsed.videoUrl) throw error;
+          finalVideoUrl = await this.uploadRemoteVideoToOss(fallback, `seedance-${rawTaskId}`);
+        }
         return {
           status: "succeeded",
           videoUrl: finalVideoUrl,
@@ -1544,7 +1503,7 @@ export class VideoProviderService {
     this.logger.warn(
       `Seedance 2.5 ToAPIs 查询失败: taskId=${rawTaskId}, http=${lastStatus}, body=${lastBody.slice(0, 500)}`,
     );
-    return { status: "processing" };
+    throw new ServiceUnavailableException(`ToAPIs Seedance 查询失败 (HTTP ${lastStatus})，请检查令牌、任务 ID 或上游状态`);
   }
 
   private async generateManagedKlingO3(

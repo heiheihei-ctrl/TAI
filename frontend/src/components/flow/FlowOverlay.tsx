@@ -1,5 +1,6 @@
 // @ts-nocheck
 // Flow 主画布与节点调度入口。
+import { getSeedanceDurations, getSeedancePollMaxAttempts } from "@/config/seedanceCapabilities";
 import React from "react";
 import { createPortal } from "react-dom";
 import { Trash2, Plus, Upload, Download, Group, Ungroup, Lock, Crown, Copy, ClipboardPaste } from "lucide-react";
@@ -13101,7 +13102,7 @@ function FlowInner() {
       if (resumePollingRef.current.has(nodeId)) return;
       resumePollingRef.current.add(nodeId);
 
-      const maxAttempts = VIDEO_TASK_POLL_MAX_ATTEMPTS;
+      const maxAttempts = getSeedancePollMaxAttempts(taskId, VIDEO_TASK_POLL_MAX_ATTEMPTS);
       const pollInterval = 5000;
       let attempts = 0;
       let settled = false;
@@ -16167,6 +16168,8 @@ function FlowInner() {
             seedanceModelForRequest = "seedance-2.0";
           }
         }
+        const isSeedanceToapisRequest = isSeedanceNode && !isLinglongRestrictedPalette() &&
+          resolveSeedanceVendorKey(useAIChatStore.getState().bananaImageRoute || bananaImageRoute) === "toapis";
         const isSeedance25Request = isSeedance25ModelValue(seedanceModelForRequest);
         const isSeedance20Request = isSeedance20ModelValue(seedanceModelForRequest);
         const isSeedance2FamilyRequest = isSeedance20Request || isSeedance25Request;
@@ -16550,6 +16553,7 @@ function FlowInner() {
 
           if (isSeedance2FamilyRequest) {
             // 兼容历史工作流：旧的 doubaoVideo 元数据通常不是 5-30，切到 2.x 时不应继续拦截。
+            if (isSeedanceToapisRequest) return getSeedanceDurations(isSeedance25Request, true);
             if (nodeConfigKey === "doubaoVideo" || !metadataSupportsSeedance2) {
               return [] as number[];
             }
@@ -16570,9 +16574,12 @@ function FlowInner() {
         if (isSeedanceNode && typeof clipDuration === "number" && Number.isFinite(clipDuration)) {
           if (isSeedance2FamilyRequest) {
             const maxDuration = isSeedance25Request ? 30 : 15;
-            if (clipDuration < 5 || clipDuration > maxDuration || clipDuration % 5 !== 0) {
+            if (clipDuration < (isSeedanceToapisRequest ? 4 : 5) || clipDuration > maxDuration ||
+                (!isSeedanceToapisRequest && clipDuration % 5 !== 0)) {
               failCurrentVideoNode(
-                `${seedanceFamilyLabel} 生成时长仅支持 5-${maxDuration} 秒，且需为 5 的倍数`
+                isSeedanceToapisRequest
+                  ? `${seedanceFamilyLabel} 生成时长仅支持 4-${maxDuration} 秒的整数`
+                  : `${seedanceFamilyLabel} 生成时长仅支持 5-${maxDuration} 秒，且需为 5 的倍数`
               );
               return;
             }
@@ -17290,9 +17297,9 @@ function FlowInner() {
           } else if (
             isSeedanceNode &&
             isSeedance2FamilyRequest &&
-            clipDuration >= 5 &&
+            clipDuration >= (isSeedanceToapisRequest ? 4 : 5) &&
             clipDuration <= (isSeedance25Request ? 30 : 15) &&
-            clipDuration % 5 === 0
+            (isSeedanceToapisRequest || clipDuration % 5 === 0)
           ) {
             durationForAPI = clipDuration;
           } else if (
@@ -17720,7 +17727,7 @@ function FlowInner() {
 
           // 开始轮询查询任务状态
           const pollInterval = 5000; // 5秒
-          const maxAttempts = VIDEO_TASK_POLL_MAX_ATTEMPTS;
+          const maxAttempts = getSeedancePollMaxAttempts(createResult.taskId, VIDEO_TASK_POLL_MAX_ATTEMPTS);
           const maxConsecutiveQueryErrors = 6; // 连续查询失败 6 次后直接失败返回
           let attempts = 0;
           let consecutiveQueryErrors = 0;
