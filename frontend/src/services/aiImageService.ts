@@ -9,8 +9,6 @@
  */
 
 import { v4 as uuidv4 } from "uuid";
-import { getRefreshAuthHeader, setTokens } from "./authTokenStorage";
-import { triggerAuthInvalid } from "./authEvents";
 import { fetchWithAuth } from "./authFetch";
 import type {
   AIImageGenerateRequest,
@@ -463,24 +461,7 @@ class AIImageService {
 
       clearTimeout(timeoutId);
 
-      if (response.status === 401 || response.status === 403) {
-        console.warn(
-          `⚠️ ${operationType}: token expired? attempting refresh...`
-        );
-        const refreshed = await this.refreshSession();
-        if (refreshed) {
-          return this.callAPI<T>(
-            url,
-            requestWithRoute,
-            `${operationType} (retry)`,
-            0,
-            allowNetworkRetry
-          );
-        }
-
-        // 刷新失败：说明登录态已失效，触发自动退出/弹窗
-        triggerAuthInvalid();
-
+      if (response.status === 401) {
         const fallback = await this.callPublicAPI<T>(
           url,
           requestWithRoute,
@@ -737,35 +718,6 @@ class AIImageService {
     return keywords.some((keyword) => prompt.includes(keyword));
   }
 
-  /**
-   * 尝试刷新登录会话
-   */
-  private async refreshSession(): Promise<boolean> {
-    try {
-      const res = await fetchWithAuth(`${this.API_BASE}/auth/refresh`, {
-        method: "POST",
-        credentials: "include",
-        headers: { ...getRefreshAuthHeader() },
-        auth: "omit",
-        allowRefresh: false,
-      });
-      if (res.ok) {
-        const data = await res.json().catch(() => null);
-        if (data?.tokens) setTokens(data.tokens);
-        console.log("🔄 Session refresh succeeded");
-        return true;
-      }
-      console.warn("Session refresh failed with status", res.status);
-      return false;
-    } catch (error) {
-      console.warn("Session refresh threw error:", error);
-      return false;
-    }
-  }
-
-  /**
-   * 检查 API 是否可用
-   */
   async isAvailable(): Promise<boolean> {
     try {
       const response = await fetchWithAuth(`${this.API_BASE}/ai/health`, {

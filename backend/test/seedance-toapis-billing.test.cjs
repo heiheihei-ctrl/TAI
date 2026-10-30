@@ -34,3 +34,13 @@ test('ToAPIs review and generation have a 45-minute polling window, other routes
   }
   assert.equal(frontExports.getSeedancePollMaxAttempts('official-task', 180), 180);
 });
+
+test('retired node selections migrate to 2.5 with valid duration and retain frame mode', () => {
+  for (const value of ['seedance-1.5-pro', '1.5-pro', undefined]) assert.equal(frontExports.isLegacySeedanceSelection(value), true);
+  for (const value of ['seedance-2.0', 'seedance-2.0-fast', 'seedance-2.5']) assert.equal(frontExports.isLegacySeedanceSelection(value), false);
+  assert.equal(frontExports.migrateLegacySeedanceSelection(12, false).clipDuration, 10);
+  assert.equal(frontExports.migrateLegacySeedanceSelection(12, true).clipDuration, 12);
+  const next = frontExports.migrateLegacySeedanceSelection(5, true, 'start_end');
+  assert.equal(next.seedanceModel, 'seedance-2.5');
+  assert.equal(next.seedanceMode, 'start_end');
+});

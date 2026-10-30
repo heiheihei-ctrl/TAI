@@ -101,7 +101,7 @@ export default function CommunityGuidelines() {
 
           <h4 className="font-medium mb-2">2. 危险行为</h4>
           <p className="mb-4">
-            禁止制作、发布、传播危险行为相关内容，包括但不限于通过Seedance 1.5 Pro生成危险舞蹈动作视频、借助Video Node制作危险驾驶、危险恶作剧画面，或展示危险工具、危险玩具的AI生成内容，避免诱导他人模仿引发人身伤害事故。
+            禁止制作、发布、传播危险行为相关内容，包括但不限于通过Seedance生成危险舞蹈动作视频、借助Video Node制作危险驾驶、危险恶作剧画面，或展示危险工具、危险玩具的AI生成内容，避免诱导他人模仿引发人身伤害事故。
           </p>
 
           <h4 className="font-medium mb-2">3. 侵犯隐私与个人信息</h4>

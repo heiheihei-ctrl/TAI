@@ -15,6 +15,7 @@ for (const failure of ['network', 500, 403, 401]) {
     const dependencies = {
       triggerAuthInvalid: () => { invalidations++; },
       getAccessToken: () => 'permanent-token',
+      getAuthSessionSignature: () => 'same-session',
       getRefreshAuthHeader: () => ({}),
       setTokens: () => {},
       ensureTraceHeader: () => {},
@@ -47,6 +48,7 @@ for (const method of ['me', 'meDetailed']) {
       const exports = {};
       const dependencies = {
         clearTokens: () => { cleared = true; },
+        getAuthSessionSignature: () => 'same-session',
         getAccessAuthHeader: () => ({}), getRefreshAuthHeader: () => ({}),
         fetchWithAuth: async () => {
           if (++calls === 1) return new Response(null, { status: 401 });

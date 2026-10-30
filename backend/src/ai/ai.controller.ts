@@ -1,3 +1,4 @@
+import { assertActiveSeedanceRequest } from './services/seedance-retirement';
 import {
   Body,
   Controller,
@@ -5406,8 +5407,12 @@ export class AiController {
 
   @Post('generate-video-provider')
   async generateVideoProvider(@Body() dto: VideoProviderRequestDto, @Req() req: any) {
+    assertActiveSeedanceRequest(dto);
     const userId = this.getUserId(req);
     const effectiveDto: VideoProviderRequestDto = { ...dto };
+    if (effectiveDto.provider === 'doubao' && !effectiveDto.seedanceModel) {
+      effectiveDto.seedanceModel = effectiveDto.managedModelKey === 'seedance-2.0' ? 'seedance-2.0' : 'seedance-2.5';
+    }
 
     // Whitelist/admin users can skip watermark for doubao provider.
     if (effectiveDto.provider === 'doubao') {

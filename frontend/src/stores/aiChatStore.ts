@@ -105,8 +105,8 @@ const IDB_SESSIONS_KEY = "local_sessions";
 const AI_CHAT_STORE_NAME = STORE_NAMES.AI_CHAT_SESSIONS;
 const AI_CHAT_VIDEO_CACHE_STORE_NAME = STORE_NAMES.AI_CHAT_VIDEO_CACHE;
 const AI_CHAT_PREFERENCES_VERSION = 1;
-const AI_CHAT_SEEDANCE_MODEL = "seedance-1.5-pro" as const;
-const AI_CHAT_VIDEO_DURATION_OPTIONS = [3, 4, 5, 6, 8, 10] as const;
+const AI_CHAT_SEEDANCE_MODEL = "seedance-2.5" as const;
+const AI_CHAT_VIDEO_DURATION_OPTIONS = [5, 10, 15, 20, 25, 30] as const;
 
 type AIChatVideoDurationSeconds =
   (typeof AI_CHAT_VIDEO_DURATION_OPTIONS)[number];
@@ -6564,7 +6564,7 @@ export const useAIChatStore = create<AIChatState>()(
             const state = get();
             const provider: VideoProvider = "doubao";
             const aspectRatio = state.videoAspectRatio ?? undefined;
-            const durationSeconds = state.videoDurationSeconds ?? undefined;
+            const durationSeconds = Math.max(5, Math.min(30, Math.round((state.videoDurationSeconds || 5) / 5) * 5));
 
             const referenceImageList = Array.isArray(referenceImages)
               ? referenceImages
@@ -6620,6 +6620,9 @@ export const useAIChatStore = create<AIChatState>()(
               aspectRatio,
               provider,
               seedanceModel: AI_CHAT_SEEDANCE_MODEL,
+              managedModelKey: "seedance-2.5",
+              vendorKey: "seedance_api",
+              platformKey: "seedance_api",
               videoMode,
             });
 

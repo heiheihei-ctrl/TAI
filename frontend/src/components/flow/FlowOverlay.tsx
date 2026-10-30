@@ -1,6 +1,6 @@
 // @ts-nocheck
 // Flow 主画布与节点调度入口。
-import { getSeedanceDurations, getSeedancePollMaxAttempts } from "@/config/seedanceCapabilities";
+import { getSeedanceDurations, getSeedancePollMaxAttempts, isLegacySeedanceSelection, migrateLegacySeedanceSelection } from "@/config/seedanceCapabilities";
 import React from "react";
 import { createPortal } from "react-dom";
 import { Trash2, Plus, Upload, Download, Group, Ungroup, Lock, Crown, Copy, ClipboardPaste } from "lucide-react";
@@ -1220,7 +1220,7 @@ const normalizeSeedanceModelValue = (
   if (normalized === "seedance-2.0" || normalized === "2.0") {
     return "seedance-2.0";
   }
-  return "seedance-1.5-pro";
+  return "seedance-2.5";
 };
 
 /** seedanceModel → 后端 managedModelKey（勿沿用节点上残留的 2.0 key） */
@@ -1230,7 +1230,7 @@ const resolveSeedanceManagedModelKey = (
   const model = normalizeSeedanceModelValue(value);
   if (model === "seedance-2.5") return "seedance-2.5";
   if (model === "seedance-2.0" || model === "seedance-2.0-fast") return "seedance-2.0";
-  return "seedance-1.5";
+  return "seedance-2.5";
 };
 
 const isSeedance25ModelValue = (value?: unknown): boolean => {
@@ -2403,7 +2403,7 @@ const buildVideoPricingContext = (
   } else if (nodeType === "doubaoVideo") {
     context.seedanceModel = isLinglongRestrictedPalette()
       ? "seedance-2.0"
-      : "seedance-1.5-pro";
+      : "seedance-2.5";
   }
 
   if (typeof nodeData?.seedanceMode === "string" && nodeData.seedanceMode.trim()) {
@@ -5815,11 +5815,18 @@ function FlowInner() {
 
       if (type === "doubaoVideo") {
         const currentSeedanceModel = String(data.seedanceModel || "").trim();
+        if (isLegacySeedanceSelection(currentSeedanceModel) && (currentSeedanceModel || rawType === "doubaoVideo")) {
+          Object.assign(data, migrateLegacySeedanceSelection(
+            data.clipDuration,
+            !isLinglongRestrictedPalette() && resolveSeedanceVendorKey(useAIChatStore.getState().bananaImageRoute) === "toapis",
+            data.seedanceMode,
+          ));
+        }
         const normalizedSeedanceModel = normalizeSeedanceModelValue(
           currentSeedanceModel ||
             (rawType === "seedance20Video" || isLinglongRestrictedPalette()
               ? "seedance-2.0"
-              : "seedance-1.5-pro")
+              : "seedance-2.5")
         );
         let nextSeedanceModel =
           rawType === "seedance20Video" && normalizedSeedanceModel === "seedance-1.5-pro"
@@ -9420,7 +9427,7 @@ function FlowInner() {
                 type === "doubaoVideo"
                   ? isLinglongRestrictedPalette()
                     ? ("seedance-2.0" as const)
-                    : ("seedance-1.5-pro" as const)
+                    : ("seedance-2.5" as const)
                   : type === "seedance20Video"
                   ? ("seedance-2.0" as const)
                   : undefined,
@@ -16157,7 +16164,7 @@ function FlowInner() {
           rawNodeData.seedanceModel ||
             (normalizedVideoNodeType === "seedance20Video"
               ? "seedance-2.0"
-              : "seedance-1.5-pro")
+              : "seedance-2.5")
         );
         // 玲珑仅 2.0 / 2.5；避免 doubaoVideo 默认落到 1.5「图生视频」必填图
         if (isLinglongRestrictedPalette()) {

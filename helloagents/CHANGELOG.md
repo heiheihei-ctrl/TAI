@@ -5,6 +5,8 @@ All notable changes to this knowledge base will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning (knowledge-base versioning).
 
 ## [Unreleased]
+- 修复永久登录仍被误退出：移除 AI 图片服务对业务 401/403 的重复刷新和直接强退；业务 401 必须由本站 `/auth/me` 确认凭证无效才退出。刷新重试更新 Authorization，旧请求/刷新/初始化响应不再覆盖或清除新登录；JWT 继续无到期时间。
+- 下线 Seedance 1.5：移除前后台模型选项及默认目录，画布旧节点与 AI 对话生成改用 2.5 并校正时长/模式；旧客户端显式提交 1.5 在扣费前拒绝，保留历史产物和任务查询兼容。
 - 按 ToAPIs 文档复核现有 Seedance 系列：统一 2.0/Fast/2.5 素材角色并补齐视频、音频参考，启用 Fast 正确模型；修复分辨率静默降级与整数时长/计费不一致，补全失败原因及备用视频地址处理，并将审核轮询窗口延长至 45 分钟。1.5 维持官方线路；合约、计费及模拟任务回归覆盖。
 - 修复 ToAPIs Seedance 2.0 多参考图请求：按验证过的 JSON 发送 `image_with_roles`、`reference_image` 角色及 `private_asset_review`，补充参考图/首尾帧/2.5 回归验证。
 - 修复 Seedance 官方线路凭证配置：移除内置旧密钥，兼容 `ARK_API_KEY`，保留显式 `DOUBAO_API_KEY` 优先级；新增配置优先级和无密钥回归测试。

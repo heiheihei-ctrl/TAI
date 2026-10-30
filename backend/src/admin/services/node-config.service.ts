@@ -127,7 +127,6 @@ const buildManagedImageNodeMetadata = (params: {
 });
 
 const SEEDANCE20_SUPPORTED_MODELS = [
-  'seedance-1.5-pro',
   'seedance-2.0',
   'seedance-2.0-fast',
   'seedance-2.5',
@@ -578,15 +577,16 @@ export class NodeConfigService {
     }
 
     const isSeedance20 = normalizedConfig.nodeKey === 'seedance20Video';
-    const isSeedance2Node = isSeedance20;
-    const modelVersion = isSeedance20 ? '2.0' : '1.5-pro';
-    const supportedModels = isSeedance20
-      ? SEEDANCE20_SUPPORTED_MODELS
-      : ['seedance-1.5-pro', 'seedance-2.0', 'seedance-2.0-fast', 'seedance-2.5'];
-    const resolutions = isSeedance20 ? SEEDANCE20_RESOLUTIONS : ['720P'];
+    if (!isSeedance20) {
+      normalizedConfig = { ...normalizedConfig, ...{ nameZh: 'Seedance 2.5视频生成', nameEn: 'Seedance 2.5' } };
+    }
+    const isSeedance2Node = true;
+    const modelVersion = isSeedance20 ? '2.0' : '2.5';
+    const supportedModels = SEEDANCE20_SUPPORTED_MODELS;
+    const resolutions = SEEDANCE20_RESOLUTIONS;
     const notes = isSeedance20
       ? SEEDANCE20_NOTES
-      : ['1.5-Pro 当前接入默认分辨率限制为 720P；可在节点内切换 Seedance 2.0 / 2.0 Fast / 2.5'];
+      : ['默认 Seedance 2.5；可切换 Seedance 2.0 / 2.0 Fast'];
 
     const metadata = {
       ...(normalizedConfig.metadata && typeof normalizedConfig.metadata === 'object'
@@ -596,11 +596,11 @@ export class NodeConfigService {
         {
           type: 'doubaoVideo',
           provider: 'doubao',
-          modelKeys: [isSeedance20 ? 'seedance-2.0' : 'seedance-1.5'],
+          modelKeys: [isSeedance20 ? 'seedance-2.0' : 'seedance-2.5'],
           supportedModels,
           defaultData: {
             provider: 'doubao',
-            seedanceModel: isSeedance20 ? 'seedance-2.0' : 'seedance-1.5-pro',
+            seedanceModel: isSeedance20 ? 'seedance-2.0' : 'seedance-2.5',
             clipDuration: 5,
             resolution: '720P',
             seedanceMode: isSeedance2Node ? 'reference_images' : undefined,
@@ -610,12 +610,12 @@ export class NodeConfigService {
           },
         },
         {
-          label: isSeedance20 ? 'Ark Seedance 2.0' : 'Ark Seedance 1.5-Pro',
+          label: isSeedance20 ? 'Ark Seedance 2.0' : 'Ark Seedance 2.5',
           modelName: 'Seedance',
           modelVersion,
           outputConfig: {
             aspectRatios: isSeedance2Node ? SEEDANCE20_ASPECT_RATIOS : ['16:9', '9:16', '1:1'],
-            durations: isSeedance2Node ? SEEDANCE20_DURATIONS : [3, 4, 5, 6, 7, 8, 9, 10],
+            durations: isSeedance20 ? SEEDANCE20_DURATIONS : [5, 10, 15, 20, 25, 30],
             resolutions,
             audioGeneration: isSeedance2Node,
           },
@@ -633,7 +633,7 @@ export class NodeConfigService {
       ...normalizedConfig,
       description: isSeedance20
         ? 'Seedance 2.0视频生成，走火山方舟模型管理'
-        : 'Seedance 1.5 Pro视频，走火山方舟模型管理',
+        : 'Seedance 2.5视频，走火山方舟模型管理',
       metadata,
     };
   }
@@ -1278,32 +1278,32 @@ export class NodeConfigService {
       },
       {
         nodeKey: 'doubaoVideo',
-        nameZh: 'Seedance 1.5 Pro视频生成',
-        nameEn: 'Seedance 1.5 Pro',
+        nameZh: 'Seedance 2.5视频生成',
+        nameEn: 'Seedance 2.5',
         category: 'video',
         sortOrder: 29,
         creditsPerCall: 600,
         serviceType: 'doubao-video',
         priceYuan: 6,
-        description: 'Seedance 1.5 Pro视频，走火山方舟模型管理',
+        description: 'Seedance 2.5视频，走火山方舟模型管理',
         metadata: {
           ...buildVodNodeMetadata(
             {
               type: 'doubaoVideo',
               provider: 'doubao',
-              modelKeys: ['seedance-1.5'],
+              modelKeys: ['seedance-2.5'],
               supportedModels: SEEDANCE20_SUPPORTED_MODELS,
               defaultData: {
                 provider: 'doubao',
-                seedanceModel: 'seedance-1.5-pro',
+                seedanceModel: 'seedance-2.5',
                 clipDuration: 5,
                 resolution: '720P',
               },
             },
             {
-              label: 'Ark Seedance 1.5-Pro',
+              label: 'Ark Seedance 2.5',
               modelName: 'Seedance',
-              modelVersion: '1.5-pro',
+              modelVersion: '2.5',
               outputConfig: {
                 aspectRatios: ['16:9', '9:16', '1:1'],
                 durations: [4, 5, 6, 7, 8, 9, 10, 11, 12],
@@ -1911,32 +1911,32 @@ export class NodeConfigService {
       },
       {
         nodeKey: 'doubaoVideo',
-        nameZh: 'Seedance 1.5 Pro视频生成',
-        nameEn: 'Seedance 1.5 Pro',
+        nameZh: 'Seedance 2.5视频生成',
+        nameEn: 'Seedance 2.5',
         category: 'video',
         sortOrder: 29,
         creditsPerCall: 600,
         serviceType: 'doubao-video',
         priceYuan: 6,
-        description: 'Seedance 1.5 Pro视频，走火山方舟模型管理',
+        description: 'Seedance 2.5视频，走火山方舟模型管理',
         metadata: {
           ...buildVodNodeMetadata(
             {
               type: 'doubaoVideo',
               provider: 'doubao',
-              modelKeys: ['seedance-1.5'],
+              modelKeys: ['seedance-2.5'],
               supportedModels: SEEDANCE20_SUPPORTED_MODELS,
               defaultData: {
                 provider: 'doubao',
-                seedanceModel: 'seedance-1.5-pro',
+                seedanceModel: 'seedance-2.5',
                 camerafixed: false,
                 watermark: false,
               },
             },
             {
-              label: 'Ark Seedance 1.5-Pro',
+              label: 'Ark Seedance 2.5',
               modelName: 'Seedance',
-              modelVersion: '1.5-pro',
+              modelVersion: '2.5',
               outputConfig: {
                 aspectRatios: ['16:9', '9:16', '1:1'],
                 durations: [4, 5, 6, 7, 8, 9, 10, 11, 12],

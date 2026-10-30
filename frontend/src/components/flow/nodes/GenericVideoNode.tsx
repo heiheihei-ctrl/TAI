@@ -14,7 +14,7 @@ import {
 import { useLocaleText } from "@/utils/localeText";
 import { useFlowOnboardingStore } from "@/stores/flowOnboardingStore";
 import RunCreditBadge from "./RunCreditBadge";
-import { getSeedanceDurations } from "@/config/seedanceCapabilities";
+import { getSeedanceDurations, isLegacySeedanceSelection, migrateLegacySeedanceSelection } from "@/config/seedanceCapabilities";
 import NodeSelect from "./NodeSelect";
 import FlowResizableNodeShell from "./FlowResizableNodeShell";
 import { useBackendCreditsPreview } from "../hooks/useBackendCreditsPreview";
@@ -34,7 +34,7 @@ import { isLinglongRestrictedPalette } from "@/config/linglongPalette";
 
 export type VideoProvider = "kling" | "kling-2.6" | "kling-o3" | "vidu" | "viduq3-pro" | "doubao";
 type ViduModel = ViduModelValue;
-type SeedanceModel = "seedance-1.5-pro" | "seedance-2.0" | "seedance-2.0-fast" | "seedance-2.5";
+type SeedanceModel = "seedance-2.0" | "seedance-2.0-fast" | "seedance-2.5";
 type Seedance20Mode = "reference_images" | "start_end";
 type Seedance15Mode = "text" | "image" | "start_end";
 type SeedanceMode = Seedance20Mode | Seedance15Mode;
@@ -471,9 +471,15 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
       ? "seedance-2.0"
       : isLinglongRestrictedPalette()
       ? "seedance-2.0"
-      : "seedance-1.5-pro";
+      : "seedance-2.5";
   const isSeedanceModel = provider === "doubao";
   const isSeedanceToapis = isSeedanceModel && ["toapis", "apimart"].includes(String(data.vendorKey || data.platformKey).toLowerCase());
+  React.useEffect(() => {
+    if (!isSeedanceModel || !isLegacySeedanceSelection(data.seedanceModel)) return;
+    window.dispatchEvent(new CustomEvent("flow:updateNodeData", {
+      detail: { id, patch: migrateLegacySeedanceSelection(data.clipDuration, isSeedanceToapis, data.seedanceMode) },
+    }));
+  }, [id, isSeedanceModel, data.seedanceModel, data.seedanceMode, data.clipDuration, isSeedanceToapis]);
   const seedance2AccessEnabled = data.seedance2AccessEnabled === true;
   const seedance2AccessResolved = data.seedance2AccessResolved === true;
   const seedance20AvailableForCurrentUser =
@@ -1130,7 +1136,6 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
   );
   const seedanceModelOptions = React.useMemo(
     () => [
-      { label: "Seedance 1.5-Pro", value: "seedance-1.5-pro" as const },
       { label: "Seedance 2.0", value: "seedance-2.0" as const },
       { label: "Seedance 2.0 Fast", value: "seedance-2.0-fast" as const },
       { label: "Seedance 2.5", value: "seedance-2.5" as const },
@@ -1220,8 +1225,9 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
         detail: {
           id,
           patch: {
-            seedanceModel: "seedance-1.5-pro",
-            seedanceMode: "text",
+            seedanceModel: "seedance-2.5",
+            managedModelKey: "seedance-2.5",
+            seedanceMode: "reference_images",
             clipDuration: nextDuration,
           },
         },
@@ -1719,7 +1725,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
           ? "seedance-2.5"
           : isSeedance2FamilySelection
           ? "seedance-2.0"
-          : "seedance-1.5";
+          : "seedance-2.5";
       const nextMode: SeedanceMode = isSeedance2FamilySelection ? "reference_images" : "text";
       const snapSeedanceStepDuration = (value?: number, max = 30) => {
         const base =
@@ -2780,7 +2786,7 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
               {isUnifiedKlingNode
                 ? klingModelLabel
                 : provider === "doubao"
-                ? filteredSeedanceModelOptions.find((opt) => opt.value === seedanceModel)?.label || "Seedance 1.5-Pro"
+                ? filteredSeedanceModelOptions.find((opt) => opt.value === seedanceModel)?.label || "Seedance 2.5"
                 : filteredViduModelOptions.find((opt) => opt.value === viduModelSelectionValue)?.label ||
                   "Vidu Q2"}
             </span>
@@ -2904,14 +2910,14 @@ function GenericVideoNodeInner({ id, data, selected }: Props) {
                 ? isSeedance25Model
                   ? lt("Seedance 2.5 模式", "Seedance 2.5 modes")
                   : lt("Seedance 2.0 模式", "Seedance 2.0 modes")
-                : lt("Seedance 1.5 模式", "Seedance 1.5 modes")
+                : lt("Seedance 模式", "Seedance modes")
             }
             title={
               isSeedance2FamilyModel
                 ? isSeedance25Model
                   ? lt("选择 Seedance 2.5 模式", "Select Seedance 2.5 mode")
                   : lt("选择 Seedance 2.0 模式", "Select Seedance 2.0 mode")
-                : lt("选择 Seedance 1.5 模式", "Select Seedance 1.5 mode")
+                : lt("选择 Seedance 模式", "Select Seedance mode")
             }
           />
         </div>

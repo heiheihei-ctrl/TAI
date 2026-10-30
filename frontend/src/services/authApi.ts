@@ -1,5 +1,6 @@
 import {
   clearTokens,
+  getAuthSessionSignature,
   getAccessAuthHeader,
   getRefreshAuthHeader,
   setTokens,
@@ -260,7 +261,11 @@ export const authApi = {
       return { user: loadSession(), source: "mock" };
     }
 
-    const localUser = loadSession();
+    let sessionSignature = getAuthSessionSignature();
+    const localResult = () => {
+      const user = loadSession();
+      return { user, source: user ? "local" as const : null };
+    };
 
     try {
       let res = await fetchWithAuth(`${base}/api/auth/me`, {
@@ -269,17 +274,21 @@ export const authApi = {
         auth: "omit",
         allowRefresh: false,
       });
+      if (sessionSignature !== getAuthSessionSignature()) return localResult();
       if (res.ok) {
         const data = await res.json().catch(() => null);
+        if (sessionSignature !== getAuthSessionSignature()) return localResult();
         const user =
           data && typeof data === "object" && "user" in data
             ? (data.user as UserInfo)
             : (data as UserInfo);
 
 
+        if (!user?.id) return localResult();
+        saveSession(user);
         return { user, source: "server" };
       }
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
         try {
           const r = await fetchWithAuth(`${base}/api/auth/refresh`, {
             method: "POST",
@@ -288,14 +297,17 @@ export const authApi = {
             auth: "omit",
             allowRefresh: false,
           });
+          if (sessionSignature !== getAuthSessionSignature()) return localResult();
           if (!r.ok && r.status !== 401) {
-            return { user: localUser, source: localUser ? "local" : null };
+            return localResult();
           }
           if (!r.ok) res = r;
           if (r.ok) {
             const refreshData = await r.json().catch(() => null);
+            if (sessionSignature !== getAuthSessionSignature()) return localResult();
             if (refreshData?.tokens) {
               setTokens(refreshData.tokens);
+              sessionSignature = getAuthSessionSignature();
             }
             res = await fetchWithAuth(`${base}/api/auth/me`, {
               credentials: "include",
@@ -303,20 +315,24 @@ export const authApi = {
               auth: "omit",
               allowRefresh: false,
             });
+            if (sessionSignature !== getAuthSessionSignature()) return localResult();
             if (res.ok) {
               const data = await res.json().catch(() => null);
+              if (sessionSignature !== getAuthSessionSignature()) return localResult();
               const user =
                 data && typeof data === "object" && "user" in data
                   ? (data.user as UserInfo)
                   : (data as UserInfo);
 
 
+              if (!user?.id) return localResult();
+              saveSession(user);
               return { user, source: "refresh" };
             }
           }
         } catch (e) {
           console.warn("authApi.refresh failed:", e);
-          return { user: localUser, source: localUser ? "local" : null };
+          return localResult();
         }
       }
       console.warn("authApi.me not ok:", res.status);
@@ -329,20 +345,12 @@ export const authApi = {
       }
 
       // 如果网络请求失败但本地有用户信息，返回本地数据
-      if (localUser) {
-        return { user: localUser, source: "local" };
-      }
-
-      return { user: null, source: null };
+      return localResult();
     } catch (e) {
       console.warn("authApi.me network error:", e);
 
       // 网络错误时返回本地用户信息（离线模式）
-      if (localUser) {
-        return { user: localUser, source: "local" };
-      }
-
-      return { user: null, source: null };
+      return localResult();
     }
   },
   async register(payload: {
@@ -469,69 +477,9 @@ export const authApi = {
 
     return result;
   },
-  async me() {
-    if (isMock) {
-      await delay(200);
-      return loadSession();
-    }
-    try {
-      let res = await fetchWithAuth(`${base}/api/auth/me`, {
-        credentials: "include",
-        headers: { ...getAccessAuthHeader() },
-        auth: "omit",
-        allowRefresh: false,
-      });
-      if (!res.ok) {
-        // 常见 401：尝试使用 refresh cookie 刷新一次
-        if (res.status === 401 || res.status === 403) {
-          try {
-            const r = await fetchWithAuth(`${base}/api/auth/refresh`, {
-              method: "POST",
-              credentials: "include",
-              headers: { ...getRefreshAuthHeader() },
-              auth: "omit",
-              allowRefresh: false,
-            });
-            if (!r.ok && r.status !== 401) return loadSession();
-            if (!r.ok) res = r;
-            if (r.ok) {
-              const refreshData = await r.json().catch(() => null);
-              if (refreshData?.tokens) {
-                setTokens(refreshData.tokens);
-              }
-              res = await fetchWithAuth(`${base}/api/auth/me`, {
-                credentials: "include",
-                headers: { ...getAccessAuthHeader() },
-                auth: "omit",
-                allowRefresh: false,
-              });
-            }
-          } catch (e) {
-            console.warn("authApi.refresh failed:", e);
-            return loadSession();
-          }
-        }
-      }
-      if (!res.ok) {
-        console.warn("authApi.me not ok:", res.status);
-        // 明确未授权：清空本地会话，避免“假登录”
-        if (res.status === 401) {
-          clearSession();
-          clearTokens();
-          return null;
-        }
-        // 尝试使用本地持久化的用户，避免开发场景下的闪跳登录
-        return loadSession();
-      }
-      const data = await res.json().catch(() => null);
-      if (!data) return null;
-      return data && typeof data === "object" && "user" in data
-        ? (data.user as UserInfo)
-        : (data as UserInfo);
-    } catch (e) {
-      console.warn("authApi.me network error:", e);
-      return loadSession();
-    }
+  async me(): Promise<UserInfo | null> {
+    const result = await authApi.meDetailed();
+    return result.user;
   },
   async logout() {
     if (isMock) {

@@ -99,7 +99,7 @@ export default function TermsOfService() {
           <ul className="list-disc pl-6 mb-4">
             <li className="mb-2"><strong>文本类：</strong>Text Chat Node（纯文本交互）、Prompt Optimizer（提示词优化）</li>
             <li className="mb-2"><strong>图像类：</strong>Image Node、Midjourney Node、Generate Refer、Image Split、Image Grid</li>
-            <li className="mb-2"><strong>视频类：</strong>Video Node、Sora2、Wan2.6、Kling、Vidu、Seedance 1.5 Pro、Video Frame Extract、Video Analysis</li>
+            <li className="mb-2"><strong>视频类：</strong>Video Node、Sora2、Wan2.6、Kling、Vidu、Seedance、Video Frame Extract、Video Analysis</li>
             <li className="mb-2"><strong>专业工具：</strong>3D Node（三维生成）、Storyboard Split（分镜）等</li>
           </ul>
 

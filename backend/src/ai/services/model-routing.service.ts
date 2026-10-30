@@ -805,36 +805,6 @@ const DEFAULT_MODEL_PROVIDER_MAPPING_V2: ModelProviderMappingV2 = {
       ],
     },
     {
-      modelKey: 'seedance-1.5',
-      modelName: 'Seedance 1.5',
-      taskType: 'video',
-      enabled: true,
-      defaultVendor: 'tencent_vod',
-      vendors: [
-        {
-          vendorKey: 'seedance_api',
-          platformKey: 'seedance_api',
-          label: 'Seedance API',
-          enabled: true,
-          route: 'legacy',
-          provider: 'doubao',
-          modelName: 'Seedance',
-          modelVersion: '1.5',
-        },
-        {
-          vendorKey: 'tencent_vod',
-          platformKey: 'tencent_vod',
-          label: '腾讯 VOD',
-          enabled: true,
-          route: 'tencent_vod',
-          provider: 'doubao',
-          modelName: 'Seedance',
-          modelVersion: '1.5-pro',
-          metadata: DEFAULT_TENCENT_VOD_SEEDANCE15_V2_VENDOR_METADATA,
-        },
-      ],
-    },
-    {
       modelKey: 'seedance-2.0',
       modelName: 'Seedance 2.0',
       taskType: 'video',
@@ -973,7 +943,9 @@ export class ModelRoutingService {
   }
 
   getDefaultConfig(): ModelProviderMappingV2 {
-    return JSON.parse(JSON.stringify(DEFAULT_MODEL_PROVIDER_MAPPING_V2));
+    const config = JSON.parse(JSON.stringify(DEFAULT_MODEL_PROVIDER_MAPPING_V2)) as ModelProviderMappingV2;
+    config.models = config.models?.filter(model => model.modelKey !== 'seedance-1.5');
+    return config;
   }
 
   private ensureModelDefaultVendor(model: ManagedModelConfig): ManagedModelConfig {
@@ -1331,7 +1303,7 @@ export class ModelRoutingService {
 
     return {
       ...input,
-      models: models.map((model) => (model ? this.ensureModelDefaultVendor(model) : model)),
+      models: models.filter(model => model?.modelKey !== 'seedance-1.5').map((model) => (model ? this.ensureModelDefaultVendor(model) : model)),
     };
   }
 

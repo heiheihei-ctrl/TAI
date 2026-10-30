@@ -11,4 +11,4 @@
 - `The API key status is not active` 表示上游拒绝密钥状态。应检查 ToAPIs 控制台及部署环境的 `TOAPIS_TOKEN`，更新后重启后端；调整请求字段不能激活密钥。
 - 回归：在 backend 运行 `npx ts-node scripts/test-seedance-toapis.ts`（模拟 HTTP，不消耗生成额度）。
 - 合约与计费回归：`node --test test/seedance-toapis-contract.test.cjs test/seedance-toapis-billing.test.cjs`。本次仅做模拟请求，不消耗真实生成额度。
-- TAI 画布 Seedance 2.x 提交与预览按全局路线覆盖历史节点 vendor：普通为 `toapis`，尊享为 `seedance_api`；1.5 保留官方路线（未接入 ToAPIs）。玲珑保留天翼。显式 ToAPIs/官方选择优先于后端部署默认品牌，且禁止跨渠道失败兜底。旧任务仍按任务 ID 前缀查询原渠道。
+- TAI 画布 Seedance 2.x 提交与预览按全局路线覆盖历史节点 vendor：普通为 `toapis`，尊享为 `seedance_api`。1.5 已下线，不再提供生成入口；旧节点升级到 2.5，显式 1.5 请求在扣费前拒绝。玲珑保留天翼。显式 ToAPIs/官方选择优先于后端部署默认品牌，且禁止跨渠道失败兜底。旧任务仍按任务 ID 前缀查询原渠道。

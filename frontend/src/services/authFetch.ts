@@ -1,5 +1,5 @@
 import { triggerAuthInvalid } from './authEvents';
-import { getAccessToken, getRefreshAuthHeader, setTokens } from './authTokenStorage';
+import { getAccessToken, getRefreshAuthHeader, getAuthSessionSignature, setTokens } from './authTokenStorage';
 import { ensureTraceHeader } from '../utils/trace';
 import { getBillingTeamId } from '@/stores/teamStore';
 import { notifyCreditsChanged } from '@/utils/creditsEvents';
@@ -94,17 +94,20 @@ const refreshUrl =
 
 async function ensureRefresh(): Promise<boolean | null> {
   if (!refreshPromise) {
+    const sessionSignature = getAuthSessionSignature();
     refreshPromise = fetch(refreshUrl, {
       method: 'POST',
       credentials: 'include',
       headers: { ...getRefreshAuthHeader() },
     })
       .then((res) => {
+        if (sessionSignature !== getAuthSessionSignature()) return null;
         if (res.ok) {
           return res
             .json()
             .catch(() => null)
             .then((data) => {
+              if (sessionSignature !== getAuthSessionSignature()) return null;
               if (data?.tokens) {
                 setTokens(data.tokens);
               }
@@ -120,6 +123,21 @@ async function ensureRefresh(): Promise<boolean | null> {
       });
   }
   return refreshPromise;
+}
+
+async function confirmAuthInvalid(): Promise<void> {
+  const signature = getAuthSessionSignature();
+  const token = getAccessToken();
+  try {
+    // Business/upstream 401 responses are not proof that the site's login is invalid.
+    const response = await fetch(refreshUrl.replace(/\/refresh$/, '/me'), {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (response.status === 401 && signature === getAuthSessionSignature()) triggerAuthInvalid();
+  } catch {
+    // Retain permanent credentials on network/service failures.
+  }
 }
 
 const normalizeInit = (init?: AuthFetchInit): RequestInit => {
@@ -168,6 +186,8 @@ export async function fetchWithAuth(
     return fetch(input, directInit);
   }
   const normalized = normalizeInit({ ...rest, auth });
+  const sessionSignature = getAuthSessionSignature();
+  const requestToken = getAccessToken();
   const response = await fetch(input, normalized);
   if (response.status === 403) {
     notifyCreditsRefreshIfNeeded(input, normalized, response);
@@ -182,25 +202,29 @@ export async function fetchWithAuth(
   if (auth === "omit") {
     return response;
   }
+  if (sessionSignature !== getAuthSessionSignature()) return response;
 
   if (!allowRefresh) {
-    triggerAuthInvalid();
+    await confirmAuthInvalid();
     return response;
   }
 
   const refreshed = await ensureRefresh();
   if (refreshed) {
-    const retryNormalized = normalizeInit({ ...rest, auth });
+    const retryHeaders = new Headers(rest.headers || {});
+    if (requestToken && new Headers(normalized.headers).get('Authorization') === `Bearer ${requestToken}`) {
+      retryHeaders.delete('Authorization');
+    }
+    const retryNormalized = normalizeInit({ ...rest, headers: retryHeaders, auth });
     const retryResponse = await fetch(input, retryNormalized);
-    // refresh 返回 ok 但重试仍 401：认为登录态已失效，触发退出/登录提示。
-    // 403 是业务权限拒绝（例如会员权益不足），不能当作登录失效处理。
+    // 业务/上游服务也可能返回 401；再次由本站认证接口确认，避免误退出。
     if (retryResponse.status === 401) {
-      triggerAuthInvalid();
+      await confirmAuthInvalid();
     }
     notifyCreditsRefreshIfNeeded(input, retryNormalized, retryResponse);
     return retryResponse;
   }
 
-  if (refreshed === false) triggerAuthInvalid();
+  if (refreshed === false) await confirmAuthInvalid();
   return response;
 }

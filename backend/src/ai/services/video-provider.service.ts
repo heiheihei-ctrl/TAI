@@ -1,4 +1,5 @@
 import { buildSeedanceToapisPayload } from './seedance-toapis.adapter';
+import { assertActiveSeedanceRequest } from './seedance-retirement';
 // Video provider integration (Kling/Vidu/Seedance) with OSS post-processing.
 import {
   BadGatewayException,
@@ -149,7 +150,7 @@ const resolveSeedanceUpstreamModelId = (modelVersion: SeedanceManagedModelVersio
     case "2.0-fast":
       return "doubao-seedance-2-0-fast-260128";
     default:
-      return "doubao-seedance-1-5-pro-251215";
+      throw new BadRequestException("Seedance 1.5 已下线，请切换到现行模型");
   }
 };
 
@@ -960,6 +961,7 @@ export class VideoProviderService {
   async generateVideo(
     options: VideoProviderRequestDto
   ): Promise<VideoGenerationResult> {
+    assertActiveSeedanceRequest(options);
     const { provider } = options;
 
     if (isOmniFlashExtModelKey(options.managedModelKey) || provider === "omni-flash-ext") {
@@ -2549,6 +2551,15 @@ export class VideoProviderService {
     if (!parsed) {
       return { status: "processing" };
     }
+    // Retiring generation must not prevent polling tasks created before retirement.
+    if (parsed.modelKey === 'seedance-1.5') {
+      if (parsed.vendorKey === 'seedance_api') {
+        return this.queryDoubao(parsed.rawTaskId, this.getProviderApiKey('doubao'));
+      }
+      if (parsed.vendorKey === 'tencent_vod') {
+        return this.queryTencentManagedVideoTask(parsed.rawTaskId, 'seedance-history', 'Seedance');
+      }
+    }
 
     const route = await this.modelRoutingService.resolveVideoModelByVendor(
       parsed.modelKey,
@@ -2697,6 +2708,7 @@ export class VideoProviderService {
     modelVersion: SeedanceManagedModelVersion;
     label: string;
   } {
+    assertActiveSeedanceRequest(options);
     const normalized = String(options.seedanceModel || "").trim().toLowerCase();
     if (normalized === "seedance-2.5" || normalized === "2.5") {
       return {
@@ -2721,9 +2733,9 @@ export class VideoProviderService {
     }
 
     return {
-      modelKey: "seedance-1.5",
-      modelVersion: "1.5-pro",
-      label: "Seedance 1.5-Pro",
+      modelKey: "seedance-2.5",
+      modelVersion: "2.5",
+      label: "Seedance 2.5",
     };
   }
 
@@ -3334,7 +3346,7 @@ export class VideoProviderService {
   private async generateDoubao(
     options: VideoProviderRequestDto,
     apiKey: string,
-    modelVersion: SeedanceManagedModelVersion = "1.5-pro"
+    modelVersion: SeedanceManagedModelVersion = "2.5"
   ): Promise<VideoGenerationResult> {
     const normalizedPrompt =
       typeof options.prompt === "string" ? options.prompt.trim() : "";

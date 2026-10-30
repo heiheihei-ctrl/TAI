@@ -1952,7 +1952,7 @@ const MANAGED_NODE_TEMPLATE_OPTIONS: Record<
     { value: "kling30Video", label: "Kling 3.0 视频节点", category: "video" },
     { value: "klingO1Video", label: "Kling 3.0-Omni 视频节点", category: "video" },
     { value: "viduVideo", label: "Vidu 视频节点", category: "video" },
-    { value: "doubaoVideo", label: "Seedance 1.5 视频节点", category: "video" },
+    { value: "doubaoVideo", label: "Seedance 2.5 视频节点", category: "video" },
     { value: "seedance20Video", label: "Seedance 2.0 视频节点", category: "video" },
     { value: "sora2Video", label: "Sora 2 视频节点", category: "video" },
     { value: "wan26", label: "Wan 2.6 视频节点", category: "video" },
@@ -2008,7 +2008,7 @@ const shouldReuseTemplateNodeKey = (modelKey?: string): boolean => {
     "vidu-q2",
     "vidu-q3",
     "sora-2",
-    "seedance-1.5",
+    "seedance-2.5",
     "seedance-2.0",
     "seedream5",
     "midjourney",
@@ -2113,7 +2113,7 @@ const DEFAULT_SEEDANCE20_V2_VENDOR_METADATA = {
   },
 } as const;
 
-const SEEDANCE20_SUPPORTED_MODELS = ["seedance-1.5-pro", "seedance-2.0", "seedance-2.0-fast"];
+const SEEDANCE20_SUPPORTED_MODELS = ["seedance-2.0", "seedance-2.0-fast", "seedance-2.5"];
 const SEEDANCE20_VOD_METADATA = {
   outputConfig: {
     aspectRatios: ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"],
@@ -3267,36 +3267,6 @@ const DEFAULT_MODEL_CATALOG: ManagedModelConfig[] = [
     ],
   },
   {
-    modelKey: "seedance-1.5",
-    modelName: "Seedance 1.5",
-    taskType: "video",
-    enabled: true,
-    defaultVendor: "seedance_api",
-    vendors: [
-      {
-        vendorKey: "seedance_api",
-        platformKey: "seedance_api",
-        label: "Seedance API",
-        enabled: true,
-        route: "legacy",
-        provider: "doubao",
-        modelName: "Seedance",
-        modelVersion: "1.5-pro",
-      },
-      {
-        vendorKey: "tencent_vod",
-        platformKey: "tencent_vod",
-        label: "腾讯 VOD",
-        enabled: false,
-        route: "tencent_vod",
-        provider: "doubao",
-        modelName: "Seedance",
-        modelVersion: "1.5-pro",
-        metadata: DEFAULT_TENCENT_VOD_SEEDANCE15_V2_VENDOR_METADATA,
-      },
-    ],
-  },
-  {
     modelKey: "seedance-2.0",
     modelName: "Seedance 2.0",
     taskType: "video",
@@ -3493,16 +3463,16 @@ const normalizeModelMapping = (input?: Partial<ModelProviderMappingV2>): ModelPr
       }))
     : [];
   const defaultModelMap = new Map(
-    DEFAULT_MODEL_CATALOG.filter((model) => model?.modelKey).map((model) => [model.modelKey, model])
+    DEFAULT_MODEL_CATALOG.filter((model) => model?.modelKey && model.modelKey !== "seedance-1.5").map((model) => [model.modelKey, model])
   );
-  const inputModels = Array.isArray(input?.models) ? input.models.filter(Boolean) : [];
+  const inputModels = Array.isArray(input?.models) ? input.models.filter(model => model && model.modelKey !== "seedance-1.5") : [];
   const inputModelMap = new Map(
     inputModels
       .filter((model) => typeof model?.modelKey === "string" && model.modelKey.trim())
       .map((model) => [model.modelKey, model])
   );
   const mergedModelInputs = [
-    ...DEFAULT_MODEL_CATALOG.map((defaultModel) => inputModelMap.get(defaultModel.modelKey) || defaultModel),
+    ...DEFAULT_MODEL_CATALOG.filter(model => model.modelKey !== "seedance-1.5").map((defaultModel) => inputModelMap.get(defaultModel.modelKey) || defaultModel),
     ...inputModels.filter((model) => {
       const modelKey = typeof model?.modelKey === "string" ? model.modelKey.trim() : "";
       return !modelKey || !defaultModelMap.has(modelKey);
@@ -3845,7 +3815,7 @@ const VIDEO_MODEL_ROUTE_OPTIONS: Record<
 
 const VIDEO_MODEL_KLING_KEYS = ["kling-2.6", "kling-3.0", "kling-o3"];
 const VIDEO_MODEL_VIDU_KEYS = ["vidu-q2", "vidu-q3"];
-const VIDEO_MODEL_SEEDANCE_KEYS = ["seedance-1.5", "seedance-2.0"];
+const VIDEO_MODEL_SEEDANCE_KEYS = ["seedance-2.0", "seedance-2.5"];
 
 const deriveVideoModelRouteSelection = (
   source?: Partial<ModelProviderMappingV2>
@@ -4018,7 +3988,7 @@ const applyVideoModelRouteSelectionToMapping = (
       route: "legacy",
       provider: "doubao",
       modelName: "Seedance",
-      modelVersion: modelKey === "seedance-2.0" ? "2.0" : "1.5-pro",
+      modelVersion: modelKey === "seedance-2.0" ? "2.0" : "2.5",
     });
     seedanceVendor.label = "火山引擎";
     seedanceVendor.enabled = true;
@@ -4564,7 +4534,7 @@ const buildManagedNodeMetadata = (model: ManagedModelConfig): Record<string, any
       vendorKey: defaultVendor?.vendorKey,
       platformKey: defaultVendor?.platformKey || defaultVendor?.vendorKey,
       creditsPerCall: defaultVendorCredits,
-      seedanceModel: supportedModels[0] || "seedance-1.5-pro",
+      seedanceModel: supportedModels[0] || "seedance-2.5",
       clipDuration: 5,
       resolution: "720P",
       ...(model.modelKey === "seedance-2.0"

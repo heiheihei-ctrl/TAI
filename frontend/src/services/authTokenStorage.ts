@@ -22,6 +22,11 @@ export function getRefreshToken(): string | null {
   }
 }
 
+// Compare in memory only; never log this value or persist an additional credential copy.
+export function getAuthSessionSignature(): string {
+  return JSON.stringify([getAccessToken(), getRefreshToken()]);
+}
+
 const tokenListeners = new Set<() => void>();
 
 export function subscribeTokenChanges(listener: () => void) {
