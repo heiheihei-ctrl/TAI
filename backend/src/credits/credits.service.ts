@@ -1,3 +1,4 @@
+import { isGptImage25Model } from '../ai/services/gpt-image-25-model';
 import { Injectable, BadRequestException, NotFoundException, Inject, forwardRef, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
@@ -1713,7 +1714,7 @@ export class CreditsService {
   private resolveBananaRouteFromRequestParams(
     requestParams: any,
   ): 'normal' | 'stable' | null {
-    if (requestParams?.model === 'gpt-image-2.5-sunburst-vip') return 'normal';
+    if (isGptImage25Model(requestParams?.model)) return 'normal';
     const explicitRoute =
       this.normalizeBananaImageRoute(requestParams?.bananaImageRoute) ||
       this.normalizeBananaImageRoute(requestParams?.providerOptions?.banana?.imageRoute) ||
@@ -1831,7 +1832,7 @@ export class CreditsService {
       const normalizedSize = this.normalizeResolutionForGptImage2TencentPricing(
         requestParams?.imageSize,
       );
-      const isGptImage25 = requestParams?.model === 'gpt-image-2.5-sunburst-vip';
+      const isGptImage25 = isGptImage25Model(requestParams?.model);
       // 2.5 在 2.0 普通路线基础上加价 25%；新增档位以 high 为基准。
       const extendedQuality = String(requestParams?.quality || '').trim().toLowerCase();
       const normalizedQuality = this.normalizeGptImage2Quality(

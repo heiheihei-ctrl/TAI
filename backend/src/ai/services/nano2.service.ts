@@ -1,3 +1,4 @@
+import { isGptImage25Model, normalizeGptImage25Model } from './gpt-image-25-model';
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { apimartRequest, buildToapisUrl, formatToapisHttpError, getApimartProxySummary, getToapisApiKey } from '../../utils/apimartHttpClient';
@@ -184,7 +185,7 @@ export class Nano2Service {
     }
 
     const payload: Record<string, any> = {
-      model: request.model?.trim() || 'gemini-3.1-flash-image-preview',
+      model: normalizeGptImage25Model(request.model || 'gemini-3.1-flash-image-preview'),
       prompt: request.prompt,
       size: request.size || '1:1',
       n: request.n || 1,
@@ -279,7 +280,7 @@ export class Nano2Service {
         const directUrl = Array.isArray(data?.data) ? (data.data[0] as any)?.url : undefined;
         const imageUrl = extractUpstreamImageUrl(data) ||
           (typeof directUrl === 'string' && /^https?:\/\//i.test(directUrl) ? directUrl : undefined);
-        if (imageUrl && request.model === 'gpt-image-2.5-sunburst-vip') {
+        if (imageUrl && isGptImage25Model(request.model)) {
           return { taskId: taskId || '', status: 'completed', imageUrl };
         }
         if (!taskId) {

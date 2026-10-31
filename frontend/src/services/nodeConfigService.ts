@@ -175,7 +175,7 @@ function getDefaultConfigs(): NodeConfig[] {
         type: "gptImage25",
         flowNodeType: "gptImage25",
         provider: "nano2",
-        model: "gpt-image-2.5-sunburst-vip",
+        model: "gpt-image-2.5-sunburst-official",
         aspectRatios: ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "5:4", "4:5", "2:1", "1:2", "21:9", "9:21"],
         resolutions: ["1K", "2K", "4K"],
         showResolutionSelector: true,
@@ -184,7 +184,7 @@ function getDefaultConfigs(): NodeConfig[] {
         maxReferenceImages: 16,
         defaultData: {
           modelProvider: "nano2",
-          model: "gpt-image-2.5-sunburst-vip",
+          model: "gpt-image-2.5-sunburst-official",
           aspectRatio: "1:1",
           resolution: "1K",
           quality: "high",

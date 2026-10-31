@@ -1,7 +1,8 @@
 # 后端模块：AI（backend-ai）
 
 ## 当前状态
-- ImageTask 状态轮询通过参数化 SQL 仅获取状态、输出及 requestData 中的 resultImageUrls/resultMetadata，禁止轮询读取完整生成输入；状态写入使用 select id 限制 RETURNING。实际执行生成仍读取必要输入。线上若出现 ClientWrite，应同时检查单行输入大小及数据库到后端网络，不能只扩大连接池。
+- 免费用户图片/视频每日及每月生成次数上限已取消。旧 assertFreeUserUsageQuota/assertFreeUserImageQuota 入口仅作兼容，不查询配额；个人和团队预扣费继续校验并扣除正常积分，不受历史 FREE_USER_*_LIMIT 配置影响。此变更不解决独立的积分批次并发死锁或上游鉴权故障。
+- ImageTask 已按要求撤回连接超时排障中的查询优化，状态轮询恢复 Prisma findFirst，状态更新恢复默认返回字段；免费次数限制取消修复独立保留。
 - ToAPIs Seedance 2.0/Fast/2.5 请求合约、素材角色、整数秒计费及任务查询已按文档核验；首尾帧和多模态参考分离，审核等待与备用视频下载处理详见 [`seedance-toapis.md`](../seedance-toapis.md)。1.5 已下线，前后台目录不再展示，生成请求在扣费前拦截；历史任务查询保留兼容。
 - Seedance 2.5 对非会员开放：前端不锁定选项、不自动回退至 1.5；后端权益校验排除 2.5，2.0 / Fast 保留原有规则。
 - TAI Seedream 5.0 Pro 按 `providerOptions.banana.imageRoute`（兼容 `bananaImageRoute`）分流：normal 使用 ToAPIs `doubao-seedream-5-0-pro` 异步提交/轮询，stable（含未传线路）使用豆包官方 `doubao-seedream-5-0-pro-260628`。分别读取 `TOAPIS_TOKEN` 与 `ARK_API_KEY`/`DOUBAO_API_KEY`，不再受 Watcha 全局配置影响。**Linglong 已下线 Seedream**（面板隐藏 `seedream5`/`seedream5Pro`，后端拒绝生图）。

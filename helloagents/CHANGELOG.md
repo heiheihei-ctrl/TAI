@@ -5,7 +5,8 @@ All notable changes to this knowledge base will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning (knowledge-base versioning).
 
 ## [Unreleased]
-- 缩减 ImageTask 数据库传输：状态轮询只在 SQL 中提取结果字段，保留用户归属校验与批量图片元数据；四处状态更新仅返回 id，避免重复回传完整 requestData。针对线上 ClientWrite/连接池超时的代码缓解，部署后需验证。
+- 移除已取消的免费用户图片/视频日、月次数限制：生成前兼容检查不再查询或拦截，个人及团队预扣积分移除配额检查，保留正常余额校验、扣费和交易记录。
+- 按要求撤回连接超时排障中的 ImageTask 查询投影及更新返回字段限制，恢复排障前实现；保留独立的免费次数限制取消修复。
 - 修复永久登录仍被误退出：移除 AI 图片服务对业务 401/403 的重复刷新和直接强退；业务 401 必须由本站 `/auth/me` 确认凭证无效才退出。刷新重试更新 Authorization，旧请求/刷新/初始化响应不再覆盖或清除新登录；JWT 继续无到期时间。
 - 下线 Seedance 1.5：移除前后台模型选项及默认目录，画布旧节点与 AI 对话生成改用 2.5 并校正时长/模式；旧客户端显式提交 1.5 在扣费前拒绝，保留历史产物和任务查询兼容。
 - 按 ToAPIs 文档复核现有 Seedance 系列：统一 2.0/Fast/2.5 素材角色并补齐视频、音频参考，启用 Fast 正确模型；修复分辨率静默降级与整数时长/计费不一致，补全失败原因及备用视频地址处理，并将审核轮询窗口延长至 45 分钟。1.5 维持官方线路；合约、计费及模拟任务回归覆盖。

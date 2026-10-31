@@ -1,3 +1,4 @@
+import { isGptImage25Model } from './gpt-image-25-model';
 import { BadGatewayException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ImageGenerationService } from '../image-generation.service';
@@ -275,7 +276,7 @@ export class ImageTaskService {
     const providerName = String(task.aiProvider || 'gemini').trim();
     const normalizedProvider = providerName.toLowerCase();
     const normalizedModel = String(requestData?.model || '').trim().toLowerCase();
-    if (normalizedModel === 'gpt-image-2.5-sunburst-vip') return 'nano2';
+    if (isGptImage25Model(normalizedModel)) return 'nano2';
     const isGptImage2Model = normalizedModel.includes('gpt-image-2');
 
     if (!isGptImage2Model) return providerName;
@@ -582,26 +583,9 @@ export class ImageTaskService {
    * 查询任务状态
    */
   async getTaskStatus(taskId: string, userId: string) {
-    // Polling must not transfer generation inputs (which may contain large images).
-    // Extract only the two result fields consumed by the controller in PostgreSQL.
-    const rows = await this.prisma.$queryRaw<Array<{
-      status: string;
-      imageUrl: string | null;
-      thumbnailUrl: string | null;
-      textResponse: string | null;
-      error: string | null;
-      requestData: { resultImageUrls: unknown; resultMetadata: unknown };
-    }>>`
-      SELECT "status", "imageUrl", "thumbnailUrl", "textResponse", "error",
-        jsonb_build_object(
-          'resultImageUrls', "requestData" -> 'resultImageUrls',
-          'resultMetadata', "requestData" -> 'resultMetadata'
-        ) AS "requestData"
-      FROM "ImageTask"
-      WHERE "id" = ${taskId} AND "userId" = ${userId}
-      LIMIT 1
-    `;
-    const task = rows[0];
+    const task = await this.prisma.imageTask.findFirst({
+      where: { id: taskId, userId },
+    });
 
     if (!task) {
       throw new NotFoundException(`任务不存在: taskId=${taskId}`);
@@ -691,7 +675,6 @@ export class ImageTaskService {
                 deductError instanceof Error ? deductError.message : String(deductError);
               this.logger.error(`异步任务预扣积分失败: taskId=${taskId}, error=${errorMsg}`);
               await this.prisma.imageTask.update({
-                select: { id: true },
                 where: { id: taskId },
                 data: {
                   status: 'failed',
@@ -704,7 +687,6 @@ export class ImageTaskService {
           }
 
           await this.prisma.imageTask.update({
-            select: { id: true },
             where: { id: taskId },
             data: { status: 'processing' },
           });
@@ -834,7 +816,6 @@ export class ImageTaskService {
           };
 
           await this.prisma.imageTask.update({
-            select: { id: true },
             where: { id: taskId },
             data: {
               status: 'succeeded',
@@ -886,7 +867,6 @@ export class ImageTaskService {
           this.logger.error(`任务执行失败: taskId=${taskId}, error=${errorMessage}`);
 
           await this.prisma.imageTask.update({
-            select: { id: true },
             where: { id: taskId },
             data: {
               status: 'failed',

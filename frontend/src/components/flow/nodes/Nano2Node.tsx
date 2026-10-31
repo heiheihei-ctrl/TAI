@@ -240,7 +240,7 @@ function Nano2NodeInner({ id, data, selected }: Props) {
   const { status, error } = data;
   const globalBananaImageRoute = useAIChatStore((state) => state.bananaImageRoute);
   const isGptImage25Node = data.nodeConfigKey === "gptImage25" ||
-    data.model === "gpt-image-2.5-sunburst-vip";
+    (/^gpt-image-2\.5-(sunburst|flare)-(vip|official)$/.test(String(data.model || "")));
   const bananaImageRoute = isGptImage25Node ? "normal" : globalBananaImageRoute;
 
   const metadata = React.useMemo<NodeConfigMetadata | undefined>(() => {

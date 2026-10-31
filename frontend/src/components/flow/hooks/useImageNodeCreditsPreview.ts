@@ -229,11 +229,11 @@ export const useImageNodeCreditsPreview = ({
       return {
         serviceType: "gpt-image-2",
         model:
-          nodeType === "gptImage25" ? "gpt-image-2.5-sunburst-vip" :
+          nodeType === "gptImage25" ? "gpt-image-2.5-sunburst-official" :
           isLinglongGptImage2 ? "gpt-image-2" :
           bananaImageRoute === "stable" ? "gpt-image-2" : "gpt-image-2-official",
         requestParams: {
-          ...(nodeType === "gptImage25" ? { model: "gpt-image-2.5-sunburst-vip" } : {}),
+          ...(nodeType === "gptImage25" ? { model: "gpt-image-2.5-sunburst-official" } : {}),
           ...(isLinglongGptImage2 ? { model: "gpt-image-2" } : {}),
           aiProvider: "nano2",
           imageSize: normalizeBananaImageSize(imageSize) || "1K",

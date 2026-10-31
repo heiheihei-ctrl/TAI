@@ -1,3 +1,4 @@
+import { isGptImage25Model, normalizeGptImage25Model } from '../services/gpt-image-25-model';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { IAIProvider } from './ai-provider.interface';
@@ -156,9 +157,9 @@ export class Nano2Provider implements IAIProvider {
   async generateImage(request: any): Promise<any> {
     const requestedModel =
       typeof request.model === 'string' && request.model.trim()
-        ? request.model.trim()
+        ? normalizeGptImage25Model(request.model)
         : 'gemini-3.1-flash-image-preview';
-    const isGptImage25 = requestedModel === 'gpt-image-2.5-sunburst-vip';
+    const isGptImage25 = isGptImage25Model(requestedModel);
     const isGptImage2Model = !isGptImage25 && this.isGptImage2Model(requestedModel);
 
     // Linglong：gpt-image-2 走 91model.ai /v1/images/generations
