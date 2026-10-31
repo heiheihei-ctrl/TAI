@@ -582,9 +582,26 @@ export class ImageTaskService {
    * 查询任务状态
    */
   async getTaskStatus(taskId: string, userId: string) {
-    const task = await this.prisma.imageTask.findFirst({
-      where: { id: taskId, userId },
-    });
+    // Polling must not transfer generation inputs (which may contain large images).
+    // Extract only the two result fields consumed by the controller in PostgreSQL.
+    const rows = await this.prisma.$queryRaw<Array<{
+      status: string;
+      imageUrl: string | null;
+      thumbnailUrl: string | null;
+      textResponse: string | null;
+      error: string | null;
+      requestData: { resultImageUrls: unknown; resultMetadata: unknown };
+    }>>`
+      SELECT "status", "imageUrl", "thumbnailUrl", "textResponse", "error",
+        jsonb_build_object(
+          'resultImageUrls', "requestData" -> 'resultImageUrls',
+          'resultMetadata', "requestData" -> 'resultMetadata'
+        ) AS "requestData"
+      FROM "ImageTask"
+      WHERE "id" = ${taskId} AND "userId" = ${userId}
+      LIMIT 1
+    `;
+    const task = rows[0];
 
     if (!task) {
       throw new NotFoundException(`任务不存在: taskId=${taskId}`);
@@ -674,6 +691,7 @@ export class ImageTaskService {
                 deductError instanceof Error ? deductError.message : String(deductError);
               this.logger.error(`异步任务预扣积分失败: taskId=${taskId}, error=${errorMsg}`);
               await this.prisma.imageTask.update({
+                select: { id: true },
                 where: { id: taskId },
                 data: {
                   status: 'failed',
@@ -686,6 +704,7 @@ export class ImageTaskService {
           }
 
           await this.prisma.imageTask.update({
+            select: { id: true },
             where: { id: taskId },
             data: { status: 'processing' },
           });
@@ -815,6 +834,7 @@ export class ImageTaskService {
           };
 
           await this.prisma.imageTask.update({
+            select: { id: true },
             where: { id: taskId },
             data: {
               status: 'succeeded',
@@ -866,6 +886,7 @@ export class ImageTaskService {
           this.logger.error(`任务执行失败: taskId=${taskId}, error=${errorMessage}`);
 
           await this.prisma.imageTask.update({
+            select: { id: true },
             where: { id: taskId },
             data: {
               status: 'failed',
