@@ -2773,167 +2773,13 @@ export class CreditsService {
     return role === 'admin' || role === 'normal_admin';
   }
 
-  private async shouldSkipFreeUsageQuota(
-    client: PrismaService | Prisma.TransactionClient,
-    userId: string,
-  ): Promise<boolean> {
-    return this.hasPrivilegedUsageQuotaAccess(client, userId);
-  }
-
-  private async enforceFreeUserImageQuota(
-    client: PrismaService | Prisma.TransactionClient,
-    params: {
-      userId: string;
-      serviceType: ServiceType;
-      requestedOutputImageCount?: number;
-      skipQuota?: boolean;
-    },
-  ): Promise<void> {
-    const { userId, serviceType, requestedOutputImageCount } = params;
-    const monthlyLimit = this.getFreeUserMonthlyImageLimit();
-    const dailyLimit = await this.getFreeUserDailyImageLimit();
-
-    if (monthlyLimit <= 0 && dailyLimit <= 0) return;
-    if (!this.isFreeUserImageQuotaService(serviceType)) return;
-    if (params.skipQuota) return;
-
-    const requestedCount = this.resolveImageQuotaRequestCount(requestedOutputImageCount);
-    const now = new Date();
-    const quotaCutoverAt = this.getFreeUsageQuotaCutoverAt();
-    const baseWhere: Prisma.ApiUsageRecordWhereInput = {
-      userId,
-      serviceType: { in: FREE_USER_IMAGE_LIMITED_SERVICES },
-      responseStatus: { in: [ApiResponseStatus.PENDING, ApiResponseStatus.SUCCESS] },
-    };
-
-    if (dailyLimit > 0) {
-      const { start, end, label } = this.getUtcDayRange(now);
-      const effectiveStart =
-        quotaCutoverAt && quotaCutoverAt.getTime() > start.getTime() ? quotaCutoverAt : start;
-      const usedCount = await this.countImageQuotaUsage(client, {
-        ...baseWhere,
-        createdAt: {
-          gte: effectiveStart,
-          lt: end,
-        },
-      });
-
-      if (usedCount + requestedCount > dailyLimit) {
-        this.logger.warn(
-          `免费用户日生图配额超限 userId=${userId} day=${label} used=${usedCount} requested=${requestedCount} limit=${dailyLimit}`,
-        );
-        throw new BadRequestException(
-          `免费额度已用尽，请前往充值，享有更多权限后可继续生成。免费用户每天最多可使用图片能力 ${dailyLimit} 次（UTC ${label}）。今日已使用 ${usedCount} 次，本次请求 ${requestedCount} 次。`,
-        );
-      }
-    }
-
-    if (monthlyLimit > 0) {
-      const { start, end, label } = this.getUtcMonthRange(now);
-      const effectiveStart =
-        quotaCutoverAt && quotaCutoverAt.getTime() > start.getTime() ? quotaCutoverAt : start;
-      const usedCount = await this.countImageQuotaUsage(client, {
-        ...baseWhere,
-        createdAt: {
-          gte: effectiveStart,
-          lt: end,
-        },
-      });
-
-      if (usedCount + requestedCount > monthlyLimit) {
-        this.logger.warn(
-          `免费用户月生图配额超限 userId=${userId} month=${label} used=${usedCount} requested=${requestedCount} limit=${monthlyLimit}`,
-        );
-        throw new BadRequestException(
-          `免费额度已用尽，请前往充值，享有更多权限后可继续生成。免费用户每月最多可使用图片能力 ${monthlyLimit} 次（UTC ${label}）。本月已使用 ${usedCount} 次，本次请求 ${requestedCount} 次。`,
-        );
-      }
-    }
-  }
-
-  private async enforceFreeUserVideoQuota(
-    client: PrismaService | Prisma.TransactionClient,
-    params: {
-      userId: string;
-      serviceType: ServiceType;
-      skipQuota?: boolean;
-    },
-  ): Promise<void> {
-    const { userId, serviceType } = params;
-    const dailyLimit = await this.getFreeUserDailyVideoLimit();
-    const monthlyLimit = this.getFreeUserMonthlyVideoLimit();
-
-    if (dailyLimit <= 0 && monthlyLimit <= 0) return;
-    if (!this.isFreeUserVideoQuotaService(serviceType)) return;
-    if (params.skipQuota) return;
-
-    const now = new Date();
-    const baseWhere: Prisma.ApiUsageRecordWhereInput = {
-      userId,
-      serviceType: { in: FREE_USER_VIDEO_LIMITED_SERVICES },
-      responseStatus: { in: [ApiResponseStatus.PENDING, ApiResponseStatus.SUCCESS] },
-    };
-    const requestedCount = 1;
-
-    if (dailyLimit > 0) {
-      const { start, end, label } = this.getUtcDayRange(now);
-      const usedCount = await this.countVideoQuotaUsage(client, {
-        ...baseWhere,
-        createdAt: {
-          gte: start,
-          lt: end,
-        },
-      });
-
-      if (usedCount + requestedCount > dailyLimit) {
-        this.logger.warn(
-          `免费用户日生视频配额超限 userId=${userId} day=${label} used=${usedCount} requested=${requestedCount} limit=${dailyLimit}`,
-        );
-        throw new BadRequestException(
-          `免费额度已用尽，请前往充值，享有更多权限后可继续生成。免费用户每天最多可生成视频 ${dailyLimit} 个（UTC ${label}）。今日已使用 ${usedCount} 个，本次请求 ${requestedCount} 个。`,
-        );
-      }
-    }
-
-    if (monthlyLimit > 0) {
-      const { start, end, label } = this.getUtcMonthRange(now);
-      const usedCount = await this.countVideoQuotaUsage(client, {
-        ...baseWhere,
-        createdAt: {
-          gte: start,
-          lt: end,
-        },
-      });
-
-      if (usedCount + requestedCount > monthlyLimit) {
-        this.logger.warn(
-          `免费用户月生视频配额超限 userId=${userId} month=${label} used=${usedCount} requested=${requestedCount} limit=${monthlyLimit}`,
-        );
-        throw new BadRequestException(
-          `免费额度已用尽，请前往充值，享有更多权限后可继续生成。免费用户每月最多可生成视频 ${monthlyLimit} 个（UTC ${label}）。本月已使用 ${usedCount} 个，本次请求 ${requestedCount} 个。`,
-        );
-      }
-    }
-  }
-
+  // Compatibility entry point: daily/monthly free usage caps have been retired.
+  // Normal credit balance validation and billing remain in the deduction paths.
   async assertFreeUserUsageQuota(
-    userId: string,
-    serviceType: ServiceType,
-    requestedOutputImageCount?: number,
-  ): Promise<void> {
-    const skipQuota = await this.shouldSkipFreeUsageQuota(this.prisma, userId);
-    await this.enforceFreeUserImageQuota(this.prisma, {
-      userId,
-      serviceType,
-      requestedOutputImageCount,
-      skipQuota,
-    });
-    await this.enforceFreeUserVideoQuota(this.prisma, {
-      userId,
-      serviceType,
-      skipQuota,
-    });
-  }
+    _userId: string,
+    _serviceType: ServiceType,
+    _requestedOutputImageCount?: number,
+  ): Promise<void> {}
 
   async assertFreeUserImageQuota(
     userId: string,
@@ -3734,19 +3580,6 @@ export class CreditsService {
         membership,
         account.balance,
       );
-      const skipFreeUsageQuota = await this.shouldSkipFreeUsageQuota(tx, userId);
-
-      await this.enforceFreeUserImageQuota(tx, {
-        userId,
-        serviceType,
-        requestedOutputImageCount: outputImageCount,
-        skipQuota: skipFreeUsageQuota,
-      });
-      await this.enforceFreeUserVideoQuota(tx, {
-        userId,
-        serviceType,
-        skipQuota: skipFreeUsageQuota,
-      });
 
       if (creditsToDeduct > available) {
         throw new BadRequestException(
@@ -3968,19 +3801,6 @@ export class CreditsService {
         policy: consumePolicy,
       });
 
-      const skipFreeUsageQuota = await this.shouldSkipFreeUsageQuota(tx, userId);
-
-      await this.enforceFreeUserImageQuota(tx, {
-        userId,
-        serviceType,
-        requestedOutputImageCount: outputImageCount,
-        skipQuota: skipFreeUsageQuota,
-      });
-      await this.enforceFreeUserVideoQuota(tx, {
-        userId,
-        serviceType,
-        skipQuota: skipFreeUsageQuota,
-      });
 
       if (!deductionPlan.sufficient) {
         throw new BadRequestException(`积分不足，当前余额: ${account.balance}，需要: ${creditsToDeduct}`);
