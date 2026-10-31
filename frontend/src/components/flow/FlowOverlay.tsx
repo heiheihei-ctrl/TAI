@@ -19272,7 +19272,7 @@ function FlowInner() {
             : 14;
         const requestedModel =
           node.type === "gptImage25"
-            ? "gpt-image-2.5-sunburst-official"
+            ? "gpt-image-2.5-flare-official"
             : node.type === "gptImage2" && isLinglongRestrictedPalette()
             ? "gpt-image-2"
             : (typeof nodeData.model === "string" && nodeData.model.trim()) ||

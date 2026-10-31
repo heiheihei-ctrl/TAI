@@ -5,6 +5,8 @@ All notable changes to this knowledge base will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning (knowledge-base versioning).
 
 ## [Unreleased]
+- GPT 2.5 节点默认模型切换为 gpt-image-2.5-flare-official，同步生成请求、积分预估及前后端默认节点配置。
+- 按供应商下线通知将 GPT-Image-2.5 sunburst/flare 的 vip 型号兼容迁移到 official；同步节点默认配置、前端请求和报价、后端路由及同步图片解析，保留原积分公式。
 - 移除已取消的免费用户图片/视频日、月次数限制：生成前兼容检查不再查询或拦截，个人及团队预扣积分移除配额检查，保留正常余额校验、扣费和交易记录。
 - 按要求撤回连接超时排障中的 ImageTask 查询投影及更新返回字段限制，恢复排障前实现；保留独立的免费次数限制取消修复。
 - 修复永久登录仍被误退出：移除 AI 图片服务对业务 401/403 的重复刷新和直接强退；业务 401 必须由本站 `/auth/me` 确认凭证无效才退出。刷新重试更新 Authorization，旧请求/刷新/初始化响应不再覆盖或清除新登录；JWT 继续无到期时间。

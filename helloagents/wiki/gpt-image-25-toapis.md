@@ -3,7 +3,7 @@
 - 节点键：`gptImage25`，复用 Nano2 图片展示、任务轮询与远程图片持久化。
 - 运行入口：FlowOverlay 的节点回调注入分支必须包含 `gptImage25`，绑定 `onRun` 和 `onSend`；遗漏时 Nano2 按钮的可选回调调用会静默跳过，表现为点击无反应。
 - 上游：`POST /v1/images/generations`，使用后端 `TOAPIS_TOKEN` 和现有 ToAPIs 主备地址配置。
-- 模型：`gpt-image-2.5-sunburst-vip`，固定 ToAPIs，不受全局尊享路线切换影响，也不会改写为 `gpt-image-2-official`。
+- 模型：`gpt-image-2.5-flare-official`，固定 ToAPIs，不受全局尊享路线切换影响，也不会改写为 `gpt-image-2-official`。按供应商 2026-10-30 下线通知，后端兼容将 sunburst-vip / flare-vip 分别映射到对应 official 型号；两种变体均保留 2.5 请求及结果解析路径。积分公式不变。
 - 默认请求：`size: "1:1"`、`n: 1`、`quality: "high"`、`metadata: { resolution: "1K", orientation: "square" }`。
 - 质量档位：Low、Medium、High、Xhigh、Max，对应透传 `low/medium/high/xhigh/max`；默认 High。Xhigh/Max 独立定价未确认，积分预览与扣费暂沿用 High。
 - 方向按比例计算：正方形 square、横向 landscape、纵向 portrait。分辨率放 metadata，省略 2.0 专用 official_fallback/background/moderation/output_format。
